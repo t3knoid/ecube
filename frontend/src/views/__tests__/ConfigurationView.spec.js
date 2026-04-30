@@ -40,6 +40,8 @@ function buildResponse(overrides = {}) {
     job_detail_files_page_size: 40,
     callback_default_url: null,
     callback_proxy_url: null,
+    callback_payload_fields: null,
+    callback_payload_field_map: null,
     callback_hmac_secret_configured: false,
     ...overrides,
   }
@@ -154,6 +156,59 @@ describe('ConfigurationView logging defaults', () => {
     expect(mocks.updateConfiguration).toHaveBeenCalledWith({
       callback_proxy_url: 'https://proxy.example.com:8443',
     })
+  })
+
+  it('loads and saves callback payload field selection and mapping as JSON', async () => {
+    mocks.getConfiguration.mockResolvedValue(
+      buildResponse({
+        callback_payload_fields: ['event', 'project_id', 'completion_result'],
+        callback_payload_field_map: {
+          type: 'event',
+          summary: 'project=${project_id};result=${completion_result}',
+        },
+      }),
+    )
+    mocks.updateConfiguration.mockResolvedValue({
+      restart_required: false,
+      restart_required_settings: [],
+      applied_immediately: ['callback_payload_fields', 'callback_payload_field_map'],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const fieldsInput = wrapper.find('#cfg-callback-payload-fields')
+    const mappingInput = wrapper.find('#cfg-callback-payload-field-map')
+
+    expect(fieldsInput.element.value).toContain('"event"')
+    expect(mappingInput.element.value).toContain('"type": "event"')
+
+    await fieldsInput.setValue('["event","status"]')
+    await mappingInput.setValue('{"kind":"event","state":"status"}')
+    await wrapper.find('.action-row .btn.btn-primary').trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateConfiguration).toHaveBeenCalledWith({
+      callback_payload_fields: ['event', 'status'],
+      callback_payload_field_map: {
+        kind: 'event',
+        state: 'status',
+      },
+    })
+  })
+
+  it('shows a validation error when callback payload JSON is invalid', async () => {
+    mocks.getConfiguration.mockResolvedValue(buildResponse())
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.find('#cfg-callback-payload-field-map').setValue('{bad json')
+    await wrapper.find('.action-row .btn.btn-primary').trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateConfiguration).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain(i18n.global.t('configuration.fields.callback_payload_field_map.invalidJson'))
   })
 
   it('sends a new callback signing secret without reloading the current value', async () => {

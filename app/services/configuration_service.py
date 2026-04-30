@@ -10,6 +10,7 @@ import logging
 import os
 import shutil
 import subprocess
+import json
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List
 
@@ -58,6 +59,12 @@ def _serialize_callback_proxy_url(value: Any) -> str:
     return str(value).strip()
 
 
+def _serialize_json_value(value: Any) -> str:
+    if value is None:
+        return ""
+    return json.dumps(value, separators=(",", ":"), ensure_ascii=False)
+
+
 _EDITABLE_FIELDS: Dict[str, _FieldSpec] = {
     "log_level": _FieldSpec("LOG_LEVEL", False, _serialize_plain),
     "log_format": _FieldSpec("LOG_FORMAT", False, _serialize_plain),
@@ -78,6 +85,8 @@ _EDITABLE_FIELDS: Dict[str, _FieldSpec] = {
         _serialize_callback_hmac_secret,
         readable=False,
     ),
+    "callback_payload_fields": _FieldSpec("CALLBACK_PAYLOAD_FIELDS", False, _serialize_json_value),
+    "callback_payload_field_map": _FieldSpec("CALLBACK_PAYLOAD_FIELD_MAP", False, _serialize_json_value),
 }
 
 
@@ -92,6 +101,14 @@ def _normalized_value(field_name: str, value: Any) -> Any:
             return None
         text = str(value).strip()
         return text or None
+    if field_name == "callback_payload_fields":
+        if value is None:
+            return None
+        return list(value)
+    if field_name == "callback_payload_field_map":
+        if value is None:
+            return None
+        return dict(value)
     return value
 
 

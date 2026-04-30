@@ -286,16 +286,17 @@ The callback body is a JSON object containing:
 - Proxy URLs must not contain embedded credentials.
 - Existing SSRF protections remain in force even when a proxy is configured: ECUBE still resolves and validates the destination host before delivery and connects using the pinned IP.
 
-### Future Payload Mapping Contract
+### Payload Mapping Contract
 
-- Payload customization remains design-only in this slice and is not yet implemented.
-- The default payload described above remains the only runtime payload shape until a later release enables allowlists and mapping.
-- A future payload configuration must use an explicit allowlist of ECUBE-owned source fields; arbitrary expressions, code, and unrestricted templating are forbidden.
-- Proposed source-field allowlist: `event`, `job_id`, `project_id`, `evidence_number`, `status`, `source_path`, `total_bytes`, `copied_bytes`, `file_count`, `files_succeeded`, `files_failed`, `files_timed_out`, `completion_result`, `completed_at`.
-- Proposed mapping format: a JSON object whose keys are outbound field names and whose values are either an allowlisted ECUBE field name or a constrained template token such as `${project_id}`.
-- Mapping evaluation must be deterministic, side-effect free, and string-substitution only. Nested expressions, function calls, arithmetic, path traversal, and host-environment access are out of scope.
-- Invalid or unknown source fields must cause configuration rejection rather than silent omission.
-- A future implementation should preserve auditability by recording which mapping profile was applied without logging secret values or raw host-path expansions.
+- Administrators may optionally customize callback payloads with `CALLBACK_PAYLOAD_FIELDS` and `CALLBACK_PAYLOAD_FIELD_MAP`.
+- The default payload described above remains the baseline payload shape when neither setting is configured.
+- Payload configuration uses an explicit allowlist of ECUBE-owned source fields; arbitrary expressions, code, and unrestricted templating are forbidden.
+- Supported source fields are `event`, `job_id`, `project_id`, `evidence_number`, `started_by`, `status`, `source_path`, `total_bytes`, `copied_bytes`, `file_count`, `files_succeeded`, `files_failed`, `files_timed_out`, `completion_result`, `active_duration_seconds`, `drive_id`, `drive_manufacturer`, `drive_model`, `drive_serial_number`, `started_at`, and `completed_at`.
+- Mapping format is a JSON object whose keys are outbound field names and whose values are either an allowlisted ECUBE field name or a constrained template token such as `${project_id}`.
+- Mapping evaluation is deterministic, side-effect free, and string-substitution only. Nested expressions, function calls, arithmetic, path traversal, and host-environment access are out of scope.
+- Invalid, blank, duplicate, or unknown source fields cause configuration rejection rather than silent omission.
+- Mapping is applied before signature generation so `X-ECUBE-Signature` always covers the final outbound request body.
+- Delivery and audit handling preserve auditability by recording the applied payload profile shape without logging secret values or unsafe raw expansions.
 
 ---
 
