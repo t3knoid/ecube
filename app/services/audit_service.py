@@ -232,6 +232,7 @@ def confirm_chain_of_custody_handoff(
     actor: Optional[str],
     client_ip: Optional[str],
     job_id: Optional[int] = None,
+    lifecycle_start_at: Optional[datetime] = None,
 ) -> ChainOfCustodyHandoffResponse:
     # Acquire a per-drive row lock (SELECT … FOR UPDATE NOWAIT on PostgreSQL;
     # silently ignored on SQLite used in tests) before the idempotency check
@@ -283,6 +284,7 @@ def confirm_chain_of_custody_handoff(
         receipt_ref=payload.receipt_ref,
         project_id=effective_project_id,
         job_id=job_id,
+        lifecycle_start_at=lifecycle_start_at,
     )
     if existing is not None:
         return _handoff_response_from_audit(existing)
@@ -433,6 +435,7 @@ def confirm_job_chain_of_custody_handoff(
         actor=actor,
         client_ip=client_ip,
         job_id=job.id,
+        lifecycle_start_at=_job_drive_lifecycle_start_at(job=job, assignment=assignment),
     )
 
     refreshed_job = JobRepository(db).get(job.id)
@@ -790,11 +793,22 @@ def _build_job_chain_of_custody_report(
     job_creation_details_by_job = _extract_job_creation_details(job_events)
     reports: List[ChainOfCustodyDriveReportSchema] = []
     for drive in drives:
+        lifecycle_start_at = _job_drive_lifecycle_start_at(
+            job=job,
+            assignment=assignment_by_drive_and_job.get((drive.id, job.id)),
+        )
         events = [
             event
             for event in drive_events
             if event.drive_id == drive.id
-            and (event.action != "COC_HANDOFF_CONFIRMED" or event.job_id == job.id)
+            and (
+                event.action != "COC_HANDOFF_CONFIRMED"
+                or _handoff_event_matches_job_lifecycle(
+                    event,
+                    job_id=job.id,
+                    lifecycle_start_at=lifecycle_start_at,
+                )
+            )
         ]
         events.extend(job_events)
         events.sort(key=lambda row: (row.timestamp, row.id))
@@ -964,6 +978,7 @@ def _find_existing_handoff_event(
     receipt_ref: Optional[str],
     project_id: str,
     job_id: Optional[int] = None,
+    lifecycle_start_at: Optional[datetime] = None,
 ) -> Optional[AuditLog]:
     # Scope idempotency to the resolved project lifecycle and, when available,
     # the specific job lifecycle so a reused drive cannot satisfy a later job.
@@ -972,11 +987,15 @@ def _find_existing_handoff_event(
         AuditLog.drive_id == drive_id,
         AuditLog.project_id == project_id,
     )
-    if job_id is not None:
-        query = query.filter(AuditLog.job_id == job_id)
     candidates = query.order_by(AuditLog.id.desc()).all()
     delivery_iso = delivery_time.isoformat().replace("+00:00", "Z")
     for row in candidates:
+        if not _handoff_event_matches_job_lifecycle(
+            row,
+            job_id=job_id,
+            lifecycle_start_at=lifecycle_start_at,
+        ):
+            continue
         details = row.details or {}
         if details.get("possessor") != possessor:
             continue
@@ -986,6 +1005,36 @@ def _find_existing_handoff_event(
             continue
         return row
     return None
+
+
+def _handoff_event_matches_job_lifecycle(
+    event: AuditLog,
+    *,
+    job_id: Optional[int],
+    lifecycle_start_at: Optional[datetime],
+) -> bool:
+    if job_id is None:
+        return True
+    if event.job_id == job_id:
+        return True
+    if event.job_id is not None:
+        return False
+    if lifecycle_start_at is None:
+        return False
+    return event.timestamp is not None and event.timestamp >= lifecycle_start_at
+
+
+def _job_drive_lifecycle_start_at(
+    *,
+    job: ExportJob,
+    assignment: Optional[DriveAssignment],
+) -> Optional[datetime]:
+    return (
+        (assignment.assigned_at if assignment is not None else None)
+        or job.created_at
+        or job.started_at
+        or job.completed_at
+    )
 
 
 def _handoff_response_from_audit(entry: AuditLog) -> ChainOfCustodyHandoffResponse:
