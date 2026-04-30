@@ -409,6 +409,19 @@ describe('JobsView grouped create dialog', () => {
     })
   })
 
+  it('explains that a blank callback URL uses the system default when configured', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const createButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.create'))
+    await createButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(
+      'Leave blank to use the system default callback URL when one is configured.',
+    )
+  })
+
   it('keeps slash-prefixed source paths within the selected mount', async () => {
     const wrapper = mountView()
     await flushPromises()
