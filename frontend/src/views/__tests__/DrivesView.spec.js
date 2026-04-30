@@ -6,7 +6,7 @@ import DrivesView from '@/views/DrivesView.vue'
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   getDrives: vi.fn(),
-  listJobs: vi.fn(),
+  listAllJobs: vi.fn(),
   refreshDrives: vi.fn(),
 }))
 
@@ -26,7 +26,7 @@ vi.mock('@/api/drives.js', () => ({
 }))
 
 vi.mock('@/api/jobs.js', () => ({
-  listJobs: (...args) => mocks.listJobs(...args),
+  listAllJobs: (...args) => mocks.listAllJobs(...args),
 }))
 
 function buildDrive(overrides = {}) {
@@ -102,11 +102,11 @@ describe('DrivesView rescan and filter loading', () => {
     installMatchMediaMock()
     mocks.push.mockReset()
     mocks.getDrives.mockReset()
-    mocks.listJobs.mockReset()
+    mocks.listAllJobs.mockReset()
     mocks.refreshDrives.mockReset()
 
     mocks.getDrives.mockResolvedValue([buildDrive()])
-    mocks.listJobs.mockResolvedValue([])
+    mocks.listAllJobs.mockResolvedValue([])
     mocks.refreshDrives.mockResolvedValue({ ok: true })
   })
 
@@ -172,7 +172,7 @@ describe('DrivesView rescan and filter loading', () => {
   })
 
   it('shows the readable device label and serial number in separate columns', async () => {
-    mocks.listJobs.mockResolvedValue([{ id: 9, project_id: 'PROJ-001', evidence_number: 'EV-009' }])
+    mocks.listAllJobs.mockResolvedValue([{ id: 9, project_id: 'PROJ-001', evidence_number: 'EV-009' }])
     mocks.getDrives.mockResolvedValue([
       buildDrive({
         device_identifier: 'SER-ONLY',
@@ -248,7 +248,7 @@ describe('DrivesView rescan and filter loading', () => {
 
   it('removes the filesystem column and shows project evidence in the list', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-123' })])
-    mocks.listJobs.mockResolvedValue([
+    mocks.listAllJobs.mockResolvedValue([
       { id: 12, project_id: 'PROJ-123', evidence_number: 'EV-123' },
       { id: 11, project_id: 'PROJ-123', evidence_number: 'EV-OLDER' },
     ])
@@ -264,7 +264,7 @@ describe('DrivesView rescan and filter loading', () => {
 
   it('links the project and evidence values to the related job detail', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-123' })])
-    mocks.listJobs.mockResolvedValue([
+    mocks.listAllJobs.mockResolvedValue([
       { id: 44, project_id: 'PROJ-123', evidence_number: 'EV-123', drive: { id: 1 } },
     ])
 
@@ -291,7 +291,7 @@ describe('DrivesView rescan and filter loading', () => {
       buildDrive({ id: 1, current_project_id: 'PROJ-123', display_device_label: 'Drive 1 - Port 1' }),
       buildDrive({ id: 2, current_project_id: 'PROJ-123', display_device_label: 'Drive 2 - Port 2' }),
     ])
-    mocks.listJobs.mockResolvedValue([
+    mocks.listAllJobs.mockResolvedValue([
       { id: 7, project_id: 'PROJ-123', evidence_number: 'EV-007', drive: { id: 1 } },
       { id: 4, project_id: 'PROJ-123', evidence_number: 'EV-004', drive: { id: 2 } },
     ])
@@ -310,6 +310,20 @@ describe('DrivesView rescan and filter loading', () => {
     await flushPromises()
 
     expect(mocks.push).toHaveBeenLastCalledWith({ name: 'job-detail', params: { id: 4 } })
+  })
+
+  it('uses jobs beyond the first backend page when deriving related evidence links', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ id: 2, current_project_id: 'PROJ-123', display_device_label: 'Drive 2 - Port 2' })])
+    mocks.listAllJobs.mockResolvedValue([
+      { id: 7, project_id: 'PROJ-123', evidence_number: 'EV-007', drive: { id: 1 } },
+      { id: 4, project_id: 'PROJ-123', evidence_number: 'EV-004', drive: { id: 2 } },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const linkedCells = wrapper.findAll('.cell-link')
+    expect(linkedCells.map((node) => node.text())).toEqual(['PROJ-123', 'EV-004'])
   })
 
   it('sorts by project in ascending and descending order and keeps that sort after refresh', async () => {
