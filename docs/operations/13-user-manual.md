@@ -24,15 +24,15 @@
    - [Prepare Eject](#76-prepare-eject)
 10. [Mounts](#8-mounts)
 11. [Jobs](#9-jobs)
-   - [Webhook Callbacks](#93-webhook-callbacks)
-12. [Job Detail, Verification, and File Review](#10-job-detail-verification-and-file-review)
-13. [Audit Logs](#11-audit-logs)
-   - [Chain of Custody Workflow](#111-chain-of-custody-workflow)
+   - [Job Detail, Verification, and File Review](#94-job-detail-verification-and-file-review)
+12. [Audit Logs](#10-audit-logs)
+   - [Chain of Custody Workflow](#101-chain-of-custody-workflow)
+13. [System](#11-system)
+   - [Application Logs Tab](#111-application-logs-tab)
+   - [Manual Mount Reconciliation](#112-manual-mount-reconciliation)
 14. [Users](#12-users)
 15. [Configuration](#13-configuration)
-16. [System](#14-system)
-   - [Application Logs Tab](#141-application-logs-tab)
-   - [Manual Mount Reconciliation](#142-manual-mount-reconciliation)
+16. [Webhook Callbacks](#14-webhook-callbacks)
 17. [Common Tasks](#15-common-tasks)
 18. [Troubleshooting](#16-troubleshooting)
 
@@ -587,31 +587,7 @@ For `thread count`, start with the default value unless your administrator has g
 
 The source path is interpreted inside the selected mounted share. Entering only / uses the root of that share, and attempts to navigate outside the selected share are rejected before the job is created.
 
-### 9.3 Webhook Callbacks
-
-ECUBE can notify an external system when a job reaches a terminal state.
-
-You can configure webhook behavior in two places:
-
-- `Configuration` page: administrators can set a system-wide `Default Callback URL`
-- Jobs UI: operators can set or clear a per-job `Webhook callback URL`
-
-How precedence works:
-
-- If a job has its own `Webhook callback URL`, ECUBE uses that job-specific value
-- If the job field is blank, ECUBE falls back to the system-wide `Default Callback URL` when one is configured
-- If neither value is set, ECUBE does not send a webhook callback
-
-Important rules:
-
-- Callback URLs must use `https://`
-- Callback URLs with embedded credentials are rejected
-- If an administrator configures a signing secret, ECUBE adds an `X-ECUBE-Signature` header to outbound callbacks
-- The callback is sent only when the job reaches a terminal state such as `COMPLETED` or `FAILED`
-
-Use a job-specific callback URL when one export must notify a different downstream system than the rest of the deployment.
-
-### 9.4 Opening a Job
+### 9.3 Opening a Job
 
 Open a job to view details and perform follow-up actions.
 
@@ -623,7 +599,7 @@ Archived jobs remain readable from Job Detail, but they are intentionally treate
 
 ---
 
-## 10. Job Detail, Verification, and File Review
+### 9.4 Job Detail, Verification, and File Review
 
 > **Access Summary**
 > **Page visibility:** `admin`, `manager`, `processor`, `auditor`
@@ -647,7 +623,7 @@ Typical functions include:
 - Inspect hashes for individual files
 - Compare a file's source version against its copied destination version
 
-### 10.1 Editing, Starting, Retrying Failed Files, Pausing, Completing, Verifying, and Generating a Manifest
+#### 9.4.1 Editing, Starting, Retrying Failed Files, Pausing, Completing, Verifying, and Generating a Manifest
 
 Action buttons are shown near the top of the job detail screen.
 
@@ -695,7 +671,7 @@ When a job is paused, completed, or fails, the detail view shows a summary with 
 
 When ECUBE can safely correlate a failed copy to the selected source or destination for that job, the failure summary may add relative hints such as `source: reports/a.txt` or `destination: reports/a.txt`. Raw host or mount paths are not shown in the Job Detail summary.
 
-### 10.2 File List
+#### 9.4.2 File List
 
 The Files panel is collapsed by default on Job Detail. Use `Show files` to expand it and `Hide files` to collapse it again without losing the current page.
 
@@ -711,7 +687,7 @@ Users allowed to inspect hashes open the hash viewer by selecting the file path 
 
 If the job contains more rows than fit on one page, the panel shows a numbered pagination control with left/right navigation. Desktop layouts expose a wider page-number window, while smaller screens show a shorter page-number window to reduce horizontal crowding. The number of rows shown per page is controlled by the admin-only `Job Detail Files Per Page` runtime setting and is bounded between 20 and 100.
 
-### 10.3 Hash Viewer
+#### 9.4.3 Hash Viewer
 
 Users with sufficient permissions can inspect file hashes in a popup dialog opened from the file path in the Files panel. The dialog includes values such as:
 
@@ -720,7 +696,7 @@ Users with sufficient permissions can inspect file hashes in a popup dialog open
 
 The same popup also includes the compare workflow, so operators can inspect hashes and then compare the selected exported file against its source version without leaving Job Detail.
 
-### 10.4 Compare Source and Destination
+#### 9.4.4 Compare Source and Destination
 
 The compare workflow now uses clear `Source` and `Destination` terminology inside the hash viewer popup. After you open hashes for an exported file, choose the source file in the compare selector to evaluate the original source version against the copied destination version.
 
@@ -739,7 +715,7 @@ Verify and Manifest stay disabled until the job reaches a truly complete 100% st
 
 ---
 
-## 11. Audit Logs
+## 10. Audit Logs
 
 > **Access Summary**
 > **Page visibility:** `admin`, `manager`, `auditor`
@@ -765,7 +741,7 @@ When exporting CSV:
 
 ![Audit page with filters and export tools (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/audit-default-chromium-linux.png)
 
-### 11.1 Chain of Custody Workflow
+### 10.1 Chain of Custody Workflow
 
 Use the `Chain of Custody` action on `Job Detail` to open the job-scoped CoC dialog. This is the standard closeout path when media is being transferred. The dialog loads the last stored CoC snapshot for that job, shows the formatted report content directly, allows authorized users to refresh and store a new snapshot, and provides print/export controls plus a separate `Custody Handoff` action when the current role and custody state allow it.
 
@@ -811,94 +787,7 @@ Operational guidance:
 
 ---
 
-## 12. Users
-
-> **Access Summary**
-> **Page visibility:** `admin`
-> **Restricted actions:** All user-management actions on this page are administrator-only.
-
-The `Users` page is role-restricted and is generally intended for administrators.
-
-Functions available from this page can include:
-
-- Refreshing the current user list
-- Creating an operating-system user for ECUBE access
-- Assigning or removing ECUBE roles
-- Resetting a user's password
-
-### 12.1 Reset a User Password
-
-**Allowed roles:** `admin`
-
-1. Open `Users`.
-2. Locate the target account in the users table.
-3. Open the password reset action for that user.
-4. Enter a temporary or policy-compliant new password.
-5. Confirm the reset action.
-6. Verify the UI shows a success confirmation.
-7. Communicate the temporary password through your approved secure channel.
-8. Require the user to change it at first sign-in if required by your policy.
-
-Notes:
-
-- Reset only ECUBE-managed accounts from this workflow.
-- Use strong passwords that meet your organization security requirements.
-- Record administrative password-reset actions according to your SOP.
-
-If your role does not include access to this page, the navigation item will not appear.
-
-![Users page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/users-default-chromium-linux.png)
-
-## 13. Configuration
-
-**Allowed roles:** `admin`
-
-Use the `Configuration` page to update selected runtime settings from the UI without logging into the host terminal.
-
-In a standard deployment, the Logging section loads with file logging already enabled and the log path prefilled as `/var/log/ecube/app.log`. Unchecking the file logging toggle clears `LOG_FILE` and returns ECUBE to console-only logging.
-
-What this page is for:
-
-- Adjusting logging behavior (level, format, and file logging options)
-- Adjusting selected database pool settings exposed by the UI
-- Setting or clearing the system-wide `Default Callback URL` used for job webhooks when a job does not supply its own callback URL
-- Setting or clearing the write-only webhook signing secret used for the `X-ECUBE-Signature` header
-- Setting or clearing the outbound webhook proxy URL used for callback delivery
-- Applying safe configuration changes through role-restricted workflows
-
-Basic workflow:
-
-1. Open `Configuration` from the admin navigation area.
-2. Review current values in each section.
-3. Edit one or more fields.
-4. Click `Save`.
-5. Review post-save status: some changes apply immediately, and some changes are marked as pending restart.
-
-Restart-required workflow:
-
-1. If the page indicates that restart is required, review the listed changed settings.
-2. Click `Restart Service` only when you are ready.
-3. Read the confirmation dialog.
-4. Confirm restart to submit the service restart request.
-5. If you select cancel, no restart is triggered and the service keeps running.
-
-Important operational notes:
-
-- Restart actions are never automatic from this page and always require explicit confirmation.
-- Restarting the application service can interrupt active operations. Prefer using a maintenance window or an idle period.
-- The `Default Callback URL` must be a valid `https://` URL and is overridden by any job-specific `Webhook callback URL` entered on the Jobs page or Job Detail edit dialog.
-- The `Outbound Callback Proxy URL` must be a valid `http://` or `https://` URL and must not contain embedded credentials.
-- The `Webhook Signing Secret` field is write-only. Leave it blank to keep the current secret, enter a new value to rotate it, or use the clear checkbox to remove it.
-- If restart submission fails, use the displayed error and contact platform support or perform restart through approved host-level procedures.
-- For field-by-field meaning and defaults, see [04-configuration-reference.md](04-configuration-reference.md).
-
-If your role does not include access to this page, the navigation item will not appear.
-
-![Configuration page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/configuration-default-chromium-linux.png)
-
----
-
-## 14. System
+## 11. System
 
 > **Access Summary**
 > **Page visibility:** `admin`, `manager`, `processor`, `auditor`
@@ -925,7 +814,7 @@ For users with `admin` or `manager` roles, the System tab bar includes a `Reconc
 
 ![System page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/system-default-chromium-linux.png)
 
-### 14.1 Application Logs Tab
+### 11.1 Application Logs Tab
 
 **Access:** `admin` role only
 
@@ -982,11 +871,11 @@ If the Logs tab shows an error or is unavailable:
 - Check that the selected log file still exists on the ECUBE host.
 - Verify the ECUBE service account has read permissions on the selected log file.
 - If you selected a rotated file, confirm the file has not been removed or replaced during log rotation.
-- Consult [15. Troubleshooting](#15-troubleshooting) for service-level issues.
+- Consult [16. Troubleshooting](#16-troubleshooting) for service-level issues.
 
 Governance note: denied log access attempts by non-admin users are recorded in the audit trail for accountability and compliance visibility.
 
-### 14.2 Manual Mount Reconciliation
+### 11.2 Manual Mount Reconciliation
 
 **Access:** `admin`, `manager` roles
 
@@ -1028,9 +917,236 @@ Use the `Back` button on the results page to return to the System page.
 
 ---
 
+## 12. Users
+
+> **Access Summary**
+> **Page visibility:** `admin`
+> **Restricted actions:** All user-management actions on this page are administrator-only.
+
+The `Users` page is role-restricted and is generally intended for administrators.
+
+Functions available from this page can include:
+
+- Refreshing the current user list
+- Creating an operating-system user for ECUBE access
+- Assigning or removing ECUBE roles
+- Resetting a user's password
+
+### 12.1 Reset a User Password
+
+**Allowed roles:** `admin`
+
+1. Open `Users`.
+2. Locate the target account in the users table.
+3. Open the password reset action for that user.
+4. Enter a temporary or policy-compliant new password.
+5. Confirm the reset action.
+6. Verify the UI shows a success confirmation.
+7. Communicate the temporary password through your approved secure channel.
+8. Require the user to change it at first sign-in if required by your policy.
+
+Notes:
+
+- Reset only ECUBE-managed accounts from this workflow.
+- Use strong passwords that meet your organization security requirements.
+- Record administrative password-reset actions according to your SOP.
+
+If your role does not include access to this page, the navigation item will not appear.
+
+![Users page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/users-default-chromium-linux.png)
+
+## 13. Configuration
+
+**Allowed roles:** `admin`
+
+Use the `Configuration` page to update selected runtime settings from the UI without logging into the host terminal.
+
+In a standard deployment, the Logging section loads with file logging already enabled and the log path prefilled as `/var/log/ecube/app.log`. Unchecking the file logging toggle clears `LOG_FILE` and returns ECUBE to console-only logging.
+
+What this page is for:
+
+- Adjusting logging behavior (level, format, and file logging options)
+- Adjusting selected database pool settings exposed by the UI
+- Setting or clearing the system-wide `Default Callback URL` used for job webhooks when a job does not supply its own callback URL
+- Setting or clearing the write-only webhook signing secret used for the `X-ECUBE-Signature` header
+- Setting or clearing the outbound webhook proxy URL used for callback delivery
+- Setting or clearing JSON-based callback payload field selection and outbound field mapping rules
+- Applying safe configuration changes through role-restricted workflows
+
+Basic workflow:
+
+1. Open `Configuration` from the admin navigation area.
+2. Review current values in each section.
+3. Edit one or more fields.
+4. Click `Save`.
+5. Review post-save status: some changes apply immediately, and some changes are marked as pending restart.
+
+Restart-required workflow:
+
+1. If the page indicates that restart is required, review the listed changed settings.
+2. Click `Restart Service` only when you are ready.
+3. Read the confirmation dialog.
+4. Confirm restart to submit the service restart request.
+5. If you select cancel, no restart is triggered and the service keeps running.
+
+Important operational notes:
+
+- Restart actions are never automatic from this page and always require explicit confirmation.
+- Restarting the application service can interrupt active operations. Prefer using a maintenance window or an idle period.
+- The `Default Callback URL` must be a valid `https://` URL and is overridden by any job-specific `Webhook callback URL` entered on the Jobs page or Job Detail edit dialog.
+- The `Outbound Callback Proxy URL` must be a valid `http://` or `https://` URL and must not contain embedded credentials.
+- The `Webhook Signing Secret` field is write-only. Leave it blank to keep the current secret, enter a new value to rotate it, or use the clear checkbox to remove it.
+- `Callback Payload Source Fields` expects a JSON array of allowlisted source fields. Leave it blank to keep the default ECUBE payload.
+- `Callback Payload Field Mapping` expects a JSON object whose values are exact source field names or `${field}` template strings. Invalid JSON or unsupported field names are rejected on save.
+- If restart submission fails, use the displayed error and contact platform support or perform restart through approved host-level procedures.
+- For field-by-field meaning and defaults, see [04-configuration-reference.md](04-configuration-reference.md).
+
+If your role does not include access to this page, the navigation item will not appear.
+
+![Configuration page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/configuration-default-chromium-linux.png)
+
+---
+
+## 14. Webhook Callbacks
+
+ECUBE can notify an external system when a job reaches a terminal state.
+
+You can configure webhook behavior in two places:
+
+- `Configuration` page: administrators can set a system-wide `Default Callback URL`
+- Jobs UI: operators can set or clear a per-job `Webhook callback URL`
+
+How precedence works:
+
+- If a job has its own `Webhook callback URL`, ECUBE uses that job-specific value
+- If the job field is blank, ECUBE falls back to the system-wide `Default Callback URL` when one is configured
+- If neither value is set, ECUBE does not send a webhook callback
+
+Important rules:
+
+- Callback URLs must use `https://`
+- Callback URLs with embedded credentials are rejected
+- If an administrator configures a signing secret, ECUBE adds an `X-ECUBE-Signature` header to outbound callbacks
+- The callback is sent only when the job reaches a terminal state such as `COMPLETED` or `FAILED`
+
+Use a job-specific callback URL when one export must notify a different downstream system than the rest of the deployment.
+
+### 14.1 Configure Callback Delivery
+
+To configure a system-wide callback as an administrator:
+
+1. Open `Configuration`.
+2. Scroll to the `Webhooks` panel.
+3. Enter the `Default Callback URL` if jobs without a per-job callback should still notify a downstream system.
+4. Optionally enter an `Outbound Callback Proxy URL` if your environment requires webhook delivery through an HTTP or HTTPS forward proxy.
+5. Optionally enter a `Webhook Signing Secret` if the receiver should validate `X-ECUBE-Signature` against the raw request body.
+6. Click `Save`.
+
+To configure a per-job callback:
+
+1. Open `Jobs` and create a new job, or open `Job Detail` and use `Edit` on an eligible job.
+2. Enter the job-specific `Webhook callback URL`.
+3. Save the job.
+
+Operational notes:
+
+- The callback URL must use `https://`.
+- Embedded credentials in callback or proxy URLs are rejected.
+- Leaving the job-level callback blank causes ECUBE to fall back to the configured system default, if one exists.
+- Leaving both values blank disables callback delivery for that job.
+- The signing secret is write-only in the UI. Leave it blank to keep the current secret, enter a new secret to rotate it, or clear it from the `Configuration` page.
+
+### 14.2 Configure the Callback Payload
+
+Administrators can optionally customize the outbound payload in the `Configuration` page `Webhooks` panel with these two fields:
+
+- `Callback Payload Source Fields`: JSON array of allowlisted source fields to include.
+- `Callback Payload Field Mapping`: JSON object that remaps outbound field names to either an exact source field name or a deterministic `${field}` template string.
+
+Recommended workflow:
+
+1. Start by entering the source fields you want ECUBE to expose.
+2. Save that field list first if you want the backend to validate the allowlist before you add mapping.
+3. Add `Callback Payload Field Mapping` only after the required source fields are present in the allowlist.
+4. Save again and validate the result against your receiver.
+
+Example `Callback Payload Source Fields` value:
+
+```json
+[
+   "event",
+   "job_id",
+   "project_id",
+   "evidence_number",
+   "started_by",
+   "completion_result",
+   "active_duration_seconds",
+   "drive_id",
+   "drive_serial_number",
+   "started_at",
+   "completed_at"
+]
+```
+
+Example `Callback Payload Field Mapping` value:
+
+```json
+{
+   "type": "event",
+   "job": "job_id",
+   "project": "project_id",
+   "operator": "started_by",
+   "duration_seconds": "active_duration_seconds",
+   "drive": "drive_id",
+   "serial": "drive_serial_number",
+   "summary": "project=${project_id};result=${completion_result}",
+   "started": "started_at",
+   "ended": "completed_at"
+}
+```
+
+Important payload rules:
+
+- `Callback Payload Source Fields` must be valid JSON and must be a non-empty array when provided.
+- `Callback Payload Field Mapping` must be valid JSON and must be an object when provided.
+- Mapping values can reference only fields already present in `Callback Payload Source Fields`.
+- Template values are limited to exact `${field}` substitutions. Expressions, code, arithmetic, and nested templating are not supported.
+- ECUBE validates the payload contract before saving; invalid, blank, duplicate, or unknown fields are rejected.
+- Mapping is applied before ECUBE signs the payload, so the final mapped JSON body is what the receiver validates.
+
+### 14.3 Available Callback Payload Fields
+
+The following source fields can be used in `Callback Payload Source Fields` and `Callback Payload Field Mapping`:
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `event` | `string` | `JOB_COMPLETED` or `JOB_FAILED`. |
+| `job_id` | `integer` | ECUBE job ID. |
+| `project_id` | `string` | Bound project identifier. |
+| `evidence_number` | `string` | Evidence/case number stored on the job. |
+| `started_by` | `string` or null | Username of the user who started the job when recorded. |
+| `status` | `string` | Terminal job status. |
+| `source_path` | `string` | Source path recorded for the job. |
+| `total_bytes` | `integer` | Total bytes ECUBE planned to copy. |
+| `copied_bytes` | `integer` | Bytes actually copied. |
+| `file_count` | `integer` | Total file count. |
+| `files_succeeded` | `integer` | Files copied successfully. |
+| `files_failed` | `integer` | Files that ended in error. |
+| `files_timed_out` | `integer` | Files that timed out. |
+| `completion_result` | `string` | `success`, `partial_success`, or `failed`. |
+| `active_duration_seconds` | `integer` | Persisted cumulative active runtime for the job in seconds. |
+| `drive_id` | `integer` or absent | Active destination drive ID for the job when present. |
+| `drive_manufacturer` | `string` or null or absent | Destination drive manufacturer when present. |
+| `drive_model` | `string` or null or absent | Destination drive model/product name when present. |
+| `drive_serial_number` | `string` or null or absent | Destination drive serial number when present. |
+| `started_at` | `string` or absent | ISO 8601 timestamp when the job run started. |
+| `completed_at` | `string` or absent | ISO 8601 timestamp when present on the job. |
+
+---
+
 ## 15. Common Tasks
 
-### 14.1 Insert a New Drive and Associate It with a Project
+### 15.1 Insert a New Drive and Associate It with a Project
 
 **Allowed roles:** `admin`, `manager`
 
@@ -1051,7 +1167,7 @@ Notes:
 - The destination drive itself must also already be mounted; otherwise ECUBE returns a conflict and records the rejection in the audit log.
 - Confirm the project carefully before initialization because project isolation is enforced after association.
 
-### 14.1a Re-insert a Drive to Add More Data to the Same Project
+### 15.1a Re-insert a Drive to Add More Data to the Same Project
 
 **Allowed roles:** `admin`, `manager`
 
@@ -1068,7 +1184,7 @@ If a drive was previously ejected and needs to receive more data for the same pr
 
 No format is required when re-using the same project, but both the mounted-share and mounted-drive prerequisites still apply.
 
-### 14.1b Re-assign a Drive to a Different Project
+### 15.1b Re-assign a Drive to a Different Project
 
 **Allowed roles:** `admin`, `manager`
 
@@ -1085,7 +1201,7 @@ If a drive must be reassigned to a different project, a format is required to wi
 
 > **Warning:** Formatting permanently deletes all data on the drive. Verify that copies and chain-of-custody records for prior project data are complete before proceeding.
 
-### 14.2 Prepare a Drive for Removal and Shipment
+### 15.2 Prepare a Drive for Removal and Shipment
 
 **Allowed roles:** `admin`, `manager`
 
@@ -1103,7 +1219,7 @@ Notes:
 - After ejection the drive returns to `AVAILABLE` with its project binding intact. It can be re-initialized for the same project without reformatting.
 - To permanently retire the drive, open the related job in `Job Detail` and complete the Chain of Custody handoff from the `Chain of Custody` dialog.
 
-### 14.3 Export Evidence to a Drive
+### 15.3 Export Evidence to a Drive
 
 **Allowed roles:** `admin`, `manager`, `processor`
 
@@ -1120,7 +1236,7 @@ Notes:
 
 If the job should notify an external case-management or orchestration system when it completes, enter the destination `Webhook callback URL` during job creation. Leave the field blank if the job should use the administrator-configured system default instead.
 
-### 14.4 Review Copy Results
+### 15.4 Review Copy Results
 
 **Allowed roles:** `admin`, `manager`, `processor`, `auditor`
 
@@ -1135,7 +1251,7 @@ Notes:
 - Hash inspection is currently available to `admin` and `auditor` in the UI.
 - Operational actions such as `Start`, `Verify`, and `Manifest` are available to `admin`, `manager`, and `processor`.
 
-### 14.5 Review Audit Activity
+### 15.5 Review Audit Activity
 
 **Allowed roles:** `admin`, `manager`, `auditor`
 
@@ -1144,7 +1260,7 @@ Notes:
 3. Expand details for relevant records.
 4. Export CSV if you need to retain or share the filtered results.
 
-### 14.6 Add a New User
+### 15.6 Add a New User
 
 **Allowed roles:** `admin`
 
@@ -1164,7 +1280,7 @@ Notes:
 - Existing users that are linked into ECUBE are not prompted for a new password in this flow.
 - For directory-backed users that cannot be fully enumerated by host account listing, ECUBE may show placeholder host fields while still exposing role management controls.
 
-### 14.7 Remove a User's ECUBE Access
+### 15.7 Remove a User's ECUBE Access
 
 **Allowed roles:** `admin`
 
@@ -1179,7 +1295,7 @@ Notes:
 - In the current web UI, removing all roles is the visible workflow for removing ECUBE access.
 - Full operating-system user deletion is not currently exposed in the web UI and should be handled through administrative procedures outside this manual.
 
-### 14.8 View Application Logs for Troubleshooting
+### 15.8 View Application Logs for Troubleshooting
 
 **Allowed roles:** `admin`
 

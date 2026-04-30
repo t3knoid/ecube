@@ -20,6 +20,15 @@ const logFileEnabled = ref(false)
 const originalLogFileEnabled = ref(false)
 
 const DEFAULT_LOG_FILE_PATH = '/var/log/ecube/app.log'
+const CALLBACK_PAYLOAD_FIELDS_PLACEHOLDER = `[
+  "event",
+  "project_id",
+  "completion_result"
+]`
+const CALLBACK_PAYLOAD_FIELD_MAP_PLACEHOLDER = `{
+  "type": "event",
+  "summary": "project=${'${project_id}'};result=${'${completion_result}'}"
+}`
 
 const form = ref({
   log_level: 'INFO',
@@ -35,6 +44,8 @@ const form = ref({
   job_detail_files_page_size: 40,
   callback_default_url: '',
   callback_proxy_url: '',
+  callback_payload_fields: '',
+  callback_payload_field_map: '',
   callback_hmac_secret: '',
   callback_hmac_secret_configured: false,
   clear_callback_hmac_secret: false,
@@ -55,13 +66,35 @@ const fieldOrder = [
   'job_detail_files_page_size',
   'callback_default_url',
   'callback_proxy_url',
+  'callback_payload_fields',
+  'callback_payload_field_map',
 ]
 
 const levelOptions = ['DEBUG', 'INFO', 'WARNING', 'ERROR']
 const formatOptions = ['text', 'json']
 const nfsClientVersionOptions = ['4.2', '4.1', '4.0', '3']
 
-const hasChanges = computed(() => Object.keys(buildPatchPayload()).length > 0)
+const hasChanges = computed(() => {
+  for (const key of fieldOrder) {
+    if (key === 'log_file') {
+      const currentLogFile = effectiveLogFileValue(logFileEnabled.value, form.value.log_file)
+      const originalLogFile = effectiveLogFileValue(originalLogFileEnabled.value, originalForm.value.log_file)
+      if (currentLogFile !== originalLogFile) {
+        return true
+      }
+      continue
+    }
+    if (form.value[key] !== originalForm.value[key]) {
+      return true
+    }
+  }
+
+  const nextSecret = String(form.value.callback_hmac_secret || '').trim()
+  if (nextSecret) {
+    return true
+  }
+  return !!(form.value.clear_callback_hmac_secret && originalForm.value.callback_hmac_secret_configured)
+})
 
 const changedFieldLabels = computed(() => {
   return fieldOrder
@@ -119,6 +152,9 @@ function normalizeForm(data) {
       value = value || ''
       backendLogFileValue = String(value)
     }
+    if (key === 'callback_payload_fields' || key === 'callback_payload_field_map') {
+      value = value == null ? '' : JSON.stringify(value, null, 2)
+    }
     if (typeof form.value[key] === 'number' && value != null) {
       value = Number(value)
     }
@@ -155,7 +191,13 @@ function buildPatchPayload() {
       continue
     }
     if (form.value[key] !== originalForm.value[key]) {
-      payload[key] = form.value[key]
+      if (key === 'callback_payload_fields') {
+        payload[key] = parseJsonConfigurationField(form.value[key], key, 'array')
+      } else if (key === 'callback_payload_field_map') {
+        payload[key] = parseJsonConfigurationField(form.value[key], key, 'object')
+      } else {
+        payload[key] = form.value[key]
+      }
     }
   }
 
@@ -167,6 +209,26 @@ function buildPatchPayload() {
   }
 
   return payload
+}
+
+function parseJsonConfigurationField(value, key, kind) {
+  const trimmed = String(value || '').trim()
+  if (!trimmed) return null
+
+  let parsed
+  try {
+    parsed = JSON.parse(trimmed)
+  } catch {
+    throw new Error(t(`configuration.fields.${key}.invalidJson`))
+  }
+
+  if (kind === 'array' && !Array.isArray(parsed)) {
+    throw new Error(t(`configuration.fields.${key}.invalidType`))
+  }
+  if (kind === 'object' && (parsed == null || Array.isArray(parsed) || typeof parsed !== 'object')) {
+    throw new Error(t(`configuration.fields.${key}.invalidType`))
+  }
+  return parsed
 }
 
 function resetForm() {
@@ -192,7 +254,13 @@ async function loadConfiguration() {
 }
 
 async function saveConfiguration() {
-  const payload = buildPatchPayload()
+  let payload
+  try {
+    payload = buildPatchPayload()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : t('common.errors.validationFailed')
+    return
+  }
   if (Object.keys(payload).length === 0) return
 
   saving.value = true
@@ -375,6 +443,24 @@ onMounted(loadConfiguration)
           />
           <span>{{ t('configuration.fields.callback_hmac_secret.clearLabel') }}</span>
         </label>
+
+        <label for="cfg-callback-payload-fields">{{ t('configuration.fields.callback_payload_fields.label') }}</label>
+        <textarea
+          id="cfg-callback-payload-fields"
+          v-model="form.callback_payload_fields"
+          rows="6"
+          :placeholder="CALLBACK_PAYLOAD_FIELDS_PLACEHOLDER"
+        />
+        <p class="field-help">{{ t('configuration.fields.callback_payload_fields.help') }}</p>
+
+        <label for="cfg-callback-payload-field-map">{{ t('configuration.fields.callback_payload_field_map.label') }}</label>
+        <textarea
+          id="cfg-callback-payload-field-map"
+          v-model="form.callback_payload_field_map"
+          rows="8"
+          :placeholder="CALLBACK_PAYLOAD_FIELD_MAP_PLACEHOLDER"
+        />
+        <p class="field-help">{{ t('configuration.fields.callback_payload_field_map.help') }}</p>
       </article>
     </div>
 
