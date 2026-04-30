@@ -691,6 +691,10 @@ onBeforeUnmount(() => {
   gap: var(--space-xs);
 }
 
+.detail-grid > div > strong {
+  font-weight: var(--font-weight-bold);
+}
+
 .action-row {
   margin-top: var(--space-md);
 }
