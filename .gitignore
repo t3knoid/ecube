@@ -226,3 +226,4 @@ test-results/.last-run.json
 docs/review/**
 .vscodeprompt.md
 None
+*.sh
