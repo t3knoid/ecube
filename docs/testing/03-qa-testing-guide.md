@@ -1870,7 +1870,7 @@ SELECT action, COUNT(*) AS count FROM audit_logs WHERE project_id IN ('CASE-2026
 COMMIT;
 ```
 
-**Cleanup Script (PostgreSQL):**
+#### Cleanup Script (PostgreSQL)
 
 ```sql
 -- ============================================================================
@@ -1884,6 +1884,11 @@ BEGIN; -- Wrap in transaction for safety
 
 -- Delete audit logs first (no dependents, but clears history)
 DELETE FROM audit_logs WHERE project_id IN ('CASE-2026-001', 'CASE-2026-002');
+
+-- Delete stored chain-of-custody snapshots (FK to jobs)
+DELETE FROM job_chain_of_custody_snapshots WHERE job_id IN (
+  SELECT id FROM export_jobs WHERE project_id IN ('CASE-2026-001', 'CASE-2026-002')
+);
 
 -- Delete drive assignments (FK to drives and jobs)
 DELETE FROM drive_assignments WHERE job_id IN (
@@ -2177,6 +2182,32 @@ $$
 ## 13. Environment Reset Between Test Runs
 
 To ensure clean, repeatable results, reset the environment between QA test runs.
+
+### Targeted reset (remove jobs only)
+
+Use these `psql` one-liners when you need to remove a specific QA job without dropping the full database. Run them in reverse dependency order so foreign keys remain valid while cleaning up job history, the stored chain-of-custody snapshot, and any project-scoped drive or mount bindings that only existed for that job.
+
+```bash
+# Replace 42 with the job ID you want to remove.
+
+sudo -u postgres psql -d ecube -c "DELETE FROM audit_logs WHERE job_id = 42;"
+
+sudo -u postgres psql -d ecube -c "DELETE FROM job_chain_of_custody_snapshots WHERE job_id = 42;"
+
+sudo -u postgres psql -d ecube -c "UPDATE usb_drives SET current_project_id = NULL WHERE id IN (SELECT drive_id FROM drive_assignments WHERE job_id = 42) AND current_project_id = (SELECT project_id FROM export_jobs WHERE id = 42) AND NOT EXISTS (SELECT 1 FROM drive_assignments da JOIN export_jobs ej ON ej.id = da.job_id WHERE da.drive_id = usb_drives.id AND da.job_id <> 42 AND ej.project_id = usb_drives.current_project_id);"
+
+sudo -u postgres psql -d ecube -c "UPDATE network_mounts SET project_id = 'UNASSIGNED' WHERE project_id = (SELECT project_id FROM export_jobs WHERE id = 42) AND NOT EXISTS (SELECT 1 FROM export_jobs WHERE project_id = network_mounts.project_id AND id <> 42);"
+
+sudo -u postgres psql -d ecube -c "DELETE FROM drive_assignments WHERE job_id = 42;"
+
+sudo -u postgres psql -d ecube -c "DELETE FROM manifests WHERE job_id = 42;"
+
+sudo -u postgres psql -d ecube -c "DELETE FROM export_files WHERE job_id = 42;"
+
+sudo -u postgres psql -d ecube -c "DELETE FROM export_jobs WHERE id = 42;"
+```
+
+The `usb_drives` and `network_mounts` updates are intentionally conservative: they only clear the project binding when the deleted job was the last remaining job using that project relationship. If you need to remove multiple jobs, repeat the same commands with each target `job_id`. If you also need to remove broader QA audit history, drives, mounts, hubs, or ports for an entire test project, use the [Cleanup Script (PostgreSQL)](#cleanup-script-postgresql).
 
 ### Quick reset (database only)
 
