@@ -210,6 +210,24 @@ def build_payload(job: ExportJob) -> Dict[str, Any]:
 _TERMINAL_STATUSES = frozenset({JobStatus.COMPLETED, JobStatus.FAILED})
 
 
+def _resolve_callback_url(job: ExportJob) -> Optional[str]:
+    """Return the effective callback URL for *job*.
+
+    Job-specific callback_url takes precedence. When it is absent, the
+    system-wide callback_default_url is used if configured.
+    """
+    job_url = getattr(job, "callback_url", None)
+    if isinstance(job_url, str):
+        job_url = job_url.strip() or None
+    if job_url:
+        return job_url
+
+    default_url = settings.callback_default_url
+    if isinstance(default_url, str):
+        default_url = default_url.strip() or None
+    return default_url
+
+
 def deliver_callback(job: ExportJob, db: Any = None) -> None:
     """Snapshot callback data from *job* and deliver the webhook callback.
 
@@ -222,10 +240,11 @@ def deliver_callback(job: ExportJob, db: Any = None) -> None:
       caller's process using the supplied session, making audit-log assertions
       deterministic.
 
-    If *job.callback_url* is falsy or the job is not in a terminal state
-    (COMPLETED / FAILED) the call is a no-op.
+    If neither a job-specific callback_url nor a system-wide
+    callback_default_url is configured, or the job is not in a terminal
+    state (COMPLETED / FAILED), the call is a no-op.
     """
-    url: Optional[str] = job.callback_url
+    url = _resolve_callback_url(job)
     if not url:
         return
 
