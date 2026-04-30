@@ -37,6 +37,14 @@ class TestConfigurationSchemaValidation:
         req = ConfigurationUpdateRequest(callback_default_url="https://example.com/default-webhook")
         assert req.callback_default_url == "https://example.com/default-webhook"
 
+    def test_update_accepts_callback_proxy_url(self):
+        req = ConfigurationUpdateRequest(callback_proxy_url="http://proxy.example.com:8080")
+        assert req.callback_proxy_url == "http://proxy.example.com:8080"
+
+    def test_update_accepts_callback_hmac_secret(self):
+        req = ConfigurationUpdateRequest(callback_hmac_secret="super-secret")
+        assert req.callback_hmac_secret == "super-secret"
+
     def test_update_allows_clearing_callback_default_url_with_blank(self):
         req = ConfigurationUpdateRequest(callback_default_url="   ")
         assert req.callback_default_url is None
@@ -44,6 +52,17 @@ class TestConfigurationSchemaValidation:
     def test_update_rejects_non_https_callback_default_url(self):
         with pytest.raises(ValidationError):
             ConfigurationUpdateRequest(callback_default_url="http://example.com/webhook")
+
+    def test_update_rejects_callback_proxy_url_with_credentials(self):
+        with pytest.raises(ValidationError):
+            ConfigurationUpdateRequest(callback_proxy_url="http://user:pass@proxy.example.com:8080")
+
+    def test_update_rejects_setting_and_clearing_callback_hmac_secret_together(self):
+        with pytest.raises(ValidationError):
+            ConfigurationUpdateRequest(
+                callback_hmac_secret="super-secret",
+                clear_callback_hmac_secret=True,
+            )
 
     def test_update_rejects_job_detail_files_page_size_below_minimum(self):
         with pytest.raises(ValidationError):
@@ -62,6 +81,9 @@ class TestConfigurationEndpoints:
         assert "copy_job_timeout" in keys
         assert "job_detail_files_page_size" in keys
         assert "callback_default_url" in keys
+        assert "callback_proxy_url" in keys
+        assert "callback_hmac_secret_configured" in keys
+        assert "callback_hmac_secret" not in keys
 
     def test_get_configuration_returns_default_enabled_log_file(self, admin_client):
         resp = admin_client.get("/admin/configuration")
@@ -76,6 +98,19 @@ class TestConfigurationEndpoints:
 
         settings_map = {item["key"]: item["value"] for item in resp.json()["settings"]}
         assert settings_map["callback_default_url"] is None
+
+    def test_get_configuration_returns_callback_hmac_secret_status_only(self, admin_client):
+        original_secret = settings.callback_hmac_secret
+        settings.callback_hmac_secret = "stored-secret"
+        try:
+            resp = admin_client.get("/admin/configuration")
+            assert resp.status_code == 200
+
+            settings_map = {item["key"]: item["value"] for item in resp.json()["settings"]}
+            assert settings_map["callback_hmac_secret_configured"] is True
+            assert "callback_hmac_secret" not in settings_map
+        finally:
+            settings.callback_hmac_secret = original_secret
 
     def test_get_configuration_non_admin_forbidden(self, client):
         resp = client.get("/admin/configuration")
@@ -128,6 +163,98 @@ class TestConfigurationEndpoints:
             assert written.get("CALLBACK_DEFAULT_URL") == "https://example.com/default-webhook"
         finally:
             settings.callback_default_url = original_value
+
+    @patch("app.services.configuration_service.database_service._write_env_settings")
+    def test_update_configuration_persists_callback_proxy_url(
+        self,
+        mock_write_env,
+        admin_client,
+    ):
+        original_value = settings.callback_proxy_url
+        try:
+            resp = admin_client.put(
+                "/admin/configuration",
+                json={"callback_proxy_url": "http://proxy.example.com:8080"},
+            )
+            assert resp.status_code == 200, resp.json()
+
+            payload = resp.json()
+            assert "callback_proxy_url" in payload["changed_settings"]
+
+            written = mock_write_env.call_args.args[0]
+            assert written.get("CALLBACK_PROXY_URL") == "http://proxy.example.com:8080"
+        finally:
+            settings.callback_proxy_url = original_value
+
+    @patch("app.services.configuration_service.database_service._write_env_settings")
+    def test_update_configuration_persists_callback_hmac_secret_without_leaking_it(
+        self,
+        mock_write_env,
+        admin_client,
+        db,
+    ):
+        original_secret = settings.callback_hmac_secret
+        try:
+            resp = admin_client.put(
+                "/admin/configuration",
+                json={"callback_hmac_secret": "super-secret"},
+            )
+            assert resp.status_code == 200, resp.json()
+
+            payload = resp.json()
+            assert "callback_hmac_secret" in payload["changed_settings"]
+            changed_values = payload["changed_setting_values"]["callback_hmac_secret"]
+            assert changed_values["old_value"] is False
+            assert changed_values["new_value"] is True
+
+            written = mock_write_env.call_args.args[0]
+            assert written.get("CALLBACK_HMAC_SECRET") == "super-secret"
+
+            attempt = (
+                db.query(AuditLog)
+                .filter(AuditLog.action == "CONFIGURATION_UPDATE_ATTEMPTED")
+                .order_by(AuditLog.id.desc())
+                .first()
+            )
+            updated = (
+                db.query(AuditLog)
+                .filter(AuditLog.action == "CONFIGURATION_UPDATED")
+                .order_by(AuditLog.id.desc())
+                .first()
+            )
+            assert attempt is not None
+            assert updated is not None
+            assert (attempt.details or {}).get("requested_values", {}).get("callback_hmac_secret") == "[redacted]"
+            updated_secret = (updated.details or {}).get("changed_setting_values", {}).get("callback_hmac_secret", {})
+            assert updated_secret.get("old_value") is False
+            assert updated_secret.get("new_value") is True
+        finally:
+            settings.callback_hmac_secret = original_secret
+
+    @patch("app.services.configuration_service.database_service._write_env_settings")
+    def test_update_configuration_clears_callback_hmac_secret(
+        self,
+        mock_write_env,
+        admin_client,
+    ):
+        original_secret = settings.callback_hmac_secret
+        settings.callback_hmac_secret = "stored-secret"
+        try:
+            resp = admin_client.put(
+                "/admin/configuration",
+                json={"clear_callback_hmac_secret": True},
+            )
+            assert resp.status_code == 200, resp.json()
+
+            payload = resp.json()
+            changed_values = payload["changed_setting_values"]["callback_hmac_secret"]
+            assert changed_values["old_value"] is True
+            assert changed_values["new_value"] is False
+
+            written = mock_write_env.call_args.args[0]
+            assert written.get("CALLBACK_HMAC_SECRET") == ""
+        finally:
+            settings.callback_hmac_secret = original_secret
 
     @patch("app.services.configuration_service.database_service._write_env_settings")
     @patch("app.services.configuration_service.configure_logging")

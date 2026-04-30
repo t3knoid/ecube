@@ -595,6 +595,19 @@
         "label": "Default Callback URL",
         "placeholder": "https://example.com/default-webhook",
         "help": "Optional HTTPS webhook URL used when a job does not define its own callback URL. A job-specific callback URL always overrides this system-wide default."
+      },
+      "callback_proxy_url": {
+        "label": "Outbound Callback Proxy URL",
+        "placeholder": "http://proxy.example.com:8080",
+        "help": "Optional HTTP or HTTPS forward proxy used for outbound webhook delivery. Leave blank to connect directly."
+      },
+      "callback_hmac_secret": {
+        "label": "Webhook Signing Secret",
+        "placeholder": "Enter a new shared secret",
+        "help": "Optional write-only shared secret used to sign callback payloads with the X-ECUBE-Signature header. Leave blank to keep the current secret.",
+        "statusConfigured": "A signing secret is currently configured.",
+        "statusNotConfigured": "No signing secret is currently configured.",
+        "clearLabel": "Clear the stored signing secret"
       }
     },
     "restartRequiredField": "Requires service restart",

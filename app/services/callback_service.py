@@ -16,7 +16,10 @@ backpressure against slow or unreachable callback endpoints.
 """
 
 import atexit
+import hashlib
+import hmac
 import ipaddress
+import json
 import logging
 import socket
 import threading
@@ -228,6 +231,45 @@ def _resolve_callback_url(job: ExportJob) -> Optional[str]:
     return default_url
 
 
+def _resolve_callback_hmac_secret() -> Optional[str]:
+    """Return the configured callback HMAC secret, if present."""
+    secret = getattr(settings, "callback_hmac_secret", None)
+    if not isinstance(secret, str):
+        return None
+    return secret.strip() or None
+
+
+def _resolve_callback_proxy_url() -> Optional[str]:
+    """Return the configured callback forward-proxy URL, if present."""
+    proxy_url = getattr(settings, "callback_proxy_url", None)
+    if not isinstance(proxy_url, str):
+        return None
+    return proxy_url.strip() or None
+
+
+def _serialize_payload_bytes(payload: Dict[str, Any]) -> bytes:
+    """Serialize *payload* into the exact JSON bytes delivered to receivers."""
+    return json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+
+
+def _build_signature_header(payload_bytes: bytes) -> Optional[str]:
+    """Return the HMAC signature header value for *payload_bytes*."""
+    secret = _resolve_callback_hmac_secret()
+    if not secret:
+        return None
+    digest = hmac.new(
+        secret.encode("utf-8"),
+        payload_bytes,
+        hashlib.sha256,
+    ).hexdigest()
+    return f"sha256={digest}"
+
+
 def deliver_callback(job: ExportJob, db: Any = None) -> None:
     """Snapshot callback data from *job* and deliver the webhook callback.
 
@@ -426,6 +468,9 @@ def _do_deliver(
 
     timeout = settings.callback_timeout_seconds
     last_error: Optional[str] = None
+    payload_bytes = _serialize_payload_bytes(payload)
+    signature_header = _build_signature_header(payload_bytes)
+    proxy_url = _resolve_callback_proxy_url()
 
     # Build a pinned URL that connects directly to the resolved IP,
     # preventing DNS rebinding between our safety check and the
@@ -446,16 +491,31 @@ def _do_deliver(
 
     for attempt in range(_MAX_RETRIES):
         try:
-            post_kwargs: Dict[str, Any] = {"json": payload}
+            headers = {"Content-Type": "application/json"}
+            if signature_header:
+                headers["X-ECUBE-Signature"] = signature_header
+
+            post_kwargs: Dict[str, Any] = {
+                "content": payload_bytes,
+                "headers": headers,
+            }
             if pinned_ip is not None:
                 # Override Host header and TLS SNI so the server sees the
                 # original hostname despite connecting to the resolved IP.
-                post_kwargs["headers"] = {"Host": host_header}
+                post_kwargs["headers"]["Host"] = host_header
                 post_kwargs["extensions"] = {
                     "sni_hostname": hostname.encode("idna"),
                 }
 
-            with httpx.Client(timeout=timeout, follow_redirects=False) as client:
+            client_kwargs: Dict[str, Any] = {
+                "timeout": timeout,
+                "follow_redirects": False,
+                "trust_env": False,
+            }
+            if proxy_url:
+                client_kwargs["proxy"] = proxy_url
+
+            with httpx.Client(**client_kwargs) as client:
                 response = client.post(pinned_url, **post_kwargs)
 
             if response.status_code < 300:

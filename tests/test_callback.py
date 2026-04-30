@@ -9,6 +9,9 @@ Covers:
 - ExportJobSchema includes callback_url
 """
 
+import hashlib
+import hmac
+import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -524,7 +527,10 @@ class TestDeliverCallback:
         call_args = mock_client_instance.post.call_args
         posted_url = call_args[0][0]
         assert "93.184.216.34" in posted_url
-        assert call_args[1]["headers"] == {"Host": "default.example.com"}
+        headers = call_args[1]["headers"]
+        assert headers["Host"] == "default.example.com"
+        assert headers["Content-Type"] == "application/json"
+        assert "X-ECUBE-Signature" not in headers
 
     @patch("app.services.callback_service._resolve_safe", return_value="93.184.216.34")
     @patch("app.services.callback_service.httpx.Client")
@@ -545,7 +551,10 @@ class TestDeliverCallback:
             deliver_callback(job, db)
 
         call_args = mock_client_instance.post.call_args
-        assert call_args[1]["headers"] == {"Host": "job.example.com"}
+        headers = call_args[1]["headers"]
+        assert headers["Host"] == "job.example.com"
+        assert headers["Content-Type"] == "application/json"
+        assert "X-ECUBE-Signature" not in headers
 
     @pytest.mark.parametrize("status", [
         JobStatus.PENDING,
@@ -647,6 +656,8 @@ class TestDeliverCallback:
         """Audit logs must never contain query tokens or userinfo."""
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = None
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -677,6 +688,8 @@ class TestDeliverCallback:
     def test_successful_delivery(self, mock_client_cls, mock_settings, mock_resolve, db):
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = None
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -692,10 +705,22 @@ class TestDeliverCallback:
         call_args = mock_client_instance.post.call_args
         posted_url = call_args[0][0]
         assert "93.184.216.34" in posted_url
-        assert call_args[1]["headers"] == {"Host": "example.com"}
+        headers = call_args[1]["headers"]
+        assert headers["Host"] == "example.com"
+        assert headers["Content-Type"] == "application/json"
+        assert "X-ECUBE-Signature" not in headers
         assert call_args[1]["extensions"] == {
             "sni_hostname": b"example.com",
         }
+        delivered_payload = json.loads(call_args[1]["content"].decode("utf-8"))
+        assert delivered_payload["job_id"] == job.id
+        assert delivered_payload["status"] == job.status.value
+        assert delivered_payload["event"] == "JOB_COMPLETED"
+        mock_client_cls.assert_called_with(
+            timeout=5,
+            follow_redirects=False,
+            trust_env=False,
+        )
 
         logs = db.query(AuditLog).filter(
             AuditLog.job_id == job.id,
@@ -712,6 +737,8 @@ class TestDeliverCallback:
     def test_retry_on_5xx_then_success(self, mock_sleep, mock_client_cls, mock_settings, mock_resolve, db):
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = None
 
         resp_500 = MagicMock()
         resp_500.status_code = 500
@@ -744,6 +771,8 @@ class TestDeliverCallback:
     def test_all_retries_exhausted(self, mock_sleep, mock_client_cls, mock_settings, mock_resolve, db):
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = None
 
         resp_503 = MagicMock()
         resp_503.status_code = 503
@@ -773,6 +802,8 @@ class TestDeliverCallback:
     def test_network_error_retries(self, mock_sleep, mock_client_cls, mock_settings, mock_resolve, db):
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = None
 
         mock_client_instance = MagicMock()
         mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
@@ -798,6 +829,8 @@ class TestDeliverCallback:
         not retried — to prevent redirect-based SSRF bypass."""
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = None
 
         resp_302 = MagicMock()
         resp_302.status_code = 302
@@ -828,6 +861,8 @@ class TestDeliverCallback:
         """4xx responses are not retried — they are treated as non-transient."""
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = None
 
         resp_404 = MagicMock()
         resp_404.status_code = 404
@@ -856,6 +891,8 @@ class TestDeliverCallback:
         and httpx connects to the original URL (no DNS pinning)."""
         mock_settings.callback_allow_private_ips = True
         mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = None
 
         with patch("app.services.callback_service.httpx.Client") as mock_client_cls, \
              patch("app.services.callback_service._resolve_safe") as mock_resolve:
@@ -888,6 +925,8 @@ class TestDeliverCallback:
         connection, preventing DNS rebinding (TOCTOU) attacks."""
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = None
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -908,7 +947,9 @@ class TestDeliverCallback:
 
         # Host header and SNI must carry the original hostname for
         # virtual-hosting and proper TLS certificate verification.
-        assert call_args[1]["headers"] == {"Host": "example.com"}
+        headers = call_args[1]["headers"]
+        assert headers["Host"] == "example.com"
+        assert headers["Content-Type"] == "application/json"
         assert call_args[1]["extensions"] == {
             "sni_hostname": b"example.com",
         }
@@ -923,6 +964,8 @@ class TestDeliverCallback:
         must include it so virtual-host routing works on the receiver."""
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = None
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -940,7 +983,9 @@ class TestDeliverCallback:
         assert "93.184.216.34:8443" in posted_url
 
         # Host header must include the port for non-default ports.
-        assert call_args[1]["headers"] == {"Host": "example.com:8443"}
+        headers = call_args[1]["headers"]
+        assert headers["Host"] == "example.com:8443"
+        assert headers["Content-Type"] == "application/json"
         # SNI carries just the hostname (port is not part of TLS SNI).
         assert call_args[1]["extensions"] == {
             "sni_hostname": b"example.com",
@@ -953,6 +998,8 @@ class TestDeliverCallback:
         """IPv6 addresses must be bracket-wrapped in the pinned URL."""
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = None
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -977,6 +1024,8 @@ class TestDeliverCallback:
         so callback delivery doesn't crash on non-ASCII hostnames."""
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = None
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -996,6 +1045,72 @@ class TestDeliverCallback:
         # Must be valid ASCII bytes (IDNA-encoded), not raw UTF-8.
         assert sni == "b\u00fccher.example.com".encode("idna")
         assert sni == b"xn--bcher-kva.example.com"
+
+    @patch("app.services.callback_service._resolve_safe", return_value="93.184.216.34")
+    @patch("app.services.callback_service.settings")
+    @patch("app.services.callback_service.httpx.Client")
+    def test_includes_hmac_signature_header_when_secret_is_configured(
+        self, mock_client_cls, mock_settings, mock_resolve, db,
+    ):
+        mock_settings.callback_allow_private_ips = False
+        mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = "super-secret"
+        mock_settings.callback_proxy_url = None
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_client_instance = MagicMock()
+        mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
+        mock_client_instance.__exit__ = MagicMock(return_value=False)
+        mock_client_instance.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client_instance
+
+        job = self._make_db_job(db)
+        deliver_callback(job, db)
+
+        call_args = mock_client_instance.post.call_args
+        payload_bytes = call_args[1]["content"]
+        headers = call_args[1]["headers"]
+        expected_signature = "sha256=" + hmac.new(
+            b"super-secret",
+            payload_bytes,
+            hashlib.sha256,
+        ).hexdigest()
+        assert headers["X-ECUBE-Signature"] == expected_signature
+        assert headers["Content-Type"] == "application/json"
+        delivered_payload = json.loads(payload_bytes.decode("utf-8"))
+        assert delivered_payload["job_id"] == job.id
+        assert delivered_payload["status"] == job.status.value
+        assert delivered_payload["event"] == "JOB_COMPLETED"
+
+    @patch("app.services.callback_service._resolve_safe", return_value="93.184.216.34")
+    @patch("app.services.callback_service.settings")
+    @patch("app.services.callback_service.httpx.Client")
+    def test_uses_configured_callback_proxy_url(
+        self, mock_client_cls, mock_settings, mock_resolve, db,
+    ):
+        mock_settings.callback_allow_private_ips = False
+        mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = "http://proxy.example.com:8080"
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_client_instance = MagicMock()
+        mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
+        mock_client_instance.__exit__ = MagicMock(return_value=False)
+        mock_client_instance.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client_instance
+
+        job = self._make_db_job(db)
+        deliver_callback(job, db)
+
+        mock_client_cls.assert_called_with(
+            timeout=5,
+            follow_redirects=False,
+            trust_env=False,
+            proxy="http://proxy.example.com:8080",
+        )
 
     def test_production_path_uses_bounded_executor(self):
         """When db is None (production), deliver_callback submits to a
