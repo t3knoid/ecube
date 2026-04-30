@@ -507,6 +507,31 @@ describe('DriveDetailView mount workflow', () => {
     })
   })
 
+  it('keeps the CoC prompt available after prepare eject when the CoC lookup fails unexpectedly', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'IN_USE' })])
+    mocks.listAllJobs.mockResolvedValue([
+      { id: 44, project_id: 'PROJ-007', evidence_number: 'EV-007', drive: { id: 7 } },
+    ])
+    mocks.prepareEjectDrive.mockResolvedValue(buildDrive({ current_state: 'AVAILABLE', mount_path: null }))
+    mocks.getJobChainOfCustody.mockRejectedValue({ response: { status: 500 } })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const ejectButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.prepareEject'))
+    expect(ejectButton).toBeTruthy()
+
+    await ejectButton.trigger('click')
+    await flushPromises()
+    await wrapper.find('.confirm-dialog-confirm').trigger('click')
+    await flushPromises()
+
+    expect(mocks.getJobChainOfCustody).toHaveBeenCalledWith(44)
+    expect(wrapper.text()).toContain(i18n.global.t('drives.ejectSuccess'))
+    expect(wrapper.text()).toContain(i18n.global.t('drives.cocPrompt'))
+    expect(wrapper.findAll('button').some((node) => node.text() === i18n.global.t('drives.openCocReport'))).toBe(true)
+  })
+
   it('blocks prepare eject when the drive has an active running job', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'IN_USE' })])
     mocks.listJobs.mockResolvedValue([{ id: 44, status: 'RUNNING' }])
