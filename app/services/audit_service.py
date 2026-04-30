@@ -21,8 +21,32 @@ from app.schemas.audit import (
     ChainOfCustodyReportSchema,
     ManifestSummarySchema,
 )
+from app.services.callback_service import deliver_callback
 
 logger = logging.getLogger(__name__)
+
+
+def _emit_job_lifecycle_callback(
+    job: ExportJob,
+    *,
+    event: str,
+    actor: Optional[str] = None,
+    event_at: Optional[datetime] = None,
+    event_details: Optional[Dict[str, Any]] = None,
+) -> None:
+    try:
+        deliver_callback(
+            job,
+            event=event,
+            event_actor=actor,
+            event_at=event_at,
+            event_details=event_details,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to dispatch lifecycle callback",
+            extra={"job_id": job.id, "event": event},
+        )
 
 _COC_DRIVE_ACTIONS = {
     "DRIVE_DISCOVERED",
@@ -417,6 +441,21 @@ def confirm_job_chain_of_custody_handoff(
         report=report,
         actor=actor,
         client_ip=client_ip,
+    )
+    _emit_job_lifecycle_callback(
+        refreshed_job,
+        event="COC_HANDOFF_CONFIRMED",
+        actor=actor,
+        event_at=response.recorded_at,
+        event_details={
+            "drive_id": response.drive_id,
+            "project_id": response.project_id,
+            "possessor": response.possessor,
+            "delivery_time": _format_utc_iso(response.delivery_time),
+            "received_by": response.received_by,
+            "receipt_ref": response.receipt_ref,
+            "recorded_at": _format_utc_iso(response.recorded_at),
+        },
     )
     return response
 
@@ -839,6 +878,17 @@ def _store_job_chain_of_custody_snapshot(
         {
             "job_id": job.id,
             "snapshot_id": snapshot.id,
+            "snapshot_stored_at": _format_utc_iso(snapshot.stored_at),
+            "snapshot_updated_at": _format_utc_iso(snapshot.updated_at),
+        },
+    )
+    _emit_job_lifecycle_callback(
+        job,
+        event="COC_SNAPSHOT_STORED",
+        actor=actor,
+        event_at=snapshot.updated_at,
+        event_details={
+            "report_count": len(report.reports),
             "snapshot_stored_at": _format_utc_iso(snapshot.stored_at),
             "snapshot_updated_at": _format_utc_iso(snapshot.updated_at),
         },

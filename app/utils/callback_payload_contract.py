@@ -11,6 +11,7 @@ ALLOWED_CALLBACK_PAYLOAD_SOURCE_FIELDS = (
     "job_id",
     "project_id",
     "evidence_number",
+    "created_by",
     "started_by",
     "status",
     "source_path",
@@ -26,8 +27,12 @@ ALLOWED_CALLBACK_PAYLOAD_SOURCE_FIELDS = (
     "drive_manufacturer",
     "drive_model",
     "drive_serial_number",
+    "created_at",
     "started_at",
     "completed_at",
+    "event_actor",
+    "event_at",
+    "event_details",
 )
 
 _ALLOWED_CALLBACK_PAYLOAD_SOURCE_FIELD_SET = frozenset(ALLOWED_CALLBACK_PAYLOAD_SOURCE_FIELDS)

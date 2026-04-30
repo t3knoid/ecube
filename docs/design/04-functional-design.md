@@ -225,7 +225,7 @@ so project isolation covers both destination drives and source-path selection.
 
 ## 4.8 Webhook Callback Delivery
 
-When a job includes a `callback_url`, the system sends an HTTPS POST request with a JSON payload to the specified URL when the job reaches a terminal state (`COMPLETED` or `FAILED`). This applies to all three terminal-state paths: copy completion, copy timeout, and post-copy verification.
+When a job includes a `callback_url`, the system sends an HTTPS POST request with a JSON payload to the specified URL for persisted lifecycle events. Supported events are `JOB_CREATED`, `JOB_STARTED`, `JOB_RETRY_FAILED_FILES_STARTED`, `JOB_PAUSE_REQUESTED`, `JOB_VERIFY_STARTED`, `JOB_COMPLETED`, `JOB_FAILED`, `JOB_COMPLETED_MANUALLY`, `MANIFEST_CREATED`, `COC_SNAPSHOT_STORED`, `COC_HANDOFF_CONFIRMED`, `JOB_ARCHIVED`, and `JOB_RECONCILED`. Terminal-state callbacks still apply to copy completion, copy timeout, and post-copy verification. Lifecycle callbacks are emitted only after the relevant state change or artifact generation has been persisted.
 
 ### Payload
 
@@ -233,11 +233,12 @@ The callback body is a JSON object containing:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `event` | string | `JOB_COMPLETED` or `JOB_FAILED` |
+| `event` | string | Lifecycle event code such as `JOB_CREATED`, `JOB_STARTED`, `JOB_VERIFY_STARTED`, `JOB_COMPLETED`, `JOB_FAILED`, `MANIFEST_CREATED`, `COC_SNAPSHOT_STORED`, `COC_HANDOFF_CONFIRMED`, `JOB_ARCHIVED`, or `JOB_RECONCILED` |
 | `job_id` | integer | Job identifier |
 | `project_id` | string | Bound project ID |
 | `evidence_number` | string | Evidence case number |
-| `status` | string | Terminal status value |
+| `created_by` | string or null | Username of the user who created the job when recorded |
+| `status` | string | Persisted job status at callback time |
 | `source_path` | string | Source data path |
 | `total_bytes` | integer | Total bytes to copy |
 | `copied_bytes` | integer | Bytes actually copied |
@@ -245,7 +246,11 @@ The callback body is a JSON object containing:
 | `files_succeeded` | integer | Number of files that completed successfully |
 | `files_failed` | integer | Number of files that ended in error |
 | `files_timed_out` | integer | Number of files that timed out |
-| `completion_result` | string | `success`, `partial_success`, or `failed`; consumers must use this to distinguish clean success from partial-success `JOB_COMPLETED` callbacks |
+| `completion_result` | string | `success`, `partial_success`, or `failed`; present for terminal `COMPLETED` or `FAILED` job states so consumers can distinguish clean success from partial-success `JOB_COMPLETED` callbacks |
+| `event_actor` | string or null | Username or system identity that triggered the lifecycle action when recorded |
+| `event_at` | string | ISO 8601 timestamp for the persisted lifecycle event |
+| `event_details` | object | Optional event-specific metadata such as retry counts, manifest details, chain-of-custody snapshot counts, handoff details, or reconciliation reason |
+| `created_at` | string or null | ISO 8601 timestamp when the job was created |
 | `completed_at` | string or null | ISO 8601 timestamp (present when `completed_at` is set) |
 
 ### Retry & Backoff
@@ -291,7 +296,7 @@ The callback body is a JSON object containing:
 - Administrators may optionally customize callback payloads with `CALLBACK_PAYLOAD_FIELDS` and `CALLBACK_PAYLOAD_FIELD_MAP`.
 - The default payload described above remains the baseline payload shape when neither setting is configured.
 - Payload configuration uses an explicit allowlist of ECUBE-owned source fields; arbitrary expressions, code, and unrestricted templating are forbidden.
-- Supported source fields are `event`, `job_id`, `project_id`, `evidence_number`, `started_by`, `status`, `source_path`, `total_bytes`, `copied_bytes`, `file_count`, `files_succeeded`, `files_failed`, `files_timed_out`, `completion_result`, `active_duration_seconds`, `drive_id`, `drive_manufacturer`, `drive_model`, `drive_serial_number`, `started_at`, and `completed_at`.
+- Supported source fields are `event`, `job_id`, `project_id`, `evidence_number`, `created_by`, `started_by`, `status`, `source_path`, `total_bytes`, `copied_bytes`, `file_count`, `files_succeeded`, `files_failed`, `files_timed_out`, `completion_result`, `active_duration_seconds`, `drive_id`, `drive_manufacturer`, `drive_model`, `drive_serial_number`, `created_at`, `started_at`, `completed_at`, `event_actor`, `event_at`, and `event_details`.
 - Mapping format is a JSON object whose keys are outbound field names and whose values are either an allowlisted ECUBE field name or a constrained template token such as `${project_id}`.
 - Mapping evaluation is deterministic, side-effect free, and string-substitution only. Nested expressions, function calls, arithmetic, path traversal, and host-environment access are out of scope.
 - Invalid, blank, duplicate, or unknown source fields cause configuration rejection rather than silent omission.

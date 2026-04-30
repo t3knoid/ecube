@@ -24,6 +24,7 @@ from app.repositories.job_repository import (
 from app.repositories.mount_repository import MountRepository
 from app.schemas.jobs import JobCreate, JobStart, JobUpdate
 from app.services import copy_engine
+from app.services.callback_service import deliver_callback
 from app.utils.sanitize import is_encoding_error, resolve_source_path, sanitize_error_message, validate_source_path
 from app.utils.path_overlap import classify_source_path_overlap
 
@@ -64,6 +65,29 @@ _ARCHIVABLE_JOB_STATUSES = (
 def _row(instance: object) -> Any:
     """Expose SQLAlchemy model instances using their runtime attribute types."""
     return cast(Any, instance)
+
+
+def _emit_job_lifecycle_callback(
+    job: ExportJob,
+    *,
+    event: str,
+    actor: Optional[str] = None,
+    event_at: Optional[datetime] = None,
+    event_details: Optional[dict[str, Any]] = None,
+) -> None:
+    try:
+        deliver_callback(
+            job,
+            event=event,
+            event_actor=actor,
+            event_at=event_at,
+            event_details=event_details,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to dispatch lifecycle callback",
+            extra={"job_id": job.id, "event": event},
+        )
 
 
 def list_jobs(
@@ -268,6 +292,14 @@ def archive_job(
         )
 
     db.refresh(job)
+    archived_at = datetime.now(timezone.utc)
+    _emit_job_lifecycle_callback(
+        job,
+        event="JOB_ARCHIVED",
+        actor=actor,
+        event_at=archived_at,
+        event_details={"previous_status": current_status.value},
+    )
     return job
 
 
@@ -508,6 +540,13 @@ def create_job(
         )
     except Exception:
         logger.exception("Failed to write audit log for JOB_CREATED")
+
+    _emit_job_lifecycle_callback(
+        job,
+        event="JOB_CREATED",
+        actor=actor,
+        event_at=cast(Optional[datetime], getattr(job_row, "created_at", None)),
+    )
     return job
 
 
@@ -890,6 +929,13 @@ def complete_job(
             )
 
     db.refresh(job)
+    _emit_job_lifecycle_callback(
+        job,
+        event="JOB_COMPLETED_MANUALLY",
+        actor=actor,
+        event_at=cast(Optional[datetime], job_row.completed_at),
+        event_details={"previous_status": previous_status},
+    )
     return job
 
 
@@ -1209,6 +1255,13 @@ def start_job(
         )
     except Exception:
         logger.exception("Failed to write audit log for JOB_STARTED")
+    _emit_job_lifecycle_callback(
+        job,
+        event="JOB_STARTED",
+        actor=actor,
+        event_at=cast(Optional[datetime], job_row.started_at),
+        event_details={"thread_count": cast(Optional[int], job_row.thread_count)},
+    )
     background_tasks.add_task(copy_engine.run_copy_job, job_id)
     db.refresh(job)
     return job
@@ -1309,6 +1362,18 @@ def retry_failed_files(
     except Exception:
         logger.exception("Failed to write audit log for JOB_RETRY_FAILED_FILES_STARTED")
 
+    _emit_job_lifecycle_callback(
+        job,
+        event="JOB_RETRY_FAILED_FILES_STARTED",
+        actor=actor,
+        event_at=cast(Optional[datetime], job_row.started_at),
+        event_details={
+            "retry_file_count": retryable_count,
+            "error_count": int(error_count),
+            "timeout_count": int(timeout_count),
+        },
+    )
+
     background_tasks.add_task(copy_engine.run_copy_job, job_id)
     db.refresh(job)
     return job
@@ -1376,6 +1441,14 @@ def pause_job(
         logger.exception("Failed to write audit log for JOB_PAUSE_REQUESTED")
 
     db.refresh(job)
+    pause_requested_at = datetime.now(timezone.utc)
+    _emit_job_lifecycle_callback(
+        job,
+        event="JOB_PAUSE_REQUESTED",
+        actor=actor,
+        event_at=pause_requested_at,
+        event_details={"status": job_status.value},
+    )
     return job
 
 
@@ -1436,6 +1509,13 @@ def verify_job(
         )
     except Exception:
         logger.exception("Failed to write audit log for JOB_VERIFY_STARTED")
+    verify_started_at = datetime.now(timezone.utc)
+    _emit_job_lifecycle_callback(
+        job,
+        event="JOB_VERIFY_STARTED",
+        actor=actor,
+        event_at=verify_started_at,
+    )
     background_tasks.add_task(copy_engine.run_verify_job, job_id)
     db.refresh(job)
     return job
@@ -1471,7 +1551,8 @@ def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, clien
         if assignment_row is not None and getattr(assignment_row, "drive", None) is not None
         else None
     )
-    generated_at = datetime.now(timezone.utc).isoformat()
+    generated_at_dt = datetime.now(timezone.utc)
+    generated_at = generated_at_dt.isoformat()
     generated_by = actor or "system"
     manifest_data = {
         "job_id": cast(int, job_row.id),
@@ -1579,6 +1660,17 @@ def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, clien
     except Exception:
         logger.error("Failed to write audit log for MANIFEST_CREATED")
     db.refresh(job)
+    _emit_job_lifecycle_callback(
+        job,
+        event="MANIFEST_CREATED",
+        actor=actor,
+        event_at=generated_at_dt,
+        event_details={
+            "manifest_file": manifest_name,
+            "generated_at": generated_at,
+            "generated_by": generated_by,
+        },
+    )
     return job
 
 
