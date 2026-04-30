@@ -33,6 +33,11 @@ const mocks = vi.hoisted(() => ({
   mobileViewportMatches: false,
 }))
 
+const routeState = vi.hoisted(() => ({
+  params: { id: '6' },
+  query: {},
+}))
+
 function setMobileViewport(matches) {
   mocks.mobileViewportMatches = matches
 }
@@ -48,7 +53,7 @@ Object.defineProperty(window, 'matchMedia', {
 })
 
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ params: { id: '6' } }),
+  useRoute: () => routeState,
   useRouter: () => ({ push: (...args) => mocks.routerPush(...args) }),
 }))
 
@@ -197,6 +202,8 @@ describe('JobDetailView start action', () => {
     mocks.pollerStop.mockReset()
     mocks.pollerTick = null
     setMobileViewport(false)
+    routeState.params = { id: '6' }
+    routeState.query = {}
 
     mocks.hasAnyRole.mockReturnValue(true)
     mocks.getJob.mockResolvedValue({
@@ -271,6 +278,27 @@ describe('JobDetailView start action', () => {
     expect(mocks.startJob).toHaveBeenCalledWith(6, { thread_count: 4 })
     expect(wrapper.text()).toContain('body: Field required')
     expect(wrapper.text()).not.toContain(i18n.global.t('common.errors.requestConflict'))
+  })
+
+  it('opens the job-scoped CoC dialog on initial load when requested by route query', async () => {
+    routeState.query = { coc: '1' }
+    mocks.getJobChainOfCustody.mockResolvedValue({
+      selector_mode: 'JOB',
+      project_id: 'PROJ-001',
+      snapshot_updated_at: '2026-04-29T09:15:00Z',
+      reports: [{
+        drive_id: 5,
+        evidence_number: 'EV-006',
+        chain_of_custody_events: [],
+      }],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(mocks.getJobChainOfCustody).toHaveBeenCalledWith(6)
+    expect(wrapper.find('#job-coc-title').exists()).toBe(true)
+    expect(wrapper.text()).toContain('job-coc-report-5|JOB|PROJ-001|EV-006|casey|2026-04-29T09:15:00Z')
   })
 
   it('shows startup-analysis status details and starts analysis for eligible jobs', async () => {
