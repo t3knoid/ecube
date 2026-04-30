@@ -116,13 +116,26 @@ const canConfirmCocHandoff = computed(() => authStore.hasAnyRole(['admin', 'mana
   && currentStatus.value !== 'ARCHIVED'
   && hasPendingCocHandoff.value)
 const currentStartupAnalysisStatus = computed(() => String(job.value?.startup_analysis_status || 'NOT_ANALYZED').toUpperCase())
+const archiveRelatedDrive = computed(() => {
+  const drive = job.value?.drive
+  if (!drive) return null
+
+  const jobProjectId = normalizeProjectId(job.value?.project_id)
+  const driveProjectId = normalizeProjectId(drive?.current_project_id)
+
+  if (!jobProjectId || !driveProjectId || driveProjectId !== jobProjectId) {
+    return null
+  }
+
+  return drive
+})
 const archiveDriveReady = computed(() => {
-  const driveState = String(job.value?.drive?.current_state || '').toUpperCase()
-  return !job.value?.drive || (driveState === 'AVAILABLE' && !job.value?.drive?.is_mounted)
+  const driveState = String(archiveRelatedDrive.value?.current_state || '').toUpperCase()
+  return !archiveRelatedDrive.value || (driveState === 'AVAILABLE' && !archiveRelatedDrive.value?.is_mounted)
 })
 const archiveBlockedByDriveEject = computed(() => canArchiveJobs.value
   && ['COMPLETED', 'FAILED'].includes(currentStatus.value)
-  && !!job.value?.drive
+  && !!archiveRelatedDrive.value
   && !archiveDriveReady.value)
 const archivePrerequisiteNotice = computed(() => (archiveBlockedByDriveEject.value ? t('jobs.archiveRequiresEject') : ''))
 const canArchive = computed(() => canArchiveJobs.value

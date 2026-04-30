@@ -698,7 +698,7 @@ describe('JobDetailView start action', () => {
       files_failed: 0,
       files_timed_out: 0,
       startup_analysis_status: 'READY',
-      drive: { id: 1, current_state: 'AVAILABLE', is_mounted: true },
+      drive: { id: 1, current_state: 'AVAILABLE', is_mounted: true, current_project_id: 'PROJ-001' },
     })
 
     const wrapper = mountView()
@@ -708,6 +708,34 @@ describe('JobDetailView start action', () => {
     expect(archiveButton).toBeTruthy()
     expect(archiveButton.attributes('disabled')).toBeDefined()
     expect(wrapper.text()).toContain(i18n.global.t('jobs.archiveRequiresEject'))
+  })
+
+  it('does not block archive when the present drive is no longer bound to the job project', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 10,
+      total_bytes: 10,
+      file_count: 1,
+      files_succeeded: 1,
+      files_failed: 0,
+      files_timed_out: 0,
+      startup_analysis_status: 'READY',
+      drive: { id: 1, current_state: 'AVAILABLE', is_mounted: true, current_project_id: null },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const archiveButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.archiveWithoutHandoff'))
+    expect(archiveButton).toBeTruthy()
+    expect(archiveButton.attributes('disabled')).toBeUndefined()
+    expect(wrapper.text()).not.toContain(i18n.global.t('jobs.archiveRequiresEject'))
   })
 
   it('enables archive after the related drive is available and unmounted', async () => {
@@ -726,7 +754,7 @@ describe('JobDetailView start action', () => {
       files_failed: 0,
       files_timed_out: 0,
       startup_analysis_status: 'READY',
-      drive: { id: 1, current_state: 'AVAILABLE', is_mounted: false },
+      drive: { id: 1, current_state: 'AVAILABLE', is_mounted: false, current_project_id: 'PROJ-001' },
     })
 
     const wrapper = mountView()
