@@ -16,12 +16,16 @@ backpressure against slow or unreachable callback endpoints.
 """
 
 import atexit
+import hashlib
+import hmac
 import ipaddress
+import json
 import logging
 import socket
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse, urlunparse
 
@@ -30,9 +34,14 @@ from sqlalchemy.orm import object_session
 from sqlalchemy.orm.exc import UnmappedInstanceError
 
 from app.config import settings
+from app.models.hardware import UsbDrive
 from app.models.jobs import ExportJob, FileStatus, JobStatus
 from app.repositories.audit_repository import AuditRepository
-from app.repositories.job_repository import FileRepository
+from app.repositories.job_repository import DriveAssignmentRepository, FileRepository
+from app.utils.callback_payload_contract import (
+    apply_callback_payload_contract,
+    describe_callback_payload_contract,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +178,43 @@ def _count_file_outcomes(job: ExportJob) -> tuple[int, int, int]:
     )
 
 
+def _resolve_active_drive(job: ExportJob) -> UsbDrive | None:
+    try:
+        session = object_session(job)
+    except UnmappedInstanceError:
+        session = None
+
+    if session is not None and job.id is not None:
+        active_assignment = DriveAssignmentRepository(session).get_active_for_job(job.id)
+        return getattr(active_assignment, "drive", None)
+
+    assignments = list(getattr(job, "assignments", []) or [])
+    active_assignments = [
+        assignment for assignment in assignments if getattr(assignment, "released_at", None) is None
+    ]
+    if not active_assignments:
+        return None
+
+    active_assignments.sort(
+        key=lambda assignment: (
+            getattr(assignment, "assigned_at", None) or 0,
+            getattr(assignment, "id", 0) or 0,
+        ),
+        reverse=True,
+    )
+    return getattr(active_assignments[0], "drive", None)
+
+
+def _serialize_timestamp(value: Any) -> str | None:
+    if not isinstance(value, datetime):
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    else:
+        value = value.astimezone(timezone.utc)
+    return value.isoformat()
+
+
 def build_payload(job: ExportJob) -> Dict[str, Any]:
     """Construct the JSON callback payload from a terminal job.
 
@@ -192,6 +238,7 @@ def build_payload(job: ExportJob) -> Dict[str, Any]:
         "job_id": job.id,
         "project_id": job.project_id,
         "evidence_number": job.evidence_number,
+        "started_by": job.started_by,
         "status": job.status.value,
         "source_path": job.source_path,
         "total_bytes": job.total_bytes,
@@ -201,13 +248,114 @@ def build_payload(job: ExportJob) -> Dict[str, Any]:
         "files_failed": files_failed,
         "files_timed_out": files_timed_out,
         "completion_result": completion_result,
+        "active_duration_seconds": int(getattr(job, "active_duration_seconds", 0) or 0),
     }
-    if job.completed_at:
-        payload["completed_at"] = job.completed_at.isoformat()
+
+    active_drive = _resolve_active_drive(job)
+    if active_drive is not None:
+        payload["drive_id"] = active_drive.id
+        payload["drive_manufacturer"] = active_drive.manufacturer
+        payload["drive_model"] = active_drive.product_name
+        payload["drive_serial_number"] = active_drive.serial_number
+
+    started_at = _serialize_timestamp(getattr(job, "started_at", None))
+    if started_at is not None:
+        payload["started_at"] = started_at
+
+    completed_at = _serialize_timestamp(getattr(job, "completed_at", None))
+    if completed_at is not None:
+        payload["completed_at"] = completed_at
     return payload
 
 
 _TERMINAL_STATUSES = frozenset({JobStatus.COMPLETED, JobStatus.FAILED})
+
+
+def _resolve_callback_url(job: ExportJob) -> Optional[str]:
+    """Return the effective callback URL for *job*.
+
+    Job-specific callback_url takes precedence. When it is absent, the
+    system-wide callback_default_url is used if configured.
+    """
+    job_url = getattr(job, "callback_url", None)
+    if isinstance(job_url, str):
+        job_url = job_url.strip() or None
+    if job_url:
+        return job_url
+
+    default_url = settings.callback_default_url
+    if isinstance(default_url, str):
+        default_url = default_url.strip() or None
+    return default_url
+
+
+def _resolve_callback_hmac_secret() -> Optional[str]:
+    """Return the configured callback HMAC secret, if present."""
+    secret = getattr(settings, "callback_hmac_secret", None)
+    if not isinstance(secret, str):
+        return None
+    return secret.strip() or None
+
+
+def _resolve_callback_proxy_url() -> Optional[str]:
+    """Return the configured callback forward-proxy URL, if present."""
+    proxy_url = getattr(settings, "callback_proxy_url", None)
+    if not isinstance(proxy_url, str):
+        return None
+    return proxy_url.strip() or None
+
+
+def _serialize_payload_bytes(payload: Dict[str, Any]) -> bytes:
+    """Serialize *payload* into the exact JSON bytes delivered to receivers."""
+    return json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+
+
+def _build_signature_header(payload_bytes: bytes) -> Optional[str]:
+    """Return the HMAC signature header value for *payload_bytes*."""
+    secret = _resolve_callback_hmac_secret()
+    if not secret:
+        return None
+    digest = hmac.new(
+        secret.encode("utf-8"),
+        payload_bytes,
+        hashlib.sha256,
+    ).hexdigest()
+    return f"sha256={digest}"
+
+
+def _resolve_callback_payload_fields() -> list[str] | None:
+    payload_fields = getattr(settings, "callback_payload_fields", None)
+    if payload_fields is None or not isinstance(payload_fields, list):
+        return None
+    return list(payload_fields)
+
+
+def _resolve_callback_payload_field_map() -> dict[str, str] | None:
+    payload_field_map = getattr(settings, "callback_payload_field_map", None)
+    if payload_field_map is None or not isinstance(payload_field_map, dict):
+        return None
+    return dict(payload_field_map)
+
+
+def build_callback_payload(job: ExportJob) -> Dict[str, Any]:
+    """Build the effective outbound callback payload for *job*."""
+    return apply_callback_payload_contract(
+        build_payload(job),
+        _resolve_callback_payload_fields(),
+        _resolve_callback_payload_field_map(),
+    )
+
+
+def _callback_payload_audit_details() -> Dict[str, Any]:
+    return describe_callback_payload_contract(
+        _resolve_callback_payload_fields(),
+        _resolve_callback_payload_field_map(),
+    )
 
 
 def deliver_callback(job: ExportJob, db: Any = None) -> None:
@@ -222,10 +370,11 @@ def deliver_callback(job: ExportJob, db: Any = None) -> None:
       caller's process using the supplied session, making audit-log assertions
       deterministic.
 
-    If *job.callback_url* is falsy or the job is not in a terminal state
-    (COMPLETED / FAILED) the call is a no-op.
+    If neither a job-specific callback_url nor a system-wide
+    callback_default_url is configured, or the job is not in a terminal
+    state (COMPLETED / FAILED), the call is a no-op.
     """
-    url: Optional[str] = job.callback_url
+    url = _resolve_callback_url(job)
     if not url:
         return
 
@@ -237,7 +386,7 @@ def deliver_callback(job: ExportJob, db: Any = None) -> None:
         return
 
     # Snapshot everything we need before leaving the caller's session scope.
-    payload = build_payload(job)
+    payload = build_callback_payload(job)
     job_id: int = job.id  # type: ignore[assignment]
 
     if db is not None:
@@ -314,6 +463,7 @@ def _do_deliver(
     audit_repo = AuditRepository(db)
 
     safe_url = _sanitize_url_for_log(url)
+    payload_audit_details = _callback_payload_audit_details()
 
     # --- SSRF guard ---
     try:
@@ -328,6 +478,7 @@ def _do_deliver(
                 details={
                     "callback_url": safe_url,
                     "reason": "Malformed callback URL: unable to parse",
+                    **payload_audit_details,
                 },
             )
         except Exception:
@@ -343,6 +494,7 @@ def _do_deliver(
                 details={
                     "callback_url": safe_url,
                     "reason": f"Callback URL uses disallowed scheme: {parsed.scheme}",
+                    **payload_audit_details,
                 },
             )
         except Exception:
@@ -358,6 +510,7 @@ def _do_deliver(
                 details={
                     "callback_url": safe_url,
                     "reason": "Callback URL contains embedded credentials (userinfo)",
+                    **payload_audit_details,
                 },
             )
         except Exception:
@@ -376,6 +529,7 @@ def _do_deliver(
                 details={
                     "callback_url": safe_url,
                     "reason": "Empty hostname",
+                    **payload_audit_details,
                 },
             )
         except Exception:
@@ -399,6 +553,7 @@ def _do_deliver(
                     details={
                         "callback_url": safe_url,
                         "reason": reason,
+                        **payload_audit_details,
                     },
                 )
             except Exception:
@@ -407,6 +562,9 @@ def _do_deliver(
 
     timeout = settings.callback_timeout_seconds
     last_error: Optional[str] = None
+    payload_bytes = _serialize_payload_bytes(payload)
+    signature_header = _build_signature_header(payload_bytes)
+    proxy_url = _resolve_callback_proxy_url()
 
     # Build a pinned URL that connects directly to the resolved IP,
     # preventing DNS rebinding between our safety check and the
@@ -427,16 +585,31 @@ def _do_deliver(
 
     for attempt in range(_MAX_RETRIES):
         try:
-            post_kwargs: Dict[str, Any] = {"json": payload}
+            headers = {"Content-Type": "application/json"}
+            if signature_header:
+                headers["X-ECUBE-Signature"] = signature_header
+
+            post_kwargs: Dict[str, Any] = {
+                "content": payload_bytes,
+                "headers": headers,
+            }
             if pinned_ip is not None:
                 # Override Host header and TLS SNI so the server sees the
                 # original hostname despite connecting to the resolved IP.
-                post_kwargs["headers"] = {"Host": host_header}
+                post_kwargs["headers"]["Host"] = host_header
                 post_kwargs["extensions"] = {
                     "sni_hostname": hostname.encode("idna"),
                 }
 
-            with httpx.Client(timeout=timeout, follow_redirects=False) as client:
+            client_kwargs: Dict[str, Any] = {
+                "timeout": timeout,
+                "follow_redirects": False,
+                "trust_env": False,
+            }
+            if proxy_url:
+                client_kwargs["proxy"] = proxy_url
+
+            with httpx.Client(**client_kwargs) as client:
                 response = client.post(pinned_url, **post_kwargs)
 
             if response.status_code < 300:
@@ -449,6 +622,7 @@ def _do_deliver(
                             "callback_url": safe_url,
                             "status_code": response.status_code,
                             "attempt": attempt + 1,
+                            **payload_audit_details,
                         },
                     )
                 except Exception:
@@ -473,6 +647,7 @@ def _do_deliver(
                             "status_code": response.status_code,
                             "reason": f"HTTP {response.status_code}: redirect not followed (SSRF protection)",
                             "attempt": attempt + 1,
+                            **payload_audit_details,
                         },
                     )
                 except Exception:
@@ -494,6 +669,7 @@ def _do_deliver(
                             "status_code": response.status_code,
                             "reason": f"HTTP {response.status_code}: receiver rejected the request",
                             "attempt": attempt + 1,
+                            **payload_audit_details,
                         },
                     )
                 except Exception:
@@ -527,6 +703,7 @@ def _do_deliver(
                 "callback_url": safe_url,
                 "reason": last_error or "unknown",
                 "attempts": _MAX_RETRIES,
+                **payload_audit_details,
             },
         )
     except Exception:

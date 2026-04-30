@@ -795,6 +795,8 @@ that URL whenever the job completes or fails.
 
 ### 7.1 Enabling Webhooks
 
+Operators can configure the callback URL from the Jobs create dialog and the Job Detail edit dialog. API clients can also continue to supply `callback_url` directly when creating or updating a job. Administrators can also set a system-wide `CALLBACK_DEFAULT_URL` from the Configuration page; that default is used only when the job itself does not define `callback_url`.
+
 Add the `callback_url` field to your `POST /jobs` request:
 
 ```json
@@ -820,6 +822,7 @@ When the job reaches a terminal state, ECUBE delivers a `POST` request with a JS
 | `job_id` | `integer` | The export job ID. |
 | `project_id` | `string` | Bound project ID. |
 | `evidence_number` | `string` | Evidence case number. |
+| `started_by` | `string` or null | Username of the user who started the job when recorded. |
 | `status` | `string` | Terminal status: `COMPLETED` or `FAILED`. |
 | `source_path` | `string` | Source data path. |
 | `total_bytes` | `integer` | Total bytes to copy. |
@@ -829,6 +832,12 @@ When the job reaches a terminal state, ECUBE delivers a `POST` request with a JS
 | `files_failed` | `integer` | Number of files that ended in error. |
 | `files_timed_out` | `integer` | Number of files that timed out. |
 | `completion_result` | `string` | `success`, `partial_success`, or `failed` so receivers can distinguish clean completion from partial-success `JOB_COMPLETED` callbacks. |
+| `active_duration_seconds` | `integer` | Persisted cumulative active runtime for the job in seconds. |
+| `drive_id` | `integer` or absent | Active destination drive ID when the terminal job still has an unreleased drive assignment. |
+| `drive_manufacturer` | `string` or null or absent | Destination drive manufacturer when available from hardware discovery. |
+| `drive_model` | `string` or null or absent | Destination drive model/product name when available from hardware discovery. |
+| `drive_serial_number` | `string` or null or absent | Destination drive serial number when available from hardware discovery. |
+| `started_at` | `string` or absent | ISO 8601 timestamp when the job run started. |
 | `completed_at` | `string` or absent | ISO 8601 timestamp. Present only when the job recorded a completion time. |
 
 **Example payload:**
@@ -839,6 +848,7 @@ When the job reaches a terminal state, ECUBE delivers a `POST` request with a JS
   "job_id": 42,
   "project_id": "ProjectAlpha",
   "evidence_number": "EV-2026-0042",
+  "started_by": "processor1",
   "status": "COMPLETED",
   "source_path": "/exports/ProjectAlpha/production_set_01",
   "total_bytes": 1073741824,
@@ -848,6 +858,8 @@ When the job reaches a terminal state, ECUBE delivers a `POST` request with a JS
   "files_failed": 0,
   "files_timed_out": 0,
   "completion_result": "success",
+  "active_duration_seconds": 1845,
+  "started_at": "2026-03-18T16:14:15+00:00",
   "completed_at": "2026-03-18T16:45:00+00:00"
 }
 ```
@@ -855,6 +867,70 @@ When the job reaches a terminal state, ECUBE delivers a `POST` request with a JS
 For partial-success runs that still end in `JOB_COMPLETED`, rely on `completion_result`, `files_failed`, and `files_timed_out` rather than the event name alone.
 
 The request includes the header `Content-Type: application/json`.
+
+If administrators configure a webhook signing secret, ECUBE also includes:
+
+- `X-ECUBE-Signature: sha256=<hex digest>`
+
+The digest is an HMAC-SHA256 computed over the exact JSON request body bytes that ECUBE sends on the wire. Receivers should validate the header against the raw request body before parsing or trusting the payload.
+
+Administrators can also constrain and remap callback payloads before delivery:
+
+- `CALLBACK_PAYLOAD_FIELDS` accepts a JSON array of allowlisted ECUBE source fields.
+- `CALLBACK_PAYLOAD_FIELD_MAP` accepts a JSON object whose values are either an exact source field name or a deterministic `${field}` template string.
+- Mapping is applied before ECUBE signs the payload, so receivers validate the signature against the final customized request body.
+- Invalid, unknown, duplicate, or blank source fields are rejected at configuration time rather than being silently dropped.
+
+Supported source fields for `CALLBACK_PAYLOAD_FIELDS` and `CALLBACK_PAYLOAD_FIELD_MAP` values:
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `event` | `string` | `JOB_COMPLETED` or `JOB_FAILED`. |
+| `job_id` | `integer` | ECUBE job ID. |
+| `project_id` | `string` | Bound project identifier. |
+| `evidence_number` | `string` | Evidence/case number stored on the job. |
+| `started_by` | `string` or null | Username of the user who started the job when recorded. |
+| `status` | `string` | Terminal job status. |
+| `source_path` | `string` | Source path recorded for the job. |
+| `total_bytes` | `integer` | Total bytes ECUBE planned to copy. |
+| `copied_bytes` | `integer` | Bytes actually copied. |
+| `file_count` | `integer` | Total file count. |
+| `files_succeeded` | `integer` | Files copied successfully. |
+| `files_failed` | `integer` | Files that ended in error. |
+| `files_timed_out` | `integer` | Files that timed out. |
+| `completion_result` | `string` | `success`, `partial_success`, or `failed`. |
+| `active_duration_seconds` | `integer` | Persisted cumulative active runtime for the job in seconds. |
+| `drive_id` | `integer` or absent | Active destination drive ID for the job when present. |
+| `drive_manufacturer` | `string` or null or absent | Destination drive manufacturer when present. |
+| `drive_model` | `string` or null or absent | Destination drive model/product name when present. |
+| `drive_serial_number` | `string` or null or absent | Destination drive serial number when present. |
+| `started_at` | `string` or absent | ISO 8601 timestamp when the job run started. |
+| `completed_at` | `string` or absent | ISO 8601 timestamp when present on the job. |
+
+Template strings may reference only the same allowlisted source fields, for example `project=${project_id};result=${completion_result}`.
+
+**Example customized payload configuration:**
+
+```json
+{
+  "callback_payload_fields": ["event", "project_id", "completion_result"],
+  "callback_payload_field_map": {
+    "type": "event",
+    "project": "project_id",
+    "summary": "project=${project_id};result=${completion_result}"
+  }
+}
+```
+
+With that configuration, ECUBE sends:
+
+```json
+{
+  "type": "JOB_COMPLETED",
+  "project": "PROJECTALPHA",
+  "summary": "project=PROJECTALPHA;result=success"
+}
+```
 
 ### 7.3 Retry Behaviour
 
@@ -881,6 +957,11 @@ The request includes the header `Content-Type: application/json`.
 | `CALLBACK_ALLOW_PRIVATE_IPS` | `false` | Allow callbacks to RFC 1918 / loopback addresses. |
 | `CALLBACK_MAX_WORKERS` | `4` | Maximum concurrent callback delivery threads. |
 | `CALLBACK_MAX_PENDING` | `100` | Maximum outstanding deliveries (queued + in-flight). Excess deliveries are dropped. |
+| `CALLBACK_DEFAULT_URL` | unset | Optional HTTPS callback URL used when a job does not define `callback_url`. |
+| `CALLBACK_PROXY_URL` | unset | Optional `http://` or `https://` forward-proxy URL used for outbound callback delivery. |
+| `CALLBACK_HMAC_SECRET` | unset | Optional shared secret used to generate the `X-ECUBE-Signature` header. |
+| `CALLBACK_PAYLOAD_FIELDS` | unset | Optional JSON array of allowlisted source field names to include in callback payloads. |
+| `CALLBACK_PAYLOAD_FIELD_MAP` | unset | Optional JSON object mapping outbound field names to an allowlisted field name or `${field}` template. |
 
 ### 7.5 Example Webhook Receiver
 
@@ -904,7 +985,9 @@ async def ecube_callback(request: Request):
 ### 7.6 Security Recommendations
 
 - **HTTPS only:** Always use an HTTPS endpoint so payloads are encrypted in transit.
-- **Authenticate inbound requests:** Consider placing your webhook behind a reverse proxy that validates a shared secret or HMAC signature.
+- **Validate `X-ECUBE-Signature`:** When `CALLBACK_HMAC_SECRET` is configured, verify the `X-ECUBE-Signature` HMAC against the raw request body before accepting the callback.
+- **Keep payload mappings deterministic:** Restrict `CALLBACK_PAYLOAD_FIELD_MAP` values to exact field names or simple `${field}` substitution templates. Expressions, code, and unrestricted templating are intentionally unsupported.
+- **Keep secrets out of URLs:** ECUBE rejects callback and proxy URLs with embedded credentials. Use a managed proxy or receiver-side secret store instead.
 - **Idempotency:** Your receiver may be called more than once for the same job (e.g., if the first `200 OK` was lost in transit). Design your handler to be idempotent.
 - **Firewall rules:** Only allow inbound connections from the ECUBE host IP to your webhook port.
 

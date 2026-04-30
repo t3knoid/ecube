@@ -116,6 +116,9 @@
     "chooseProject": "Choose a project",
     "additionalNotes": "Additional notes",
     "notesHint": "Optional operator notes for this job",
+    "callbackUrl": "Webhook callback URL",
+    "callbackUrlHint": "https://example.com/ecube/webhook",
+    "callbackUrlHelp": "Optional HTTPS endpoint for terminal-state job notifications. Leave blank to use the system default callback URL when one is configured.",
     "runImmediately": "Run job immediately after creation",
     "noProjectsAvailable": "No mounted projects are available. Add and mount a project share first.",
     "noEligibleDrives": "No eligible mounted USB drives are available for the selected project.",
@@ -543,7 +546,8 @@
       "logging": "Logging",
       "shares": "Shares",
       "databasePool": "Database Connection Pool",
-      "copyJobs": "Copy Jobs"
+      "copyJobs": "Copy Jobs",
+      "webhooks": "Webhooks"
     },
     "fields": {
       "log_level": {
@@ -586,6 +590,36 @@
       "job_detail_files_page_size": {
         "label": "Job Detail Files Per Page",
         "help": "Default number of file rows shown per Job Detail page. Minimum 20, maximum 100."
+      },
+      "callback_default_url": {
+        "label": "Default Callback URL",
+        "placeholder": "https://example.com/default-webhook",
+        "help": "Optional HTTPS webhook URL used when a job does not define its own callback URL. A job-specific callback URL always overrides this system-wide default."
+      },
+      "callback_proxy_url": {
+        "label": "Outbound Callback Proxy URL",
+        "placeholder": "http://proxy.example.com:8080",
+        "help": "Optional HTTP or HTTPS forward proxy used for outbound webhook delivery. Leave blank to connect directly."
+      },
+      "callback_payload_fields": {
+        "label": "Callback Payload Source Fields",
+        "help": "Optional JSON array of allowlisted source field names to include in outbound callback payloads. Leave blank to send the default payload.",
+        "invalidJson": "Callback Payload Source Fields must be valid JSON.",
+        "invalidType": "Callback Payload Source Fields must be a JSON array."
+      },
+      "callback_payload_field_map": {
+        "label": "Callback Payload Field Mapping",
+        "help": "Optional JSON object mapping outbound field names to exact source field names or deterministic field-substitution template strings. Leave blank to preserve the selected source field names.",
+        "invalidJson": "Callback Payload Field Mapping must be valid JSON.",
+        "invalidType": "Callback Payload Field Mapping must be a JSON object."
+      },
+      "callback_hmac_secret": {
+        "label": "Webhook Signing Secret",
+        "placeholder": "Enter a new shared secret",
+        "help": "Optional write-only shared secret used to sign callback payloads with the X-ECUBE-Signature header. Leave blank to keep the current secret.",
+        "statusConfigured": "A signing secret is currently configured.",
+        "statusNotConfigured": "No signing secret is currently configured.",
+        "clearLabel": "Clear the stored signing secret"
       }
     },
     "restartRequiredField": "Requires service restart",
