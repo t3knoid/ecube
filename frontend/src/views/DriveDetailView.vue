@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
 import { getDrives, formatDrive, initializeDrive, mountDrive, prepareEjectDrive, refreshDrives } from '@/api/drives.js'
-import { listJobs } from '@/api/jobs.js'
+import { listAllJobs, listJobs } from '@/api/jobs.js'
 import { getMounts } from '@/api/mounts.js'
 import { enablePort } from '@/api/admin.js'
 import { normalizeErrorMessage } from '@/api/client.js'
@@ -147,7 +147,7 @@ async function loadDrive() {
   try {
     const [driveResult, jobResult] = await Promise.allSettled([
       getDrives({ include_disconnected: true }),
-      listJobs({ limit: 1000, include_archived: true }),
+      listAllJobs({ include_archived: true }),
     ])
 
     if (driveResult.status !== 'fulfilled') {

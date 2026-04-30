@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getDrives, refreshDrives } from '@/api/drives.js'
-import { listJobs } from '@/api/jobs.js'
+import { listAllJobs } from '@/api/jobs.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
@@ -134,7 +134,7 @@ async function loadDrives() {
     }
     const [driveResult, jobResult] = await Promise.allSettled([
       getDrives(params),
-      listJobs({ limit: 1000, include_archived: true }),
+      listAllJobs({ include_archived: true }),
     ])
 
     if (driveResult.status !== 'fulfilled') {
