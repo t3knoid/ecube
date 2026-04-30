@@ -96,7 +96,7 @@ Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 
 | UC# | Use Case | Primary Actor | Roles |
 |-----|----------|---------------|-------|
 | UC-4.1 | View all USB drives (state, filesystem, project, capacity, mount point) | Any authenticated user | any |
-| UC-4.2 | Filter/search drives by state (DISCONNECTED, AVAILABLE, IN_USE, ARCHIVED) | Any authenticated user | any |
+| UC-4.2 | Filter/search drives by state (DISCONNECTED, AVAILABLE, IN_USE) | Any authenticated user | any |
 | UC-4.3 | Trigger USB discovery refresh | Admin, Manager | admin, manager |
 | UC-4.4 | Format a drive (select ext4 or exfat) | Admin, Manager | admin, manager |
 | UC-4.5 | Initialize a mounted drive for a project from eligible mounted-share assignments | Admin, Manager | admin, manager |
@@ -184,7 +184,7 @@ Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 
 
 	Startup reconciliation may add `MOUNT_RECONCILED` and `DRIVE_MOUNT_RECONCILED` entries when ECUBE restores expected managed mounts or removes orphan managed mount points during service startup.
 
-2. **Chain of Custody** (UC-7.8–7.15): Job Detail exposes a dedicated `Chain of Custody` action that opens a compliance-focused CoC dialog for the current job. The dialog loads the last stored snapshot, shows a `Generated At` timestamp sourced from that stored snapshot metadata, lets `admin` and `manager` users explicitly refresh and persist a new snapshot, and exposes `Print CoC`, `Export CoC CSV`, and `Export JSON` against the stored snapshot currently loaded in the dialog. The same dialog contains the handoff confirmation form, prefill controls, and permanent-archive warning modal for `admin` and `manager` users only. After handoff, drives transition to `ARCHIVED`, while archived jobs continue to expose their last stored CoC snapshot for read-only review.
+2. **Chain of Custody** (UC-7.8–7.15): Job Detail exposes a dedicated `Chain of Custody` action that opens a compliance-focused CoC dialog for the current job. The dialog loads the last stored snapshot, shows a `Generated At` timestamp sourced from that stored snapshot metadata, lets `admin` and `manager` users explicitly refresh and persist a new snapshot, and exposes `Print CoC`, `Export CoC CSV`, and `Export JSON` against the stored snapshot currently loaded in the dialog. The same dialog contains the handoff confirmation form, prefill controls, and warning modal for `admin` and `manager` users only. After handoff, the custody transfer is recorded while the drive remains governed by the normal operational lifecycle, and archived jobs continue to expose their last stored CoC snapshot for read-only review.
 
 ---
 
@@ -254,7 +254,7 @@ The primary operational workflow combines use cases across groups:
 1. **Setup** (one-time): UC-1.1 → UC-1.2 → UC-1.3 → UC-1.6 → UC-2.1
 2. **Prepare infrastructure**: UC-5.2/5.3 (add mounts) → UC-4.3 (discover drives) → UC-4.9/4.10 (enable ports) → UC-4.4 (format) → UC-4.6 (mount drive) → UC-4.5 (initialize for project)
 3. **Execute export**: UC-6.1 (create job using the mounted destination) → UC-6.2c (optional edit before run) → UC-6.2 (start) → UC-6.3 (monitor) → UC-6.2a/UC-6.2b (pause/resume if needed) → UC-6.5 (verify once fully complete) → UC-6.6 (manifest)
-4. **Eject & chain of custody**: UC-4.7 (prepare eject) → UC-7.8/7.10 (retrieve CoC) → UC-7.13 (confirm handoff) → UC-7.14 (dismiss warning) → UC-7.15 (save report for records) → drive transitions to `ARCHIVED`
+4. **Eject & chain of custody**: UC-4.7 (prepare eject) → UC-7.8/7.10 (retrieve CoC) → UC-7.13 (confirm handoff) → UC-7.14 (dismiss warning) → UC-7.15 (save report for records) → custody transfer is recorded for the job
 5. **Audit trail**: UC-7.1–7.7 (review operational audit) + UC-7.8–7.12 (validate handoff in compliance record)
 6. **Operational tuning (admin, optional)**: UC-9.1 → UC-9.2/UC-9.4 → UC-9.5 → UC-9.6
 7. **Contextual assistance (optional)**: UC-10.1 → UC-10.2/UC-10.3 during any workflow stage

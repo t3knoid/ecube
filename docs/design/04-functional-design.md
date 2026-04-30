@@ -25,9 +25,8 @@ Recommended legal transitions:
 - `AVAILABLE → IN_USE` on initialize or job assignment.
 - `IN_USE → AVAILABLE` on prepare-eject.
 - `AVAILABLE → DISCONNECTED` on removal or disabled-port reconciliation.
-- `AVAILABLE → ARCHIVED` on custody handoff confirmation (via `POST /jobs/{job_id}/chain-of-custody/handoff`).
 
-Note: handoff confirmation accepts drives in any non-archived state so that drives that were not formally ejected before handoff can still be archived. The expected operational flow is `IN_USE → AVAILABLE` (prepare-eject) followed by `AVAILABLE → ARCHIVED` (handoff). `ARCHIVED` is a terminal state; no further transitions are permitted.
+Note: custody handoff confirmation records legal transfer details for the assigned drive but does not introduce a separate archival drive state. The expected operational flow remains `IN_USE → AVAILABLE` (prepare-eject) followed by custody handoff recording on the related job.
 
 ### 4.1.1 Filesystem Detection Design
 
