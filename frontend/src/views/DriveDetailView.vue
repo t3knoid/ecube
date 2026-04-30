@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
 import { getDrives, formatDrive, initializeDrive, mountDrive, prepareEjectDrive, refreshDrives } from '@/api/drives.js'
-import { listJobs } from '@/api/jobs.js'
+import { listAllJobs, listJobs } from '@/api/jobs.js'
 import { getMounts } from '@/api/mounts.js'
 import { enablePort } from '@/api/admin.js'
 import { normalizeErrorMessage } from '@/api/client.js'
@@ -14,6 +14,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 import { formatDriveIdentity } from '@/utils/driveIdentity.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
+import { buildDriveJobMap, buildProjectEvidenceMap, getDriveJob, getProjectEvidence } from '@/utils/projectEvidence.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -26,6 +27,7 @@ const saving = ref(false)
 const error = ref('')
 const infoMessage = ref('')
 const warnMessage = ref('')
+const currentProjectEvidenceNumber = ref('')
 
 function clearBanners() {
   error.value = ''
@@ -143,9 +145,23 @@ async function loadDrive() {
   loading.value = true
   clearBanners()
   try {
-    const drives = await getDrives({ include_disconnected: true })
+    const [driveResult, jobResult] = await Promise.allSettled([
+      getDrives({ include_disconnected: true }),
+      listAllJobs({ include_archived: true }),
+    ])
+
+    if (driveResult.status !== 'fulfilled') {
+      throw driveResult.reason
+    }
+
+    const drives = driveResult.value || []
+    const jobs = jobResult.status === 'fulfilled' ? (jobResult.value || []) : []
     const next = drives.find((item) => item.id === driveId.value) || null
     drive.value = next ? normalizeProjectRecord(next, ['current_project_id']) : null
+    const assignedJob = drive.value ? getDriveJob(drive.value.id, buildDriveJobMap(jobs)) : null
+    currentProjectEvidenceNumber.value = drive.value
+      ? assignedJob?.evidenceNumber || getProjectEvidence(drive.value.current_project_id, buildProjectEvidenceMap(jobs))
+      : ''
     if (!drive.value) {
       error.value = t('drives.notFound')
     }
@@ -506,11 +522,11 @@ onBeforeUnmount(() => {
       <div class="detail-grid">
         <div><strong>{{ t('common.labels.id') }}</strong><span>{{ drive.id }}</span></div>
         <div><strong>{{ t('drives.device') }}</strong><span>{{ formatDriveIdentity(drive) }}</span></div>
-        <div><strong>{{ t('drives.filesystemPath') }}</strong><span>{{ protectedValue(drive.filesystem_path) }}</span></div>
         <!-- Mount Point field removed -->
         <div><strong>{{ t('drives.filesystem') }}</strong><span>{{ drive.filesystem_type || '-' }}</span></div>
         <div><strong>{{ t('common.labels.size') }}</strong><span>{{ formatBytes(drive.capacity_bytes) }}</span></div>
         <div><strong>{{ t('dashboard.project') }}</strong><span>{{ drive.current_project_id || '-' }}</span></div>
+        <div><strong>{{ t('jobs.evidence') }}</strong><span>{{ currentProjectEvidenceNumber || '-' }}</span></div>
         <div><strong>{{ t('common.labels.status') }}</strong><StatusBadge :status="drive.current_state" :label="driveStateLabel(drive.current_state)" /></div>
       </div>
 
@@ -671,6 +687,10 @@ onBeforeUnmount(() => {
 .detail-grid > div {
   display: grid;
   gap: var(--space-xs);
+}
+
+.detail-grid > div > strong {
+  font-weight: var(--font-weight-bold);
 }
 
 .action-row {

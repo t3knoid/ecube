@@ -26,6 +26,11 @@ function makeEmptyDrive(overrides = {}) {
   }
 }
 
+async function stubDriveDetailApis(page, drive) {
+  await routeJson(page, '**/api/drives', () => [drive])
+  await routeJson(page, '**/api/jobs**', [])
+}
+
 // ---------------------------------------------------------------------------
 // Enable Drive — button visibility
 // ---------------------------------------------------------------------------
@@ -33,7 +38,7 @@ function makeEmptyDrive(overrides = {}) {
 test('Enable Drive button is visible for admin on a physically detected DISCONNECTED drive', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
   const drive = makeEmptyDrive({ filesystem_path: '/dev/sdc' })
-  await routeJson(page, '**/api/drives', () => [drive])
+  await stubDriveDetailApis(page, drive)
 
   await page.goto('/drives/2')
   await expect(page.getByRole('button', { name: 'Enable Drive' })).toBeVisible()
@@ -42,7 +47,7 @@ test('Enable Drive button is visible for admin on a physically detected DISCONNE
 test('Enable Drive button is visible for manager on a physically detected DISCONNECTED drive', async ({ page }) => {
   await setupAuthenticatedPage(page, ['manager'])
   const drive = makeEmptyDrive({ filesystem_path: '/dev/sdc' })
-  await routeJson(page, '**/api/drives', () => [drive])
+  await stubDriveDetailApis(page, drive)
 
   await page.goto('/drives/2')
   await expect(page.getByRole('button', { name: 'Enable Drive' })).toBeVisible()
@@ -51,7 +56,7 @@ test('Enable Drive button is visible for manager on a physically detected DISCON
 test('Enable Drive button is not visible for admin when the drive is disconnected and not physically detected', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
   const drive = makeEmptyDrive()
-  await routeJson(page, '**/api/drives', () => [drive])
+  await stubDriveDetailApis(page, drive)
 
   await page.goto('/drives/2')
   await expect(page.getByRole('button', { name: 'Enable Drive' })).toHaveCount(0)
@@ -60,7 +65,7 @@ test('Enable Drive button is not visible for admin when the drive is disconnecte
 test('Enable Drive button is not visible for processor on DISCONNECTED drive', async ({ page }) => {
   await setupAuthenticatedPage(page, ['processor'])
   const drive = makeEmptyDrive()
-  await routeJson(page, '**/api/drives', () => [drive])
+  await stubDriveDetailApis(page, drive)
 
   await page.goto('/drives/2')
   await expect(page.getByRole('button', { name: 'Enable Drive' })).toHaveCount(0)
@@ -69,7 +74,7 @@ test('Enable Drive button is not visible for processor on DISCONNECTED drive', a
 test('Enable Drive button is not visible when drive has no port_id', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
   const drive = makeEmptyDrive({ port_id: null })
-  await routeJson(page, '**/api/drives', () => [drive])
+  await stubDriveDetailApis(page, drive)
 
   await page.goto('/drives/2')
   await expect(page.getByRole('button', { name: 'Enable Drive' })).toHaveCount(0)
@@ -78,7 +83,7 @@ test('Enable Drive button is not visible when drive has no port_id', async ({ pa
 test('Enable Drive button is not visible when drive is AVAILABLE', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
   const drive = makeEmptyDrive({ current_state: 'AVAILABLE' })
-  await routeJson(page, '**/api/drives', () => [drive])
+  await stubDriveDetailApis(page, drive)
 
   await page.goto('/drives/2')
   await expect(page.getByRole('button', { name: 'Enable Drive' })).toHaveCount(0)
@@ -98,7 +103,7 @@ test('Enable Drive issues PATCH port + POST refresh and shows success banner whe
   const patchBodies = []
   const refreshRequests = []
 
-  await routeJson(page, '**/api/drives', () => [drive])
+  await stubDriveDetailApis(page, drive)
 
   await page.route('**/api/admin/ports/7', async (route) => {
     patchRequests.push(route.request().method())
@@ -131,7 +136,7 @@ test('Enable Drive shows warning banner when drive does not promote to AVAILABLE
 
   const drive = makeEmptyDrive({ filesystem_path: '/dev/sdc' })
 
-  await routeJson(page, '**/api/drives', () => [drive])
+  await stubDriveDetailApis(page, drive)
 
   // Port enable succeeds but discovery does not promote the drive
   await page.route('**/api/admin/ports/7', async (route) => {
@@ -153,7 +158,7 @@ test('Enable Drive shows success banner when drive is immediately reconciled to 
 
   const drive = makeEmptyDrive({ filesystem_path: '/dev/sdc' })
 
-  await routeJson(page, '**/api/drives', () => [drive])
+  await stubDriveDetailApis(page, drive)
 
   await page.route('**/api/admin/ports/7', async (route) => {
     drive.current_state = 'IN_USE'
@@ -178,7 +183,7 @@ test('Enable Drive shows error banner when PATCH port call fails', async ({ page
   await setupAuthenticatedPage(page, ['admin'])
 
   const drive = makeEmptyDrive({ filesystem_path: '/dev/sdc' })
-  await routeJson(page, '**/api/drives', () => [drive])
+  await stubDriveDetailApis(page, drive)
 
   await page.route('**/api/admin/ports/7', async (route) => {
     await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ detail: 'internal error' }) })
@@ -332,6 +337,7 @@ test('drives mobile overflow menu stays visible without expanding the row', asyn
   }
 
   await routeJson(page, '**/api/drives', () => [drive])
+  await routeJson(page, '**/api/jobs**', [])
 
   await page.goto('/drives')
   await expect(page.getByRole('heading', { name: 'Drives' })).toBeVisible()
