@@ -1533,7 +1533,7 @@ Setup endpoints are unauthenticated during first-run.
 
 ### 12.12 Chain-of-Custody Handoff
 
-Chain-of-Custody (CoC) handoff ensures legal custody transfer of evidence is properly recorded and drives are archived after transfer to prevent accidental reuse or operational confusion.
+Chain-of-Custody (CoC) handoff ensures legal custody transfer of evidence is properly recorded and the job-scoped stored snapshot is refreshed after transfer.
 
 #### 12.12.1 CoC Report Retrieval
 
@@ -1569,19 +1569,19 @@ Chain-of-Custody (CoC) handoff ensures legal custody transfer of evidence is pro
 | 11 | Audit trail — COC_HANDOFF_CONFIRMED | Query `GET /audit?action=COC_HANDOFF_CONFIRMED` after handoff | Entry includes drive_id, project_id, possessor, delivery_time (ISO), received_by, receipt_ref, actor |
 | 12 | UI — delivery time local-to-UTC conversion | In the Confirm Custody Handoff panel, enter a delivery time (browser local timezone); submit the handoff | Submitted `delivery_time` in the API request body is in UTC ISO 8601; stored audit event reflects the UTC equivalent of the local time entered |
 
-#### 12.12.3 Drive Archival After Handoff
+#### 12.12.3 Drive Availability and Stored Snapshot Behavior After Handoff
 
 | # | Test | How | Expected |
 |---|------|-----|----------|
-| 1 | Drive state post-handoff | Initialize drive (state → IN_USE), run prepare-eject (state → AVAILABLE), confirm handoff | Drive transitions to `current_state: ARCHIVED` |
-| 2 | Archived job retains stored CoC snapshot | Archive a job after storing a snapshot, then call `GET /jobs/{job_id}/chain-of-custody` | 200, last stored snapshot remains available for review |
-| 3 | Archived job cannot refresh CoC snapshot | Call `POST /jobs/{job_id}/chain-of-custody/refresh` after job archival | 409, archived jobs can only return the last stored snapshot |
-| 4 | Archived snapshot remains exportable | Open the archived job CoC dialog and use print or export | Stored snapshot remains printable and downloadable |
-| 5 | Archived drives cannot initialize (prevents reuse) | Archive a drive, attempt `POST /drives/<archived_id>/initialize` | 409, `CONFLICT`, message includes "archived" |
-| 6 | Archived drives cannot format | Archive a drive, attempt `POST /drives/<archived_id>/format` | 409, `CONFLICT` |
-| 7 | Archived drives cannot prepare-eject | Archive a drive, attempt `POST /drives/<archived_id>/prepare-eject` | 409, `CONFLICT` |
-| 8 | Archived audit trail preserved | Review full audit log (without CoC filter) after archival | All audit entries for the archived drive remain visible (CoC filtering is read-side only) |
-| 9 | Archive idempotency | Call handoff endpoint twice with same contract (drive_id, possessor, delivery_time, receipt_ref) | Both succeed; drive transitions to ARCHIVED once (no duplicate operations) |
+| 1 | Drive state post-handoff after prepare-eject | Initialize drive (state → IN_USE), run prepare-eject (state → AVAILABLE), confirm handoff | Drive remains `current_state: AVAILABLE` |
+| 2 | Drive state post-handoff without prepare-eject | Initialize drive (state → IN_USE), confirm handoff directly | Drive remains `current_state: IN_USE` |
+| 3 | Drive remains reportable by drive ID | Confirm handoff, then load CoC filtered by `drive_id` | 200, report still returns that drive |
+| 4 | Drive remains reportable by serial number | Confirm handoff, then load CoC filtered by `drive_sn` | 200, report still returns that drive |
+| 5 | Drive remains included in project selector results | Confirm handoff, then load CoC filtered by `project_id` | Report still includes the handed-off drive |
+| 6 | Archived job retains stored CoC snapshot | Archive a job after storing a snapshot, then call `GET /jobs/{job_id}/chain-of-custody` | 200, last stored snapshot remains available for review |
+| 7 | Archived job cannot refresh CoC snapshot | Call `POST /jobs/{job_id}/chain-of-custody/refresh` after job archival | 409, archived jobs can only return the last stored snapshot |
+| 8 | Archived snapshot remains exportable | Open the archived job CoC dialog and use print or export | Stored snapshot remains printable and downloadable |
+| 9 | Handoff idempotency preserves drive state | Call handoff endpoint twice with same contract (drive_id, possessor, delivery_time, receipt_ref) | Both succeed; drive state is unchanged and no duplicate operations occur |
 
 #### 12.12.4 UI: Job Detail CoC Workflow
 
@@ -1595,14 +1595,14 @@ Chain-of-Custody (CoC) handoff ensures legal custody transfer of evidence is pro
 | 6 | CoC CSV export contains custody-event rows | Load a stored snapshot and click `Export CoC CSV` | Download filename matches `chain-of-custody-job-*.csv`; rows include drive serial, manufacturer, model, timestamp, actor, action, event type, and JSON details |
 | 7 | CoC print layout isolates the report | Load a stored snapshot, trigger print preview, and inspect the rendered page | Print view shows only the formatted CoC report cards from the dialog |
 | 8 | CoC prefill handoff form | Click `Prefill Handoff` on a CoC report as admin or manager | Handoff form populates with drive_id, project_id, and evidence value from the report/job |
-| 9 | Handoff confirmation warning modal appears | After filling handoff form and clicking `Confirm Handoff` | Modal appears with warning text: "This action will permanently archive the drive..." |
-| 10 | Handoff warning shows confirmation buttons | Inspect warning modal | Two buttons: `Yes, archive drive` (danger styling) and `Cancel` |
+| 9 | Handoff confirmation warning modal appears | After filling handoff form and clicking `Confirm Handoff` | Modal appears with text explaining the handoff will be recorded in ECUBE and the stored CoC snapshot will be refreshed |
+| 10 | Handoff warning shows confirmation buttons | Inspect warning modal | Two buttons: `Record custody handoff` and `Cancel` |
 | 11 | Cancel handoff from modal | Click `Cancel` in warning modal | Modal closes, form state preserved, no handoff submitted |
-| 12 | Confirm handoff from modal | Click `Yes, archive drive` in warning modal | Modal closes, handoff submits, status message appears, and the stored snapshot reloads |
+| 12 | Confirm handoff from modal | Click `Record custody handoff` in warning modal | Modal closes, handoff submits, status message appears, and the stored snapshot reloads |
 | 13 | Auditor sees read-only CoC actions | Open CoC as auditor | Print/export actions are visible; refresh and handoff controls are hidden |
 | 14 | Handoff form validation | Submit handoff form with missing possessor or delivery_time | Inline validation error shown (form not submitted) |
 | 15 | Archived job CoC stays readable | Open an archived job in Job Detail and click `Chain of Custody` | Stored snapshot opens in read-only mode and remains exportable |
-| 16 | Manual archive result | After successful handoff, query drive state via API | Drive state is `ARCHIVED` |
+| 16 | Manual handoff result | After successful prepare-eject + handoff, query drive state via API | Drive state remains `AVAILABLE` |
 
 #### 12.12.5 Manual Test Data Setup (SQL)
 
@@ -1615,8 +1615,8 @@ This section provides SQL scripts to populate the database with realistic chain-
 
 **Scenario Summary:**
 The following setup creates two projects with three USB drives each:
-- Project `CASE-2026-001`: Two completed jobs (one with archived drive, one with active drive)
-- Project `CASE-2026-002`: One completed job with a non-archived drive
+- Project `CASE-2026-001`: Two completed jobs (one with a recorded CoC handoff, one still active for additional handoff testing)
+- Project `CASE-2026-002`: One completed job with no handoff recorded yet
 - All drives in `IN_USE` state (already initialized), with job lifecycle and manifest records
 - Full audit trail showing `DRIVE_INITIALIZED`, `JOB_CREATED`, `JOB_STARTED`, `JOB_COMPLETED`, and (for one drive) `COC_HANDOFF_CONFIRMED`
 
@@ -1817,7 +1817,7 @@ CROSS JOIN LATERAL (VALUES
    NULL::INT, ids.j001b,
    jsonb_build_object('job_id', ids.j001b, 'evidence_number', 'EV-2026-001-B', 'total_bytes', 3500000000, 'file_count', 1800, 'duration_seconds', 7200)),
 
-  -- CASE-2026-001, CoC handoff (drive-001 archived)
+  -- CASE-2026-001, CoC handoff recorded for drive-001
   (NOW() - INTERVAL '1 day', 'CASE-2026-001', 'COC_HANDOFF_CONFIRMED',
    ids.d001, NULL::INT,
    jsonb_build_object('drive_id', ids.d001, 'project_id', 'CASE-2026-001', 'possessor', 'Officer Smith',
@@ -1840,17 +1840,7 @@ CROSS JOIN LATERAL (VALUES
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
--- 9. Manually Archive Drive 1 (CASE-2026-001) via state transition
--- ============================================================================
--- This simulates the automatic state transition that occurs on CoC handoff.
--- Drive 1 should now be ARCHIVED.
-
-UPDATE usb_drives
-SET current_state = 'ARCHIVED'
-WHERE device_identifier = 'coC-test-drive-001' AND current_state = 'IN_USE';
-
--- ============================================================================
--- 10. Verify Setup
+-- 9. Verify Setup
 -- ============================================================================
 
 SELECT 'Hubs created:' AS check_point;
@@ -1859,7 +1849,7 @@ SELECT COUNT(*) AS hub_count FROM usb_hubs WHERE system_identifier LIKE 'test-hu
 SELECT 'Ports created:' AS check_point;
 SELECT COUNT(*) AS port_count FROM usb_ports WHERE system_path IN ('1-1', '1-2', '1-3', '4-1', '4-2', '4-3');
 
-SELECT 'Drives (IN_USE and ARCHIVED):' AS check_point;
+SELECT 'Drives with project bindings:' AS check_point;
 SELECT current_project_id, current_state, COUNT(*) AS count FROM usb_drives WHERE current_project_id IN ('CASE-2026-001', 'CASE-2026-002') GROUP BY current_project_id, current_state;
 
 SELECT 'Jobs COMPLETED:' AS check_point;
@@ -1944,9 +1934,9 @@ COMMIT;
 
 3. **Test CoC UI:**
    - Navigate to Audit view
-   - Filter by project `CASE-2026-001` — verify archived drive is hidden
+  - Filter by project `CASE-2026-001` — verify the handoff-recorded drive remains visible
    - Filter by project `CASE-2026-002` — verify active drive is shown
-   - Attempt handoff on active drive; verify modal appears and archival succeeds
+  - Attempt handoff on active drive; verify modal appears and the handoff is recorded successfully
 
 4. **Run cleanup script before next test run:**
    ```bash

@@ -4,7 +4,6 @@ const DRIVE_STATE_KEYS = {
   DISCONNECTED: 'drives.states.disconnected',
   AVAILABLE: 'drives.states.available',
   IN_USE: 'drives.states.inUse',
-  ARCHIVED: 'drives.states.archived',
 }
 
 const JOB_STATUS_KEYS = {
