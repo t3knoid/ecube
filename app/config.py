@@ -459,6 +459,11 @@ class Settings(BaseSettings):
     #: backpressure against slow or unreachable callback endpoints.
     callback_max_pending: int = 100
 
+    #: Optional HTTPS URL used for terminal-state callbacks when a job
+    #: does not define its own callback_url. Job-level callback_url
+    #: takes precedence over this system-wide default.
+    callback_default_url: str | None = None
+
     # ---------------------------------------------------------------------------
     # Database pool settings
     # ---------------------------------------------------------------------------

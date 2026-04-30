@@ -1310,6 +1310,10 @@ Use a controlled HTTPS webhook sink when validating callback behavior.
 
 | # | Test | How | Expected |
 |---|------|-----|----------|
+| 0 | System-wide callback default can be set from Configuration UI | Open Configuration, enter a valid HTTPS URL in Default Callback URL, save, then reload Configuration | Configuration saves successfully and the field reloads with the saved value |
+| 0 | Callback URL can be set from Jobs UI | Open Jobs, create a job, enter a valid HTTPS value in Webhook callback URL, submit, then open Job Detail | Job creates successfully and Job Detail shows the saved callback URL |
+| 0a | Callback URL can be cleared from Job Detail UI | Open a job with an existing callback URL, choose Edit, clear Webhook callback URL, save, and refresh Job Detail | Job saves successfully and Job Detail no longer shows a callback URL |
+| 0b | Job callback overrides system-wide default | Set a system-wide Default Callback URL, then create a job with a different Webhook callback URL and complete the job against a controlled sink | Callback is delivered to the job-specific URL instead of the system-wide default |
 | 1 | HTTPS callback URL accepted on job create | `POST /jobs` with `"callback_url": "https://example.com/webhook"` | 200, job response echoes `callback_url` |
 | 2 | HTTP callback URL rejected | `POST /jobs` with `"callback_url": "http://example.com/webhook"` | 422, validation error mentions HTTPS |
 | 3 | Callback URL with embedded credentials rejected | `POST /jobs` with `"callback_url": "https://user:pass@example.com/hook"` | 422, validation error rejects URL credentials |

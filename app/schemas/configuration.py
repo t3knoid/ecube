@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, StrictBool, StrictInt, model_validator
 
@@ -44,6 +45,47 @@ class ConfigurationUpdateRequest(StrictIntMixin, BaseModel):
     db_pool_recycle_seconds: Optional[StrictInt] = Field(default=None, ge=-1)
     copy_job_timeout: Optional[StrictInt] = Field(default=None, ge=0)
     job_detail_files_page_size: Optional[StrictInt] = Field(default=None, ge=20, le=100)
+    callback_default_url: Optional[StrictSafeStr] = Field(
+        default=None,
+        json_schema_extra={"pattern": "^https://[a-zA-Z0-9]"},
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_callback_default_url_blank(cls, values: Any) -> Any:
+        if not isinstance(values, dict):
+            return values
+        if "callback_default_url" not in values:
+            return values
+
+        value = values.get("callback_default_url")
+        if value is None:
+            return values
+        if isinstance(value, str) and not value.strip():
+            values = dict(values)
+            values["callback_default_url"] = None
+        return values
+
+    @model_validator(mode="after")
+    def validate_callback_default_url(self) -> "ConfigurationUpdateRequest":
+        value = self.callback_default_url
+        if value is None:
+            return self
+
+        normalized = value.strip()
+        try:
+            parsed = urlparse(normalized)
+        except Exception as exc:
+            raise ValueError("callback_default_url is not a valid URL") from exc
+        if parsed.scheme.lower() != "https":
+            raise ValueError("callback_default_url must use HTTPS")
+        if not parsed.hostname:
+            raise ValueError("callback_default_url must include a hostname")
+        if parsed.username or parsed.password:
+            raise ValueError("callback_default_url must not contain embedded credentials")
+
+        self.callback_default_url = normalized
+        return self
 
     @model_validator(mode="after")
     def check_at_least_one_field(self) -> "ConfigurationUpdateRequest":

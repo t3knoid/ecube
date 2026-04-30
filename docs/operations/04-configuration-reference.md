@@ -205,6 +205,7 @@ For NFS shares, ECUBE persists a per-share `nfs_client_version` only when an ope
 | `CALLBACK_ALLOW_PRIVATE_IPS` | `false` | Allow callbacks to private/reserved IP addresses. Must remain `false` in production to prevent SSRF.                                      |
 | `CALLBACK_MAX_WORKERS`       | `4`     | Maximum number of concurrent callback delivery threads.                                                                                   |
 | `CALLBACK_MAX_PENDING`       | `100`   | Maximum outstanding deliveries (queued + in-flight). When exceeded, new deliveries are dropped and logged as `CALLBACK_DELIVERY_DROPPED`. |
+| `CALLBACK_DEFAULT_URL`       | unset   | Optional HTTPS callback URL used when a job does not define its own `callback_url`. A job-specific callback URL always overrides the system-wide default. |
 
 ---
 
