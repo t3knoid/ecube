@@ -289,6 +289,19 @@ def confirm_chain_of_custody_handoff(
     if existing is not None:
         return _handoff_response_from_audit(existing)
 
+    prior_handoff = _find_prior_handoff_event(
+        db,
+        drive_id=drive.id,
+        project_id=effective_project_id,
+        job_id=job_id,
+        lifecycle_start_at=lifecycle_start_at,
+    )
+    if prior_handoff is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="A custody handoff has already been recorded for this drive lifecycle",
+        )
+
     created = AuditRepository(db).add_uncommitted(
         action="COC_HANDOFF_CONFIRMED",
         user=actor,
@@ -982,6 +995,34 @@ def _find_existing_handoff_event(
         if details.get("receipt_ref") != receipt_ref:
             continue
         return row
+    return None
+
+
+def _find_prior_handoff_event(
+    db: Session,
+    *,
+    drive_id: int,
+    project_id: str,
+    job_id: Optional[int] = None,
+    lifecycle_start_at: Optional[datetime] = None,
+) -> Optional[AuditLog]:
+    candidates = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.action == "COC_HANDOFF_CONFIRMED",
+            AuditLog.drive_id == drive_id,
+            AuditLog.project_id == project_id,
+        )
+        .order_by(AuditLog.id.desc())
+        .all()
+    )
+    for row in candidates:
+        if _handoff_event_matches_job_lifecycle(
+            row,
+            job_id=job_id,
+            lifecycle_start_at=lifecycle_start_at,
+        ):
+            return row
     return None
 
 
