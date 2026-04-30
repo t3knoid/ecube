@@ -1590,19 +1590,20 @@ Chain-of-Custody (CoC) handoff ensures legal custody transfer of evidence is pro
 | 1 | CoC dialog accessible after job completion | Complete a job, open Job Detail, click `Chain of Custody` | CoC dialog opens from Job Detail |
 | 2 | Missing snapshot state is clear | Open CoC for a non-archived job with no stored snapshot yet | Dialog shows no stored snapshot message and a refresh hint for admin/manager users |
 | 3 | Snapshot status is visible | Open CoC after a snapshot has been stored | Dialog shows a `Generated At` timestamp sourced from the stored snapshot metadata |
-| 4 | Refresh stores a new snapshot | Click `Refresh` as admin or manager | Dialog reloads with the refreshed snapshot and a success message |
-| 5 | CoC export actions use stored snapshot | Open CoC and inspect the toolbar | `Print CoC`, `Export CoC CSV`, and `Export JSON` operate on the loaded stored snapshot |
-| 6 | CoC CSV export contains custody-event rows | Load a stored snapshot and click `Export CoC CSV` | Download filename matches `chain-of-custody-job-*.csv`; rows include drive serial, manufacturer, model, timestamp, actor, action, event type, and JSON details |
-| 7 | CoC print layout isolates the report | Load a stored snapshot, trigger print preview, and inspect the rendered page | Print view shows only the formatted CoC report cards from the dialog |
-| 8 | CoC prefill handoff form | Click `Prefill Handoff` on a CoC report as admin or manager | Handoff form populates with drive_id, project_id, and evidence value from the report/job |
-| 9 | Handoff confirmation warning modal appears | After filling handoff form and clicking `Confirm Handoff` | Modal appears with text explaining the handoff will be recorded in ECUBE and the stored CoC snapshot will be refreshed |
-| 10 | Handoff warning shows confirmation buttons | Inspect warning modal | Two buttons: `Record custody handoff` and `Cancel` |
-| 11 | Cancel handoff from modal | Click `Cancel` in warning modal | Modal closes, form state preserved, no handoff submitted |
-| 12 | Confirm handoff from modal | Click `Record custody handoff` in warning modal | Modal closes, handoff submits, status message appears, and the stored snapshot reloads |
-| 13 | Auditor sees read-only CoC actions | Open CoC as auditor | Print/export actions are visible; refresh and handoff controls are hidden |
-| 14 | Handoff form validation | Submit handoff form with missing possessor or delivery_time | Inline validation error shown (form not submitted) |
-| 15 | Archived job CoC stays readable | Open an archived job in Job Detail and click `Chain of Custody` | Stored snapshot opens in read-only mode and remains exportable |
-| 16 | Manual handoff result | After successful prepare-eject + handoff, query drive state via API | Drive state remains `AVAILABLE` |
+| 4 | Refresh stores a new snapshot while custody is pending | Open CoC as admin or manager for a non-archived job whose loaded report still has `custody_complete = false`, then click `Refresh` | Dialog reloads with the refreshed snapshot and a success message |
+| 5 | Completed custody hides refresh | Open CoC as admin or manager for a non-archived job whose loaded report shows `custody_complete = true` for all reports | The `Refresh` control is not shown |
+| 6 | CoC export actions use stored snapshot | Open CoC and inspect the toolbar | `Print CoC`, `Export CoC CSV`, and `Export JSON` operate on the loaded stored snapshot |
+| 7 | CoC CSV export contains custody-event rows | Load a stored snapshot and click `Export CoC CSV` | Download filename matches `chain-of-custody-job-*.csv`; rows include drive serial, manufacturer, model, timestamp, actor, action, event type, and JSON details |
+| 8 | CoC print layout isolates the report | Load a stored snapshot, trigger print preview, and inspect the rendered page | Print view shows only the formatted CoC report cards from the dialog |
+| 9 | CoC prefill handoff form | Click `Prefill Handoff` on a CoC report as admin or manager | Handoff form populates with drive_id, project_id, and evidence value from the report/job |
+| 10 | Handoff confirmation warning modal appears | After filling handoff form and clicking `Confirm Handoff` | Modal appears with text explaining the handoff will be recorded in ECUBE and the stored CoC snapshot will be refreshed |
+| 11 | Handoff warning shows confirmation buttons | Inspect warning modal | Two buttons: `Record custody handoff` and `Cancel` |
+| 12 | Cancel handoff from modal | Click `Cancel` in warning modal | Modal closes, form state preserved, no handoff submitted |
+| 13 | Confirm handoff from modal | Click `Record custody handoff` in warning modal | Modal closes, handoff submits, status message appears, and the stored snapshot reloads |
+| 14 | Auditor sees read-only CoC actions | Open CoC as auditor | Print/export actions are visible; refresh and handoff controls are hidden |
+| 15 | Handoff form validation | Submit handoff form with missing possessor or delivery_time | Inline validation error shown (form not submitted) |
+| 16 | Archived job CoC stays readable | Open an archived job in Job Detail and click `Chain of Custody` | Stored snapshot opens in read-only mode and remains exportable |
+| 17 | Manual handoff result | After successful prepare-eject + handoff, query drive state via API | Drive state remains `AVAILABLE` |
 
 #### 12.12.5 Manual Test Data Setup (SQL)
 
