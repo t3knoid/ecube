@@ -45,7 +45,7 @@ def _emit_job_lifecycle_callback(
     except Exception:
         logger.exception(
             "Failed to dispatch lifecycle callback",
-            {"job_id": job.id, "event": event},
+            extra={"job_id": job.id, "event": event},
         )
 
 _COC_DRIVE_ACTIONS = {
