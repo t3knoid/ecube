@@ -27,7 +27,7 @@ from app.schemas.jobs import (
     JobStartupAnalysisClearRequest,
     JobUpdate,
 )
-from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_410, R_422, R_500
+from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500
 from app.services import audit_service, job_service
 from app.utils.client_ip import get_client_ip
 from app.utils.sanitize import redact_pathlike_substrings
@@ -417,7 +417,7 @@ def refresh_job_chain_of_custody(
     )
 
 
-@router.post("/{job_id}/chain-of-custody/handoff", response_model=ChainOfCustodyHandoffResponse, responses={**R_401, **R_403, **R_404, **R_409, **R_410, **R_422})
+@router.post("/{job_id}/chain-of-custody/handoff", response_model=ChainOfCustodyHandoffResponse, responses={**R_401, **R_403, **R_404, **R_409, **R_422})
 def confirm_job_chain_of_custody_handoff(
     job_id: int,
     body: ChainOfCustodyHandoffRequest,
