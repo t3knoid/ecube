@@ -238,7 +238,7 @@ The callback body is a JSON object containing:
 | `project_id` | string | Bound project ID |
 | `evidence_number` | string | Evidence case number |
 | `created_by` | string or null | Username of the user who created the job when recorded |
-| `status` | string | Terminal status value |
+| `status` | string | Persisted job status at callback time |
 | `source_path` | string | Source data path |
 | `total_bytes` | integer | Total bytes to copy |
 | `copied_bytes` | integer | Bytes actually copied |
