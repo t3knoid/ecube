@@ -54,6 +54,14 @@ class TestSettingsDefaults:
         s = Settings(database_url="sqlite://")
         assert s.callback_default_url is None
 
+    def test_callback_hmac_secret_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.callback_hmac_secret is None
+
+    def test_callback_proxy_url_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.callback_proxy_url is None
+
     def test_ldap_server_default(self):
         s = Settings(database_url="sqlite://")
         assert s.ldap_server is None

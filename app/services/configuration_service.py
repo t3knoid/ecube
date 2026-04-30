@@ -27,6 +27,7 @@ class _FieldSpec:
     env_key: str
     requires_restart: bool
     serializer: Callable[[Any], str]
+    readable: bool = True
 
 
 def _serialize_plain(value: Any) -> str:
@@ -45,6 +46,18 @@ def _serialize_callback_default_url(value: Any) -> str:
     return str(value).strip()
 
 
+def _serialize_callback_hmac_secret(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _serialize_callback_proxy_url(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
 _EDITABLE_FIELDS: Dict[str, _FieldSpec] = {
     "log_level": _FieldSpec("LOG_LEVEL", False, _serialize_plain),
     "log_format": _FieldSpec("LOG_FORMAT", False, _serialize_plain),
@@ -58,6 +71,13 @@ _EDITABLE_FIELDS: Dict[str, _FieldSpec] = {
     "copy_job_timeout": _FieldSpec("COPY_JOB_TIMEOUT", False, _serialize_plain),
     "job_detail_files_page_size": _FieldSpec("JOB_DETAIL_FILES_PAGE_SIZE", False, _serialize_plain),
     "callback_default_url": _FieldSpec("CALLBACK_DEFAULT_URL", False, _serialize_callback_default_url),
+    "callback_proxy_url": _FieldSpec("CALLBACK_PROXY_URL", False, _serialize_callback_proxy_url),
+    "callback_hmac_secret": _FieldSpec(
+        "CALLBACK_HMAC_SECRET",
+        False,
+        _serialize_callback_hmac_secret,
+        readable=False,
+    ),
 }
 
 
@@ -67,7 +87,7 @@ def _normalized_value(field_name: str, value: Any) -> Any:
             return None
         text = str(value).strip()
         return text or None
-    if field_name == "callback_default_url":
+    if field_name in {"callback_default_url", "callback_proxy_url", "callback_hmac_secret"}:
         if value is None:
             return None
         text = str(value).strip()
@@ -75,17 +95,33 @@ def _normalized_value(field_name: str, value: Any) -> Any:
     return value
 
 
+def _display_value(field_name: str, value: Any) -> Any:
+    normalized = _normalized_value(field_name, value)
+    if field_name == "callback_hmac_secret":
+        return bool(normalized)
+    return normalized
+
+
 def get_configuration_fields() -> List[Dict[str, Any]]:
     """Return editable configuration fields and their current values."""
     fields: List[Dict[str, Any]] = []
     for key, spec in _EDITABLE_FIELDS.items():
+        if not spec.readable:
+            continue
         fields.append(
             {
                 "key": key,
-                "value": _normalized_value(key, getattr(settings, key)),
+                "value": _display_value(key, getattr(settings, key)),
                 "requires_restart": spec.requires_restart,
             }
         )
+    fields.append(
+        {
+            "key": "callback_hmac_secret_configured",
+            "value": _display_value("callback_hmac_secret", settings.callback_hmac_secret),
+            "requires_restart": False,
+        }
+    )
     return fields
 
 
@@ -105,6 +141,11 @@ def update_configuration(values: Dict[str, Any]) -> Dict[str, Any]:
     pending_values: Dict[str, Any] = {}
     old_values: Dict[str, Any] = {}
 
+    values = dict(values)
+    clear_callback_hmac_secret = bool(values.pop("clear_callback_hmac_secret", False))
+    if clear_callback_hmac_secret:
+        values["callback_hmac_secret"] = None
+
     for key, new_value_raw in values.items():
         if key not in _EDITABLE_FIELDS:
             continue
@@ -117,8 +158,8 @@ def update_configuration(values: Dict[str, Any]) -> Dict[str, Any]:
         old_values[key] = current_value
         changed_settings.append(key)
         changed_setting_values[key] = {
-            "old_value": current_value,
-            "new_value": new_value,
+            "old_value": _display_value(key, current_value),
+            "new_value": _display_value(key, new_value),
         }
         if spec.requires_restart:
             restart_required_settings.append(key)
