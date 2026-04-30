@@ -523,7 +523,6 @@ onBeforeUnmount(() => {
       <div class="detail-grid">
         <div><strong>{{ t('common.labels.id') }}</strong><span>{{ drive.id }}</span></div>
         <div><strong>{{ t('drives.device') }}</strong><span>{{ formatDriveIdentity(drive) }}</span></div>
-        <div><strong>{{ t('drives.filesystemPath') }}</strong><span>{{ protectedValue(drive.filesystem_path) }}</span></div>
         <!-- Mount Point field removed -->
         <div><strong>{{ t('drives.filesystem') }}</strong><span>{{ drive.filesystem_type || '-' }}</span></div>
         <div><strong>{{ t('common.labels.size') }}</strong><span>{{ formatBytes(drive.capacity_bytes) }}</span></div>
