@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   hasAnyRole: vi.fn(),
   push: vi.fn(),
   getDrives: vi.fn(),
+  listAllJobs: vi.fn(),
   listJobs: vi.fn(),
   getMounts: vi.fn(),
   formatDrive: vi.fn(),
@@ -38,6 +39,7 @@ vi.mock('@/api/drives.js', () => ({
 }))
 
 vi.mock('@/api/jobs.js', () => ({
+  listAllJobs: (...args) => mocks.listAllJobs(...args),
   listJobs: (...args) => mocks.listJobs(...args),
 }))
 
@@ -99,6 +101,7 @@ describe('DriveDetailView mount workflow', () => {
     mocks.hasAnyRole.mockReset()
     mocks.push.mockReset()
     mocks.getDrives.mockReset()
+    mocks.listAllJobs.mockReset()
     mocks.listJobs.mockReset()
     mocks.getMounts.mockReset()
     mocks.formatDrive.mockReset()
@@ -110,6 +113,7 @@ describe('DriveDetailView mount workflow', () => {
 
     mocks.hasAnyRole.mockReturnValue(true)
     mocks.getDrives.mockResolvedValue([buildDrive()])
+    mocks.listAllJobs.mockResolvedValue([])
     mocks.listJobs.mockResolvedValue([])
     mocks.getMounts.mockResolvedValue([
       { id: 1, status: 'MOUNTED', project_id: 'PROJ-007' },
@@ -214,7 +218,7 @@ describe('DriveDetailView mount workflow', () => {
 
   it('shows the evidence number for the drive assigned job when multiple drives share a project', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-007', mount_path: '/mnt/ecube/7' })])
-    mocks.listJobs.mockResolvedValue([
+    mocks.listAllJobs.mockResolvedValue([
       { id: 21, project_id: 'PROJ-007', evidence_number: 'EV-OTHER-DRIVE', drive: { id: 8 } },
       { id: 20, project_id: 'PROJ-007', evidence_number: 'EV-007', drive: { id: 7 } },
     ])
@@ -223,6 +227,20 @@ describe('DriveDetailView mount workflow', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain(i18n.global.t('jobs.evidence'))
+    expect(wrapper.text()).toContain('EV-007')
+    expect(wrapper.text()).not.toContain('EV-OTHER-DRIVE')
+  })
+
+  it('uses jobs beyond the first backend page when resolving detail evidence', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-007', mount_path: '/mnt/ecube/7' })])
+    mocks.listAllJobs.mockResolvedValue([
+      { id: 21, project_id: 'PROJ-007', evidence_number: 'EV-OTHER-DRIVE', drive: { id: 8 } },
+      { id: 20, project_id: 'PROJ-007', evidence_number: 'EV-007', drive: { id: 7 } },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
     expect(wrapper.text()).toContain('EV-007')
     expect(wrapper.text()).not.toContain('EV-OTHER-DRIVE')
   })
