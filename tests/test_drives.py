@@ -611,7 +611,7 @@ def test_mount_drive_relocks_only_after_os_mount_and_aborts_if_state_changed(man
         call_order.append("lock")
         locked_drive = original_get_for_update(self, drive_id)
         if "mount" in call_order:
-            locked_drive.current_state = DriveState.ARCHIVED
+            locked_drive.current_state = DriveState.IN_USE
         return locked_drive
 
     with (
@@ -693,36 +693,6 @@ def test_mount_drive_auditor_forbidden(auditor_client, db):
 def test_initialize_drive_not_found(manager_client, db):
     response = manager_client.post("/drives/999/initialize", json={"project_id": "PROJ-001"})
     assert response.status_code == 404
-
-
-def test_initialize_archived_drive_is_rejected(manager_client, db):
-    """Archived drives must never be re-initialized (terminal state)."""
-    from app.models.audit import AuditLog
-
-    drive = UsbDrive(
-        device_identifier="USB003A",
-        current_state=DriveState.ARCHIVED,
-        current_project_id="PROJ-OLD",
-        filesystem_type="exfat",
-    )
-    db.add(drive)
-    db.commit()
-
-    response = manager_client.post(f"/drives/{drive.id}/initialize", json={"project_id": "PROJ-NEW"})
-    assert response.status_code == 409
-    assert "archived" in response.json()["message"].lower()
-
-    # Drive state must remain ARCHIVED.
-    db.refresh(drive)
-    assert drive.current_state == DriveState.ARCHIVED
-
-    # Denial must be recorded in the audit trail.
-    log = db.query(AuditLog).filter(AuditLog.action == "INIT_REJECTED_ARCHIVED").first()
-    assert log is not None
-    assert log.details["drive_id"] == drive.id
-    assert log.details["requested_project_id"] == "PROJ-NEW"
-    assert log.details["current_state"] == "ARCHIVED"
-    assert log.details["existing_project_id"] == "PROJ-OLD"
 
 
 def test_initialize_empty_drive_is_rejected(manager_client, db):

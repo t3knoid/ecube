@@ -398,6 +398,86 @@ class TestChainOfCustodyHandoff:
         rows = db.query(AuditLog).filter(AuditLog.action == "COC_HANDOFF_CONFIRMED", AuditLog.drive_id == drive_id).all()
         assert len(rows) == 1
 
+    def test_handoff_rejects_second_distinct_submission_for_same_project_lifecycle(self, manager_client, db):
+        drive = _seed_drive(db, device_identifier="COC-HANDOFF-ONCE", project_id="CASE-HANDOFF-ONCE", state=DriveState.AVAILABLE)
+        drive_id = _as_int(drive.id)
+
+        first = manager_client.post(
+            "/audit/chain-of-custody/handoff",
+            json={
+                "drive_id": drive_id,
+                "project_id": "CASE-HANDOFF-ONCE",
+                "possessor": "Jane Reviewer",
+                "delivery_time": datetime(2026, 4, 10, 14, 22, 31, tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
+                "receipt_ref": "COC-2026-0410-08",
+            },
+        )
+        assert first.status_code == 200
+
+        second = manager_client.post(
+            "/audit/chain-of-custody/handoff",
+            json={
+                "drive_id": drive_id,
+                "project_id": "CASE-HANDOFF-ONCE",
+                "possessor": "Evidence Locker",
+                "delivery_time": datetime(2026, 4, 10, 14, 25, 0, tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
+                "receipt_ref": "COC-2026-0410-09",
+            },
+        )
+        assert second.status_code == 409
+        assert "already been recorded" in second.json()["message"].lower()
+
+        rows = db.query(AuditLog).filter(AuditLog.action == "COC_HANDOFF_CONFIRMED", AuditLog.drive_id == drive_id).all()
+        assert len(rows) == 1
+
+    def test_drive_level_handoff_allows_new_submission_after_reinitialize_same_project(self, manager_client, db):
+        drive = _seed_drive(db, device_identifier="COC-HANDOFF-REINIT", project_id="CASE-HANDOFF-REINIT", state=DriveState.AVAILABLE)
+        drive_id = _as_int(drive.id)
+
+        _seed_audit(
+            db,
+            action="DRIVE_INITIALIZED",
+            drive_id=drive_id,
+            project_id="CASE-HANDOFF-REINIT",
+            details={"drive_id": drive_id, "project_id": "CASE-HANDOFF-REINIT"},
+        )
+
+        first = manager_client.post(
+            "/audit/chain-of-custody/handoff",
+            json={
+                "drive_id": drive_id,
+                "project_id": "CASE-HANDOFF-REINIT",
+                "possessor": "Initial Recipient",
+                "delivery_time": datetime(2026, 4, 10, 14, 22, 31, tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
+                "receipt_ref": "COC-2026-0410-10",
+            },
+        )
+        assert first.status_code == 200
+
+        _seed_audit(
+            db,
+            action="DRIVE_INITIALIZED",
+            drive_id=drive_id,
+            project_id="CASE-HANDOFF-REINIT",
+            details={"drive_id": drive_id, "project_id": "CASE-HANDOFF-REINIT", "context": "reinitialized"},
+        )
+
+        second = manager_client.post(
+            "/audit/chain-of-custody/handoff",
+            json={
+                "drive_id": drive_id,
+                "project_id": "CASE-HANDOFF-REINIT",
+                "possessor": "Second Recipient",
+                "delivery_time": datetime(2026, 4, 10, 15, 0, 0, tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
+                "receipt_ref": "COC-2026-0410-11",
+            },
+        )
+        assert second.status_code == 200
+        assert second.json()["event_id"] != first.json()["event_id"]
+
+        rows = db.query(AuditLog).filter(AuditLog.action == "COC_HANDOFF_CONFIRMED", AuditLog.drive_id == drive_id).all()
+        assert len(rows) == 2
+
     def test_idempotency_does_not_match_across_projects(self, manager_client, db):
         """A prior-project handoff record must not satisfy the idempotency check
         for a new handoff submission scoped to a different project on the same drive."""
@@ -496,7 +576,7 @@ class TestChainOfCustodyHandoff:
         )
         assert response.status_code == 422
 
-    def test_handoff_transitions_drive_to_archived(self, manager_client, db):
+    def test_handoff_keeps_drive_state_unchanged(self, manager_client, db):
         drive = _seed_drive(db, device_identifier="COC-ARCHIVE", project_id="CASE-ARCHIVE")
         drive_id = _as_int(drive.id)
 
@@ -515,36 +595,47 @@ class TestChainOfCustodyHandoff:
         )
         assert response.status_code == 200
 
-        # Verify drive is ARCHIVED after handoff
+        # Custody handoff records the transfer but no longer archives the drive.
         drive_after = db.get(UsbDrive, drive_id)
-        assert drive_after.current_state == DriveState.ARCHIVED
+        assert drive_after.current_state == DriveState.IN_USE
 
-    def test_archived_drives_excluded_from_coc_by_drive_id(self, manager_client, db):
-        drive = _seed_drive(db, device_identifier="COC-ARCHIVED-EXCLUDE", project_id="CASE-ARCHIVED-EXC")
+    def test_handoff_drive_remains_reportable_by_drive_id(self, manager_client, db):
+        drive = _seed_drive(db, device_identifier="COC-HANDOFF-REPORTABLE", project_id="CASE-HANDOFF-REPORTABLE")
         drive_id = _as_int(drive.id)
 
-        # Archive the drive
-        drive.current_state = DriveState.ARCHIVED
-        db.commit()
+        handoff_response = manager_client.post(
+            "/audit/chain-of-custody/handoff",
+            json={
+                "drive_id": drive_id,
+                "project_id": "CASE-HANDOFF-REPORTABLE",
+                "possessor": "Recipient",
+                "delivery_time": datetime(2026, 4, 10, 14, 22, 31, tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
+            },
+        )
+        assert handoff_response.status_code == 200
 
-        # Try to retrieve CoC for archived drive
         response = manager_client.get(
             "/audit/chain-of-custody",
             params={"drive_id": drive_id}
         )
-        assert response.status_code == 410
+        assert response.status_code == 200
         assert response.headers["Cache-Control"] == "no-store"
 
-    def test_archived_drives_excluded_from_coc_by_project_id(self, manager_client, db):
-        # Create two drives in same project: one active, one archived
+    def test_handoff_drive_remains_included_in_coc_by_project_id(self, manager_client, db):
         active_drive = _seed_drive(db, device_identifier="COC-ACTIVE-2", project_id="CASE-PROJECT-2")
-        archived_drive = _seed_drive(db, device_identifier="COC-ARCHIVED-2", project_id="CASE-PROJECT-2")
+        handed_off_drive = _seed_drive(db, device_identifier="COC-HANDOFF-2", project_id="CASE-PROJECT-2")
 
-        # Archive one drive
-        archived_drive.current_state = DriveState.ARCHIVED
-        db.commit()
+        handoff_response = manager_client.post(
+            "/audit/chain-of-custody/handoff",
+            json={
+                "drive_id": _as_int(handed_off_drive.id),
+                "project_id": "CASE-PROJECT-2",
+                "possessor": "Recipient",
+                "delivery_time": datetime(2026, 4, 10, 14, 22, 31, tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
+            },
+        )
+        assert handoff_response.status_code == 200
 
-        # Retrieve CoC by project_id
         response = manager_client.get(
             "/audit/chain-of-custody",
             params={"project_id": "CASE-PROJECT-2"}
@@ -552,22 +643,28 @@ class TestChainOfCustodyHandoff:
         assert response.status_code == 200
         data = response.json()
 
-        # Verify only active drive is included
-        assert len(data["reports"]) == 1
-        report = data["reports"][0]
-        assert report["drive_id"] == _as_int(active_drive.id)
-        assert _as_int(archived_drive.id) not in [r["drive_id"] for r in data["reports"]]
+        report_ids = [r["drive_id"] for r in data["reports"]]
+        assert _as_int(active_drive.id) in report_ids
+        assert _as_int(handed_off_drive.id) in report_ids
 
-    def test_archived_drive_excluded_from_coc_by_drive_sn(self, manager_client, db):
-        drive = _seed_drive(db, device_identifier="COC-ARCHIVED-SN", project_id="CASE-ARCHIVED-SN")
-        drive.current_state = DriveState.ARCHIVED
-        db.commit()
+    def test_handoff_drive_remains_reportable_by_drive_sn(self, manager_client, db):
+        drive = _seed_drive(db, device_identifier="COC-HANDOFF-SN", project_id="CASE-HANDOFF-SN")
+        handoff_response = manager_client.post(
+            "/audit/chain-of-custody/handoff",
+            json={
+                "drive_id": _as_int(drive.id),
+                "project_id": "CASE-HANDOFF-SN",
+                "possessor": "Recipient",
+                "delivery_time": datetime(2026, 4, 10, 14, 22, 31, tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
+            },
+        )
+        assert handoff_response.status_code == 200
 
         response = manager_client.get(
             "/audit/chain-of-custody",
-            params={"drive_sn": "COC-ARCHIVED-SN"},
+            params={"drive_sn": "COC-HANDOFF-SN"},
         )
-        assert response.status_code == 410
+        assert response.status_code == 200
 
     def test_handoff_rejected_when_drive_has_no_project_binding(self, manager_client, db):
         """A handoff for a drive with no current_project_id and no caller-supplied

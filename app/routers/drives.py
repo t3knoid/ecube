@@ -31,7 +31,7 @@ def list_drives(
     ),
     state: Optional[List[str]] = Query(
         default=None,
-        description="Filter drives by state (repeatable). Valid values: DISCONNECTED, AVAILABLE, IN_USE, ARCHIVED.",
+        description="Filter drives by state (repeatable). Valid values: DISCONNECTED, AVAILABLE, IN_USE.",
     ),
     include_disconnected: bool = Query(
         default=False,
@@ -43,7 +43,7 @@ def list_drives(
     """List USB drives with their current state and project assignments.
 
     By default only drives in non-``DISCONNECTED`` states (``AVAILABLE``,
-    ``IN_USE``, ``ARCHIVED``) are returned. Set
+    ``IN_USE``) are returned. Set
     ``include_disconnected=true`` to include ``DISCONNECTED`` drives
     in that default listing.
 
