@@ -110,8 +110,10 @@ const canManageStartupAnalysis = computed(() => authStore.hasAnyRole(['admin', '
 const canInspectHashes = computed(() => authStore.hasAnyRole(['admin', 'auditor']))
 const canReadCoc = computed(() => authStore.hasAnyRole(['admin', 'manager', 'auditor']))
 const currentStatus = computed(() => String(job.value?.status || '').toUpperCase())
-const canRefreshCoc = computed(() => authStore.hasAnyRole(['admin', 'manager']) && currentStatus.value !== 'ARCHIVED')
 const hasPendingCocHandoff = computed(() => (cocReport.value?.reports || []).some((report) => !report?.custody_complete))
+const canRefreshCoc = computed(() => authStore.hasAnyRole(['admin', 'manager'])
+  && currentStatus.value !== 'ARCHIVED'
+  && (!cocReport.value || hasPendingCocHandoff.value))
 const canConfirmCocHandoff = computed(() => authStore.hasAnyRole(['admin', 'manager'])
   && currentStatus.value !== 'ARCHIVED'
   && hasPendingCocHandoff.value)
