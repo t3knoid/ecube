@@ -498,9 +498,54 @@ class TestDeliverCallback:
     def test_noop_when_no_callback_url(self, db):
         """deliver_callback is a no-op when callback_url is None."""
         job = self._make_mock_job(callback_url=None)
-        deliver_callback(job, db)
+        with patch("app.services.callback_service.settings.callback_default_url", None):
+            deliver_callback(job, db)
         logs = db.query(AuditLog).all()
         assert len(logs) == 0
+
+    @patch("app.services.callback_service._resolve_safe", return_value="93.184.216.34")
+    @patch("app.services.callback_service.httpx.Client")
+    def test_uses_system_default_callback_url_when_job_callback_missing(self, mock_client_cls, mock_resolve, db):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_client_instance = MagicMock()
+        mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
+        mock_client_instance.__exit__ = MagicMock(return_value=False)
+        mock_client_instance.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client_instance
+
+        job = self._make_db_job(db, callback_url=None)
+
+        with patch("app.services.callback_service.settings.callback_allow_private_ips", False), \
+             patch("app.services.callback_service.settings.callback_timeout_seconds", 5), \
+             patch("app.services.callback_service.settings.callback_default_url", "https://default.example.com/hook"):
+            deliver_callback(job, db)
+
+        call_args = mock_client_instance.post.call_args
+        posted_url = call_args[0][0]
+        assert "93.184.216.34" in posted_url
+        assert call_args[1]["headers"] == {"Host": "default.example.com"}
+
+    @patch("app.services.callback_service._resolve_safe", return_value="93.184.216.34")
+    @patch("app.services.callback_service.httpx.Client")
+    def test_job_callback_url_overrides_system_default(self, mock_client_cls, mock_resolve, db):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_client_instance = MagicMock()
+        mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
+        mock_client_instance.__exit__ = MagicMock(return_value=False)
+        mock_client_instance.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client_instance
+
+        job = self._make_db_job(db, callback_url="https://job.example.com/hook")
+
+        with patch("app.services.callback_service.settings.callback_allow_private_ips", False), \
+             patch("app.services.callback_service.settings.callback_timeout_seconds", 5), \
+             patch("app.services.callback_service.settings.callback_default_url", "https://default.example.com/hook"):
+            deliver_callback(job, db)
+
+        call_args = mock_client_instance.post.call_args
+        assert call_args[1]["headers"] == {"Host": "job.example.com"}
 
     @pytest.mark.parametrize("status", [
         JobStatus.PENDING,

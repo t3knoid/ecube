@@ -2065,10 +2065,14 @@ describe('JobDetailView start action', () => {
       thread_count: 4,
       copied_bytes: 0,
       total_bytes: 0,
+      callback_url: 'https://example.com/current-webhook',
     })
 
     const wrapper = mountView()
     await flushPromises()
+
+    expect(wrapper.text()).toContain('Webhook callback URL')
+    expect(wrapper.text()).toContain('https://example.com/current-webhook')
 
     const editButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit'))
     expect(editButton).toBeTruthy()
@@ -2076,6 +2080,7 @@ describe('JobDetailView start action', () => {
     await flushPromises()
 
     expect(wrapper.find('#job-evidence').element.value).toBe('EV-006')
+    expect(wrapper.find('#job-callback-url').element.value).toBe('https://example.com/current-webhook')
     const driveOptions = wrapper.find('#job-drive').findAll('option').map((node) => node.text())
     expect(wrapper.text()).toContain(i18n.global.t('jobs.selectDrive'))
     expect(driveOptions.join(' ')).toContain('2-1')
@@ -2091,6 +2096,40 @@ describe('JobDetailView start action', () => {
     expect(mocks.updateJob).toHaveBeenCalledWith(6, expect.objectContaining({
       evidence_number: 'EV-UPDATED',
       source_path: '/updated/folder',
+      callback_url: 'https://example.com/current-webhook',
+    }))
+  })
+
+  it('clears the callback URL when the edit field is blank', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'PENDING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 0,
+      total_bytes: 0,
+      callback_url: 'https://example.com/current-webhook',
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const editButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit'))
+    expect(editButton).toBeTruthy()
+    await editButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#job-mount').setValue('4')
+    await wrapper.find('#job-drive').setValue('1')
+    await wrapper.find('#job-callback-url').setValue('')
+    await wrapper.find('#job-submit').trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateJob).toHaveBeenCalledWith(6, expect.objectContaining({
+      callback_url: null,
     }))
   })
 

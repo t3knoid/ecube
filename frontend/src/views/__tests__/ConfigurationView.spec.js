@@ -38,6 +38,7 @@ function buildResponse(overrides = {}) {
     db_pool_recycle_seconds: -1,
     copy_job_timeout: 3600,
     job_detail_files_page_size: 40,
+    callback_default_url: null,
     ...overrides,
   }
 
@@ -107,6 +108,29 @@ describe('ConfigurationView logging defaults', () => {
     expect(mocks.updateConfiguration).toHaveBeenCalledWith({ job_detail_files_page_size: 80 })
   })
 
+  it('loads and saves the system-wide callback default URL', async () => {
+    mocks.getConfiguration.mockResolvedValue(buildResponse({ callback_default_url: 'https://example.com/default-webhook' }))
+    mocks.updateConfiguration.mockResolvedValue({
+      restart_required: false,
+      restart_required_settings: [],
+      applied_immediately: ['callback_default_url'],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const callbackInput = wrapper.find('#cfg-callback-default-url')
+    expect(callbackInput.element.value).toBe('https://example.com/default-webhook')
+
+    await callbackInput.setValue('https://example.com/updated-default-webhook')
+    await wrapper.find('.action-row .btn.btn-primary').trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateConfiguration).toHaveBeenCalledWith({
+      callback_default_url: 'https://example.com/updated-default-webhook',
+    })
+  })
+
   it('loads and saves the default NFS client version', async () => {
     mocks.getConfiguration.mockResolvedValue(buildResponse({ nfs_client_version: '4.1' }))
     mocks.updateConfiguration.mockResolvedValue({
@@ -161,6 +185,7 @@ describe('ConfigurationView logging defaults', () => {
       i18n.global.t('configuration.sections.shares'),
       i18n.global.t('configuration.sections.databasePool'),
       i18n.global.t('configuration.sections.copyJobs'),
+      i18n.global.t('configuration.sections.webhooks'),
     ])
 
     expect(wrapper.find('.warning-panel').exists()).toBe(false)
