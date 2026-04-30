@@ -16,8 +16,66 @@ from app.config import settings
 from app.infrastructure.device_path import validate_device_path
 from app.infrastructure.filesystem_detection import LinuxFilesystemDetector
 from app.infrastructure.mount_info import find_device_mount_point
+from app.utils.sanitize import sanitize_error_message
 
 logger = logging.getLogger(__name__)
+
+
+def _classify_drive_mount_failure(raw_error: object, *, phase: str) -> tuple[str, str]:
+    raw_text = "" if raw_error is None else str(raw_error).strip()
+    lowered = raw_text.lower()
+    default_messages = {
+        "mount_root_prepare": "Managed mount root is unavailable",
+        "mount_timeout": "Mount operation timed out",
+        "mount_command": "Mount command failed",
+        "mount_os_error": "Mount operation failed unexpectedly",
+        "mount_access_repair": "Mount succeeded but post-mount access repair failed",
+    }
+    safe_summary = sanitize_error_message(raw_error, default_messages.get(phase, "Mount operation failed"))
+
+    if phase == "mount_root_prepare":
+        if any(token in lowered for token in ("permission denied", "access denied", "not authorized")):
+            return "managed_mount_root_inaccessible", safe_summary
+        if "no such file" in lowered or "not found" in lowered:
+            return "managed_mount_root_missing", safe_summary
+        return "managed_mount_root_unavailable", safe_summary
+
+    if phase == "mount_timeout":
+        return "mount_timeout", safe_summary
+
+    if phase == "mount_access_repair":
+        return "post_mount_access_repair_failure", safe_summary
+
+    if "unknown filesystem type" in lowered or "wrong fs type" in lowered or "bad superblock" in lowered:
+        return "missing_filesystem_runtime", safe_summary
+    if any(token in lowered for token in ("permission denied", "access denied", "not authorized")):
+        return "mount_permission_failure", safe_summary
+    if "no such file" in lowered or "not found" in lowered:
+        return "mount_target_unavailable", safe_summary
+
+    if phase == "mount_os_error":
+        return "mount_runtime_error", safe_summary
+    return "mount_command_failure", safe_summary
+
+
+def _log_drive_mount_safe_warning(
+    message: str,
+    *,
+    phase: str,
+    mount_point: str,
+    raw_error: object,
+    returncode: int | None = None,
+) -> None:
+    failure_category, failure_summary = _classify_drive_mount_failure(raw_error, phase=phase)
+    extra = {
+        "failure_category": failure_category,
+        "failure_summary": failure_summary,
+        "mount_phase": phase,
+        "mount_slot": os.path.basename(mount_point.rstrip("/")),
+    }
+    if returncode is not None:
+        extra["returncode"] = returncode
+    logger.warning(message, extra=extra)
 
 
 def _log_drive_mount_debug_failure(
@@ -203,6 +261,18 @@ class LinuxDriveMount:
         try:
             os.makedirs(mount_point, exist_ok=True)
         except OSError as exc:
+            _log_drive_mount_safe_warning(
+                "Drive mount root preparation failed",
+                phase="mount_root_prepare",
+                mount_point=mount_point,
+                raw_error=exc,
+            )
+            _log_drive_mount_debug_failure(
+                "Drive mount root preparation details",
+                device_path=mountable,
+                mount_point=mount_point,
+                raw_error=exc,
+            )
             return False, f"failed to create mount point {mount_point}: {exc}"
 
         mount_command = [
@@ -220,11 +290,11 @@ class LinuxDriveMount:
                 timeout=settings.subprocess_timeout_seconds,
             )
         except subprocess.TimeoutExpired:
-            logger.warning(
-                "Drive mount timed out: device_name=%s mount_slot=%s timeout=%ss",
-                os.path.basename(mountable),
-                os.path.basename(mount_point.rstrip("/")),
-                settings.subprocess_timeout_seconds,
+            _log_drive_mount_safe_warning(
+                "Drive mount timed out",
+                phase="mount_timeout",
+                mount_point=mount_point,
+                raw_error=f"mount timed out after {settings.subprocess_timeout_seconds}s",
             )
             _log_drive_mount_debug_failure(
                 "Drive mount timeout details",
@@ -235,12 +305,12 @@ class LinuxDriveMount:
             return False, f"mount timed out after {settings.subprocess_timeout_seconds}s"
         except subprocess.CalledProcessError as exc:
             stderr = (exc.stderr or b"").decode(errors="replace").strip()
-            logger.warning(
-                "Drive mount command failed: device_name=%s mount_slot=%s returncode=%s reason=%s",
-                os.path.basename(mountable),
-                os.path.basename(mount_point.rstrip("/")),
-                exc.returncode,
-                stderr or "mount command failed",
+            _log_drive_mount_safe_warning(
+                "Drive mount command failed",
+                phase="mount_command",
+                mount_point=mount_point,
+                raw_error=stderr or exc,
+                returncode=exc.returncode,
             )
             _log_drive_mount_debug_failure(
                 "Drive mount raw error",
@@ -264,11 +334,11 @@ class LinuxDriveMount:
                 msg += f": {stderr}"
             return False, msg
         except OSError as exc:
-            logger.warning(
-                "Drive mount OS error: device_name=%s mount_slot=%s reason=%s",
-                os.path.basename(mountable),
-                os.path.basename(mount_point.rstrip("/")),
-                str(exc),
+            _log_drive_mount_safe_warning(
+                "Drive mount OS error",
+                phase="mount_os_error",
+                mount_point=mount_point,
+                raw_error=exc,
             )
             _log_drive_mount_debug_failure(
                 "Drive mount OS error details",
@@ -281,13 +351,14 @@ class LinuxDriveMount:
         writable, access_error = _ensure_mount_point_writable(mount_point)
         if not writable:
             cleanup_ok, cleanup_error = self.unmount_drive(mount_point)
-            logger.warning(
-                "Drive mount access repair failed: device_name=%s mount_slot=%s cleanup_ok=%s reason=%s cleanup_reason=%s",
-                os.path.basename(mountable),
-                os.path.basename(mount_point.rstrip("/")),
-                cleanup_ok,
-                access_error or "mount target is not writable",
-                cleanup_error or "",
+            _log_drive_mount_safe_warning(
+                "Drive mount access repair failed",
+                phase="mount_access_repair",
+                mount_point=mount_point,
+                raw_error=(
+                    f"access_error={access_error or 'mount target is not writable'}; "
+                    f"cleanup_error={cleanup_error or ''}"
+                ),
             )
             _log_drive_mount_debug_failure(
                 "Drive mount access repair details",
