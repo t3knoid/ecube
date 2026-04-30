@@ -1025,7 +1025,7 @@ def test_validate_mount_command_failure(manager_client, db):
     assert data["last_checked_at"] is not None
 
 
-def test_validate_mount_candidate_returns_candidate_without_persisting(manager_client, db):
+def test_validate_mount_candidate_returns_candidate_without_persisting(manager_client, db, caplog):
     class StatefulProvider:
         def __init__(self):
             self.mounted = False
@@ -1059,16 +1059,17 @@ def test_validate_mount_candidate_returns_candidate_without_persisting(manager_c
     with patch("app.services.mount_service._default_provider", return_value=provider), \
          patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None):
-        response = manager_client.post(
-            "/mounts/test",
-            json={
-                "type": "NFS",
-                "remote_path": "192.168.1.1:/exports/evidence",
-                "project_id": "proj-new",
-                "username": "svc-reader",
-                "password": "top-secret",
-            },
-        )
+        with caplog.at_level("INFO"):
+            response = manager_client.post(
+                "/mounts/test",
+                json={
+                    "type": "NFS",
+                    "remote_path": "192.168.1.1:/exports/evidence",
+                    "project_id": "proj-new",
+                    "username": "svc-reader",
+                    "password": "top-secret",
+                },
+            )
 
     assert response.status_code == 200
     data = response.json()
@@ -1091,6 +1092,9 @@ def test_validate_mount_candidate_returns_candidate_without_persisting(manager_c
         }
     ]
     assert provider.unmount_calls == ["/nfs/evidence"]
+    info_messages = [record.getMessage() for record in caplog.records if record.levelname == "INFO"]
+    assert any("Mount candidate validation started" in message for message in info_messages)
+    assert any("Mount candidate validation succeeded" in message for message in info_messages)
 
 
 def test_validate_mount_candidate_timeout_returns_conflict(manager_client, db, caplog):
@@ -1115,7 +1119,16 @@ def test_validate_mount_candidate_timeout_returns_conflict(manager_client, db, c
 
     assert response.status_code == 409
     assert response.json()["message"] == "Operation timed out"
+    info_messages = [record.getMessage() for record in caplog.records if record.levelname == "INFO"]
     warning_messages = [record.getMessage() for record in caplog.records if record.levelname == "WARNING"]
+    assert any(
+        "Mount candidate validation failed" in message
+        and "type=NFS" in message
+        and "mount_label=demo-case-001" in message
+        and "failure_category=mount_validate_candidate" in message
+        and "reason=Operation timed out" in message
+        for message in info_messages
+    )
     assert any(
         "Mount command timed out" in message
         and "type=NFS" in message
@@ -1521,19 +1534,28 @@ def test_linux_mount_provider_uses_guest_option_for_credentialless_smb_mount(mon
     assert "guest" in cmd
 
 
-def test_linux_mount_provider_treats_returncode_zero_with_inactive_mountpoint_as_failure():
+def test_linux_mount_provider_treats_returncode_zero_with_inactive_mountpoint_as_failure(caplog):
     provider = LinuxMountProvider()
 
     with patch("subprocess.run") as mock_run, patch.object(provider, "check_mounted", return_value=False):
         mock_run.return_value = MagicMock(returncode=0, stderr="", stdout="")
-        ok, err = provider.os_mount(
-            MountType.NFS,
-            "192.168.2.250:/mnt/Data/music",
-            "/nfs/music",
-        )
+        with caplog.at_level("DEBUG"):
+            ok, err = provider.os_mount(
+                MountType.NFS,
+                "192.168.2.250:/mnt/Data/music",
+                "/nfs/music",
+            )
 
     assert ok is False
     assert "not active" in (err or "")
+    messages = [record.getMessage() for record in caplog.records]
+    assert any(
+        "Mount command verification details" in message
+        and "remote_path=192.168.2.250:/mnt/Data/music" in message
+        and "local_mount_point=/nfs/music" in message
+        and "command_path=" in message
+        for message in messages
+    )
 
 
 def test_linux_mount_provider_uses_nsenter_when_mount_namespace_differs(monkeypatch):
@@ -1644,7 +1666,7 @@ def test_linux_mount_provider_returns_retry_error_when_fstab_retry_fails():
     assert "failed to apply fstab options" in (err or "")
 
 
-def test_linux_mount_provider_uses_direct_nfs_helper_after_fstab_failures():
+def test_linux_mount_provider_uses_direct_nfs_helper_after_fstab_failures(caplog):
     provider = LinuxMountProvider()
 
     first = MagicMock(returncode=32, stderr="mount.nfs: failed to apply fstab options", stdout="")
@@ -1652,17 +1674,33 @@ def test_linux_mount_provider_uses_direct_nfs_helper_after_fstab_failures():
 
     with patch("app.services.mount_service._resolve_mount_nfs_binary", return_value="/sbin/mount.nfs"), \
          patch("subprocess.run", side_effect=[first, second]) as mock_run:
-        ok, err = provider.os_mount(
-            MountType.NFS,
-            "192.168.2.250:/mnt/Data/music",
-            "/mnt/music",
-        )
+        with caplog.at_level("DEBUG"):
+            ok, err = provider.os_mount(
+                MountType.NFS,
+                "192.168.2.250:/mnt/Data/music",
+                "/mnt/music",
+            )
 
     assert ok is True
     assert err is None
     assert mock_run.call_count == 2
     direct_cmd = mock_run.call_args_list[1].args[0]
     assert "/sbin/mount.nfs" in direct_cmd
+    info_messages = [record.getMessage() for record in caplog.records if record.levelname == "INFO"]
+    debug_messages = [record.getMessage() for record in caplog.records if record.levelname == "DEBUG"]
+    assert any(
+        "Executing NFS mount command" in message
+        and "nfs_client_version=4.1" in message
+        and "command_path=" in message
+        for message in info_messages
+    )
+    assert any(
+        "Direct NFS helper context" in message
+        and "helper=/sbin/mount.nfs" in message
+        and "remote_path=192.168.2.250:/mnt/Data/music" in message
+        and "local_mount_point=/mnt/music" in message
+        for message in debug_messages
+    )
 
 
 def test_linux_mount_provider_treats_active_mountpoint_as_success_after_failures():
