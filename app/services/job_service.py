@@ -1505,6 +1505,11 @@ def verify_job(
         )
     except Exception:
         logger.exception("Failed to write audit log for JOB_VERIFY_STARTED")
+    _emit_job_lifecycle_callback(
+        job,
+        event="JOB_VERIFY_STARTED",
+        actor=actor,
+    )
     background_tasks.add_task(copy_engine.run_verify_job, job_id)
     db.refresh(job)
     return job

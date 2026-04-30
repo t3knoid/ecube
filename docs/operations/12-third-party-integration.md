@@ -789,7 +789,7 @@ Write-Host "  Drive:    $driveId"
 
 ## 7. Webhook Callbacks
 
-Instead of polling `GET /jobs/{job_id}` for every lifecycle change, you can supply a `callback_url` when creating or updating a job. ECUBE will `POST` a JSON payload to that URL whenever one of the supported persisted job lifecycle events occurs: `JOB_CREATED`, `JOB_STARTED`, `JOB_RETRY_FAILED_FILES_STARTED`, `JOB_PAUSE_REQUESTED`, `JOB_COMPLETED`, `JOB_FAILED`, `JOB_COMPLETED_MANUALLY`, `MANIFEST_CREATED`, `COC_SNAPSHOT_STORED`, `COC_HANDOFF_CONFIRMED`, `JOB_ARCHIVED`, or `JOB_RECONCILED`.
+Instead of polling `GET /jobs/{job_id}` for every lifecycle change, you can supply a `callback_url` when creating or updating a job. ECUBE will `POST` a JSON payload to that URL whenever one of the supported persisted job lifecycle events occurs: `JOB_CREATED`, `JOB_STARTED`, `JOB_RETRY_FAILED_FILES_STARTED`, `JOB_PAUSE_REQUESTED`, `JOB_VERIFY_STARTED`, `JOB_COMPLETED`, `JOB_FAILED`, `JOB_COMPLETED_MANUALLY`, `MANIFEST_CREATED`, `COC_SNAPSHOT_STORED`, `COC_HANDOFF_CONFIRMED`, `JOB_ARCHIVED`, or `JOB_RECONCILED`.
 
 ### 7.1 Enabling Webhooks
 
@@ -816,7 +816,7 @@ When a supported job lifecycle event is persisted, ECUBE delivers a `POST` reque
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `event` | `string` | Lifecycle event code such as `JOB_CREATED`, `JOB_STARTED`, `JOB_COMPLETED`, `JOB_FAILED`, `MANIFEST_CREATED`, `COC_SNAPSHOT_STORED`, `COC_HANDOFF_CONFIRMED`, `JOB_ARCHIVED`, or `JOB_RECONCILED`. |
+| `event` | `string` | Lifecycle event code such as `JOB_CREATED`, `JOB_STARTED`, `JOB_VERIFY_STARTED`, `JOB_COMPLETED`, `JOB_FAILED`, `MANIFEST_CREATED`, `COC_SNAPSHOT_STORED`, `COC_HANDOFF_CONFIRMED`, `JOB_ARCHIVED`, or `JOB_RECONCILED`. |
 | `job_id` | `integer` | The export job ID. |
 | `project_id` | `string` | Bound project ID. |
 | `evidence_number` | `string` | Evidence case number. |

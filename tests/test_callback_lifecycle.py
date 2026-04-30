@@ -180,6 +180,43 @@ def test_job_service_emits_retry_and_manifest_callbacks(db, tmp_path):
     assert mock_callback.call_args_list[1].kwargs["event_details"]["manifest_file"] == "manifest.json"
 
 
+def test_job_service_emits_verify_started_callback(db):
+    drive = _make_drive(
+        db,
+        device_identifier="USB-CALLBACK-LIFECYCLE-007",
+        project_id="PROJ-CALLBACK-LIFECYCLE-007",
+        mount_path="/mnt/ecube/callback-lifecycle-007",
+    )
+    job = _make_job(
+        db,
+        project_id="PROJ-CALLBACK-LIFECYCLE-007",
+        evidence_number="EV-CALLBACK-LIFECYCLE-007",
+        status=JobStatus.COMPLETED,
+        source_path="/data/callback-lifecycle-007",
+        target_mount_path=drive.mount_path,
+        drive=drive,
+        file_count=1,
+        copied_bytes=64,
+    )
+    db.add(
+        ExportFile(
+            job_id=job.id,
+            relative_path="verified.bin",
+            status=FileStatus.DONE,
+            checksum="abc123",
+            size_bytes=64,
+        )
+    )
+    db.commit()
+
+    with patch("app.services.job_service.deliver_callback") as mock_callback:
+        job_service.verify_job(job.id, BackgroundTasks(), db, actor="processor")
+
+    assert mock_callback.call_count == 1
+    assert mock_callback.call_args.kwargs["event"] == "JOB_VERIFY_STARTED"
+    assert mock_callback.call_args.kwargs["event_actor"] == "processor"
+
+
 def test_audit_service_emits_snapshot_and_handoff_callbacks(db):
     drive = _make_drive(
         db,
