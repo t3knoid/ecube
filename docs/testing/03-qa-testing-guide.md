@@ -1308,23 +1308,31 @@ Walk through the complete data export lifecycle:
 
 Use a controlled HTTPS webhook sink when validating callback behavior.
 
+Recommended QA sink: https://webhook.site/
+
+1. Open https://webhook.site/ in a browser and let it generate a unique HTTPS callback URL for the current test session.
+2. Copy that generated URL into the ECUBE job-level `Webhook callback URL` field or the admin `Default Callback URL` field, depending on the case being tested.
+3. Keep the `webhook.site` request view open while you run the job so you can inspect the exact inbound request headers and body.
+4. For signature-validation coverage, use the `Raw Content` or equivalent raw-body view in `webhook.site` when comparing the body against the `X-ECUBE-Signature` value. Do not reformat or reserialize the JSON before calculating the expected HMAC.
+5. Start a fresh `webhook.site` session or clear prior requests between test cases so each QA step has an isolated request history.
+
 | # | Test | How | Expected |
 |---|------|-----|----------|
-| 0 | System-wide callback default can be set from Configuration UI | Open Configuration, enter a valid HTTPS URL in Default Callback URL, save, then reload Configuration | Configuration saves successfully and the field reloads with the saved value |
+| 0 | System-wide callback default can be set from Configuration UI | Open `https://webhook.site/`, copy the generated HTTPS URL, enter it in Default Callback URL, save, then reload Configuration | Configuration saves successfully and the field reloads with the saved value |
 | 0aa | Outbound callback proxy URL can be set from Configuration UI | Open Configuration, enter a valid HTTP or HTTPS URL in Outbound Callback Proxy URL, save, then reload Configuration | Configuration saves successfully and the proxy URL reloads with the saved value |
 | 0ab | Callback signing secret can be rotated from Configuration UI without being displayed | Open Configuration, confirm the signing secret status, enter a new Webhook Signing Secret, save, then refresh the page | Save succeeds, the secret input reloads empty, and the status indicates that a secret is configured |
 | 0ac | Stored callback signing secret can be cleared from Configuration UI | Open Configuration with a configured signing secret, check Clear the stored signing secret, save, then refresh the page | Save succeeds, the secret input remains empty, and the status indicates that no signing secret is configured |
-| 0 | Callback URL can be set from Jobs UI | Open Jobs, create a job, enter a valid HTTPS value in Webhook callback URL, submit, then open Job Detail | Job creates successfully and Job Detail shows the saved callback URL |
-| 0a | Callback URL can be cleared from Job Detail UI | Open a job with an existing callback URL, choose Edit, clear Webhook callback URL, save, and refresh Job Detail | Job saves successfully and Job Detail no longer shows a callback URL |
-| 0b | Job callback overrides system-wide default | Set a system-wide Default Callback URL, then create a job with a different Webhook callback URL and complete the job against a controlled sink | Callback is delivered to the job-specific URL instead of the system-wide default |
+| 0 | Callback URL can be set from Jobs UI | Open `https://webhook.site/`, copy the generated HTTPS URL, create a job, enter it in Webhook callback URL, submit, then open Job Detail | Job creates successfully and Job Detail shows the saved callback URL |
+| 0a | Callback URL can be cleared from Job Detail UI | Open a job with an existing `webhook.site` callback URL, choose Edit, clear Webhook callback URL, save, and refresh Job Detail | Job saves successfully and Job Detail no longer shows a callback URL |
+| 0b | Job callback overrides system-wide default | Create two separate `webhook.site` sessions, set one as the system-wide Default Callback URL, then create a job with the second session URL and complete the job | Callback is delivered to the job-specific `webhook.site` URL instead of the system-wide default |
 | 1 | HTTPS callback URL accepted on job create | `POST /jobs` with `"callback_url": "https://example.com/webhook"` | 200, job response echoes `callback_url` |
 | 2 | HTTP callback URL rejected | `POST /jobs` with `"callback_url": "http://example.com/webhook"` | 422, validation error mentions HTTPS |
 | 3 | Callback URL with embedded credentials rejected | `POST /jobs` with `"callback_url": "https://user:pass@example.com/hook"` | 422, validation error rejects URL credentials |
 | 4 | Callback URL with no hostname rejected | `POST /jobs` with malformed HTTPS URL such as `"https:///path-only"` | 422 |
-| 5 | Terminal-state callback delivered | Create a job with a reachable HTTPS webhook sink, run job to completion, inspect sink | Sink receives terminal-state payload and job completes normally |
-| 5b | Signed callback includes HMAC header when configured | Configure a webhook signing secret, complete a job against a controlled HTTPS sink, and inspect the raw request | Sink receives `X-ECUBE-Signature: sha256=...` and the value validates against the raw JSON request body |
-| 5c | Callback delivery honors configured outbound proxy | Configure an outbound callback proxy that records requests, complete a job against a controlled sink, and inspect proxy logs | Proxy observes the outbound callback attempt and the sink still receives the callback |
-| 5a | Partial-success callback is distinguishable | Create a job with a reachable HTTPS webhook sink, finish with one or more failed or timed-out files, then inspect sink | Sink receives `event: JOB_COMPLETED` together with `completion_result: partial_success` and nonzero `files_failed` or `files_timed_out` |
+| 5 | Terminal-state callback delivered | Create a job with a `webhook.site` HTTPS URL, run job to completion, then inspect the received request in `webhook.site` | `webhook.site` receives the terminal-state payload and the job completes normally |
+| 5b | Signed callback includes HMAC header when configured | Configure a webhook signing secret, complete a job against a `webhook.site` URL, then inspect the raw request in `webhook.site` | `webhook.site` shows `X-ECUBE-Signature: sha256=...` and the value validates against the raw JSON request body |
+| 5c | Callback delivery honors configured outbound proxy | Configure an outbound callback proxy that records requests, complete a job against a `webhook.site` URL, and inspect proxy logs plus the `webhook.site` request | Proxy observes the outbound callback attempt and `webhook.site` still receives the callback |
+| 5a | Partial-success callback is distinguishable | Create a job with a `webhook.site` HTTPS URL, finish with one or more failed or timed-out files, then inspect the received request | `webhook.site` shows `event: JOB_COMPLETED` together with `completion_result: partial_success` and nonzero `files_failed` or `files_timed_out` |
 | 6 | Callback delivery audit trail | After terminal-state delivery, query `GET /audit?action=CALLBACK_SENT` | Audit entry records delivery result without leaking secret material |
 
 ### 12.7 Error Handling
