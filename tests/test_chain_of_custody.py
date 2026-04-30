@@ -398,6 +398,38 @@ class TestChainOfCustodyHandoff:
         rows = db.query(AuditLog).filter(AuditLog.action == "COC_HANDOFF_CONFIRMED", AuditLog.drive_id == drive_id).all()
         assert len(rows) == 1
 
+    def test_handoff_rejects_second_distinct_submission_for_same_project_lifecycle(self, manager_client, db):
+        drive = _seed_drive(db, device_identifier="COC-HANDOFF-ONCE", project_id="CASE-HANDOFF-ONCE", state=DriveState.AVAILABLE)
+        drive_id = _as_int(drive.id)
+
+        first = manager_client.post(
+            "/audit/chain-of-custody/handoff",
+            json={
+                "drive_id": drive_id,
+                "project_id": "CASE-HANDOFF-ONCE",
+                "possessor": "Jane Reviewer",
+                "delivery_time": datetime(2026, 4, 10, 14, 22, 31, tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
+                "receipt_ref": "COC-2026-0410-08",
+            },
+        )
+        assert first.status_code == 200
+
+        second = manager_client.post(
+            "/audit/chain-of-custody/handoff",
+            json={
+                "drive_id": drive_id,
+                "project_id": "CASE-HANDOFF-ONCE",
+                "possessor": "Evidence Locker",
+                "delivery_time": datetime(2026, 4, 10, 14, 25, 0, tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
+                "receipt_ref": "COC-2026-0410-09",
+            },
+        )
+        assert second.status_code == 409
+        assert "already been recorded" in second.json()["message"].lower()
+
+        rows = db.query(AuditLog).filter(AuditLog.action == "COC_HANDOFF_CONFIRMED", AuditLog.drive_id == drive_id).all()
+        assert len(rows) == 1
+
     def test_idempotency_does_not_match_across_projects(self, manager_client, db):
         """A prior-project handoff record must not satisfy the idempotency check
         for a new handoff submission scoped to a different project on the same drive."""
@@ -496,7 +528,7 @@ class TestChainOfCustodyHandoff:
         )
         assert response.status_code == 422
 
-    def test_handoff_transitions_drive_to_archived(self, manager_client, db):
+    def test_handoff_keeps_drive_state_unchanged(self, manager_client, db):
         drive = _seed_drive(db, device_identifier="COC-ARCHIVE", project_id="CASE-ARCHIVE")
         drive_id = _as_int(drive.id)
 
