@@ -1,9 +1,11 @@
-"""Webhook callback delivery for terminal job states.
+"""Webhook callback delivery for job lifecycle events.
 
-Sends an HTTPS POST with a JSON payload when a job reaches COMPLETED
-or FAILED.  Retries up to 4 times with exponential backoff on transient
-errors (5xx, network failures).  Blocks private/reserved IP addresses
-by default (SSRF protection).
+Sends an HTTPS POST with a JSON payload for terminal job outcomes and
+selected persisted lifecycle actions such as creation, start, retry,
+pause, manifest generation, chain-of-custody updates, archive, and
+restart reconciliation. Retries up to 4 times with exponential backoff
+on transient errors (5xx, network failures). Blocks private/reserved IP
+addresses by default (SSRF protection).
 
 Delivery runs on a bounded ``ThreadPoolExecutor`` (sized by
 ``settings.callback_max_workers``, default 4) with its own short-lived
@@ -147,13 +149,16 @@ def _resolve_safe(hostname: str) -> str:
 
     first_ip: Optional[str] = None
     for _family, _type, _proto, _canonname, sockaddr in infos:
-        addr = ipaddress.ip_address(sockaddr[0])
+        resolved_ip = sockaddr[0]
+        if not isinstance(resolved_ip, str):
+            continue
+        addr = ipaddress.ip_address(resolved_ip)
         if not addr.is_global or addr.is_multicast:
             raise ValueError(
-                f"Resolved to non-globally-routable address: {sockaddr[0]}"
+                f"Resolved to non-globally-routable address: {resolved_ip}"
             )
         if first_ip is None:
-            first_ip = sockaddr[0]
+            first_ip = resolved_ip
 
     # first_ip is guaranteed non-None because infos is non-empty and we
     # would have raised on an unsafe address before reaching here.
@@ -167,8 +172,9 @@ def _count_file_outcomes(job: ExportJob) -> tuple[int, int, int]:
     except UnmappedInstanceError:
         session = None
 
-    if session is not None and job.id is not None:
-        return FileRepository(session).count_done_errors_and_timeouts(job.id)
+    job_id = getattr(job, "id", None)
+    if session is not None and isinstance(job_id, int):
+        return FileRepository(session).count_done_errors_and_timeouts(job_id)
 
     files = list(getattr(job, "files", []) or [])
     return (
@@ -184,8 +190,9 @@ def _resolve_active_drive(job: ExportJob) -> UsbDrive | None:
     except UnmappedInstanceError:
         session = None
 
-    if session is not None and job.id is not None:
-        active_assignment = DriveAssignmentRepository(session).get_active_for_job(job.id)
+    job_id = getattr(job, "id", None)
+    if session is not None and isinstance(job_id, int):
+        active_assignment = DriveAssignmentRepository(session).get_active_for_job(job_id)
         return getattr(active_assignment, "drive", None)
 
     assignments = list(getattr(job, "assignments", []) or [])
@@ -215,29 +222,79 @@ def _serialize_timestamp(value: Any) -> str | None:
     return value.isoformat()
 
 
-def build_payload(job: ExportJob) -> Dict[str, Any]:
-    """Construct the JSON callback payload from a terminal job.
-
-    Raises ``ValueError`` if *job.status* is not a terminal state.
-    """
-    if job.status not in _TERMINAL_STATUSES:
+def _resolve_event_name(job: ExportJob, event: str | None) -> str:
+    if event is not None:
+        return event
+    job_status = getattr(job, "status", None)
+    if not isinstance(job_status, JobStatus) or job_status not in _TERMINAL_STATUSES:
         raise ValueError(
-            f"build_payload requires a terminal status (COMPLETED/FAILED), "
-            f"got {job.status!r}"
+            f"build_payload requires an explicit event for non-terminal status, got {job_status!r}"
         )
+    return "JOB_COMPLETED" if job_status == JobStatus.COMPLETED else "JOB_FAILED"
+
+
+def _resolve_completion_result(
+    *,
+    job: ExportJob,
+    files_failed: int,
+    files_timed_out: int,
+) -> str | None:
+    job_status = getattr(job, "status", None)
+    if job_status == JobStatus.FAILED:
+        return "failed"
+    if job_status == JobStatus.COMPLETED:
+        return "partial_success" if (files_failed or files_timed_out) else "success"
+    return None
+
+
+def _resolve_event_actor(job: ExportJob, event_actor: str | None) -> str | None:
+    if event_actor:
+        return event_actor
+    return None
+
+
+def _resolve_event_at(job: ExportJob, event_name: str, event_at: datetime | None) -> str | None:
+    if event_at is not None:
+        return _serialize_timestamp(event_at)
+
+    if event_name == "JOB_CREATED":
+        return _serialize_timestamp(getattr(job, "created_at", None))
+    if event_name in {"JOB_STARTED", "JOB_RETRY_FAILED_FILES_STARTED"}:
+        return _serialize_timestamp(getattr(job, "started_at", None))
+    if event_name in {"JOB_COMPLETED", "JOB_FAILED", "JOB_COMPLETED_MANUALLY", "JOB_RECONCILED"}:
+        return _serialize_timestamp(getattr(job, "completed_at", None))
+    return _serialize_timestamp(datetime.now(timezone.utc))
+
+
+def build_payload(
+    job: ExportJob,
+    *,
+    event: str | None = None,
+    event_actor: str | None = None,
+    event_at: datetime | None = None,
+    event_details: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    """Construct the JSON callback payload for a persisted lifecycle event.
+
+    When *event* is omitted, the payload defaults to terminal completion
+    semantics for ``COMPLETED`` and ``FAILED`` jobs to preserve the legacy
+    contract used by existing callers.
+    """
+    event_name = _resolve_event_name(job, event)
 
     files_succeeded, files_failed, files_timed_out = _count_file_outcomes(job)
-
-    event = "JOB_COMPLETED" if job.status == JobStatus.COMPLETED else "JOB_FAILED"
-    completion_result = "failed"
-    if job.status == JobStatus.COMPLETED:
-        completion_result = "partial_success" if (files_failed or files_timed_out) else "success"
+    completion_result = _resolve_completion_result(
+        job=job,
+        files_failed=files_failed,
+        files_timed_out=files_timed_out,
+    )
 
     payload: Dict[str, Any] = {
-        "event": event,
+        "event": event_name,
         "job_id": job.id,
         "project_id": job.project_id,
         "evidence_number": job.evidence_number,
+        "created_by": getattr(job, "created_by", None),
         "started_by": job.started_by,
         "status": job.status.value,
         "source_path": job.source_path,
@@ -247,9 +304,11 @@ def build_payload(job: ExportJob) -> Dict[str, Any]:
         "files_succeeded": files_succeeded,
         "files_failed": files_failed,
         "files_timed_out": files_timed_out,
-        "completion_result": completion_result,
         "active_duration_seconds": int(getattr(job, "active_duration_seconds", 0) or 0),
     }
+
+    if completion_result is not None:
+        payload["completion_result"] = completion_result
 
     active_drive = _resolve_active_drive(job)
     if active_drive is not None:
@@ -258,6 +317,10 @@ def build_payload(job: ExportJob) -> Dict[str, Any]:
         payload["drive_model"] = active_drive.product_name
         payload["drive_serial_number"] = active_drive.serial_number
 
+    created_at = _serialize_timestamp(getattr(job, "created_at", None))
+    if created_at is not None:
+        payload["created_at"] = created_at
+
     started_at = _serialize_timestamp(getattr(job, "started_at", None))
     if started_at is not None:
         payload["started_at"] = started_at
@@ -265,6 +328,18 @@ def build_payload(job: ExportJob) -> Dict[str, Any]:
     completed_at = _serialize_timestamp(getattr(job, "completed_at", None))
     if completed_at is not None:
         payload["completed_at"] = completed_at
+
+    resolved_event_actor = _resolve_event_actor(job, event_actor)
+    if resolved_event_actor is not None:
+        payload["event_actor"] = resolved_event_actor
+
+    resolved_event_at = _resolve_event_at(job, event_name, event_at)
+    if resolved_event_at is not None:
+        payload["event_at"] = resolved_event_at
+
+    if event_details:
+        payload["event_details"] = dict(event_details)
+
     return payload
 
 
@@ -342,10 +417,23 @@ def _resolve_callback_payload_field_map() -> dict[str, str] | None:
     return dict(payload_field_map)
 
 
-def build_callback_payload(job: ExportJob) -> Dict[str, Any]:
+def build_callback_payload(
+    job: ExportJob,
+    *,
+    event: str | None = None,
+    event_actor: str | None = None,
+    event_at: datetime | None = None,
+    event_details: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
     """Build the effective outbound callback payload for *job*."""
     return apply_callback_payload_contract(
-        build_payload(job),
+        build_payload(
+            job,
+            event=event,
+            event_actor=event_actor,
+            event_at=event_at,
+            event_details=event_details,
+        ),
         _resolve_callback_payload_fields(),
         _resolve_callback_payload_field_map(),
     )
@@ -358,7 +446,15 @@ def _callback_payload_audit_details() -> Dict[str, Any]:
     )
 
 
-def deliver_callback(job: ExportJob, db: Any = None) -> None:
+def deliver_callback(
+    job: ExportJob,
+    db: Any = None,
+    *,
+    event: str | None = None,
+    event_actor: str | None = None,
+    event_at: datetime | None = None,
+    event_details: Dict[str, Any] | None = None,
+) -> None:
     """Snapshot callback data from *job* and deliver the webhook callback.
 
     * **Production (db omitted):** submits delivery to a bounded
@@ -371,14 +467,15 @@ def deliver_callback(job: ExportJob, db: Any = None) -> None:
       deterministic.
 
     If neither a job-specific callback_url nor a system-wide
-    callback_default_url is configured, or the job is not in a terminal
-    state (COMPLETED / FAILED), the call is a no-op.
+    callback_default_url is configured, the call is a no-op. When *event*
+    is omitted, only terminal job states (COMPLETED / FAILED) are eligible
+    for delivery to preserve legacy behavior.
     """
     url = _resolve_callback_url(job)
     if not url:
         return
 
-    if job.status not in _TERMINAL_STATUSES:
+    if event is None and job.status not in _TERMINAL_STATUSES:
         logger.warning(
             "deliver_callback called for job %s in non-terminal status %s; ignoring",
             job.id, job.status,
@@ -386,7 +483,13 @@ def deliver_callback(job: ExportJob, db: Any = None) -> None:
         return
 
     # Snapshot everything we need before leaving the caller's session scope.
-    payload = build_callback_payload(job)
+    payload = build_callback_payload(
+        job,
+        event=event,
+        event_actor=event_actor,
+        event_at=event_at,
+        event_details=event_details,
+    )
     job_id: int = job.id  # type: ignore[assignment]
 
     if db is not None:
@@ -463,7 +566,17 @@ def _do_deliver(
     audit_repo = AuditRepository(db)
 
     safe_url = _sanitize_url_for_log(url)
+    event_name = payload.get("event")
     payload_audit_details = _callback_payload_audit_details()
+
+    logger.info(
+        "Dispatching callback",
+        {
+            "job_id": job_id,
+            "event": event_name,
+            "callback_url": safe_url,
+        },
+    )
 
     # --- SSRF guard ---
     try:
@@ -614,6 +727,16 @@ def _do_deliver(
 
             if response.status_code < 300:
                 # 2xx: successful delivery.
+                logger.info(
+                    "Callback delivered",
+                    {
+                        "job_id": job_id,
+                        "event": event_name,
+                        "callback_url": safe_url,
+                        "status_code": response.status_code,
+                        "attempt": attempt + 1,
+                    },
+                )
                 try:
                     audit_repo.add(
                         action="CALLBACK_SENT",

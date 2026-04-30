@@ -43,6 +43,7 @@ from app.models.network import MountStatus, NetworkMount
 from app.models.system import ReconciliationLock
 from app.repositories.user_role_repository import UserRoleRepository
 from app.repositories.audit_repository import AuditRepository
+from app.services.callback_service import deliver_callback
 from app.services.mount_check_utils import check_mounted_with_configured_timeout
 from app.constants import ECUBE_GROUP_ROLE_MAP
 from app.utils.sanitize import normalize_project_id
@@ -856,6 +857,25 @@ def reconcile_jobs(db: Session) -> Dict[str, int]:
             db.expire_all()
             logger.error(
                 "Failed to write audit logs for JOB_RECONCILED",
+            )
+
+    for job, audit_entry in zip(jobs, audit_entries):
+        try:
+            deliver_callback(
+                job,
+                event="JOB_RECONCILED",
+                event_actor="system",
+                event_at=getattr(job, "completed_at", None),
+                event_details={
+                    "old_status": audit_entry["old_status"],
+                    "new_status": audit_entry["new_status"],
+                    "reason": audit_entry["reason"],
+                },
+            )
+        except Exception:
+            logger.exception(
+                "Failed to dispatch lifecycle callback",
+                {"job_id": job.id, "event": "JOB_RECONCILED"},
             )
 
     return {"jobs_checked": checked, "jobs_corrected": corrected}
