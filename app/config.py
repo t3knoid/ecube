@@ -4,8 +4,10 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.utils.callback_payload_contract import validate_callback_payload_contract
 
 logger = logging.getLogger(__name__)
 
@@ -459,6 +461,30 @@ class Settings(BaseSettings):
     #: backpressure against slow or unreachable callback endpoints.
     callback_max_pending: int = 100
 
+    #: Optional HTTPS URL used for terminal-state callbacks when a job
+    #: does not define its own callback_url. Job-level callback_url
+    #: takes precedence over this system-wide default.
+    callback_default_url: str | None = None
+
+    #: Optional shared secret used to generate the
+    #: ``X-ECUBE-Signature: sha256=...`` HMAC header for callback payloads.
+    #: This value is write-only in admin configuration surfaces.
+    callback_hmac_secret: str | None = None
+
+    #: Optional outbound forward-proxy URL used for callback delivery.
+    #: Supports ``http://`` and ``https://`` proxies. Leave unset to
+    #: connect directly.
+    callback_proxy_url: str | None = None
+
+    #: Optional source-field allowlist applied to outbound callback payloads.
+    #: When unset, ECUBE sends the default payload shape.
+    callback_payload_fields: List[str] | None = None
+
+    #: Optional outbound field mapping applied after
+    #: :attr:`callback_payload_fields`. Values reference allowlisted source
+    #: fields directly or use constrained ``${field}`` templates.
+    callback_payload_field_map: Dict[str, str] | None = None
+
     # ---------------------------------------------------------------------------
     # Database pool settings
     # ---------------------------------------------------------------------------
@@ -690,6 +716,10 @@ class Settings(BaseSettings):
                 "SESSION_COOKIE_SAMESITE is 'none' (browsers reject "
                 "SameSite=None cookies without the Secure flag)"
             )
+        validate_callback_payload_contract(
+            self.callback_payload_fields,
+            self.callback_payload_field_map,
+        )
         return self
 
 

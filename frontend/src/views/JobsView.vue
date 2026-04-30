@@ -56,6 +56,7 @@ const form = ref({
   source_path: '/',
   thread_count: 4,
   notes: '',
+  callback_url: '',
   run_immediately: false,
 })
 
@@ -235,6 +236,7 @@ function resetForm() {
     source_path: '/',
     thread_count: 4,
     notes: '',
+    callback_url: '',
     run_immediately: false,
   }
 }
@@ -537,6 +539,7 @@ async function submitCreateJob() {
       drive_id: Number(form.value.drive_id),
       thread_count: Number(form.value.thread_count),
       notes: form.value.notes.trim() || undefined,
+      callback_url: form.value.callback_url.trim() || undefined,
     }
 
     const created = normalizeProjectRecord(await createJob(payload), ['project_id'])
@@ -797,6 +800,16 @@ onBeforeUnmount(() => {
                 <label for="job-notes">{{ t('jobs.additionalNotes') }}</label>
                 <textarea id="job-notes" v-model="form.notes" rows="3" :disabled="!projectSelected" :placeholder="t('jobs.notesHint')"></textarea>
 
+                <label for="job-callback-url">{{ t('jobs.callbackUrl') }}</label>
+                <input
+                  id="job-callback-url"
+                  v-model="form.callback_url"
+                  type="url"
+                  :disabled="!projectSelected"
+                  :placeholder="t('jobs.callbackUrlHint')"
+                />
+                <p class="muted field-hint">{{ t('jobs.callbackUrlHelp') }}</p>
+
                 <label for="job-thread-count">{{ t('jobs.threadCount') }}</label>
                 <input id="job-thread-count" v-model.number="form.thread_count" type="number" min="1" max="8" :disabled="!projectSelected" />
               </fieldset>
@@ -877,6 +890,10 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   justify-content: center;
   gap: var(--space-sm);
+}
+
+.field-hint {
+  margin-top: calc(var(--space-xs) * -1);
 }
 
 .job-status-icon {

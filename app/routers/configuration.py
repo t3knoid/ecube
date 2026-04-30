@@ -22,8 +22,35 @@ from app.services.audit_service import log_and_audit
 
 logger = logging.getLogger(__name__)
 
+_SECRET_CONFIGURATION_FIELDS = frozenset({"callback_hmac_secret"})
+
 router = APIRouter(prefix="/admin/configuration", tags=["admin"])
 _ADMIN_ONLY = require_roles("admin")
+
+
+def _sanitize_configuration_value(key: str, value: object) -> object:
+    if key not in _SECRET_CONFIGURATION_FIELDS:
+        return value
+    return "[redacted]" if value not in (None, "") else None
+
+
+def _sanitize_configuration_values(values: dict[str, object]) -> dict[str, object]:
+    return {
+        key: _sanitize_configuration_value(key, value)
+        for key, value in values.items()
+    }
+
+
+def _sanitize_changed_setting_values(
+    values: dict[str, dict[str, object]],
+) -> dict[str, dict[str, object]]:
+    sanitized: dict[str, dict[str, object]] = {}
+    for key, value in values.items():
+        if key in _SECRET_CONFIGURATION_FIELDS:
+            sanitized[key] = value
+            continue
+        sanitized[key] = value
+    return sanitized
 
 
 def _log_configuration_event(
@@ -77,7 +104,9 @@ def update_configuration(
     """
     values = {key: getattr(body, key) for key in body.model_fields_set}
     requested_settings = sorted(values.keys())
-    requested_values = {key: values[key] for key in requested_settings}
+    requested_values = _sanitize_configuration_values(
+        {key: values[key] for key in requested_settings}
+    )
 
     _log_configuration_event(
         db,
@@ -143,7 +172,9 @@ def update_configuration(
         level=logging.WARNING,
         metadata={
             "changed_settings": result["changed_settings"],
-            "changed_setting_values": result["changed_setting_values"],
+            "changed_setting_values": _sanitize_changed_setting_values(
+                result["changed_setting_values"]
+            ),
             "restart_required_settings": result["restart_required_settings"],
         },
         fallback_message="CONFIGURATION_UPDATED actor=%s changed=%s",
