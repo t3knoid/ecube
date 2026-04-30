@@ -263,7 +263,7 @@ def _resolve_event_at(job: ExportJob, event_name: str, event_at: datetime | None
         return _serialize_timestamp(getattr(job, "started_at", None))
     if event_name in {"JOB_COMPLETED", "JOB_FAILED", "JOB_COMPLETED_MANUALLY", "JOB_RECONCILED"}:
         return _serialize_timestamp(getattr(job, "completed_at", None))
-    return _serialize_timestamp(datetime.now(timezone.utc))
+    raise ValueError(f"build_payload requires an explicit event_at for lifecycle event {event_name!r}")
 
 
 def build_payload(
