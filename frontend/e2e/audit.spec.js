@@ -83,7 +83,7 @@ test('job detail chain of custody report renders printable sections and CoC expo
     thread_count: 4,
     source_path: '/mnt/share/evidence',
     target_mount_path: '/mnt/ecube/1',
-    drive: { id: 1, current_state: 'ARCHIVED', is_mounted: false, device_identifier: 'SN-001' },
+    drive: { id: 1, current_state: 'AVAILABLE', is_mounted: false, device_identifier: 'SN-001' },
   })
 
   await page.route(/\/api\/audit(?!\/)/, async (route) => {
