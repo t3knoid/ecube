@@ -225,7 +225,7 @@ so project isolation covers both destination drives and source-path selection.
 
 ## 4.8 Webhook Callback Delivery
 
-When a job includes a `callback_url`, the system sends an HTTPS POST request with a JSON payload to the specified URL for persisted lifecycle events. Supported events are `JOB_CREATED`, `JOB_STARTED`, `JOB_RETRY_FAILED_FILES_STARTED`, `JOB_PAUSE_REQUESTED`, `JOB_COMPLETED`, `JOB_FAILED`, `JOB_COMPLETED_MANUALLY`, `MANIFEST_CREATED`, `COC_SNAPSHOT_STORED`, `COC_HANDOFF_CONFIRMED`, `JOB_ARCHIVED`, and `JOB_RECONCILED`. Terminal-state callbacks still apply to copy completion, copy timeout, and post-copy verification. Lifecycle callbacks are emitted only after the relevant state change or artifact generation has been persisted.
+When a job includes a `callback_url`, the system sends an HTTPS POST request with a JSON payload to the specified URL for persisted lifecycle events. Supported events are `JOB_CREATED`, `JOB_STARTED`, `JOB_RETRY_FAILED_FILES_STARTED`, `JOB_PAUSE_REQUESTED`, `JOB_VERIFY_STARTED`, `JOB_COMPLETED`, `JOB_FAILED`, `JOB_COMPLETED_MANUALLY`, `MANIFEST_CREATED`, `COC_SNAPSHOT_STORED`, `COC_HANDOFF_CONFIRMED`, `JOB_ARCHIVED`, and `JOB_RECONCILED`. Terminal-state callbacks still apply to copy completion, copy timeout, and post-copy verification. Lifecycle callbacks are emitted only after the relevant state change or artifact generation has been persisted.
 
 ### Payload
 
@@ -233,7 +233,7 @@ The callback body is a JSON object containing:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `event` | string | Lifecycle event code such as `JOB_CREATED`, `JOB_STARTED`, `JOB_COMPLETED`, `JOB_FAILED`, `MANIFEST_CREATED`, `COC_SNAPSHOT_STORED`, `COC_HANDOFF_CONFIRMED`, `JOB_ARCHIVED`, or `JOB_RECONCILED` |
+| `event` | string | Lifecycle event code such as `JOB_CREATED`, `JOB_STARTED`, `JOB_VERIFY_STARTED`, `JOB_COMPLETED`, `JOB_FAILED`, `MANIFEST_CREATED`, `COC_SNAPSHOT_STORED`, `COC_HANDOFF_CONFIRMED`, `JOB_ARCHIVED`, or `JOB_RECONCILED` |
 | `job_id` | integer | Job identifier |
 | `project_id` | string | Bound project ID |
 | `evidence_number` | string | Evidence case number |
