@@ -4,8 +4,10 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.utils.callback_payload_contract import validate_callback_payload_contract
 
 logger = logging.getLogger(__name__)
 
@@ -474,6 +476,15 @@ class Settings(BaseSettings):
     #: connect directly.
     callback_proxy_url: str | None = None
 
+    #: Optional source-field allowlist applied to outbound callback payloads.
+    #: When unset, ECUBE sends the default payload shape.
+    callback_payload_fields: List[str] | None = None
+
+    #: Optional outbound field mapping applied after
+    #: :attr:`callback_payload_fields`. Values reference allowlisted source
+    #: fields directly or use constrained ``${field}`` templates.
+    callback_payload_field_map: Dict[str, str] | None = None
+
     # ---------------------------------------------------------------------------
     # Database pool settings
     # ---------------------------------------------------------------------------
@@ -705,6 +716,10 @@ class Settings(BaseSettings):
                 "SESSION_COOKIE_SAMESITE is 'none' (browsers reject "
                 "SameSite=None cookies without the Secure flag)"
             )
+        validate_callback_payload_contract(
+            self.callback_payload_fields,
+            self.callback_payload_field_map,
+        )
         return self
 
 
