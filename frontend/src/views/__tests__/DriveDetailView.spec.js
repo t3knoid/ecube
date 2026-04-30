@@ -249,6 +249,45 @@ describe('DriveDetailView mount workflow', () => {
     expect(wrapper.text()).not.toContain('EV-OTHER-DRIVE')
   })
 
+  it('does not show stale evidence after format clears the drive project binding', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: null, mount_path: null })])
+    mocks.listAllJobs.mockResolvedValue([
+      { id: 44, project_id: 'PROJ-007', evidence_number: 'EV-STALE', drive: { id: 7 } },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('EV-STALE')
+    expect(wrapper.text()).toContain(`${i18n.global.t('jobs.evidence')}-`)
+  })
+
+  it('clears stale evidence immediately after formatting without leaving the page', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-007', mount_path: null })])
+    mocks.listAllJobs.mockResolvedValue([
+      { id: 44, project_id: 'PROJ-007', evidence_number: 'EV-STALE', drive: { id: 7 } },
+    ])
+    mocks.formatDrive.mockResolvedValue(buildDrive({ current_project_id: null, mount_path: null }))
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('EV-STALE')
+
+    const formatButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.format'))
+    expect(formatButton).toBeTruthy()
+
+    await formatButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('.confirm-dialog-confirm').trigger('click')
+    await flushPromises()
+
+    expect(mocks.formatDrive).toHaveBeenCalledWith(7, { filesystem_type: 'ext4' })
+    expect(wrapper.text()).not.toContain('EV-STALE')
+    expect(wrapper.text()).toContain(`${i18n.global.t('jobs.evidence')}-`)
+  })
+
   it('hides Enable Drive when the drive is disconnected and not physically detected', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'DISCONNECTED', filesystem_path: null })])
 

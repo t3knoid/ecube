@@ -148,11 +148,14 @@ async function loadDrives() {
 
     drives.value = (driveResult.value || []).map((item) => {
       const drive = normalizeProjectRecord(item, ['current_project_id'])
-      const assignedJob = getDriveJob(drive.id, driveJobById.value)
+      const hasActiveProjectBinding = Boolean(normalizeProjectId(drive.current_project_id))
+      const assignedJob = hasActiveProjectBinding ? getDriveJob(drive.id, driveJobById.value) : null
       return {
         ...drive,
         current_project_job_id: assignedJob?.jobId ?? null,
-        current_project_evidence_number: assignedJob?.evidenceNumber || getProjectEvidence(drive.current_project_id, projectEvidenceById.value),
+        current_project_evidence_number: hasActiveProjectBinding
+          ? assignedJob?.evidenceNumber || getProjectEvidence(drive.current_project_id, projectEvidenceById.value)
+          : '',
       }
     })
   } catch {
