@@ -289,15 +289,6 @@ def confirm_chain_of_custody_handoff(
     if existing is not None:
         return _handoff_response_from_audit(existing)
 
-    # Reject new (non-idempotent) handoff submissions for archived drives.
-    # Idempotent repeats are returned above, so this only fires for genuinely
-    # new submissions after archival.
-    if drive.current_state == DriveState.ARCHIVED:
-        raise HTTPException(
-            status_code=410,
-            detail="Drive has been archived after handoff and is no longer available for new handoff submissions",
-        )
-
     created = AuditRepository(db).add_uncommitted(
         action="COC_HANDOFF_CONFIRMED",
         user=actor,
@@ -318,9 +309,6 @@ def confirm_chain_of_custody_handoff(
         },
         client_ip=client_ip,
     )
-
-    # Transition drive to ARCHIVED state after successful handoff to remove from active circulation
-    drive.current_state = DriveState.ARCHIVED
     try:
         db.commit()
     except Exception:
@@ -482,8 +470,6 @@ def _resolve_coc_targets(
         drive = db.get(UsbDrive, drive_id)
         if drive is None:
             raise HTTPException(status_code=404, detail="Drive not found")
-        if drive.current_state == DriveState.ARCHIVED:
-            raise HTTPException(status_code=410, detail="Drive has been archived after handoff and is no longer available for reporting")
         if project_id and drive.current_project_id and drive.current_project_id != project_id:
             raise HTTPException(
                 status_code=409,
@@ -511,8 +497,6 @@ def _resolve_coc_targets(
             )
         if drive is None:
             raise HTTPException(status_code=404, detail="No drive found for provided drive_sn")
-        if drive.current_state == DriveState.ARCHIVED:
-            raise HTTPException(status_code=410, detail="Drive has been archived after handoff and is no longer available for reporting")
         if project_id and drive.current_project_id and drive.current_project_id != project_id:
             raise HTTPException(
                 status_code=409,
@@ -532,7 +516,6 @@ def _resolve_coc_targets(
 
     project_drives = db.query(UsbDrive).filter(
         UsbDrive.current_project_id == project_id,
-        UsbDrive.current_state != DriveState.ARCHIVED
     ).all()
 
     # Derive historical drive IDs from two authoritative sources:
@@ -569,14 +552,9 @@ def _resolve_coc_targets(
 
     # Include drives that historically participated in this project even if they
     # have since been reformatted and reassigned (current_project_id differs).
-    # Archived drives are deliberately excluded here: the drive_id and drive_sn
-    # selector paths reject archived drives with 410, so the PROJECT selector
-    # consistently omits them to avoid surfacing retired drives in an
-    # active-project overview.
     historical_drives = (
         db.query(UsbDrive).filter(
             UsbDrive.id.in_(historical_drive_ids),
-            UsbDrive.current_state != DriveState.ARCHIVED,
         ).all()
         if historical_drive_ids
         else []

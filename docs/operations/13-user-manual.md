@@ -339,14 +339,13 @@ Every drive moves through a defined set of states. Actions available in the UI d
 | `DISCONNECTED` | Drive is known to the system but not currently accessible — either not physically present, or present on a disabled port. | Enable port when the drive is still physically detected on a known port |
 | `AVAILABLE` | Drive is present on an enabled port and ready to be formatted or assigned to a project. | Format, Initialize |
 | `IN_USE` | Drive is assigned to a project. Jobs can target this drive. | Prepare Eject |
-| `ARCHIVED` | Drive has been permanently handed off via the Chain of Custody workflow. | None — drive is read-only. |
 
 State transitions follow this order:
 
 ```
-DISCONNECTED → AVAILABLE → IN_USE → AVAILABLE → ARCHIVED
-                       ↑____________|
-                     (re-insert same project)
+DISCONNECTED → AVAILABLE → IN_USE → AVAILABLE
+                                  ↑____________|
+                               (re-insert same project)
 ```
 
 A drive assigned to one project cannot be re-assigned to a different project without first being formatted. Formatting wipes the drive and clears the project binding.
@@ -427,7 +426,7 @@ If ECUBE reports that the drive is still busy, the confirmation dialog closes cl
 
 If ECUBE detects timed-out or failed files in active drive assignments, the first `Prepare Eject` attempt is blocked with an explicit confirmation-required warning. Review the warning details, then confirm a second prompt to continue with ejection.
 
-> To permanently retire a drive after removal, open the related job in `Job Detail`, then use the `Chain of Custody` action. Confirming a handoff transitions the drive to `ARCHIVED`.
+> Use `Chain of Custody` from `Job Detail` to record legal handoff details for the job's assigned drive. The handoff is stored in ECUBE's audit and CoC records without adding a separate archived drive state.
 
 ---
 
@@ -759,7 +758,7 @@ Typical workflow:
 10. If validation succeeds, review the `Record custody handoff in ECUBE?` modal.
 11. Choose one of the following:
    - `Cancel`: closes the warning modal and does not record a handoff.
-   - `Record handoff and archive drive`: records the handoff and archives the drive.
+   - `Record custody handoff`: records the handoff and refreshes the stored CoC snapshot for that job.
 
 Auditor behavior:
 
@@ -772,14 +771,13 @@ What happens when handoff is confirmed:
 
 - The custody handoff event is written to the immutable audit trail.
 - The refreshed CoC snapshot write is recorded in both the audit log and the application log.
-- The selected drive is automatically transitioned to the `ARCHIVED` state.
-- The drive is removed from active circulation workflows.
+- The selected drive keeps its current operational state.
+- The drive remains governed by the normal format, initialize, and prepare-eject rules.
 - Archived jobs continue to expose the last stored CoC snapshot for review, print, and export.
-- Operational actions for that drive are blocked as part of archival enforcement.
 
 Operational guidance:
 
-- Treat `Record handoff and archive drive` as a finalization action.
+- Treat `Record custody handoff` as a finalization action for the current CoC record.
 - Treat each Chain of Custody report as tied to the drive lifecycle for that copy job.
 - If a drive is later formatted and reused, that later work must be handled as a new copy job with its own Chain of Custody record rather than as a continuation of the earlier job.
 - Verify drive ID, project, possessor, and delivery timestamp before confirming.

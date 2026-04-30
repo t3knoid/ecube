@@ -961,7 +961,7 @@ def test_get_job_chain_of_custody_auditor_read_does_not_persist_snapshot(auditor
 def test_get_job_chain_of_custody_archived_job_requires_stored_snapshot(auditor_client, db):
     drive = UsbDrive(
         device_identifier="USB-COC-ARCHIVE-001",
-        current_state=DriveState.ARCHIVED,
+        current_state=DriveState.AVAILABLE,
         current_project_id="PROJ-COC-ARCHIVE",
     )
     db.add(drive)
@@ -1349,7 +1349,7 @@ def test_confirm_job_chain_of_custody_handoff_stores_snapshot(manager_client, db
 
     assert response.status_code == 200
     db.refresh(drive)
-    assert drive.current_state == DriveState.ARCHIVED
+    assert drive.current_state == DriveState.AVAILABLE
 
     snapshot = db.query(JobChainOfCustodySnapshot).filter(JobChainOfCustodySnapshot.job_id == job.id).one_or_none()
     assert snapshot is not None
@@ -1440,7 +1440,7 @@ def test_refresh_job_chain_of_custody_includes_legacy_handoff_without_job_id(man
         device_identifier="USB-COC-LEGACY-REFRESH-001",
         manufacturer="SanDisk",
         product_name="Ultra",
-        current_state=DriveState.ARCHIVED,
+        current_state=DriveState.AVAILABLE,
         current_project_id="PROJ-COC-LEGACY-REFRESH",
         mount_path="/mnt/ecube/coc-legacy-refresh-001",
     )

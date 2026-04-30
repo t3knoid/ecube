@@ -1071,6 +1071,8 @@ describe('JobDetailView start action', () => {
     await flushPromises()
 
     expect(wrapper.find('.confirm-dialog-stub').exists()).toBe(true)
+    expect(wrapper.find('.confirm-dialog-message').text()).toBe(i18n.global.t('audit.handoffWarningMessage'))
+    expect(wrapper.find('.confirm-dialog-confirm').text()).toBe(i18n.global.t('audit.handoffWarningConfirm'))
     await wrapper.find('.confirm-dialog-confirm').trigger('click')
     await flushPromises()
 
