@@ -161,12 +161,17 @@ async function loadDrive() {
     const evidenceByProject = buildProjectEvidenceMap(jobs)
     const next = drives.find((item) => item.id === driveId.value) || null
     drive.value = next ? normalizeProjectRecord(next, ['current_project_id']) : null
-    const assignedJob = drive.value ? getDriveJob(drive.value.id, jobsByDrive) : null
+    const hasActiveProjectBinding = Boolean(normalizeProjectId(drive.value?.current_project_id))
+    const assignedJob = drive.value && hasActiveProjectBinding ? getDriveJob(drive.value.id, jobsByDrive) : null
     currentProjectEvidenceNumber.value = drive.value
-      ? assignedJob?.evidenceNumber || getProjectEvidence(drive.value.current_project_id, evidenceByProject)
+      ? hasActiveProjectBinding
+        ? assignedJob?.evidenceNumber || getProjectEvidence(drive.value.current_project_id, evidenceByProject)
+        : ''
       : ''
     relatedJobId.value = drive.value
-      ? assignedJob?.jobId || getProjectEvidenceJobId(drive.value.current_project_id, evidenceByProject)
+      ? hasActiveProjectBinding
+        ? assignedJob?.jobId || getProjectEvidenceJobId(drive.value.current_project_id, evidenceByProject)
+        : null
       : null
     if (!drive.value) {
       error.value = t('drives.notFound')
@@ -201,6 +206,8 @@ async function runFormat() {
       await formatDrive(drive.value.id, { filesystem_type: filesystemType.value }),
       ['current_project_id'],
     )
+    currentProjectEvidenceNumber.value = ''
+    relatedJobId.value = null
     infoMessage.value = t('drives.formatSuccess')
     showFormatDialog.value = false
   } catch {
