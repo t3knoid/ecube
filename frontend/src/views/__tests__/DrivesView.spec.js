@@ -262,6 +262,56 @@ describe('DrivesView rescan and filter loading', () => {
     expect(wrapper.find('.row-evidence').text()).toBe('EV-123')
   })
 
+  it('links the project and evidence values to the related job detail', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-123' })])
+    mocks.listJobs.mockResolvedValue([
+      { id: 44, project_id: 'PROJ-123', evidence_number: 'EV-123', drive: { id: 1 } },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const linkedCells = wrapper.findAll('.cell-link')
+    expect(linkedCells.map((node) => node.text())).toContain('PROJ-123')
+    expect(linkedCells.map((node) => node.text())).toContain('EV-123')
+
+    await linkedCells[0].trigger('click')
+    await flushPromises()
+
+    expect(mocks.push).toHaveBeenCalledWith({ name: 'job-detail', params: { id: 44 } })
+
+    await linkedCells[1].trigger('click')
+    await flushPromises()
+
+    expect(mocks.push).toHaveBeenLastCalledWith({ name: 'job-detail', params: { id: 44 } })
+  })
+
+  it('uses the assigned drive job instead of the latest project job when multiple drives share a project', async () => {
+    mocks.getDrives.mockResolvedValue([
+      buildDrive({ id: 1, current_project_id: 'PROJ-123', display_device_label: 'Drive 1 - Port 1' }),
+      buildDrive({ id: 2, current_project_id: 'PROJ-123', display_device_label: 'Drive 2 - Port 2' }),
+    ])
+    mocks.listJobs.mockResolvedValue([
+      { id: 7, project_id: 'PROJ-123', evidence_number: 'EV-007', drive: { id: 1 } },
+      { id: 4, project_id: 'PROJ-123', evidence_number: 'EV-004', drive: { id: 2 } },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const rows = wrapper.findAll('.row-stub')
+    const driveOneLinks = rows[0].findAll('.cell-link')
+    const driveTwoLinks = rows[1].findAll('.cell-link')
+
+    expect(driveOneLinks.map((node) => node.text())).toEqual(['PROJ-123', 'EV-007'])
+    expect(driveTwoLinks.map((node) => node.text())).toEqual(['PROJ-123', 'EV-004'])
+
+    await driveTwoLinks[0].trigger('click')
+    await flushPromises()
+
+    expect(mocks.push).toHaveBeenLastCalledWith({ name: 'job-detail', params: { id: 4 } })
+  })
+
   it('sorts by project in ascending and descending order and keeps that sort after refresh', async () => {
     mocks.getDrives
       .mockResolvedValueOnce([

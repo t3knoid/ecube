@@ -11,7 +11,7 @@ import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 import { useStatusLabels } from '@/composables/useStatusLabels.js'
 import { formatDriveIdentity } from '@/utils/driveIdentity.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
-import { buildProjectEvidenceMap, getProjectEvidence } from '@/utils/projectEvidence.js'
+import { buildDriveJobMap, buildProjectEvidenceMap, getDriveJob, getProjectEvidence } from '@/utils/projectEvidence.js'
 
 const { t } = useI18n()
 const { driveStateLabel } = useStatusLabels()
@@ -28,6 +28,7 @@ const sortDir = ref('asc')
 const page = ref(1)
 const pageSize = ref(10)
 const isMobileViewport = ref(false)
+const driveJobById = ref(new Map())
 const projectEvidenceById = ref(new Map())
 let mobileViewportQuery = null
 
@@ -140,15 +141,18 @@ async function loadDrives() {
       throw driveResult.reason
     }
 
-    projectEvidenceById.value = jobResult.status === 'fulfilled'
-      ? buildProjectEvidenceMap(jobResult.value || [])
-      : new Map()
+    const jobs = jobResult.status === 'fulfilled' ? (jobResult.value || []) : []
+
+    projectEvidenceById.value = buildProjectEvidenceMap(jobs)
+    driveJobById.value = buildDriveJobMap(jobs)
 
     drives.value = (driveResult.value || []).map((item) => {
       const drive = normalizeProjectRecord(item, ['current_project_id'])
+      const assignedJob = getDriveJob(drive.id, driveJobById.value)
       return {
         ...drive,
-        current_project_evidence_number: getProjectEvidence(drive.current_project_id, projectEvidenceById.value),
+        current_project_job_id: assignedJob?.jobId ?? null,
+        current_project_evidence_number: assignedJob?.evidenceNumber || getProjectEvidence(drive.current_project_id, projectEvidenceById.value),
       }
     })
   } catch {
@@ -263,6 +267,12 @@ function openDrive(drive) {
   router.push({ name: 'drive-detail', params: { id: drive.id } })
 }
 
+function openRelatedJob(jobId) {
+  const normalizedJobId = Number(jobId)
+  if (!Number.isInteger(normalizedJobId) || normalizedJobId < 1) return
+  router.push({ name: 'job-detail', params: { id: normalizedJobId } })
+}
+
 function closeRowActionsMenu(event) {
   const menu = event?.currentTarget instanceof HTMLElement ? event.currentTarget.closest('details') : null
   if (menu instanceof HTMLDetailsElement) {
@@ -353,10 +363,26 @@ onBeforeUnmount(() => {
         {{ row.serial_number || '-' }}
       </template>
       <template #cell-current_project_id="{ row }">
-        {{ formatProjectId(row.current_project_id) }}
+        <button
+          v-if="row.current_project_job_id"
+          class="cell-link"
+          type="button"
+          @click="openRelatedJob(row.current_project_job_id)"
+        >
+          {{ formatProjectId(row.current_project_id) }}
+        </button>
+        <span v-else>{{ formatProjectId(row.current_project_id) }}</span>
       </template>
       <template #cell-current_project_evidence_number="{ row }">
-        {{ row.current_project_evidence_number || '-' }}
+        <button
+          v-if="row.current_project_job_id && row.current_project_evidence_number"
+          class="cell-link"
+          type="button"
+          @click="openRelatedJob(row.current_project_job_id)"
+        >
+          {{ row.current_project_evidence_number }}
+        </button>
+        <span v-else>{{ row.current_project_evidence_number || '-' }}</span>
       </template>
       <template #cell-current_state="{ row }">
         <span
@@ -448,6 +474,21 @@ onBeforeUnmount(() => {
 
 .filters {
   flex-wrap: wrap;
+}
+
+.cell-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-link);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
+.cell-link:hover,
+.cell-link:focus-visible {
+  text-decoration-thickness: 2px;
 }
 
 .row-actions {
