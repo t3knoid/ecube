@@ -88,6 +88,7 @@ def test_job_service_emits_create_start_and_pause_callbacks(db):
     events = [call.kwargs["event"] for call in mock_callback.call_args_list]
     assert events == ["JOB_CREATED", "JOB_STARTED", "JOB_PAUSE_REQUESTED"]
     assert mock_callback.call_args_list[1].kwargs["event_details"] == {"thread_count": 3}
+    assert mock_callback.call_args_list[2].kwargs["event_at"] is not None
 
 
 def test_job_service_emits_manual_complete_and_archive_callbacks(db):
@@ -114,6 +115,7 @@ def test_job_service_emits_manual_complete_and_archive_callbacks(db):
     assert events == ["JOB_COMPLETED_MANUALLY", "JOB_ARCHIVED"]
     assert mock_callback.call_args_list[0].kwargs["event_details"] == {"previous_status": "PAUSED"}
     assert mock_callback.call_args_list[1].kwargs["event_details"] == {"previous_status": "COMPLETED"}
+    assert mock_callback.call_args_list[1].kwargs["event_at"] is not None
 
 
 def test_job_service_emits_retry_and_manifest_callbacks(db, tmp_path):
@@ -215,6 +217,7 @@ def test_job_service_emits_verify_started_callback(db):
     assert mock_callback.call_count == 1
     assert mock_callback.call_args.kwargs["event"] == "JOB_VERIFY_STARTED"
     assert mock_callback.call_args.kwargs["event_actor"] == "processor"
+    assert mock_callback.call_args.kwargs["event_at"] is not None
 
 
 def test_audit_service_emits_snapshot_and_handoff_callbacks(db):

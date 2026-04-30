@@ -290,6 +290,29 @@ class TestBuildPayload:
         assert payload["event_details"] == {"thread_count": 4}
         assert "completion_result" not in payload
 
+    def test_explicit_lifecycle_event_requires_event_at_when_not_derived(self):
+        job = SimpleNamespace(
+            id=42,
+            project_id="PROJ-LIFECYCLE",
+            evidence_number="EV-LIFECYCLE",
+            created_by="creator",
+            started_by="operator",
+            status=JobStatus.ARCHIVED,
+            source_path="/data/lifecycle",
+            total_bytes=2048,
+            copied_bytes=2048,
+            file_count=4,
+            active_duration_seconds=11,
+            created_at=datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc),
+            started_at=datetime(2026, 5, 1, 12, 5, tzinfo=timezone.utc),
+            completed_at=datetime(2026, 5, 1, 12, 25, tzinfo=timezone.utc),
+            files=[],
+            assignments=[],
+        )
+
+        with pytest.raises(ValueError, match="explicit event_at"):
+            build_payload(job, event="JOB_ARCHIVED")
+
     def test_count_file_outcomes_uses_aggregate_query_for_mapped_jobs(self, db):
         job = ExportJob(
             project_id="PROJ-CALLBACK-COUNTS",
