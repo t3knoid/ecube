@@ -915,6 +915,7 @@ describe('JobDetailView start action', () => {
     await openCocButton.trigger('click')
     await flushPromises()
 
+    expect(wrapper.find('.coc-toolbar').findAll('button').some((node) => node.text() === i18n.global.t('common.actions.refresh'))).toBe(false)
     expect(wrapper.findAll('button').some((node) => node.text() === i18n.global.t('audit.handoffTitle'))).toBe(false)
   })
 
@@ -1212,7 +1213,7 @@ describe('JobDetailView start action', () => {
     expect(mocks.confirmJobChainOfCustodyHandoff).not.toHaveBeenCalled()
   })
 
-  it('refreshes and stores the CoC snapshot from the dialog toolbar', async () => {
+  it('refreshes and stores the CoC snapshot from the dialog toolbar while custody handoff is still pending', async () => {
     mocks.getJob.mockResolvedValue({
       id: 6,
       status: 'COMPLETED',
@@ -1271,12 +1272,63 @@ describe('JobDetailView start action', () => {
     await flushPromises()
 
     const refreshButton = wrapper.find('.coc-toolbar').findAll('button').find((node) => node.text() === i18n.global.t('common.actions.refresh'))
+    expect(refreshButton).toBeTruthy()
     await refreshButton.trigger('click')
     await flushPromises()
 
     expect(mocks.refreshJobChainOfCustody).toHaveBeenCalledWith(6)
     expect(wrapper.text()).toContain(i18n.global.t('audit.snapshotRefreshed'))
     expect(wrapper.text()).toContain('2026-04-29T09:15:00Z')
+  })
+
+  it('keeps CoC refresh available when no stored snapshot exists yet', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 10,
+      total_bytes: 10,
+      file_count: 1,
+      files_succeeded: 1,
+      files_failed: 0,
+      files_timed_out: 0,
+      startup_analysis_status: 'READY',
+      drive: { id: 1, current_state: 'AVAILABLE', is_mounted: false },
+    })
+    mocks.getJobChainOfCustody.mockRejectedValue({
+      response: { data: { message: 'Refresh the report first.' } },
+      message: 'Request failed',
+    })
+    mocks.refreshJobChainOfCustody.mockResolvedValue({
+      selector_mode: 'JOB',
+      project_id: 'PROJ-001',
+      snapshot_updated_at: '2026-04-29T09:15:00Z',
+      reports: [{
+        drive_id: 1,
+        drive_sn: 'SN-001',
+        drive_manufacturer: 'PNY',
+        drive_model: 'USB 3.2.1 FD',
+        project_id: 'PROJ-001',
+        custody_complete: false,
+        delivery_time: null,
+        chain_of_custody_events: [],
+        manifest_summary: [],
+      }],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const openCocButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.closeOutWithHandoff'))
+    await openCocButton.trigger('click')
+    await flushPromises()
+
+    const refreshButton = wrapper.find('.coc-toolbar').findAll('button').find((node) => node.text() === i18n.global.t('common.actions.refresh'))
+    expect(refreshButton).toBeTruthy()
   })
 
   it('keeps the files panel collapsed by default and pages through file rows with a 5-page window', async () => {
