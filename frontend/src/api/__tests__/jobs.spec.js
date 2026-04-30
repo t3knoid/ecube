@@ -75,4 +75,25 @@ describe('jobs api helpers', () => {
     expect(get).toHaveBeenCalledTimes(1)
     expect(get).toHaveBeenCalledWith('/api/jobs', expect.objectContaining({ timeout: 5000 }))
   })
+
+  it('paginates through all job pages when callers need more than 1000 rows', async () => {
+    toData.mockImplementation(async (value) => (await value).data)
+    get
+      .mockResolvedValueOnce({ data: Array.from({ length: 1000 }, (_value, index) => ({ id: index + 1 })) })
+      .mockResolvedValueOnce({ data: [{ id: 1001 }, { id: 1002 }] })
+
+    const { listAllJobs } = await import('@/api/jobs.js')
+
+    const jobs = await listAllJobs({ include_archived: true })
+
+    expect(get).toHaveBeenNthCalledWith(1, '/api/jobs', expect.objectContaining({
+      params: expect.any(URLSearchParams),
+    }))
+    expect(get.mock.calls[0][1].params.toString()).toBe('include_archived=true&limit=1000&offset=0')
+    expect(get.mock.calls[1][1].params.toString()).toBe('include_archived=true&limit=1000&offset=1000')
+    expect(jobs).toHaveLength(1002)
+    expect(jobs[0]).toEqual({ id: 1 })
+    expect(jobs[999]).toEqual({ id: 1000 })
+    expect(jobs[1001]).toEqual({ id: 1002 })
+  })
 })
