@@ -1098,14 +1098,59 @@ run() {
   fi
 }
 
+_configured_usb_mount_base_path() {
+  local env_file="${INSTALL_DIR}/.env"
+  local configured_path=""
+
+  if configured_path="$(_extract_env_value "${env_file}" "USB_MOUNT_BASE_PATH" 2>/dev/null)"; then
+    if [[ "${configured_path}" == /* ]]; then
+      printf '%s' "${configured_path}"
+      return 0
+    fi
+    warn "Ignoring non-absolute USB_MOUNT_BASE_PATH from ${env_file}: ${configured_path}"
+  fi
+
+  if [[ -n "${USB_MOUNT_BASE_PATH:-}" ]]; then
+    if [[ "${USB_MOUNT_BASE_PATH}" == /* ]]; then
+      printf '%s' "${USB_MOUNT_BASE_PATH}"
+      return 0
+    fi
+    warn "Ignoring non-absolute USB_MOUNT_BASE_PATH from installer environment: ${USB_MOUNT_BASE_PATH}"
+  fi
+
+  printf '%s' "/mnt/ecube"
+}
+
 _ensure_runtime_host_packages() {
   local packages=(exfatprogs nfs-common cifs-utils smbclient usbutils util-linux)
   local missing_packages=()
+  local kernel_extra_package=""
+  local apt_index_updated=false
   local package
+
+  _update_runtime_package_index() {
+    if [[ "${apt_index_updated}" == true ]]; then
+      return 0
+    fi
+    run apt-get update -qq
+    apt_index_updated=true
+  }
 
   if [[ "${ID}" != "ubuntu" && "${ID}" != "debian" && "${ID_LIKE:-}" != *"debian"* ]]; then
     warn "Skipping runtime mount package installation on unsupported OS family '${ID}'."
     return 0
+  fi
+
+  if [[ "${ID}" == "ubuntu" ]]; then
+    kernel_extra_package="linux-modules-extra-$(uname -r)"
+    if ! dpkg -s "${kernel_extra_package}" >/dev/null 2>&1; then
+      _update_runtime_package_index
+      if apt-cache show "${kernel_extra_package}" >/dev/null 2>&1; then
+        packages+=("${kernel_extra_package}")
+      else
+        warn "Runtime package '${kernel_extra_package}' is not available in apt. exFAT USB mounts may fail until it is installed manually if your host kernel requires it."
+      fi
+    fi
   fi
 
   for package in "${packages[@]}"; do
@@ -1120,9 +1165,24 @@ _ensure_runtime_host_packages() {
   fi
 
   info "Installing runtime host packages: ${missing_packages[*]}"
-  run apt-get update -qq
+  _update_runtime_package_index
   run apt-get install -y "${missing_packages[@]}"
   ok "Runtime host packages installed: ${missing_packages[*]}"
+}
+
+_prepare_managed_mount_roots() {
+  local usb_mount_root
+  usb_mount_root="$(_configured_usb_mount_base_path)"
+  local roots=(/nfs /smb)
+
+  if [[ ! " ${roots[*]} " =~ " ${usb_mount_root} " ]]; then
+    roots+=("${usb_mount_root}")
+  fi
+
+  run mkdir -p "${roots[@]}"
+  run chown ecube:ecube "${roots[@]}"
+  run chmod 755 "${roots[@]}"
+  ok "Managed mount roots prepared: ${roots[*]}"
 }
 
 # Run a command as the ecube user, dropping privileges from root.
@@ -1843,12 +1903,10 @@ install_backend() {
   run chown -R ecube:ecube /var/log/ecube
   run chmod 750 /var/log/ecube
 
-  # 4c. Managed network mount roots used for auto-generated mountpoints.
+  # 4c. Managed mount roots used for network shares and direct USB mounts.
   # Must be service-account owned so mountpoint create/remove does not rely on
   # root-owned directories.
-  run mkdir -p /nfs /smb
-  run chown ecube:ecube /nfs /smb
-  run chmod 755 /nfs /smb
+  _prepare_managed_mount_roots
 
   # 5. Python virtual environment
   # Run venv creation and pip installs as the ecube user so all files under
@@ -1961,6 +2019,9 @@ _write_env_file() {
     secret_key="$(openssl rand -hex 32)"
   fi
 
+  local usb_mount_root
+  usb_mount_root="$(_configured_usb_mount_base_path)"
+
   if [[ "${DRY_RUN}" != true ]]; then
     cat > "${env_file}" <<EOF
 # ECUBE environment configuration
@@ -1972,6 +2033,9 @@ SETUP_DEFAULT_ADMIN_USERNAME=
 
 # Set to true if a reverse proxy sits in front of uvicorn.
 TRUST_PROXY_HEADERS=false
+
+# Base directory for managed USB drive mount points.
+USB_MOUNT_BASE_PATH=${usb_mount_root}
 
 # Path to the pre-built frontend served by FastAPI (standalone mode).
 SERVE_FRONTEND_PATH=${INSTALL_DIR}/www
