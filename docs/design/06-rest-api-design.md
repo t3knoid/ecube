@@ -376,7 +376,7 @@ List all drives with state and project assignment.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `project_id` | string | No | When provided, return only drives bound to this project. When omitted, return all drives. |
-| `state` | string (repeatable) | No | Filter by drive state. May be specified multiple times (e.g. `?state=IN_USE&state=AVAILABLE`). Valid values: `DISCONNECTED`, `AVAILABLE`, `IN_USE`, `ARCHIVED`. When omitted, connected states (`AVAILABLE`, `IN_USE`, `ARCHIVED`) are returned unless `include_disconnected=true` is also set. |
+| `state` | string (repeatable) | No | Filter by drive state. May be specified multiple times (e.g. `?state=IN_USE&state=AVAILABLE`). Valid values: `DISCONNECTED`, `AVAILABLE`, `IN_USE`. When omitted, connected states (`AVAILABLE`, `IN_USE`) are returned unless `include_disconnected=true` is also set. |
 | `include_disconnected` | boolean | No | When `true`, `DISCONNECTED` drives are included in the response. Default: `false`. Has no effect when `state` is explicitly provided. |
 
 **Roles:** `admin`, `manager`, `processor`, `auditor`
@@ -724,7 +724,7 @@ All job endpoints that return a single job use the `ExportJobSchema` response, w
 | `filesystem_path` | string or null | OS block device node (e.g. `/dev/sdb`) |
 | `capacity_bytes` | integer or null | Total storage capacity in bytes |
 | `filesystem_type` | string or null | Detected filesystem label |
-| `current_state` | string | `DISCONNECTED`, `AVAILABLE`, `IN_USE`, `ARCHIVED` |
+| `current_state` | string | `DISCONNECTED`, `AVAILABLE`, `IN_USE` |
 | `is_mounted` | boolean | Whether the related drive is still mounted on the host |
 | `current_project_id` | string or null | Bound project ID |
 
@@ -1094,7 +1094,6 @@ Record custody transfer for a drive assigned to the job and store the refreshed 
 - `403 Forbidden` — Insufficient role
 - `404 Not Found` — Unknown job
 - `409 Conflict` — Provided project or drive assignment does not match the job
-- `410 Gone` — Drive is already archived or no longer eligible for handoff
 
 ---
 
