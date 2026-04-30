@@ -157,7 +157,7 @@ The ECUBE service depends on several non-standard OS packages for USB formatting
 | `usbutils` | Provides `lsusb` and USB enumeration support. |
 | `util-linux` | Provides core block and session utilities such as `lsblk`, `blkid`, and `runuser`. |
 
-On minimal Ubuntu installs, also install `linux-modules-extra-$(uname -r)` so the native exFAT kernel module is available at runtime. On Ubuntu 20.04 hosts using the 5.4 kernel series, install `exfat-fuse` instead of the native module package.
+On minimal Ubuntu installs, ensure `linux-modules-extra-$(uname -r)` is installed so the native exFAT kernel module is available at runtime. On Ubuntu 20.04 hosts using the 5.4 kernel series, install `exfat-fuse` instead of the native module package.
 
 ```bash
 sudo apt-get update
@@ -173,13 +173,13 @@ sudo apt-get install -y \
 
 ```bash
 sudo useradd --system --create-home --home-dir /opt/ecube --shell /usr/sbin/nologin ecube
-sudo mkdir -p /opt/ecube /var/lib/ecube /var/log/ecube /nfs /smb
+sudo mkdir -p /opt/ecube /var/lib/ecube /var/log/ecube /nfs /smb /mnt/ecube
 sudo chown -R ecube:ecube /opt/ecube /var/lib/ecube /var/log/ecube
-sudo chown ecube:ecube /nfs /smb
+sudo chown ecube:ecube /nfs /smb /mnt/ecube
 sudo chmod 750 /opt/ecube
 sudo chmod 700 /var/lib/ecube
 sudo chmod 750 /var/log/ecube
-sudo chmod 755 /nfs /smb
+sudo chmod 755 /nfs /smb /mnt/ecube
 
 # Optional hardware groups when present on the host
 getent group plugdev >/dev/null && sudo usermod -aG plugdev ecube
@@ -189,7 +189,7 @@ getent group dialout >/dev/null && sudo usermod -aG dialout ecube
 getent group shadow >/dev/null && sudo usermod -aG shadow ecube
 ```
 
-The managed mount roots (`/nfs` and `/smb`) must be owned by the `ecube` service account. Runtime mount requests can use narrowly scoped sudo to create missing leaf folders and repair ownership under these roots.
+The managed mount roots (`/nfs`, `/smb`, and the configured USB mount base path, default `/mnt/ecube`) must be owned by the `ecube` service account. Runtime mount requests can use narrowly scoped sudo to create missing leaf folders and repair ownership under these roots.
 
 The `shadow` group membership allows the non-root `ecube` service process to
 perform local PAM (`pam_unix`) authentication consistently on hosts where
