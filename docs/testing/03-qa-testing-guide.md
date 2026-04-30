@@ -1073,7 +1073,7 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 | 15 | Attempt to format an `IN_USE` drive | 409, `CONFLICT` — must be `AVAILABLE` |
 | 16 | Open the Initialize dialog when no eligible mounted project exists | UI shows a helper message, disables the project selector, and blocks submission |
 | 17 | Open Initialize for an AVAILABLE, mounted drive that already has a project binding, then click Cancel | The dialog shows the mounted destination context and any valid prior project selection; after cancel, the drive state, project binding, and Initialize availability remain unchanged |
-| 18 | View drive detail after initialization | Sensitive device and path fields are shown as `Protected` instead of raw internal identifiers |
+| 18 | View drive detail after initialization | Drive Detail shows the safe device label, does not display a `Filesystem Path` row, and does not expose raw internal identifiers |
 | 19 | View the mounts list and browse controls | Raw remote and local mount paths are redacted in the table; browse remains enabled only for mounted shares |
 | 20 | Operate the Initialize and Add Mount dialogs with keyboard only | Focus enters the dialog, Tab stays trapped within it, Escape closes it, and focus returns to the triggering control |
 | 21 | Use `Browse` in the Add Mount dialog with many discovered shares | The share picker opens, supports vertical scrolling, and selecting a share fills the `Remote path` field |
@@ -1185,9 +1185,12 @@ These tests exercise real hardware paths that must be validated during manual QA
 | 3 | Physical eject | Initialize drive → prepare-eject → physically remove | After the next discovery cycle, `GET /drives?include_disconnected=true` lists the drive with `current_state=DISCONNECTED`; audit shows `DRIVE_EJECT_PREPARED` |
 | 4 | Re-plug same drive | Remove and re-insert the same drive | Drive reappears as `AVAILABLE` with the same `port_system_path`/Device value and the same stable `device_identifier` (after discovery cycle) |
 | 5 | Multiple drives | Plug in 2+ drives simultaneously | All drives appear in `/drives`; each can be initialized to different projects |
-| 6 | Sync + unmount | Initialize drive, create/start a job, then prepare-eject | Filesystem flushed and unmounted before eject (verify via `mount` command — no partitions from that drive should be listed) |
-| 7 | Disabled port blocks AVAILABLE | Disable a port, plug in a drive to that port, run discovery | Drive appears in `DISCONNECTED` state (visible with `include_disconnected=true`); enable port + refresh → drive transitions to `AVAILABLE` |
-| 8 | Device and serial columns stay aligned across UI | Open Drives, Jobs, and Create/Edit Job for the same connected drive | Drives shows `Device` plus `Serial Number`; Jobs list shows the same `Device` value; destination selector is labeled `Select device` and uses the same port-based label |
+| 6 | Drives list shows all drives on first load | Keep one drive disconnected or historically discovered and one drive connected, then open the Drives page without changing filters | The page defaults to `All`, shows both connected and disconnected drives immediately, and does not require the operator to switch filters before seeing disconnected media |
+| 7 | Project and Evidence link to the assigned job | Initialize or seed two drives so they share a project but have different assigned jobs and evidence numbers, then open Drives | Each row shows `Project` and `Evidence`, the Filesystem column is absent, and selecting either value opens the matching Job Detail for that drive's assignment rather than another drive on the same project |
+| 8 | Drive Detail evidence follows the selected drive assignment | From the scenario above, open Drive Detail for each drive | The `Evidence` value matches the selected drive's assigned job, even when another drive on the same project has a different evidence number |
+| 9 | Sync + unmount | Initialize drive, create/start a job, then prepare-eject | Filesystem flushed and unmounted before eject (verify via `mount` command — no partitions from that drive should be listed) |
+| 10 | Disabled port blocks AVAILABLE | Disable a port, plug in a drive to that port, run discovery | Drive appears in `DISCONNECTED` state (visible with `include_disconnected=true`); enable port + refresh → drive transitions to `AVAILABLE` |
+| 11 | Device and serial columns stay aligned across UI | Open Drives, Jobs, and Create/Edit Job for the same connected drive | Drives shows `Device` plus `Serial Number`; Jobs list shows the same `Device` value; destination selector is labeled `Select device` and uses the same port-based label |
 
 ### 12.6 End-to-End Copy Workflow
 

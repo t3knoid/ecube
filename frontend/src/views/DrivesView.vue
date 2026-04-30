@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getDrives, refreshDrives } from '@/api/drives.js'
+import { listAllJobs } from '@/api/jobs.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
@@ -10,6 +11,7 @@ import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 import { useStatusLabels } from '@/composables/useStatusLabels.js'
 import { formatDriveIdentity } from '@/utils/driveIdentity.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
+import { buildDriveJobMap, buildProjectEvidenceMap, getDriveJob, getProjectEvidence } from '@/utils/projectEvidence.js'
 
 const { t } = useI18n()
 const { driveStateLabel } = useStatusLabels()
@@ -20,12 +22,14 @@ const loading = ref(false)
 const refreshing = ref(false)
 const error = ref('')
 const search = ref('')
-const stateFilter = ref('AVAILABLE')
+const stateFilter = ref('ALL')
 const sortKey = ref('id')
 const sortDir = ref('asc')
 const page = ref(1)
 const pageSize = ref(10)
 const isMobileViewport = ref(false)
+const driveJobById = ref(new Map())
+const projectEvidenceById = ref(new Map())
 let mobileViewportQuery = null
 
 /** Drive ID currently being browsed (null = none open). */
@@ -43,10 +47,10 @@ const columns = computed(() => {
     { key: 'id', label: t('common.labels.id'), align: 'right' },
     { key: 'display_device_label', label: t('drives.device') },
     { key: 'serial_number', label: t('drives.serialNumber') },
-    { key: 'filesystem_type', label: t('drives.filesystem') },
     { key: 'capacity_bytes', label: t('common.labels.size'), align: 'right' },
     { key: 'current_state', label: t('common.labels.status') },
     { key: 'current_project_id', label: t('dashboard.project') },
+    { key: 'current_project_evidence_number', label: t('jobs.evidence') },
     { key: 'actions', label: '', align: 'center' },
   ]
 
@@ -54,7 +58,6 @@ const columns = computed(() => {
     return nextColumns.filter(
       (column) =>
         column.key !== 'serial_number' &&
-        column.key !== 'filesystem_type' &&
         column.key !== 'capacity_bytes',
     )
   }
@@ -129,8 +132,29 @@ async function loadDrives() {
     if (stateFilter.value === 'ALL' || stateFilter.value === 'DISCONNECTED') {
       params.include_disconnected = true
     }
-    const response = await getDrives(params)
-    drives.value = (response || []).map((item) => normalizeProjectRecord(item, ['current_project_id']))
+    const [driveResult, jobResult] = await Promise.allSettled([
+      getDrives(params),
+      listAllJobs({ include_archived: true }),
+    ])
+
+    if (driveResult.status !== 'fulfilled') {
+      throw driveResult.reason
+    }
+
+    const jobs = jobResult.status === 'fulfilled' ? (jobResult.value || []) : []
+
+    projectEvidenceById.value = buildProjectEvidenceMap(jobs)
+    driveJobById.value = buildDriveJobMap(jobs)
+
+    drives.value = (driveResult.value || []).map((item) => {
+      const drive = normalizeProjectRecord(item, ['current_project_id'])
+      const assignedJob = getDriveJob(drive.id, driveJobById.value)
+      return {
+        ...drive,
+        current_project_job_id: assignedJob?.jobId ?? null,
+        current_project_evidence_number: assignedJob?.evidenceNumber || getProjectEvidence(drive.current_project_id, projectEvidenceById.value),
+      }
+    })
   } catch {
     error.value = t('common.errors.networkError')
   } finally {
@@ -149,8 +173,8 @@ const filtered = computed(() => {
       drive.product_name,
       drive.port_system_path,
       drive.serial_number,
-      drive.filesystem_type,
       drive.current_project_id,
+      drive.current_project_evidence_number,
       drive.filesystem_path,
       String(drive.id),
     ]
@@ -243,6 +267,12 @@ function openDrive(drive) {
   router.push({ name: 'drive-detail', params: { id: drive.id } })
 }
 
+function openRelatedJob(jobId) {
+  const normalizedJobId = Number(jobId)
+  if (!Number.isInteger(normalizedJobId) || normalizedJobId < 1) return
+  router.push({ name: 'job-detail', params: { id: normalizedJobId } })
+}
+
 function closeRowActionsMenu(event) {
   const menu = event?.currentTarget instanceof HTMLElement ? event.currentTarget.closest('details') : null
   if (menu instanceof HTMLDetailsElement) {
@@ -316,9 +346,9 @@ onBeforeUnmount(() => {
         <option value="id">{{ t('common.labels.id') }}</option>
         <option value="display_device_label">{{ t('drives.device') }}</option>
         <option value="serial_number">{{ t('drives.serialNumber') }}</option>
-        <option value="filesystem_type">{{ t('drives.filesystem') }}</option>
         <option value="current_state">{{ t('common.labels.status') }}</option>
         <option value="current_project_id">{{ t('dashboard.project') }}</option>
+        <option value="current_project_evidence_number">{{ t('jobs.evidence') }}</option>
       </select>
       <button class="btn" @click="setSort(sortKey)">
         {{ sortDir === 'asc' ? t('drives.sortAsc') : t('drives.sortDesc') }}
@@ -333,7 +363,26 @@ onBeforeUnmount(() => {
         {{ row.serial_number || '-' }}
       </template>
       <template #cell-current_project_id="{ row }">
-        {{ formatProjectId(row.current_project_id) }}
+        <button
+          v-if="row.current_project_job_id"
+          class="cell-link"
+          type="button"
+          @click="openRelatedJob(row.current_project_job_id)"
+        >
+          {{ formatProjectId(row.current_project_id) }}
+        </button>
+        <span v-else>{{ formatProjectId(row.current_project_id) }}</span>
+      </template>
+      <template #cell-current_project_evidence_number="{ row }">
+        <button
+          v-if="row.current_project_job_id && row.current_project_evidence_number"
+          class="cell-link"
+          type="button"
+          @click="openRelatedJob(row.current_project_job_id)"
+        >
+          {{ row.current_project_evidence_number }}
+        </button>
+        <span v-else>{{ row.current_project_evidence_number || '-' }}</span>
       </template>
       <template #cell-current_state="{ row }">
         <span
@@ -425,6 +474,21 @@ onBeforeUnmount(() => {
 
 .filters {
   flex-wrap: wrap;
+}
+
+.cell-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-link);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
+.cell-link:hover,
+.cell-link:focus-visible {
+  text-decoration-thickness: 2px;
 }
 
 .row-actions {
