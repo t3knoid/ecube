@@ -45,6 +45,20 @@ class TestConfigurationSchemaValidation:
         req = ConfigurationUpdateRequest(callback_hmac_secret="super-secret")
         assert req.callback_hmac_secret == "super-secret"
 
+    def test_update_accepts_callback_payload_contract(self):
+        req = ConfigurationUpdateRequest(
+            callback_payload_fields=["event", "project_id", "completion_result"],
+            callback_payload_field_map={
+                "type": "event",
+                "summary": "project=${project_id};result=${completion_result}",
+            },
+        )
+        assert req.callback_payload_fields == ["event", "project_id", "completion_result"]
+        assert req.callback_payload_field_map == {
+            "type": "event",
+            "summary": "project=${project_id};result=${completion_result}",
+        }
+
     def test_update_allows_clearing_callback_default_url_with_blank(self):
         req = ConfigurationUpdateRequest(callback_default_url="   ")
         assert req.callback_default_url is None
@@ -62,6 +76,26 @@ class TestConfigurationSchemaValidation:
             ConfigurationUpdateRequest(
                 callback_hmac_secret="super-secret",
                 clear_callback_hmac_secret=True,
+            )
+
+    def test_update_rejects_callback_payload_field_outside_allowlist(self):
+        with pytest.raises(ValidationError):
+            ConfigurationUpdateRequest(
+                callback_payload_fields=["event"],
+                callback_payload_field_map={"project": "project_id"},
+            )
+
+    def test_update_rejects_callback_payload_map_without_explicit_allowlist(self):
+        with pytest.raises(ValidationError):
+            ConfigurationUpdateRequest(
+                callback_payload_field_map={"project": "project_id"},
+            )
+
+    def test_update_rejects_callback_payload_template_with_unknown_token(self):
+        with pytest.raises(ValidationError):
+            ConfigurationUpdateRequest(
+                callback_payload_fields=["event"],
+                callback_payload_field_map={"summary": "job=${job_id}"},
             )
 
     def test_update_rejects_job_detail_files_page_size_below_minimum(self):
@@ -82,6 +116,8 @@ class TestConfigurationEndpoints:
         assert "job_detail_files_page_size" in keys
         assert "callback_default_url" in keys
         assert "callback_proxy_url" in keys
+        assert "callback_payload_fields" in keys
+        assert "callback_payload_field_map" in keys
         assert "callback_hmac_secret_configured" in keys
         assert "callback_hmac_secret" not in keys
 
@@ -98,6 +134,25 @@ class TestConfigurationEndpoints:
 
         settings_map = {item["key"]: item["value"] for item in resp.json()["settings"]}
         assert settings_map["callback_default_url"] is None
+
+    def test_get_configuration_returns_callback_payload_contract(self, admin_client):
+        original_fields = settings.callback_payload_fields
+        original_map = settings.callback_payload_field_map
+        settings.callback_payload_fields = ["event", "project_id"]
+        settings.callback_payload_field_map = {"type": "event", "project": "project_id"}
+        try:
+            resp = admin_client.get("/admin/configuration")
+            assert resp.status_code == 200
+
+            settings_map = {item["key"]: item["value"] for item in resp.json()["settings"]}
+            assert settings_map["callback_payload_fields"] == ["event", "project_id"]
+            assert settings_map["callback_payload_field_map"] == {
+                "type": "event",
+                "project": "project_id",
+            }
+        finally:
+            settings.callback_payload_fields = original_fields
+            settings.callback_payload_field_map = original_map
 
     def test_get_configuration_returns_callback_hmac_secret_status_only(self, admin_client):
         original_secret = settings.callback_hmac_secret
@@ -185,6 +240,41 @@ class TestConfigurationEndpoints:
             assert written.get("CALLBACK_PROXY_URL") == "http://proxy.example.com:8080"
         finally:
             settings.callback_proxy_url = original_value
+
+    @patch("app.services.configuration_service.database_service._write_env_settings")
+    def test_update_configuration_persists_callback_payload_contract(
+        self,
+        mock_write_env,
+        admin_client,
+    ):
+        original_fields = settings.callback_payload_fields
+        original_map = settings.callback_payload_field_map
+        try:
+            resp = admin_client.put(
+                "/admin/configuration",
+                json={
+                    "callback_payload_fields": ["event", "project_id", "completion_result"],
+                    "callback_payload_field_map": {
+                        "type": "event",
+                        "project": "project_id",
+                        "summary": "project=${project_id};result=${completion_result}",
+                    },
+                },
+            )
+            assert resp.status_code == 200, resp.json()
+
+            payload = resp.json()
+            assert "callback_payload_fields" in payload["changed_settings"]
+            assert "callback_payload_field_map" in payload["changed_settings"]
+
+            written = mock_write_env.call_args.args[0]
+            assert written.get("CALLBACK_PAYLOAD_FIELDS") == '["event","project_id","completion_result"]'
+            assert written.get("CALLBACK_PAYLOAD_FIELD_MAP") == (
+                '{"type":"event","project":"project_id","summary":"project=${project_id};result=${completion_result}"}'
+            )
+        finally:
+            settings.callback_payload_fields = original_fields
+            settings.callback_payload_field_map = original_map
 
     @patch("app.services.configuration_service.database_service._write_env_settings")
     def test_update_configuration_persists_callback_hmac_secret_without_leaking_it(

@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, Field, StrictBool, StrictInt, model_validator
 
 from app.schemas.types import StrictIntMixin
+from app.utils.callback_payload_contract import validate_callback_payload_contract
 from app.utils.sanitize import StrictSafeStr
 
 
@@ -55,6 +56,8 @@ class ConfigurationUpdateRequest(StrictIntMixin, BaseModel):
     )
     callback_hmac_secret: Optional[StrictSafeStr] = Field(default=None)
     clear_callback_hmac_secret: Optional[StrictBool] = Field(default=None)
+    callback_payload_fields: Optional[List[StrictSafeStr]] = Field(default=None)
+    callback_payload_field_map: Optional[Dict[StrictSafeStr, StrictSafeStr]] = Field(default=None)
 
     @staticmethod
     def _normalize_optional_string(values: dict[str, Any], key: str) -> dict[str, Any]:
@@ -124,6 +127,10 @@ class ConfigurationUpdateRequest(StrictIntMixin, BaseModel):
             if not normalized_secret:
                 raise ValueError("callback_hmac_secret must not be empty")
             self.callback_hmac_secret = normalized_secret
+        self.callback_payload_fields, self.callback_payload_field_map = validate_callback_payload_contract(
+            self.callback_payload_fields,
+            self.callback_payload_field_map,
+        )
         return self
 
 class ConfigurationUpdateResponse(BaseModel):
