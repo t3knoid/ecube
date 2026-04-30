@@ -110,11 +110,11 @@ describe('DrivesView rescan and filter loading', () => {
     mocks.refreshDrives.mockResolvedValue({ ok: true })
   })
 
-  it('loads the default AVAILABLE view without requesting disconnected drives', async () => {
+  it('loads all drives by default including disconnected drives', async () => {
     mountView()
     await flushPromises()
 
-    expect(mocks.getDrives).toHaveBeenCalledWith({})
+    expect(mocks.getDrives).toHaveBeenCalledWith({ include_disconnected: true })
   })
 
   it('requests disconnected drives when switching the filter to All', async () => {
