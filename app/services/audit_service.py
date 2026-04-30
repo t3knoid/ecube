@@ -276,6 +276,17 @@ def confirm_chain_of_custody_handoff(
             detail="Drive has no project binding and no project_id was provided; cannot record handoff",
         )
 
+    lifecycle_start_event_id: Optional[int] = None
+    if job_id is None and lifecycle_start_at is None:
+        lifecycle_start = _drive_project_lifecycle_start(
+            db,
+            drive_id=drive.id,
+            project_id=effective_project_id,
+        )
+        if lifecycle_start is not None:
+            lifecycle_start_at = lifecycle_start.timestamp
+            lifecycle_start_event_id = lifecycle_start.id
+
     existing = _find_existing_handoff_event(
         db,
         drive_id=drive.id,
@@ -285,6 +296,7 @@ def confirm_chain_of_custody_handoff(
         project_id=effective_project_id,
         job_id=job_id,
         lifecycle_start_at=lifecycle_start_at,
+        lifecycle_start_event_id=lifecycle_start_event_id,
     )
     if existing is not None:
         return _handoff_response_from_audit(existing)
@@ -295,6 +307,7 @@ def confirm_chain_of_custody_handoff(
         project_id=effective_project_id,
         job_id=job_id,
         lifecycle_start_at=lifecycle_start_at,
+        lifecycle_start_event_id=lifecycle_start_event_id,
     )
     if prior_handoff is not None:
         raise HTTPException(
@@ -970,6 +983,7 @@ def _find_existing_handoff_event(
     project_id: str,
     job_id: Optional[int] = None,
     lifecycle_start_at: Optional[datetime] = None,
+    lifecycle_start_event_id: Optional[int] = None,
 ) -> Optional[AuditLog]:
     # Scope idempotency to the resolved project lifecycle and, when available,
     # the specific job lifecycle so a reused drive cannot satisfy a later job.
@@ -985,6 +999,7 @@ def _find_existing_handoff_event(
             row,
             job_id=job_id,
             lifecycle_start_at=lifecycle_start_at,
+            lifecycle_start_event_id=lifecycle_start_event_id,
         ):
             continue
         details = row.details or {}
@@ -1005,6 +1020,7 @@ def _find_prior_handoff_event(
     project_id: str,
     job_id: Optional[int] = None,
     lifecycle_start_at: Optional[datetime] = None,
+    lifecycle_start_event_id: Optional[int] = None,
 ) -> Optional[AuditLog]:
     candidates = (
         db.query(AuditLog)
@@ -1021,6 +1037,7 @@ def _find_prior_handoff_event(
             row,
             job_id=job_id,
             lifecycle_start_at=lifecycle_start_at,
+            lifecycle_start_event_id=lifecycle_start_event_id,
         ):
             return row
     return None
@@ -1031,9 +1048,20 @@ def _handoff_event_matches_job_lifecycle(
     *,
     job_id: Optional[int],
     lifecycle_start_at: Optional[datetime],
+    lifecycle_start_event_id: Optional[int] = None,
 ) -> bool:
     if job_id is None:
-        return True
+        if lifecycle_start_at is None:
+            return True
+        if event.timestamp is None:
+            return False
+        if event.timestamp > lifecycle_start_at:
+            return True
+        if event.timestamp < lifecycle_start_at:
+            return False
+        if lifecycle_start_event_id is None:
+            return True
+        return event.id >= lifecycle_start_event_id
     if event.job_id == job_id:
         return True
     if event.job_id is not None:
@@ -1041,6 +1069,25 @@ def _handoff_event_matches_job_lifecycle(
     if lifecycle_start_at is None:
         return False
     return event.timestamp is not None and event.timestamp >= lifecycle_start_at
+
+
+def _drive_project_lifecycle_start(
+    db: Session,
+    *,
+    drive_id: int,
+    project_id: str,
+) -> Optional[AuditLog]:
+    row = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.action == "DRIVE_INITIALIZED",
+            AuditLog.drive_id == drive_id,
+            AuditLog.project_id == project_id,
+        )
+        .order_by(AuditLog.timestamp.desc(), AuditLog.id.desc())
+        .first()
+    )
+    return row
 
 
 def _job_drive_lifecycle_start_at(
