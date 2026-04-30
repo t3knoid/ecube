@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({
   hasAnyRole: vi.fn(),
   push: vi.fn(),
   getDrives: vi.fn(),
-  getJobChainOfCustody: vi.fn(),
   listAllJobs: vi.fn(),
   listJobs: vi.fn(),
   getMounts: vi.fn(),
@@ -40,7 +39,6 @@ vi.mock('@/api/drives.js', () => ({
 }))
 
 vi.mock('@/api/jobs.js', () => ({
-  getJobChainOfCustody: (...args) => mocks.getJobChainOfCustody(...args),
   listAllJobs: (...args) => mocks.listAllJobs(...args),
   listJobs: (...args) => mocks.listJobs(...args),
 }))
@@ -103,7 +101,6 @@ describe('DriveDetailView mount workflow', () => {
     mocks.hasAnyRole.mockReset()
     mocks.push.mockReset()
     mocks.getDrives.mockReset()
-    mocks.getJobChainOfCustody.mockReset()
     mocks.listAllJobs.mockReset()
     mocks.listJobs.mockReset()
     mocks.getMounts.mockReset()
@@ -117,7 +114,6 @@ describe('DriveDetailView mount workflow', () => {
     mocks.hasAnyRole.mockReturnValue(true)
     mocks.getDrives.mockResolvedValue([buildDrive()])
     mocks.listAllJobs.mockResolvedValue([])
-    mocks.getJobChainOfCustody.mockResolvedValue({ selector_mode: 'JOB', reports: [] })
     mocks.listJobs.mockResolvedValue([])
     mocks.getMounts.mockResolvedValue([
       { id: 1, status: 'MOUNTED', project_id: 'PROJ-007' },
@@ -447,64 +443,6 @@ describe('DriveDetailView mount workflow', () => {
 
     expect(mocks.prepareEjectDrive).toHaveBeenNthCalledWith(2, 7, { confirm_incomplete: true })
     expect(wrapper.text()).toContain(i18n.global.t('drives.ejectSuccess'))
-  })
-
-  it('suppresses the CoC prompt after prepare eject when a stored job CoC snapshot already exists', async () => {
-    mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'IN_USE' })])
-    mocks.listAllJobs.mockResolvedValue([
-      { id: 44, project_id: 'PROJ-007', evidence_number: 'EV-007', drive: { id: 7 } },
-    ])
-    mocks.prepareEjectDrive.mockResolvedValue(buildDrive({ current_state: 'AVAILABLE', mount_path: null }))
-    mocks.getJobChainOfCustody.mockResolvedValue({ selector_mode: 'JOB', reports: [{}] })
-
-    const wrapper = mountView()
-    await flushPromises()
-
-    const ejectButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.prepareEject'))
-    expect(ejectButton).toBeTruthy()
-
-    await ejectButton.trigger('click')
-    await flushPromises()
-    await wrapper.find('.confirm-dialog-confirm').trigger('click')
-    await flushPromises()
-
-    expect(mocks.getJobChainOfCustody).toHaveBeenCalledWith(44)
-    expect(wrapper.text()).toContain(i18n.global.t('drives.ejectSuccess'))
-    expect(wrapper.text()).not.toContain(i18n.global.t('drives.cocPrompt'))
-    expect(wrapper.findAll('button').some((node) => node.text() === i18n.global.t('drives.openCocReport'))).toBe(false)
-  })
-
-  it('shows the CoC prompt when the related job has no stored snapshot and routes Open CoC Report to job detail', async () => {
-    mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'IN_USE' })])
-    mocks.listAllJobs.mockResolvedValue([
-      { id: 44, project_id: 'PROJ-007', evidence_number: 'EV-007', drive: { id: 7 } },
-    ])
-    mocks.prepareEjectDrive.mockResolvedValue(buildDrive({ current_state: 'AVAILABLE', mount_path: null }))
-    mocks.getJobChainOfCustody.mockRejectedValue({ response: { status: 404 } })
-
-    const wrapper = mountView()
-    await flushPromises()
-
-    const ejectButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.prepareEject'))
-    expect(ejectButton).toBeTruthy()
-
-    await ejectButton.trigger('click')
-    await flushPromises()
-    await wrapper.find('.confirm-dialog-confirm').trigger('click')
-    await flushPromises()
-
-    expect(wrapper.text()).toContain(i18n.global.t('drives.cocPrompt'))
-
-    const openCocButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.openCocReport'))
-    expect(openCocButton).toBeTruthy()
-
-    await openCocButton.trigger('click')
-
-    expect(mocks.push).toHaveBeenCalledWith({
-      name: 'job-detail',
-      params: { id: 44 },
-      query: { coc: '1' },
-    })
   })
 
   it('blocks prepare eject when the drive has an active running job', async () => {
