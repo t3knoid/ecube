@@ -276,6 +276,17 @@ def confirm_chain_of_custody_handoff(
             detail="Drive has no project binding and no project_id was provided; cannot record handoff",
         )
 
+    lifecycle_start_event_id: Optional[int] = None
+    if job_id is None and lifecycle_start_at is None:
+        lifecycle_start = _drive_project_lifecycle_start(
+            db,
+            drive_id=drive.id,
+            project_id=effective_project_id,
+        )
+        if lifecycle_start is not None:
+            lifecycle_start_at = lifecycle_start.timestamp
+            lifecycle_start_event_id = lifecycle_start.id
+
     existing = _find_existing_handoff_event(
         db,
         drive_id=drive.id,
@@ -285,17 +296,23 @@ def confirm_chain_of_custody_handoff(
         project_id=effective_project_id,
         job_id=job_id,
         lifecycle_start_at=lifecycle_start_at,
+        lifecycle_start_event_id=lifecycle_start_event_id,
     )
     if existing is not None:
         return _handoff_response_from_audit(existing)
 
-    # Reject new (non-idempotent) handoff submissions for archived drives.
-    # Idempotent repeats are returned above, so this only fires for genuinely
-    # new submissions after archival.
-    if drive.current_state == DriveState.ARCHIVED:
+    prior_handoff = _find_prior_handoff_event(
+        db,
+        drive_id=drive.id,
+        project_id=effective_project_id,
+        job_id=job_id,
+        lifecycle_start_at=lifecycle_start_at,
+        lifecycle_start_event_id=lifecycle_start_event_id,
+    )
+    if prior_handoff is not None:
         raise HTTPException(
-            status_code=410,
-            detail="Drive has been archived after handoff and is no longer available for new handoff submissions",
+            status_code=409,
+            detail="A custody handoff has already been recorded for this drive lifecycle",
         )
 
     created = AuditRepository(db).add_uncommitted(
@@ -318,9 +335,6 @@ def confirm_chain_of_custody_handoff(
         },
         client_ip=client_ip,
     )
-
-    # Transition drive to ARCHIVED state after successful handoff to remove from active circulation
-    drive.current_state = DriveState.ARCHIVED
     try:
         db.commit()
     except Exception:
@@ -482,8 +496,6 @@ def _resolve_coc_targets(
         drive = db.get(UsbDrive, drive_id)
         if drive is None:
             raise HTTPException(status_code=404, detail="Drive not found")
-        if drive.current_state == DriveState.ARCHIVED:
-            raise HTTPException(status_code=410, detail="Drive has been archived after handoff and is no longer available for reporting")
         if project_id and drive.current_project_id and drive.current_project_id != project_id:
             raise HTTPException(
                 status_code=409,
@@ -511,8 +523,6 @@ def _resolve_coc_targets(
             )
         if drive is None:
             raise HTTPException(status_code=404, detail="No drive found for provided drive_sn")
-        if drive.current_state == DriveState.ARCHIVED:
-            raise HTTPException(status_code=410, detail="Drive has been archived after handoff and is no longer available for reporting")
         if project_id and drive.current_project_id and drive.current_project_id != project_id:
             raise HTTPException(
                 status_code=409,
@@ -532,7 +542,6 @@ def _resolve_coc_targets(
 
     project_drives = db.query(UsbDrive).filter(
         UsbDrive.current_project_id == project_id,
-        UsbDrive.current_state != DriveState.ARCHIVED
     ).all()
 
     # Derive historical drive IDs from two authoritative sources:
@@ -569,14 +578,9 @@ def _resolve_coc_targets(
 
     # Include drives that historically participated in this project even if they
     # have since been reformatted and reassigned (current_project_id differs).
-    # Archived drives are deliberately excluded here: the drive_id and drive_sn
-    # selector paths reject archived drives with 410, so the PROJECT selector
-    # consistently omits them to avoid surfacing retired drives in an
-    # active-project overview.
     historical_drives = (
         db.query(UsbDrive).filter(
             UsbDrive.id.in_(historical_drive_ids),
-            UsbDrive.current_state != DriveState.ARCHIVED,
         ).all()
         if historical_drive_ids
         else []
@@ -979,6 +983,7 @@ def _find_existing_handoff_event(
     project_id: str,
     job_id: Optional[int] = None,
     lifecycle_start_at: Optional[datetime] = None,
+    lifecycle_start_event_id: Optional[int] = None,
 ) -> Optional[AuditLog]:
     # Scope idempotency to the resolved project lifecycle and, when available,
     # the specific job lifecycle so a reused drive cannot satisfy a later job.
@@ -994,6 +999,7 @@ def _find_existing_handoff_event(
             row,
             job_id=job_id,
             lifecycle_start_at=lifecycle_start_at,
+            lifecycle_start_event_id=lifecycle_start_event_id,
         ):
             continue
         details = row.details or {}
@@ -1007,14 +1013,55 @@ def _find_existing_handoff_event(
     return None
 
 
+def _find_prior_handoff_event(
+    db: Session,
+    *,
+    drive_id: int,
+    project_id: str,
+    job_id: Optional[int] = None,
+    lifecycle_start_at: Optional[datetime] = None,
+    lifecycle_start_event_id: Optional[int] = None,
+) -> Optional[AuditLog]:
+    candidates = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.action == "COC_HANDOFF_CONFIRMED",
+            AuditLog.drive_id == drive_id,
+            AuditLog.project_id == project_id,
+        )
+        .order_by(AuditLog.id.desc())
+        .all()
+    )
+    for row in candidates:
+        if _handoff_event_matches_job_lifecycle(
+            row,
+            job_id=job_id,
+            lifecycle_start_at=lifecycle_start_at,
+            lifecycle_start_event_id=lifecycle_start_event_id,
+        ):
+            return row
+    return None
+
+
 def _handoff_event_matches_job_lifecycle(
     event: AuditLog,
     *,
     job_id: Optional[int],
     lifecycle_start_at: Optional[datetime],
+    lifecycle_start_event_id: Optional[int] = None,
 ) -> bool:
     if job_id is None:
-        return True
+        if lifecycle_start_at is None:
+            return True
+        if event.timestamp is None:
+            return False
+        if event.timestamp > lifecycle_start_at:
+            return True
+        if event.timestamp < lifecycle_start_at:
+            return False
+        if lifecycle_start_event_id is None:
+            return True
+        return event.id >= lifecycle_start_event_id
     if event.job_id == job_id:
         return True
     if event.job_id is not None:
@@ -1022,6 +1069,25 @@ def _handoff_event_matches_job_lifecycle(
     if lifecycle_start_at is None:
         return False
     return event.timestamp is not None and event.timestamp >= lifecycle_start_at
+
+
+def _drive_project_lifecycle_start(
+    db: Session,
+    *,
+    drive_id: int,
+    project_id: str,
+) -> Optional[AuditLog]:
+    row = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.action == "DRIVE_INITIALIZED",
+            AuditLog.drive_id == drive_id,
+            AuditLog.project_id == project_id,
+        )
+        .order_by(AuditLog.timestamp.desc(), AuditLog.id.desc())
+        .first()
+    )
+    return row
 
 
 def _job_drive_lifecycle_start_at(
