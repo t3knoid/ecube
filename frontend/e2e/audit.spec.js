@@ -198,6 +198,71 @@ test('job detail chain of custody report renders printable sections and CoC expo
   await page.evaluate(() => document.body.classList.remove('printing-coc-report'))
 })
 
+test('job detail hides CoC refresh on mobile when loaded custody is already complete', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await setupAuthenticatedPage(page, ['manager'])
+  await routeJson(page, '**/api/drives**', [])
+  await routeJson(page, '**/api/mounts', [])
+  await routeJson(page, '**/api/jobs/12/files', { total_files: 0, returned_files: 0, files: [] })
+  await routeJson(page, '**/api/jobs/12', {
+    id: 12,
+    project_id: 'PRJ-001',
+    evidence_number: 'EV-12',
+    status: 'COMPLETED',
+    copied_bytes: 1024,
+    total_bytes: 1024,
+    file_count: 3,
+    files_succeeded: 3,
+    files_failed: 0,
+    files_timed_out: 0,
+    thread_count: 4,
+    source_path: '/mnt/share/evidence',
+    target_mount_path: '/mnt/ecube/1',
+    drive: { id: 1, current_state: 'AVAILABLE', is_mounted: false, device_identifier: 'SN-001' },
+  })
+
+  await page.route(/\/api\/audit(?!\/)/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([]),
+    })
+  })
+
+  await page.route('**/api/jobs/12/chain-of-custody', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        selector_mode: 'JOB',
+        project_id: 'PRJ-001',
+        snapshot_updated_at: '2026-04-01T14:31:00.000Z',
+        reports: [
+          {
+            drive_id: 1,
+            drive_sn: 'SN-001',
+            drive_manufacturer: 'Kingston',
+            drive_model: 'DataTraveler',
+            project_id: 'PRJ-001',
+            evidence_number: 'EV-12',
+            delivery_time: '2026-04-01T14:30:00.000Z',
+            custody_complete: true,
+            manifest_summary: [],
+            chain_of_custody_events: [],
+          },
+        ],
+      }),
+    })
+  })
+
+  await page.goto('/jobs/12')
+  await openJobDetailChainOfCustody(page)
+
+  await expect(page.locator('.coc-toolbar').getByRole('button', { name: 'Refresh' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Custody Handoff' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Export CoC CSV' })).toBeVisible()
+})
+
 test.describe('chain of custody handoff', () => {
   test.use({ timezoneId: 'America/New_York' })
 
