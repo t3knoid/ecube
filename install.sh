@@ -1110,6 +1110,14 @@ _configured_usb_mount_base_path() {
     warn "Ignoring non-absolute USB_MOUNT_BASE_PATH from ${env_file}: ${configured_path}"
   fi
 
+  if [[ -n "${USB_MOUNT_BASE_PATH:-}" ]]; then
+    if [[ "${USB_MOUNT_BASE_PATH}" == /* ]]; then
+      printf '%s' "${USB_MOUNT_BASE_PATH}"
+      return 0
+    fi
+    warn "Ignoring non-absolute USB_MOUNT_BASE_PATH from installer environment: ${USB_MOUNT_BASE_PATH}"
+  fi
+
   printf '%s' "/mnt/ecube"
 }
 
@@ -2011,6 +2019,9 @@ _write_env_file() {
     secret_key="$(openssl rand -hex 32)"
   fi
 
+  local usb_mount_root
+  usb_mount_root="$(_configured_usb_mount_base_path)"
+
   if [[ "${DRY_RUN}" != true ]]; then
     cat > "${env_file}" <<EOF
 # ECUBE environment configuration
@@ -2022,6 +2033,9 @@ SETUP_DEFAULT_ADMIN_USERNAME=
 
 # Set to true if a reverse proxy sits in front of uvicorn.
 TRUST_PROXY_HEADERS=false
+
+# Base directory for managed USB drive mount points.
+USB_MOUNT_BASE_PATH=${usb_mount_root}
 
 # Path to the pre-built frontend served by FastAPI (standalone mode).
 SERVE_FRONTEND_PATH=${INSTALL_DIR}/www
