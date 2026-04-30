@@ -601,11 +601,6 @@ Every USB drive passes through four states:
         │        drive removed      │ │ │       prepare-eject        │
         └───────────────────────────┘ │ └◄───────────────────────────┘
                                format ╯                              │
-                                                                     │ CoC handoff
-                                                                     ▼
-                                                              ┌──────────────┐
-                                                              │   ARCHIVED   │
-                                                              └──────────────┘
 ```
 
 | State | Meaning |
@@ -613,7 +608,6 @@ Every USB drive passes through four states:
 | `DISCONNECTED` | Drive known to the database but not physically present |
 | `AVAILABLE` | Drive is present and ready to be formatted (if needed) and assigned to a project |
 | `IN_USE` | Drive is bound to a project and actively receiving evidence |
-| `ARCHIVED` | Drive permanently retired after chain-of-custody handoff; no further operations permitted |
 
 Key behaviors:
 
@@ -622,7 +616,7 @@ Key behaviors:
 - **Initialize** binds a drive to a project (`AVAILABLE → IN_USE`). See the Initialize Drive section below for state-aware guard rules.
 - **Eject** flushes writes, unmounts, and returns the drive to `AVAILABLE` (`IN_USE → AVAILABLE`). The project binding and filesystem type are **preserved** so the same drive can be re-initialized for the same project without reformatting.
 - **Physical removal** of an `AVAILABLE` drive transitions it back to `DISCONNECTED` on the next discovery sync. An `IN_USE` drive remains `IN_USE` even when physically absent — the project binding is intentionally preserved (project isolation must not be broken by hardware events). The drive resumes normal operation without operator intervention when re-inserted.
-- **Chain-of-custody handoff** permanently archives a drive (`IN_USE / AVAILABLE → ARCHIVED`). No operations are possible on archived drives.
+- **Chain-of-custody handoff** records legal transfer details and refreshes the stored CoC snapshot for the related job. It does not introduce a separate archived drive lifecycle state.
 
 ### List Drives
 
@@ -909,7 +903,6 @@ and `current_project_id` set to the provided project ID.
 > |-----------|--------|
 > | No mounted share is assigned to the requested `project_id` | 409 — mount and assign a share for that project first |
 > | Drive is `DISCONNECTED` (not present or port disabled) | 409 — not accessible; insert drive or enable port first |
-> | Drive is `ARCHIVED` | 409 — permanently retired, cannot re-initialize |
 > | Drive is `IN_USE` and `project_id` differs from binding | 403 — project isolation violation |
 > | Drive is `AVAILABLE` and `project_id` differs from binding | 409 — format required before reassigning to a new project |
 > | Drive is `AVAILABLE` and `project_id` matches binding (or drive has no prior binding) | Allowed — transitions to `IN_USE` |
@@ -942,9 +935,9 @@ The `current_project_id` field remains set.
 
 ### Chain-of-Custody Handoff
 
-Confirms the legal transfer of a drive to a recipient and permanently archives
-the drive. After a successful handoff, the drive transitions to `ARCHIVED` and
-cannot be initialized, formatted, or ejected. The audit trail is preserved.
+Confirms the legal transfer of a drive to a recipient and refreshes the stored
+job-scoped CoC snapshot. The drive keeps its current operational state and
+remains governed by the normal format, initialize, and prepare-eject rules.
 
 ```bash
 # Requires admin or manager role

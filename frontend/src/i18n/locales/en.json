@@ -47,8 +47,7 @@
     "states": {
       "disconnected": "Disconnected",
       "available": "Available",
-      "inUse": "In Use",
-      "archived": "Archived"
+      "inUse": "In Use"
     },
     "device": "Device",
     "serialNumber": "Serial Number",
@@ -371,12 +370,11 @@
     "handoffGuidance": "Standard closeout is an in-app custody handoff. Record it in ECUBE even if external paper paperwork is also used.",
     "confirmHandoff": "Confirm Handoff",
     "handoffWarning": "Record custody handoff in ECUBE?",
-    "handoffWarningMessage": "Use this flow to record custody transfer in ECUBE even when paper paperwork is also used. Confirming handoff records the transfer and archives the drive for future operational use.",
-    "handoffWarningConfirm": "Record handoff and archive drive",
+    "handoffWarningMessage": "Use this flow to record custody transfer in ECUBE even when paper paperwork is also used. Confirming handoff records the transfer and refreshes the stored chain-of-custody snapshot for this job.",
+    "handoffWarningConfirm": "Record custody handoff",
     "handoffWarningCancel": "Cancel",
     "handoffErrorTitle": "Handoff Failed",
     "handoffSaved": "Custody handoff recorded.",
-    "driveArchived": "This drive has been archived after handoff. The chain-of-custody report endpoint does not return reports for archived drives, but the drive remains visible in the drive list and audit log.",
     "handoffInvalid": "Drive ID, possessor, and delivery time are required.",
     "cocSelectRequired": "Select at least one filter (drive, serial number, or project) before loading the chain of custody.",
     "possessor": "Possessor",
