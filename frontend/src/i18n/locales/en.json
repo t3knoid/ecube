@@ -118,7 +118,7 @@
     "notesHint": "Optional operator notes for this job",
     "callbackUrl": "Webhook callback URL",
     "callbackUrlHint": "https://example.com/ecube/webhook",
-    "callbackUrlHelp": "Optional HTTPS endpoint for terminal-state job notifications. Leave blank to disable callbacks.",
+    "callbackUrlHelp": "Optional HTTPS endpoint for terminal-state job notifications. Leave blank to use the system default callback URL when one is configured.",
     "runImmediately": "Run job immediately after creation",
     "noProjectsAvailable": "No mounted projects are available. Add and mount a project share first.",
     "noEligibleDrives": "No eligible mounted USB drives are available for the selected project.",
