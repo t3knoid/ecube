@@ -82,6 +82,7 @@ const editForm = ref({
   source_path: '/',
   drive_id: null,
   thread_count: 4,
+  callback_url: '',
 })
 
 const cocLoading = ref(false)
@@ -1078,6 +1079,7 @@ async function openEditDialog() {
     source_path: buildEditSourcePath(job.value, inferredMount),
     drive_id: job.value.drive?.id ?? null,
     thread_count: Number(job.value.thread_count || 4),
+    callback_url: String(job.value.callback_url || ''),
   }
   showEditDialog.value = true
 }
@@ -1104,7 +1106,7 @@ async function submitEditJob() {
       thread_count: Number(editForm.value.thread_count || 4),
       max_file_retries: Number(job.value.max_file_retries || 3),
       retry_delay_seconds: Number(job.value.retry_delay_seconds || 1),
-      callback_url: job.value.callback_url || null,
+      callback_url: String(editForm.value.callback_url || '').trim() || null,
     })
     job.value = normalizeProjectRecord(updated, ['project_id'])
     closeEditDialog()
@@ -1603,6 +1605,7 @@ onUnmounted(() => {
 
       <div class="hash-grid">
         <span>{{ t('jobs.destinationGroup') }}</span><strong class="mono wrap-anywhere">{{ resolveJobDestinationLabel(job) }}</strong>
+        <span>{{ t('jobs.callbackUrl') }}</span><strong class="mono wrap-anywhere">{{ job.callback_url || '-' }}</strong>
       </div>
 
       <ProgressBar
@@ -1817,6 +1820,15 @@ onUnmounted(() => {
 
               <label for="job-thread-count">{{ t('jobs.threadCount') }}</label>
               <input id="job-thread-count" v-model.number="editForm.thread_count" type="number" min="1" max="8" />
+
+              <label for="job-callback-url">{{ t('jobs.callbackUrl') }}</label>
+              <input
+                id="job-callback-url"
+                v-model="editForm.callback_url"
+                type="url"
+                :placeholder="t('jobs.callbackUrlHint')"
+              />
+              <p class="muted field-hint">{{ t('jobs.callbackUrlHelp') }}</p>
             </fieldset>
 
             <fieldset class="dialog-group">
@@ -2142,6 +2154,10 @@ onUnmounted(() => {
 .dialog-group legend {
   padding: 0 var(--space-xs);
   font-weight: 600;
+}
+
+.field-hint {
+  margin-top: calc(var(--space-xs) * -1);
 }
 
 .dialog-actions {

@@ -9,23 +9,29 @@ Covers:
 - ExportJobSchema includes callback_url
 """
 
+import hashlib
+import hmac
+import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
+from fastapi import FastAPI, Request
+from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
-from app.models.jobs import ExportFile, ExportJob, FileStatus, JobStatus
+from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus
 from app.schemas.jobs import ExportJobSchema, JobCreate
 from app.services.callback_service import (
     _do_deliver,
     _count_file_outcomes,
     _resolve_safe,
     _sanitize_url_for_log,
+    build_callback_payload,
     build_payload,
     deliver_callback,
 )
@@ -274,11 +280,14 @@ class TestBuildPayload:
         job.id = 42
         job.project_id = "PROJ-001"
         job.evidence_number = "EV-001"
+        job.started_by = "operator1"
         job.status = JobStatus.COMPLETED
         job.source_path = "/data/evidence"
         job.total_bytes = 1024
         job.copied_bytes = 1024
         job.file_count = 10
+        job.active_duration_seconds = 75
+        job.started_at = datetime(2025, 12, 31, 23, 58, 45, tzinfo=timezone.utc)
         job.completed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
         job.files = [
             ExportFile(status=FileStatus.DONE),
@@ -288,23 +297,67 @@ class TestBuildPayload:
         payload = build_payload(job)
         assert payload["event"] == "JOB_COMPLETED"
         assert payload["job_id"] == 42
+        assert payload["started_by"] == "operator1"
         assert payload["status"] == "COMPLETED"
+        assert payload["started_at"] == "2025-12-31T23:58:45+00:00"
         assert payload["completed_at"] == "2026-01-01T00:00:00+00:00"
+        assert payload["active_duration_seconds"] == 75
         assert payload["files_succeeded"] == 2
         assert payload["files_failed"] == 0
         assert payload["files_timed_out"] == 0
         assert payload["completion_result"] == "success"
+
+    def test_completed_payload_includes_active_drive_metadata(self, db):
+        drive = UsbDrive(
+            device_identifier="SER-12345",
+            manufacturer="SanDisk",
+            product_name="Extreme Pro",
+            current_state=DriveState.IN_USE,
+            current_project_id="PROJ-DRIVE",
+        )
+        job = ExportJob(
+            project_id="PROJ-DRIVE",
+            evidence_number="EV-DRIVE",
+            started_by="operator-drive",
+            source_path="/data/evidence",
+            status=JobStatus.COMPLETED,
+            total_bytes=1024,
+            copied_bytes=1024,
+            file_count=1,
+            active_duration_seconds=42,
+            started_at=datetime(2025, 12, 31, 23, 59, 18, tzinfo=timezone.utc),
+            completed_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+        db.add_all([drive, job])
+        db.flush()
+        db.add(DriveAssignment(job_id=job.id, drive_id=drive.id))
+        db.add(ExportFile(job_id=job.id, relative_path="ok.txt", status=FileStatus.DONE))
+        db.commit()
+        db.refresh(job)
+
+        payload = build_payload(job)
+
+        assert payload["drive_id"] == drive.id
+        assert payload["started_by"] == "operator-drive"
+        assert payload["started_at"] == "2025-12-31T23:59:18+00:00"
+        assert payload["active_duration_seconds"] == 42
+        assert payload["drive_manufacturer"] == "SanDisk"
+        assert payload["drive_model"] == "Extreme Pro"
+        assert payload["drive_serial_number"] == "SER-12345"
 
     def test_completed_payload_marks_partial_success(self):
         job = MagicMock(spec=ExportJob)
         job.id = 43
         job.project_id = "PROJ-001"
         job.evidence_number = "EV-001"
+        job.started_by = "operator1"
         job.status = JobStatus.COMPLETED
         job.source_path = "/data/evidence"
         job.total_bytes = 1024
         job.copied_bytes = 900
         job.file_count = 3
+        job.active_duration_seconds = 15
+        job.started_at = datetime(2025, 12, 31, 23, 59, 45, tzinfo=timezone.utc)
         job.completed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
         job.files = [
             ExportFile(status=FileStatus.DONE),
@@ -325,16 +378,21 @@ class TestBuildPayload:
         job.id = 7
         job.project_id = "PROJ-002"
         job.evidence_number = "EV-002"
+        job.started_by = "operator2"
         job.status = JobStatus.FAILED
         job.source_path = "/data/src"
         job.total_bytes = 500
         job.copied_bytes = 200
         job.file_count = 5
+        job.active_duration_seconds = 120
+        job.started_at = datetime(2025, 12, 31, 23, 58, tzinfo=timezone.utc)
         job.completed_at = None
         job.files = [ExportFile(status=FileStatus.ERROR)]
 
         payload = build_payload(job)
         assert payload["event"] == "JOB_FAILED"
+        assert payload["started_at"] == "2025-12-31T23:58:00+00:00"
+        assert payload["active_duration_seconds"] == 120
         assert payload["files_failed"] == 1
         assert payload["completion_result"] == "failed"
         assert "completed_at" not in payload
@@ -344,11 +402,14 @@ class TestBuildPayload:
             id=44,
             project_id="PROJ-LOCAL",
             evidence_number="EV-LOCAL",
+            started_by="operator-local",
             status=JobStatus.COMPLETED,
             source_path="/data/local",
             total_bytes=123,
             copied_bytes=123,
             file_count=2,
+            active_duration_seconds=9,
+            started_at=datetime(2025, 12, 31, 23, 59, 51, tzinfo=timezone.utc),
             completed_at=None,
             files=[
                 ExportFile(status=FileStatus.DONE),
@@ -361,7 +422,61 @@ class TestBuildPayload:
         assert payload["files_succeeded"] == 1
         assert payload["files_failed"] == 1
         assert payload["files_timed_out"] == 0
+        assert payload["started_by"] == "operator-local"
+        assert payload["started_at"] == "2025-12-31T23:59:51+00:00"
+        assert payload["active_duration_seconds"] == 9
         assert payload["completion_result"] == "partial_success"
+
+    def test_build_payload_falls_back_to_in_memory_active_assignment(self):
+        drive = SimpleNamespace(
+            id=99,
+            manufacturer="Western Digital",
+            product_name="My Passport",
+            serial_number="WD-0001",
+        )
+        active_assignment = SimpleNamespace(
+            id=2,
+            assigned_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+            released_at=None,
+            drive=drive,
+        )
+        released_assignment = SimpleNamespace(
+            id=1,
+            assigned_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            released_at=datetime(2026, 1, 1, 1, tzinfo=timezone.utc),
+            drive=SimpleNamespace(
+                id=1,
+                manufacturer="Ignore",
+                product_name="Old",
+                serial_number="OLD-1",
+            ),
+        )
+        job = SimpleNamespace(
+            id=45,
+            project_id="PROJ-LOCAL",
+            evidence_number="EV-LOCAL",
+            started_by="operator-local",
+            status=JobStatus.COMPLETED,
+            source_path="/data/local",
+            total_bytes=123,
+            copied_bytes=123,
+            file_count=1,
+            active_duration_seconds=18,
+            started_at=datetime(2025, 12, 31, 23, 59, 42, tzinfo=timezone.utc),
+            completed_at=None,
+            files=[ExportFile(status=FileStatus.DONE)],
+            assignments=[released_assignment, active_assignment],
+        )
+
+        payload = build_payload(job)
+
+        assert payload["drive_id"] == 99
+        assert payload["started_by"] == "operator-local"
+        assert payload["started_at"] == "2025-12-31T23:59:42+00:00"
+        assert payload["active_duration_seconds"] == 18
+        assert payload["drive_manufacturer"] == "Western Digital"
+        assert payload["drive_model"] == "My Passport"
+        assert payload["drive_serial_number"] == "WD-0001"
 
     @pytest.mark.parametrize("status", [
         JobStatus.PENDING,
@@ -463,6 +578,7 @@ class TestDeliverCallback:
         job = ExportJob(
             project_id="PROJ-001",
             evidence_number="EV-001",
+            started_by="operator-db",
             source_path="/data/evidence",
             callback_url=callback_url,
             status=status,
@@ -474,6 +590,8 @@ class TestDeliverCallback:
         job.total_bytes = 1024
         job.copied_bytes = 1024
         job.file_count = 10
+        job.active_duration_seconds = 33
+        job.started_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
         job.completed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
         return job
 
@@ -486,11 +604,14 @@ class TestDeliverCallback:
         job.id = 1
         job.project_id = "PROJ-001"
         job.evidence_number = "EV-001"
+        job.started_by = "operator-mock"
         job.status = status
         job.source_path = "/data/evidence"
         job.total_bytes = 1024
         job.copied_bytes = 1024
         job.file_count = 10
+        job.active_duration_seconds = 33
+        job.started_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
         job.completed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
         job.callback_url = callback_url
         return job
@@ -498,9 +619,60 @@ class TestDeliverCallback:
     def test_noop_when_no_callback_url(self, db):
         """deliver_callback is a no-op when callback_url is None."""
         job = self._make_mock_job(callback_url=None)
-        deliver_callback(job, db)
+        with patch("app.services.callback_service.settings.callback_default_url", None):
+            deliver_callback(job, db)
         logs = db.query(AuditLog).all()
         assert len(logs) == 0
+
+    @patch("app.services.callback_service._resolve_safe", return_value="93.184.216.34")
+    @patch("app.services.callback_service.httpx.Client")
+    def test_uses_system_default_callback_url_when_job_callback_missing(self, mock_client_cls, mock_resolve, db):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_client_instance = MagicMock()
+        mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
+        mock_client_instance.__exit__ = MagicMock(return_value=False)
+        mock_client_instance.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client_instance
+
+        job = self._make_db_job(db, callback_url=None)
+
+        with patch("app.services.callback_service.settings.callback_allow_private_ips", False), \
+             patch("app.services.callback_service.settings.callback_timeout_seconds", 5), \
+             patch("app.services.callback_service.settings.callback_default_url", "https://default.example.com/hook"):
+            deliver_callback(job, db)
+
+        call_args = mock_client_instance.post.call_args
+        posted_url = call_args[0][0]
+        assert "93.184.216.34" in posted_url
+        headers = call_args[1]["headers"]
+        assert headers["Host"] == "default.example.com"
+        assert headers["Content-Type"] == "application/json"
+        assert "X-ECUBE-Signature" not in headers
+
+    @patch("app.services.callback_service._resolve_safe", return_value="93.184.216.34")
+    @patch("app.services.callback_service.httpx.Client")
+    def test_job_callback_url_overrides_system_default(self, mock_client_cls, mock_resolve, db):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_client_instance = MagicMock()
+        mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
+        mock_client_instance.__exit__ = MagicMock(return_value=False)
+        mock_client_instance.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client_instance
+
+        job = self._make_db_job(db, callback_url="https://job.example.com/hook")
+
+        with patch("app.services.callback_service.settings.callback_allow_private_ips", False), \
+             patch("app.services.callback_service.settings.callback_timeout_seconds", 5), \
+             patch("app.services.callback_service.settings.callback_default_url", "https://default.example.com/hook"):
+            deliver_callback(job, db)
+
+        call_args = mock_client_instance.post.call_args
+        headers = call_args[1]["headers"]
+        assert headers["Host"] == "job.example.com"
+        assert headers["Content-Type"] == "application/json"
+        assert "X-ECUBE-Signature" not in headers
 
     @pytest.mark.parametrize("status", [
         JobStatus.PENDING,
@@ -602,6 +774,8 @@ class TestDeliverCallback:
         """Audit logs must never contain query tokens or userinfo."""
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = None
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -632,6 +806,8 @@ class TestDeliverCallback:
     def test_successful_delivery(self, mock_client_cls, mock_settings, mock_resolve, db):
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = None
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -647,10 +823,22 @@ class TestDeliverCallback:
         call_args = mock_client_instance.post.call_args
         posted_url = call_args[0][0]
         assert "93.184.216.34" in posted_url
-        assert call_args[1]["headers"] == {"Host": "example.com"}
+        headers = call_args[1]["headers"]
+        assert headers["Host"] == "example.com"
+        assert headers["Content-Type"] == "application/json"
+        assert "X-ECUBE-Signature" not in headers
         assert call_args[1]["extensions"] == {
             "sni_hostname": b"example.com",
         }
+        delivered_payload = json.loads(call_args[1]["content"].decode("utf-8"))
+        assert delivered_payload["job_id"] == job.id
+        assert delivered_payload["status"] == job.status.value
+        assert delivered_payload["event"] == "JOB_COMPLETED"
+        mock_client_cls.assert_called_with(
+            timeout=5,
+            follow_redirects=False,
+            trust_env=False,
+        )
 
         logs = db.query(AuditLog).filter(
             AuditLog.job_id == job.id,
@@ -667,6 +855,8 @@ class TestDeliverCallback:
     def test_retry_on_5xx_then_success(self, mock_sleep, mock_client_cls, mock_settings, mock_resolve, db):
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = None
 
         resp_500 = MagicMock()
         resp_500.status_code = 500
@@ -699,6 +889,8 @@ class TestDeliverCallback:
     def test_all_retries_exhausted(self, mock_sleep, mock_client_cls, mock_settings, mock_resolve, db):
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = None
 
         resp_503 = MagicMock()
         resp_503.status_code = 503
@@ -728,6 +920,8 @@ class TestDeliverCallback:
     def test_network_error_retries(self, mock_sleep, mock_client_cls, mock_settings, mock_resolve, db):
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = None
 
         mock_client_instance = MagicMock()
         mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
@@ -753,6 +947,8 @@ class TestDeliverCallback:
         not retried — to prevent redirect-based SSRF bypass."""
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = None
 
         resp_302 = MagicMock()
         resp_302.status_code = 302
@@ -783,6 +979,8 @@ class TestDeliverCallback:
         """4xx responses are not retried — they are treated as non-transient."""
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = None
 
         resp_404 = MagicMock()
         resp_404.status_code = 404
@@ -811,6 +1009,8 @@ class TestDeliverCallback:
         and httpx connects to the original URL (no DNS pinning)."""
         mock_settings.callback_allow_private_ips = True
         mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = None
 
         with patch("app.services.callback_service.httpx.Client") as mock_client_cls, \
              patch("app.services.callback_service._resolve_safe") as mock_resolve:
@@ -843,6 +1043,8 @@ class TestDeliverCallback:
         connection, preventing DNS rebinding (TOCTOU) attacks."""
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = None
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -863,7 +1065,9 @@ class TestDeliverCallback:
 
         # Host header and SNI must carry the original hostname for
         # virtual-hosting and proper TLS certificate verification.
-        assert call_args[1]["headers"] == {"Host": "example.com"}
+        headers = call_args[1]["headers"]
+        assert headers["Host"] == "example.com"
+        assert headers["Content-Type"] == "application/json"
         assert call_args[1]["extensions"] == {
             "sni_hostname": b"example.com",
         }
@@ -878,6 +1082,8 @@ class TestDeliverCallback:
         must include it so virtual-host routing works on the receiver."""
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = None
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -895,7 +1101,9 @@ class TestDeliverCallback:
         assert "93.184.216.34:8443" in posted_url
 
         # Host header must include the port for non-default ports.
-        assert call_args[1]["headers"] == {"Host": "example.com:8443"}
+        headers = call_args[1]["headers"]
+        assert headers["Host"] == "example.com:8443"
+        assert headers["Content-Type"] == "application/json"
         # SNI carries just the hostname (port is not part of TLS SNI).
         assert call_args[1]["extensions"] == {
             "sni_hostname": b"example.com",
@@ -908,6 +1116,8 @@ class TestDeliverCallback:
         """IPv6 addresses must be bracket-wrapped in the pinned URL."""
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = None
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -932,6 +1142,8 @@ class TestDeliverCallback:
         so callback delivery doesn't crash on non-ASCII hostnames."""
         mock_settings.callback_allow_private_ips = False
         mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = None
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -951,6 +1163,190 @@ class TestDeliverCallback:
         # Must be valid ASCII bytes (IDNA-encoded), not raw UTF-8.
         assert sni == "b\u00fccher.example.com".encode("idna")
         assert sni == b"xn--bcher-kva.example.com"
+
+    @patch("app.services.callback_service._resolve_safe", return_value="93.184.216.34")
+    @patch("app.services.callback_service.settings")
+    @patch("app.services.callback_service.httpx.Client")
+    def test_includes_hmac_signature_header_when_secret_is_configured(
+        self, mock_client_cls, mock_settings, mock_resolve, db,
+    ):
+        mock_settings.callback_allow_private_ips = False
+        mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = "super-secret"
+        mock_settings.callback_proxy_url = None
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_client_instance = MagicMock()
+        mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
+        mock_client_instance.__exit__ = MagicMock(return_value=False)
+        mock_client_instance.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client_instance
+
+        job = self._make_db_job(db)
+        deliver_callback(job, db)
+
+        call_args = mock_client_instance.post.call_args
+        payload_bytes = call_args[1]["content"]
+        headers = call_args[1]["headers"]
+        expected_signature = "sha256=" + hmac.new(
+            b"super-secret",
+            payload_bytes,
+            hashlib.sha256,
+        ).hexdigest()
+        assert headers["X-ECUBE-Signature"] == expected_signature
+        assert headers["Content-Type"] == "application/json"
+        delivered_payload = json.loads(payload_bytes.decode("utf-8"))
+        assert delivered_payload["job_id"] == job.id
+        assert delivered_payload["status"] == job.status.value
+        assert delivered_payload["event"] == "JOB_COMPLETED"
+
+    @patch("app.services.callback_service.settings")
+    def test_build_callback_payload_applies_allowlist_and_mapping(self, mock_settings, db):
+        mock_settings.callback_payload_fields = [
+            "event",
+            "project_id",
+            "started_by",
+            "completion_result",
+            "files_failed",
+            "started_at",
+            "completed_at",
+            "active_duration_seconds",
+            "drive_id",
+            "drive_manufacturer",
+        ]
+        mock_settings.callback_payload_field_map = {
+            "type": "event",
+            "project": "project_id",
+            "operator": "started_by",
+            "started": "started_at",
+            "ended": "completed_at",
+            "duration_seconds": "active_duration_seconds",
+            "destination_drive_id": "drive_id",
+            "summary": "project=${project_id};result=${completion_result};failed=${files_failed}",
+            "vendor": "drive_manufacturer",
+        }
+
+        drive = UsbDrive(
+            device_identifier="SER-777",
+            manufacturer="Samsung",
+            product_name="T7",
+            current_state=DriveState.IN_USE,
+            current_project_id="PROJ-001",
+        )
+        db.add(drive)
+        db.flush()
+
+        job = self._make_db_job(db)
+        db.add(DriveAssignment(job_id=job.id, drive_id=drive.id))
+        db.commit()
+        db.refresh(job)
+        payload = build_callback_payload(job)
+
+        assert payload == {
+            "type": "JOB_COMPLETED",
+            "project": job.project_id,
+            "operator": job.started_by,
+            "started": "2026-01-01T00:00:00+00:00",
+            "ended": "2026-01-01T00:00:00+00:00",
+            "duration_seconds": 33,
+            "destination_drive_id": drive.id,
+            "summary": f"project={job.project_id};result=success;failed=0",
+            "vendor": "Samsung",
+        }
+
+    @patch("app.services.callback_service._resolve_safe", return_value="93.184.216.34")
+    @patch("app.services.callback_service.settings")
+    def test_signed_callback_receiver_validates_raw_request_body(self, mock_settings, mock_resolve, db):
+        mock_settings.callback_allow_private_ips = False
+        mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = "super-secret"
+        mock_settings.callback_proxy_url = None
+        mock_settings.callback_payload_fields = ["event", "project_id", "completion_result"]
+        mock_settings.callback_payload_field_map = {
+            "type": "event",
+            "project": "project_id",
+            "summary": "project=${project_id};result=${completion_result}",
+        }
+
+        receiver_app = FastAPI()
+        captured: dict[str, object] = {}
+
+        @receiver_app.post("/hook")
+        async def receive_callback(request: Request):
+            body = await request.body()
+            signature = request.headers.get("x-ecube-signature", "")
+            expected_signature = "sha256=" + hmac.new(
+                b"super-secret",
+                body,
+                hashlib.sha256,
+            ).hexdigest()
+            captured["signature"] = signature
+            captured["expected_signature"] = expected_signature
+            captured["body"] = body
+            captured["json"] = await request.json()
+            return {"valid": signature == expected_signature}
+
+        class _ClientWrapper:
+            def __init__(self, client: TestClient):
+                self._client = client
+
+            def __enter__(self):
+                return self._client
+
+            def __exit__(self, exc_type, exc, tb):
+                self._client.close()
+                return False
+
+        with patch(
+            "app.services.callback_service.httpx.Client",
+            side_effect=lambda **_: _ClientWrapper(TestClient(receiver_app, base_url="https://93.184.216.34")),
+        ):
+            job = self._make_db_job(db)
+            deliver_callback(job, db)
+
+        assert captured["signature"] == captured["expected_signature"]
+        assert json.loads(captured["body"].decode("utf-8")) == {
+            "type": "JOB_COMPLETED",
+            "project": job.project_id,
+            "summary": f"project={job.project_id};result=success",
+        }
+
+        log_entry = db.query(AuditLog).filter(
+            AuditLog.job_id == job.id,
+            AuditLog.action == "CALLBACK_SENT",
+        ).one()
+        assert log_entry.details["payload_fields"] == ["event", "project_id", "completion_result"]
+        assert log_entry.details["payload_mapping_keys"] == ["type", "project", "summary"]
+
+    @patch("app.services.callback_service._resolve_safe", return_value="93.184.216.34")
+    @patch("app.services.callback_service.settings")
+    @patch("app.services.callback_service.httpx.Client")
+    def test_uses_configured_callback_proxy_url(
+        self, mock_client_cls, mock_settings, mock_resolve, db,
+    ):
+        mock_settings.callback_allow_private_ips = False
+        mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = "http://proxy.example.com:8080"
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_client_instance = MagicMock()
+        mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
+        mock_client_instance.__exit__ = MagicMock(return_value=False)
+        mock_client_instance.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client_instance
+
+        job = self._make_db_job(db)
+        deliver_callback(job, db)
+
+        mock_client_cls.assert_called_with(
+            timeout=5,
+            follow_redirects=False,
+            trust_env=False,
+            proxy="http://proxy.example.com:8080",
+        )
 
     def test_production_path_uses_bounded_executor(self):
         """When db is None (production), deliver_callback submits to a
