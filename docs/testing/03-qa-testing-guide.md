@@ -1073,7 +1073,7 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 | 15 | Attempt to format an `IN_USE` drive | 409, `CONFLICT` — must be `AVAILABLE` |
 | 16 | Open the Initialize dialog when no eligible mounted project exists | UI shows a helper message, disables the project selector, and blocks submission |
 | 17 | Open Initialize for an AVAILABLE, mounted drive that already has a project binding, then click Cancel | The dialog shows the mounted destination context and any valid prior project selection; after cancel, the drive state, project binding, and Initialize availability remain unchanged |
-| 18 | View drive detail after initialization | Sensitive device and path fields are shown as `Protected` instead of raw internal identifiers |
+| 18 | View drive detail after initialization | Drive Detail shows the safe device label, does not display a `Filesystem Path` row, and does not expose raw internal identifiers |
 | 19 | View the mounts list and browse controls | Raw remote and local mount paths are redacted in the table; browse remains enabled only for mounted shares |
 | 20 | Operate the Initialize and Add Mount dialogs with keyboard only | Focus enters the dialog, Tab stays trapped within it, Escape closes it, and focus returns to the triggering control |
 | 21 | Use `Browse` in the Add Mount dialog with many discovered shares | The share picker opens, supports vertical scrolling, and selecting a share fills the `Remote path` field |
