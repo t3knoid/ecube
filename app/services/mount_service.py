@@ -73,6 +73,18 @@ def _log_mount_debug_failure(
     logger.debug("%s: %s raw_error=%s", message, " ".join(context_parts), raw_text)
 
 
+def _mount_command_path(cmd: list[str]) -> str:
+    if not cmd:
+        return "unknown"
+    if "nsenter" in cmd:
+        return "nsenter"
+    if "-N" in cmd:
+        return "mount-namespace-flag"
+    if cmd[:2] == ["sudo", "-n"]:
+        return "sudo"
+    return "direct"
+
+
 class LinuxMountProvider:
     """Linux implementation using ``mount(8)``, ``umount(8)``, and ``mountpoint(1)``."""
 
@@ -148,6 +160,7 @@ class LinuxMountProvider:
     def os_mount(self, mount_type: MountType, remote_path: str, local_mount_point: str,
                  *, credentials_file: Optional[str] = None, username: Optional[str] = None, password: Optional[str] = None,
                  nfs_client_version: Optional[str] = None) -> Tuple[bool, Optional[str]]:
+        resolved_nfs_client_version: Optional[str] = None
         if mount_type == MountType.NFS:
             resolved_nfs_client_version = _resolve_nfs_client_version(nfs_client_version)
             cmd = [settings.mount_binary_path, "-t", "nfs", "-o", f"vers={resolved_nfs_client_version}", remote_path, local_mount_point]
@@ -168,6 +181,22 @@ class LinuxMountProvider:
 
         cmd = _with_host_mount_namespace(cmd)
         mount_label = _redacted_mount_label(local_mount_point)
+        command_path = _mount_command_path(cmd)
+        if mount_type == MountType.NFS:
+            logger.info(
+                "Executing NFS mount command: mount_label=%s nfs_client_version=%s command_path=%s",
+                mount_label,
+                resolved_nfs_client_version,
+                command_path,
+            )
+            logger.debug(
+                "NFS mount command context: mount_label=%s remote_path=%s local_mount_point=%s nfs_client_version=%s command_path=%s",
+                mount_label,
+                remote_path,
+                local_mount_point,
+                resolved_nfs_client_version,
+                command_path,
+            )
         logger.info("Executing mount command: type=%s mount_label=%s", mount_type.value, mount_label)
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=settings.subprocess_timeout_seconds)
@@ -189,9 +218,24 @@ class LinuxMountProvider:
         if result.returncode == 0:
             mounted = self.check_mounted(local_mount_point)
             if mounted is True:
+                logger.info(
+                    "Mount command succeeded: type=%s mount_label=%s command_path=%s",
+                    mount_type.value,
+                    mount_label,
+                    command_path,
+                )
                 return True, None
             error = "mount command reported success but mountpoint is not active"
             logger.warning("Mount command verification failed for mount_label=%s", mount_label)
+            logger.debug(
+                "Mount command verification details: type=%s mount_label=%s remote_path=%s local_mount_point=%s command_path=%s mounted=%s",
+                mount_type.value,
+                mount_label,
+                remote_path,
+                local_mount_point,
+                command_path,
+                mounted,
+            )
             return False, error
 
         error = (result.stderr or result.stdout or "").strip() or "mount failed"
@@ -223,7 +267,20 @@ class LinuxMountProvider:
                 if nfs_bin:
                     direct_cmd = [nfs_bin, remote_path, local_mount_point]
                     direct_cmd = _with_host_mount_namespace(direct_cmd)
-                    logger.info("Retrying direct NFS helper for mount_label=%s", mount_label)
+                    direct_command_path = _mount_command_path(direct_cmd)
+                    logger.info(
+                        "Retrying direct NFS helper for mount_label=%s command_path=%s",
+                        mount_label,
+                        direct_command_path,
+                    )
+                    logger.debug(
+                        "Direct NFS helper context: mount_label=%s helper=%s remote_path=%s local_mount_point=%s command_path=%s",
+                        mount_label,
+                        nfs_bin,
+                        remote_path,
+                        local_mount_point,
+                        direct_command_path,
+                    )
                     try:
                         direct_result = subprocess.run(
                             direct_cmd,
@@ -246,7 +303,11 @@ class LinuxMountProvider:
                         )
                         return False, str(exc)
                     if direct_result.returncode == 0:
-                        logger.info("Direct NFS helper mount succeeded for mount_label=%s", mount_label)
+                        logger.info(
+                            "Direct NFS helper mount succeeded for mount_label=%s command_path=%s",
+                            mount_label,
+                            direct_command_path,
+                        )
                         return True, None
                     direct_error = (direct_result.stderr or direct_result.stdout or "").strip() or "mount failed"
                     logger.warning(
@@ -977,14 +1038,34 @@ def validate_mount_candidate(mount_data: MountCreate, db: Session, actor: Option
 
     validation_error = None
     candidate_status = MountStatus.ERROR
+    logger.info(
+        "Mount candidate validation started: type=%s mount_label=%s actor=%s",
+        mount_data.type.value,
+        _redacted_mount_label(str(mount.local_mount_point)),
+        actor or "system",
+    )
     try:
         create_dir_error = _ensure_mount_directory(mount.local_mount_point)
         if create_dir_error:
             validation_error = create_dir_error
+            _log_mount_debug_failure(
+                "Mount candidate validation mountpoint preparation raw error",
+                mount_type=mount_data.type,
+                remote_path=mount_data.remote_path,
+                local_mount_point=str(mount.local_mount_point),
+                raw_error=create_dir_error,
+            )
         else:
             owner_error = _validate_mount_directory_owner(mount.local_mount_point)
             if owner_error:
                 validation_error = owner_error
+                _log_mount_debug_failure(
+                    "Mount candidate validation mountpoint ownership raw error",
+                    mount_type=mount_data.type,
+                    remote_path=mount_data.remote_path,
+                    local_mount_point=str(mount.local_mount_point),
+                    raw_error=owner_error,
+                )
             else:
                 resolved_credentials = _resolve_mount_operation_credentials(mount, mount_data)
                 success, validation_error = provider.os_mount(
@@ -1030,6 +1111,36 @@ def validate_mount_candidate(mount_data: MountCreate, db: Session, actor: Option
         raise HTTPException(
             status_code=500,
             detail="Mount validation could not restore original mount state",
+        )
+
+    if candidate_status == MountStatus.MOUNTED:
+        logger.info(
+            "Mount candidate validation succeeded: type=%s mount_label=%s actor=%s",
+            mount_data.type.value,
+            _redacted_mount_label(str(mount.local_mount_point)),
+            actor or "system",
+        )
+    else:
+        logger.info(
+            "Mount candidate validation failed: type=%s mount_label=%s actor=%s failure_category=%s reason=%s",
+            mount_data.type.value,
+            _redacted_mount_label(str(mount.local_mount_point)),
+            actor or "system",
+            "mount_validate_candidate",
+            sanitize_error_message(validation_error, "Mount validation failed"),
+        )
+        logger.debug(
+            "Mount candidate validation failure details",
+            extra={
+                "context": {
+                    "type": mount_data.type.value,
+                    "mount_label": _redacted_mount_label(str(mount.local_mount_point)),
+                    "remote_path": mount_data.remote_path,
+                    "local_mount_point": str(mount.local_mount_point),
+                    "project_id": normalized_project_id,
+                    "raw_error": validation_error,
+                }
+            },
         )
 
     try:
