@@ -1357,6 +1357,120 @@ def test_confirm_job_chain_of_custody_handoff_stores_snapshot(manager_client, db
     assert snapshot.payload["reports"][0]["custody_complete"] is True
 
 
+def test_job_chain_of_custody_handoff_does_not_reuse_prior_archived_job_event(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB-COC-HANDOFF-REUSE-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-COC-HANDOFF-REUSE",
+        mount_path="/mnt/ecube/coc-handoff-reuse-001",
+    )
+    db.add(drive)
+    db.flush()
+
+    first_job = ExportJob(
+        project_id="PROJ-COC-HANDOFF-REUSE",
+        evidence_number="EV-COC-HANDOFF-REUSE-1",
+        source_path="/data/coc-handoff-reuse-1",
+        status=JobStatus.COMPLETED,
+        file_count=2,
+        copied_bytes=256,
+    )
+    db.add(first_job)
+    db.flush()
+
+    db.add(DriveAssignment(drive_id=drive.id, job_id=first_job.id, file_count=2, copied_bytes=256))
+    db.add_all([
+        AuditLog(action="DRIVE_INITIALIZED", drive_id=drive.id, project_id="PROJ-COC-HANDOFF-REUSE", details={"drive_id": drive.id}),
+        AuditLog(
+            action="JOB_CREATED",
+            drive_id=drive.id,
+            job_id=first_job.id,
+            project_id="PROJ-COC-HANDOFF-REUSE",
+            details={
+                "project_id": "PROJ-COC-HANDOFF-REUSE",
+                "evidence_number": "EV-COC-HANDOFF-REUSE-1",
+            },
+        ),
+        AuditLog(action="JOB_COMPLETED", job_id=first_job.id, project_id="PROJ-COC-HANDOFF-REUSE", details={"status": "COMPLETED"}),
+    ])
+    db.commit()
+
+    handoff_payload = {
+        "drive_id": drive.id,
+        "project_id": "PROJ-COC-HANDOFF-REUSE",
+        "possessor": "Evidence Locker",
+        "delivery_time": "2026-04-28T18:00:00Z",
+        "received_by": "Custodian A",
+        "receipt_ref": "RCPT-REUSE-001",
+    }
+
+    first_handoff = manager_client.post(
+        f"/jobs/{first_job.id}/chain-of-custody/handoff",
+        json=handoff_payload,
+    )
+
+    assert first_handoff.status_code == 200
+
+    db.refresh(drive)
+    drive.current_state = DriveState.AVAILABLE
+    drive.current_project_id = "PROJ-COC-HANDOFF-REUSE"
+    first_job.status = JobStatus.ARCHIVED
+
+    second_job = ExportJob(
+        project_id="PROJ-COC-HANDOFF-REUSE",
+        evidence_number="EV-COC-HANDOFF-REUSE-2",
+        source_path="/data/coc-handoff-reuse-2",
+        status=JobStatus.COMPLETED,
+        file_count=1,
+        copied_bytes=128,
+    )
+    db.add(second_job)
+    db.flush()
+
+    db.add(DriveAssignment(drive_id=drive.id, job_id=second_job.id, file_count=1, copied_bytes=128))
+    db.add_all([
+        AuditLog(action="DRIVE_INITIALIZED", drive_id=drive.id, project_id="PROJ-COC-HANDOFF-REUSE", details={"drive_id": drive.id}),
+        AuditLog(
+            action="JOB_CREATED",
+            drive_id=drive.id,
+            job_id=second_job.id,
+            project_id="PROJ-COC-HANDOFF-REUSE",
+            details={
+                "project_id": "PROJ-COC-HANDOFF-REUSE",
+                "evidence_number": "EV-COC-HANDOFF-REUSE-2",
+            },
+        ),
+        AuditLog(action="JOB_COMPLETED", job_id=second_job.id, project_id="PROJ-COC-HANDOFF-REUSE", details={"status": "COMPLETED"}),
+    ])
+    db.commit()
+
+    refresh_response = manager_client.post(f"/jobs/{second_job.id}/chain-of-custody/refresh")
+
+    assert refresh_response.status_code == 200
+    assert refresh_response.json()["reports"][0]["custody_complete"] is False
+
+    second_handoff = manager_client.post(
+        f"/jobs/{second_job.id}/chain-of-custody/handoff",
+        json=handoff_payload,
+    )
+
+    assert second_handoff.status_code == 200
+    assert second_handoff.json()["event_id"] != first_handoff.json()["event_id"]
+
+    handoff_rows = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "COC_HANDOFF_CONFIRMED", AuditLog.drive_id == drive.id)
+        .order_by(AuditLog.id.asc())
+        .all()
+    )
+    assert len(handoff_rows) == 2
+    assert handoff_rows[0].job_id == first_job.id
+    assert handoff_rows[1].job_id == second_job.id
+
+    second_snapshot = db.query(JobChainOfCustodySnapshot).filter(JobChainOfCustodySnapshot.job_id == second_job.id).one()
+    assert second_snapshot.payload["reports"][0]["custody_complete"] is True
+
+
 def test_start_job_writes_application_log_line(client, db, caplog):
     drive = UsbDrive(
         device_identifier="USB-START-LOG-001",
