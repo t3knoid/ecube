@@ -91,6 +91,7 @@ const initializeDialogTitleId = 'drive-initialize-dialog-title'
 const initializeDialogHelpId = 'drive-initialize-dialog-help'
 const initializeDialogStatusId = 'drive-initialize-dialog-status'
 const EJECT_PREFLIGHT_TIMEOUT_MS = 5000
+const EJECT_BLOCKING_JOB_STATUSES = ['RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING']
 
 const { driveStateLabel } = useStatusLabels()
 
@@ -402,7 +403,7 @@ async function openPrepareEjectDialog() {
   try {
     const jobs = await listJobs({
       drive_id: drive.value.id,
-      statuses: ['RUNNING', 'VERIFYING'],
+      statuses: EJECT_BLOCKING_JOB_STATUSES,
       limit: 1,
     }, { timeout: EJECT_PREFLIGHT_TIMEOUT_MS })
     const activeJob = Array.isArray(jobs) ? jobs[0] : null
