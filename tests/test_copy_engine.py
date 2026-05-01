@@ -11,7 +11,7 @@ import pytest
 
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
-from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, StartupAnalysisStatus
+from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, StartupAnalysisEntry, StartupAnalysisStatus
 from app.services import copy_engine
 
 
@@ -1016,7 +1016,7 @@ def test_prepare_job_startup_analysis_uses_specific_failure_fallback_for_unknown
     job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
 
     with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
-        with patch("app.services.copy_engine.scan_source_files", side_effect=RuntimeError("boom")):
+        with patch("app.services.copy_engine._iter_source_tree", side_effect=RuntimeError("boom")):
             with pytest.raises(RuntimeError, match="boom"):
                 copy_engine.prepare_job_startup_analysis(job.id, actor="analyst", manual=True)
 
@@ -1036,7 +1036,7 @@ def test_run_startup_analysis_logs_sanitized_failure_at_info_level(db, tmp_path,
     job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
 
     with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
-        with patch("app.services.copy_engine.scan_source_files", side_effect=RuntimeError("boom /secret/path")):
+        with patch("app.services.copy_engine._iter_source_tree", side_effect=RuntimeError("boom /secret/path")):
             with caplog.at_level(logging.INFO):
                 copy_engine.run_startup_analysis(job.id, actor="analyst")
 
@@ -1112,16 +1112,34 @@ def test_run_copy_job_refreshes_stale_startup_analysis_cache_on_completed_run_wi
 
     db.expire_all()
     db.refresh(job)
+    startup_entries = (
+        db.query(StartupAnalysisEntry)
+        .filter(StartupAnalysisEntry.job_id == job.id)
+        .order_by(StartupAnalysisEntry.entry_type, StartupAnalysisEntry.relative_path)
+        .all()
+    )
 
     assert job.status == JobStatus.COMPLETED
     assert job.startup_analysis_cached is True
     assert job.startup_analysis_file_count == 2
     assert job.startup_analysis_total_bytes == len(b"content") + len(b"more")
     file_entries = sorted(
-        [entry for entry in job.startup_analysis_entries if entry.get("entry_type", "file") == "file"],
+        [
+            {"relative_path": entry.relative_path, "size_bytes": entry.size_bytes}
+            for entry in startup_entries
+            if entry.entry_type == "file"
+        ],
         key=lambda entry: entry["relative_path"],
     )
-    directory_entries = [entry for entry in job.startup_analysis_entries if entry.get("entry_type") == "directory"]
+    directory_entries = [
+        {
+            "entry_type": entry.entry_type,
+            "relative_path": entry.relative_path,
+            "mtime_ns": entry.mtime_ns,
+        }
+        for entry in startup_entries
+        if entry.entry_type == "directory"
+    ]
 
     assert file_entries == [
         {"relative_path": "extra.txt", "size_bytes": len(b"more")},
@@ -1184,6 +1202,7 @@ def test_run_copy_job_clears_startup_analysis_cache_after_success(db, tmp_path):
 
     db.expire_all()
     db.refresh(job)
+    startup_entry_count = db.query(StartupAnalysisEntry).filter(StartupAnalysisEntry.job_id == job.id).count()
 
     audit = (
         db.query(AuditLog)
@@ -1201,8 +1220,95 @@ def test_run_copy_job_clears_startup_analysis_cache_after_success(db, tmp_path):
     assert job.startup_analysis_share_read_mbps == 120.5
     assert job.startup_analysis_drive_write_mbps == 96.25
     assert job.startup_analysis_estimated_duration_seconds == 1
+    assert startup_entry_count == 0
     assert audit is not None
     assert audit.details["reason"] == "job_completed"
+
+
+def test_prepare_job_startup_analysis_persists_entries_in_batches(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    for index in range(5):
+        (source_dir / f"file-{index}.txt").write_text(f"file-{index}")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+
+    with patch.object(copy_engine, "STARTUP_ANALYSIS_BATCH_SIZE", 2):
+        with patch("app.services.copy_engine._persist_startup_analysis_file_batch", wraps=copy_engine._persist_startup_analysis_file_batch) as persist_file_batch:
+            copy_engine.prepare_job_startup_analysis(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+
+    assert job.startup_analysis_cached is True
+    assert job.startup_analysis_file_count == 5
+    assert persist_file_batch.call_count == 3
+    assert db.query(StartupAnalysisEntry).filter(
+        StartupAnalysisEntry.job_id == job.id,
+        StartupAnalysisEntry.entry_type == "file",
+    ).count() == 5
+
+
+def test_prepare_job_startup_analysis_refresh_failure_preserves_previous_cache(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "file.txt").write_bytes(b"content")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    job.startup_analysis_status = StartupAnalysisStatus.READY
+    job.startup_analysis_file_count = 1
+    job.startup_analysis_total_bytes = len(b"content")
+    job.startup_analysis_cache_present = True
+    job.startup_analysis_revision = 1
+    db.add(
+        ExportFile(
+            job_id=job.id,
+            relative_path="file.txt",
+            size_bytes=len(b"content"),
+            status=FileStatus.PENDING,
+            startup_analysis_revision=1,
+        )
+    )
+    db.add(
+        StartupAnalysisEntry(
+            job_id=job.id,
+            entry_type="directory",
+            relative_path="",
+            mtime_ns=source_dir.stat().st_mtime_ns,
+        )
+    )
+    db.commit()
+
+    (source_dir / "extra.txt").write_bytes(b"more")
+
+    original_persist_file_batch = copy_engine._persist_startup_analysis_file_batch
+
+    def _fail_after_first_file_batch(*args, **kwargs):
+        original_persist_file_batch(*args, **kwargs)
+        raise RuntimeError("boom")
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine._persist_startup_analysis_file_batch", side_effect=_fail_after_first_file_batch):
+            with pytest.raises(RuntimeError, match="boom"):
+                copy_engine.prepare_job_startup_analysis(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+    file_rows = db.query(ExportFile).filter(ExportFile.job_id == job.id).order_by(ExportFile.id).all()
+    directory_rows = db.query(StartupAnalysisEntry).filter(StartupAnalysisEntry.job_id == job.id).all()
+
+    assert job.startup_analysis_cached is True
+    assert job.startup_analysis_revision == 1
+    assert job.startup_analysis_file_count == 1
+    assert job.startup_analysis_total_bytes == len(b"content")
+    assert [(row.relative_path, row.startup_analysis_revision) for row in file_rows] == [("file.txt", 1)]
+    assert [(row.entry_type, row.relative_path) for row in directory_rows] == [("directory", "")]
 
 
 def test_run_copy_job_accumulates_active_duration_on_resume(db, tmp_path):
