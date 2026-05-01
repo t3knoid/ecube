@@ -217,10 +217,11 @@ When `drive_id` is omitted, ECUBE selects a drive automatically:
   drives may be temporarily held by concurrent operations.
 
 > **Drive Capacity Warning:** ECUBE does **not** validate free space on the
-> target drive before or during copy operations. It is the caller's
-> responsibility to ensure the target drive has sufficient space. When a project
-> has multiple drives, specify `drive_id` to select the drive with available
-> capacity.
+> target drive before or during copy operations. ECUBE now exposes the last
+> known mounted-drive free-space reading as `available_bytes`, but it remains
+> the caller's responsibility to ensure the target drive has sufficient space.
+> When a project has multiple drives, specify `drive_id` to select the drive
+> with available capacity.
 
 **With explicit drive (when disambiguation is needed):**
 

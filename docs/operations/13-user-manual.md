@@ -4,7 +4,7 @@
 |---|---|
 | Title | ECUBE User Manual |
 | Purpose | Guides end users, processors, managers, and auditors through day-to-day ECUBE workflows and operational tasks. |
-| Updated on | 04/29/26 |
+| Updated on | 05/01/26 |
 | Audience | Processors, managers, auditors, administrators, end users. |
 
 ## Table of Contents
@@ -324,6 +324,7 @@ Typical drive fields include:
 - Device (port-based identifier such as `2-1`)
 - Project when the drive has a related job association
 - Capacity
+- Available space when the last known mounted-drive reading is available
 - Related job ID when the drive is currently tied to a job
 - Current state
 
@@ -367,10 +368,12 @@ When ECUBE can correlate a drive to a related job, the `Job ID` value on the Dri
 
 Selecting a drive opens a detail view showing:
 
-- The drive ID, the port-based `Device` value, filesystem type, capacity, and current status
+- The drive ID, the port-based `Device` value, filesystem type, total capacity, last known available space, and current status
 - Current project assignment together with the related evidence number and job ID when a job is associated with the drive
 - Current status badge
 - Available actions such as format, initialize, and prepare eject
+
+If ECUBE does not yet have a current mounted-drive free-space reading for that drive, the available-space field shows `-` instead of blocking the page.
 
 If a related job exists, the `Job ID` value on Drive Detail uses the same direct Job Detail navigation pattern as the clickable job context on the Drives page.
 
@@ -508,7 +511,7 @@ The directory browser allows users to explore the contents of active mount point
 
 **Accessing the browser:**
 
-- **From Drive Detail:** Click the mount path link on any mounted drive to open the directory browser rooted at that drive's mount point.
+- **From Drive Detail:** Click the `Browse` button on any mounted drive to open the directory browser rooted at that drive's mount point.
 - **From Mounts:** Click the `Browse` button on any mounted network share. The button is disabled for shares that are not currently mounted.
 
 **Navigating:**
@@ -610,6 +613,8 @@ Archived jobs remain readable from Job Detail, but they are intentionally treate
 > **Restricted actions:** `Analyze`, `Edit`, `Start`, `Retry Failed Files`, `Pause`, `Complete`, `Verify`, and `Manifest` are enabled for `admin`, `manager`, and `processor` when the current job state allows them. `Chain of Custody` is available to roles that can open the job-scoped chain-of-custody workflow. Within that report, `Custody Handoff` appears only for `admin` and `manager` when the loaded report still shows incomplete custody. `Archive` and `Clear startup analysis cache` remain limited to `admin` and `manager` when the current job state allows them. `Delete` is shown only for eligible pending jobs. Hash inspection and source/destination comparison remain available to `admin` and `auditor`.
 
 The job detail page provides deeper inspection and follow-up controls.
+
+Near the top of the page, Job Detail also shows the selected destination, the last known available space for the related drive when ECUBE has one, and the current job-specific webhook callback URL.
 
 Typical functions include:
 
