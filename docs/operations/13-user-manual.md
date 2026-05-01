@@ -322,10 +322,8 @@ The `Drives` page shows detected USB drives and their current state.
 Typical drive fields include:
 
 - Device (port-based identifier such as `2-1`)
-- Serial Number
-- Filesystem type
 - Capacity
-- Assigned project
+- Related job ID when the drive is currently tied to a job
 - Current state
 
 Available actions depend on your role and the selected drive.
@@ -358,18 +356,22 @@ Use the page controls to:
 
 - Refresh the current drive list
 - Trigger a rescan of connected drives
-- Search by device, serial number, or project information
+- Search by device or project information
 - Filter by drive state
 - Sort results
+
+When ECUBE can correlate a drive to a related job, the `Job ID` value on the Drives page acts as a direct link into that job's detail view. Drives without a related job keep the current placeholder behavior instead of showing a stale or guessed job ID.
 
 ### 7.3 Drive Detail Page
 
 Selecting a drive opens a detail view showing:
 
-- The port-based `Device` value, the separate `Serial Number` value, and filesystem details, with sensitive path values shown as `Protected` in standard operator views when appropriate
-- Current project assignment
+- The drive ID, the port-based `Device` value, filesystem type, capacity, and current status
+- Current project assignment together with the related evidence number and job ID when a job is associated with the drive
 - Current status badge
 - Available actions such as format, initialize, and prepare eject
+
+If a related job exists, the `Job ID` value on Drive Detail uses the same direct Job Detail navigation pattern as the clickable job context on the Drives page.
 
 Reference screen:
 
