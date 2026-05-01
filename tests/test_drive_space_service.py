@@ -60,3 +60,27 @@ def test_request_available_space_refresh_skips_unmounted_drive(db, monkeypatch):
     db.refresh(drive)
     assert probe.paths == []
     assert drive.available_bytes == 1024
+
+
+def test_request_available_space_refresh_runs_inline_for_sqlite(db, monkeypatch):
+    drive = UsbDrive(
+        device_identifier="SPACE-SQLITE-1",
+        current_state=DriveState.IN_USE,
+        mount_path="/mnt/sqlite-drive",
+        available_bytes=None,
+    )
+    db.add(drive)
+    db.commit()
+
+    probe = _Probe(available_bytes=4096)
+
+    def _unexpected_executor():
+        raise AssertionError("executor should not be used for sqlite refresh")
+
+    monkeypatch.setattr(drive_space_service, "_get_executor", _unexpected_executor)
+
+    drive_space_service.request_available_space_refresh(drive.id, probe=probe)
+
+    db.refresh(drive)
+    assert probe.paths == ["/mnt/sqlite-drive"]
+    assert drive.available_bytes == 4096
