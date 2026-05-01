@@ -235,6 +235,27 @@ describe('DriveDetailView mount workflow', () => {
     expect(wrapper.text()).not.toContain('EV-OTHER-DRIVE')
   })
 
+  it('shows the related job ID for the drive assigned job and links to Job Detail', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-007', mount_path: '/mnt/ecube/7' })])
+    mocks.listAllJobs.mockResolvedValue([
+      { id: 21, project_id: 'PROJ-007', evidence_number: 'EV-OTHER-DRIVE', drive: { id: 8 } },
+      { id: 20, project_id: 'PROJ-007', evidence_number: 'EV-007', drive: { id: 7 } },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.jobId'))
+    const jobLink = wrapper.find('.cell-link')
+    expect(jobLink.exists()).toBe(true)
+    expect(jobLink.text()).toBe('20')
+
+    await jobLink.trigger('click')
+    await flushPromises()
+
+    expect(mocks.push).toHaveBeenCalledWith({ name: 'job-detail', params: { id: 20 } })
+  })
+
   it('uses jobs beyond the first backend page when resolving detail evidence', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-007', mount_path: '/mnt/ecube/7' })])
     mocks.listAllJobs.mockResolvedValue([
@@ -260,6 +281,7 @@ describe('DriveDetailView mount workflow', () => {
 
     expect(wrapper.text()).not.toContain('EV-STALE')
     expect(wrapper.text()).toContain(`${i18n.global.t('jobs.evidence')}-`)
+    expect(wrapper.text()).toContain(`${i18n.global.t('jobs.jobId')}-`)
   })
 
   it('clears stale evidence immediately after formatting without leaving the page', async () => {
@@ -440,7 +462,7 @@ describe('DriveDetailView mount workflow', () => {
     await flushPromises()
     expect(mocks.listJobs).toHaveBeenLastCalledWith({
       drive_id: 7,
-      statuses: ['RUNNING', 'VERIFYING'],
+      statuses: ['RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING'],
       limit: 1,
     }, {
       timeout: 5000,
