@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
+from pydantic import ValidationError
 
 from app.auth_providers import LdapGroupRoleResolver, get_role_resolver
 from app.config import Settings
