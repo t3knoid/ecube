@@ -46,7 +46,11 @@ def test_list_drives(client, db):
 
 
 def test_list_drives_with_data(client, db):
-    drive = UsbDrive(device_identifier="USB001", current_state=DriveState.AVAILABLE)
+    drive = UsbDrive(
+        device_identifier="USB001",
+        current_state=DriveState.AVAILABLE,
+        available_bytes=2048,
+    )
     db.add(drive)
     db.commit()
 
@@ -56,6 +60,8 @@ def test_list_drives_with_data(client, db):
     ids = [d["device_identifier"] for d in data]
     assert "USB001" in ids
     assert ids.count("USB001") == 1
+    match = next(item for item in data if item["device_identifier"] == "USB001")
+    assert match["available_bytes"] == 2048
 
 
 def test_list_drives_exposes_port_and_serial_identifiers(client, db):

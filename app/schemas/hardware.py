@@ -57,6 +57,7 @@ class UsbDriveSchema(BaseModel):
         description="Current OS block device node for the drive (e.g., /dev/sdb); may be used in place of a mount point"
     )
     capacity_bytes: Optional[int] = Field(default=None, description="Total storage capacity in bytes")
+    available_bytes: Optional[int] = Field(default=None, description="Last known available space in bytes for the mounted drive")
     encryption_status: Optional[str] = Field(default=None, description="Encryption status (e.g., 'encrypted', 'none')")
     filesystem_type: Optional[str] = Field(default=None, description="Detected filesystem label (e.g. ext4, exfat, unformatted, unknown, or null if not yet detected)")
     current_state: DriveState = Field(..., description="Current drive state (DISCONNECTED, AVAILABLE, IN_USE)")
