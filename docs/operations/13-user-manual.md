@@ -451,8 +451,9 @@ You can typically:
 - Validate all mounts
 - Validate an individual mount
 - Add a new mount definition
-- Edit an existing mount definition
-- Remove an existing mount definition
+- Open Mount Detail for an existing mount definition
+
+`admin` and `manager` users can also edit or remove a mount from Mount Detail. `processor` and `auditor` users can open Mount Detail and browse mounted shares, but they do not see `Edit` or `Remove` actions.
 
 ### 8.1 Adding a Mount
 
@@ -483,14 +484,15 @@ If share browsing is unavailable because the ECUBE host is missing a required di
 
 ### 8.1.1 Editing a Mount
 
-Use `Edit` on an existing mount row to reopen the same dialog in edit mode.
+Use `Details` on an existing mount row to open Mount Detail, then use `Edit` from the detail action row to reopen the edit dialog in place.
 
 - The dialog pre-fills the current type, remote path, and project ID.
+- Mount Detail shows Type, Remote Path, Project, NFS Client version, Local Mount Point, Last Checked, Job ID, and Status before you open the dialog.
 - The local mount point is shown as read-only informational context and is not directly editable.
 - Stored credentials are not returned to the UI. Leaving the credential fields blank preserves the stored values.
 - Use `Clear saved credentials` if you need to remove previously stored SMB credentials without replacing them in the same edit.
 
-When you save, ECUBE updates the existing mount record instead of creating a new one, then refreshes the row status in the list. If the backend rejects the change, or if the returned mount status is `ERROR`, the dialog stays open so you can review the returned error state before closing it.
+When you save, ECUBE updates the existing mount record instead of creating a new one. If the share is currently mounted, ECUBE attempts to remount it immediately with the edited options, including any explicit NFS client-version override. If the backend rejects the change, or if the returned mount status is `ERROR`, the dialog stays open so you can review the returned error state before closing it.
 
 ### 8.2 Testing Mount Connectivity
 
@@ -498,9 +500,11 @@ Use `Test` or `Test All` to verify that configured source mounts are reachable a
 
 ### 8.3 Removing a Mount
 
+From Mount Detail, `admin` and `manager` users can remove the mount definition when it is no longer needed.
+
 Remove a mount only if it is no longer needed. If existing workflows depend on it, removing the definition can interrupt job creation or repeatability.
 
-![Mounts page with validation, browse, and add/remove actions (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/mounts-default-chromium-linux.png)
+![Mounts page with Details, Browse, and validation actions (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/mounts-default-chromium-linux.png)
 
 ---
 
@@ -511,7 +515,7 @@ The directory browser allows users to explore the contents of active mount point
 **Accessing the browser:**
 
 - **From Drive Detail:** Click the `Browse` button on any mounted drive to open the directory browser rooted at that drive's mount point.
-- **From Mounts:** Click the `Browse` button on any mounted network share. The button is disabled for shares that are not currently mounted.
+- **From Mounts:** Click the `Browse` button on any mounted network share from the list, or open Mount Detail and browse from there. The button is disabled for shares that are not currently mounted.
 
 **Navigating:**
 
