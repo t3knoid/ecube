@@ -61,6 +61,15 @@ const publicAuthConfig = ref({
 const mountId = computed(() => Number(route.params.id))
 const canManageMounts = computed(() => authStore.hasAnyRole(['admin', 'manager']))
 const canBrowse = computed(() => mountRecord.value?.status === 'MOUNTED' && !!mountRecord.value?.local_mount_point)
+const redactedMountValue = computed(() => t('mounts.redactedValue'))
+const visibleRemotePath = computed(() => {
+  if (!mountRecord.value?.remote_path) return '-'
+  return canManageMounts.value ? mountRecord.value.remote_path : redactedMountValue.value
+})
+const visibleLocalMountPoint = computed(() => {
+  if (!mountRecord.value?.local_mount_point) return '-'
+  return canManageMounts.value ? mountRecord.value.local_mount_point : redactedMountValue.value
+})
 const nfsClientVersionOptions = computed(() => {
   const configured = Array.isArray(publicAuthConfig.value?.nfs_client_version_options)
     ? publicAuthConfig.value.nfs_client_version_options
@@ -407,10 +416,10 @@ onBeforeUnmount(() => {
     <article v-if="mountRecord" class="detail-card">
       <div class="detail-grid">
         <div><strong>{{ t('common.labels.type') }}</strong><span>{{ mountRecord.type || '-' }}</span></div>
-        <div><strong>{{ t('mounts.remotePath') }}</strong><span>{{ mountRecord.remote_path || '-' }}</span></div>
+        <div><strong>{{ t('mounts.remotePath') }}</strong><span>{{ visibleRemotePath }}</span></div>
         <div><strong>{{ t('dashboard.project') }}</strong><span>{{ mountRecord.project_id || '-' }}</span></div>
         <div><strong>{{ t('mounts.nfsClientVersion') }}</strong><span>{{ mountRecord.nfs_client_version || '-' }}</span></div>
-        <div><strong>{{ t('mounts.localMountPointInfo') }}</strong><span>{{ mountRecord.local_mount_point || '-' }}</span></div>
+        <div><strong>{{ t('mounts.localMountPointInfo') }}</strong><span>{{ visibleLocalMountPoint }}</span></div>
         <div><strong>{{ t('mounts.lastChecked') }}</strong><span>{{ toIso(mountRecord.last_checked_at) }}</span></div>
         <div>
           <strong>{{ t('jobs.jobId') }}</strong>

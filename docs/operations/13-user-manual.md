@@ -453,7 +453,7 @@ You can typically:
 - Add a new mount definition
 - Open Mount Detail for an existing mount definition
 
-`admin` and `manager` users can also edit or remove a mount from Mount Detail. `processor` and `auditor` users can open Mount Detail and browse mounted shares, but they do not see `Edit` or `Remove` actions.
+`admin` and `manager` users can also edit or remove a mount from Mount Detail. `processor` and `auditor` users can open Mount Detail and browse mounted shares, but they do not see `Edit` or `Remove` actions and sensitive path fields remain redacted.
 
 ### 8.1 Adding a Mount
 
@@ -487,7 +487,7 @@ If share browsing is unavailable because the ECUBE host is missing a required di
 Use `Details` on an existing mount row to open Mount Detail, then use `Edit` from the detail action row to reopen the edit dialog in place.
 
 - The dialog pre-fills the current type, remote path, and project ID.
-- Mount Detail shows Type, Remote Path, Project, NFS Client version, Local Mount Point, Last Checked, Job ID, and Status before you open the dialog.
+- Mount Detail shows Type, Project, NFS Client version, Last Checked, Job ID, and Status before you open the dialog. `admin` and `manager` users also see the raw Remote Path and Local Mount Point values there; read-only roles see those path fields redacted.
 - The local mount point is shown as read-only informational context and is not directly editable.
 - Stored credentials are not returned to the UI. Leaving the credential fields blank preserves the stored values.
 - Use `Clear saved credentials` if you need to remove previously stored SMB credentials without replacing them in the same edit.
