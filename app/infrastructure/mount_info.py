@@ -16,6 +16,32 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_PROCFS_MOUNTS_PATH = "/proc/mounts"
+_HOST_PROCFS_MOUNTS_PATH = "/proc/1/mounts"
+
+
+def _same_host_mount_namespace() -> bool:
+    """Return whether the current process shares PID 1's mount namespace."""
+    try:
+        current_ns = os.readlink("/proc/self/ns/mnt")
+        host_ns = os.readlink("/proc/1/ns/mnt")
+    except OSError:
+        return True
+    return current_ns == host_ns
+
+
+def _mounts_path_for_current_context() -> str:
+    """Return the authoritative mount table path for the current runtime."""
+    mounts_path = settings.procfs_mounts_path
+    if mounts_path == _DEFAULT_PROCFS_MOUNTS_PATH and not _same_host_mount_namespace():
+        return _HOST_PROCFS_MOUNTS_PATH
+    return mounts_path
+
+
+def _normalize_mount_path(path: str) -> str:
+    normalized = path.rstrip("/")
+    return normalized or "/"
+
 
 def unescape_mountpoint(escaped_path: str) -> str:
     """Unescape octal escape sequences used in ``/proc/mounts``.
@@ -46,7 +72,7 @@ def read_mount_table() -> dict[str, str]:
     Returns an empty dict when the file cannot be read (non-Linux, container,
     permission error, etc.).
     """
-    mounts_path = settings.procfs_mounts_path
+    mounts_path = _mounts_path_for_current_context()
     result: dict[str, str] = {}
     try:
         with open(mounts_path, encoding="utf-8", errors="replace") as fh:
@@ -74,6 +100,28 @@ def read_mount_points() -> dict[str, str]:
         for mount_point, source in mount_table.items()
         if source.startswith("/dev/")
     }
+
+
+def is_active_mount_point(mount_point: str) -> bool:
+    """Return whether *mount_point* is present in the authoritative mount table."""
+    target = _normalize_mount_path(mount_point)
+    try:
+        real_target = os.path.realpath(target)
+    except (OSError, ValueError):
+        real_target = target
+
+    for mounted_path in read_mount_table().keys():
+        normalized_mounted = _normalize_mount_path(mounted_path)
+        if normalized_mounted == target:
+            return True
+        try:
+            real_mounted = os.path.realpath(normalized_mounted)
+        except (OSError, ValueError):
+            real_mounted = normalized_mounted
+        if real_mounted == real_target:
+            return True
+
+    return False
 
 
 def find_device_mount_point(device_path: str) -> Optional[str]:
