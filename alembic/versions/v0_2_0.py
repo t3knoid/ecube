@@ -273,6 +273,60 @@ def _ensure_export_files_project_indexes() -> None:
     op.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_export_files_project_status ON export_files (project_id, status)"))
 
 
+def _ensure_release_hot_path_indexes() -> None:
+    op.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_export_jobs_status_created_id ON export_jobs (status, created_at, id)"))
+    op.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_export_jobs_created_id ON export_jobs (created_at, id)"))
+    op.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_export_files_job_id ON export_files (job_id)"))
+    op.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_export_files_job_status ON export_files (job_id, status)"))
+    op.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_export_files_job_id_id ON export_files (job_id, id)"))
+    op.execute(
+        sa.text(
+            "CREATE INDEX IF NOT EXISTS ix_drive_assignments_job_released_assigned_id "
+            "ON drive_assignments (job_id, released_at, assigned_at, id)"
+        )
+    )
+    op.execute(
+        sa.text(
+            "CREATE INDEX IF NOT EXISTS ix_drive_assignments_drive_released_assigned_id "
+            "ON drive_assignments (drive_id, released_at, assigned_at, id)"
+        )
+    )
+    op.execute(
+        sa.text(
+            "CREATE INDEX IF NOT EXISTS ix_manifests_job_created_id "
+            "ON manifests (job_id, created_at, id)"
+        )
+    )
+    op.execute(sa.text("DROP INDEX IF EXISTS ix_audit_logs_action_timestamp"))
+    op.execute(sa.text("DROP INDEX IF EXISTS ix_audit_logs_project_timestamp"))
+    op.execute(sa.text("DROP INDEX IF EXISTS ix_audit_logs_drive_timestamp"))
+    op.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_audit_logs_timestamp_id ON audit_logs (timestamp, id)"))
+    op.execute(
+        sa.text(
+            "CREATE INDEX IF NOT EXISTS ix_audit_logs_project_timestamp_id "
+            "ON audit_logs (project_id, timestamp, id)"
+        )
+    )
+    op.execute(
+        sa.text(
+            "CREATE INDEX IF NOT EXISTS ix_audit_logs_job_timestamp_id "
+            "ON audit_logs (job_id, timestamp, id)"
+        )
+    )
+    op.execute(
+        sa.text(
+            "CREATE INDEX IF NOT EXISTS ix_audit_logs_drive_timestamp_id "
+            "ON audit_logs (drive_id, timestamp, id)"
+        )
+    )
+    op.execute(
+        sa.text(
+            "CREATE INDEX IF NOT EXISTS ix_audit_logs_action_drive_project_timestamp_id "
+            "ON audit_logs (action, drive_id, project_id, timestamp, id)"
+        )
+    )
+
+
 def _upgrade_legacy_export_file_project_schema(inspector: sa.Inspector) -> None:
     if not _export_files_has_project_id(inspector):
         with op.batch_alter_table("export_files") as batch_op:
@@ -342,6 +396,9 @@ def upgrade() -> None:
         if "export_files" in existing_tables:
             _upgrade_legacy_export_file_project_schema(inspector)
             _upgrade_startup_analysis_schema(inspector)
+        required_tables = {"export_jobs", "export_files", "drive_assignments", "manifests", "audit_logs"}
+        if required_tables.issubset(existing_tables):
+            _ensure_release_hot_path_indexes()
         return
 
     op.create_table(
@@ -573,6 +630,8 @@ def upgrade() -> None:
         ),
     )
 
+    _ensure_release_hot_path_indexes()
+
     op.create_table(
         "user_roles",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -605,30 +664,20 @@ def upgrade() -> None:
         sa.CheckConstraint("id = 1", name="ck_single_reconciliation_lock"),
     )
 
-    op.execute(
-        sa.text(
-            "CREATE INDEX IF NOT EXISTS ix_audit_logs_project_timestamp "
-            "ON audit_logs (project_id, timestamp DESC)"
-        )
-    )
-    op.execute(
-        sa.text(
-            "CREATE INDEX IF NOT EXISTS ix_audit_logs_drive_timestamp "
-            "ON audit_logs (drive_id, timestamp DESC)"
-        )
-    )
-    op.execute(
-        sa.text(
-            "CREATE INDEX IF NOT EXISTS ix_audit_logs_action_timestamp "
-            "ON audit_logs (action, timestamp DESC)"
-        )
-    )
-
-
 def downgrade() -> None:
-    op.execute(sa.text("DROP INDEX IF EXISTS ix_audit_logs_action_timestamp"))
-    op.execute(sa.text("DROP INDEX IF EXISTS ix_audit_logs_drive_timestamp"))
-    op.execute(sa.text("DROP INDEX IF EXISTS ix_audit_logs_project_timestamp"))
+    op.execute(sa.text("DROP INDEX IF EXISTS ix_audit_logs_action_drive_project_timestamp_id"))
+    op.execute(sa.text("DROP INDEX IF EXISTS ix_audit_logs_drive_timestamp_id"))
+    op.execute(sa.text("DROP INDEX IF EXISTS ix_audit_logs_job_timestamp_id"))
+    op.execute(sa.text("DROP INDEX IF EXISTS ix_audit_logs_project_timestamp_id"))
+    op.execute(sa.text("DROP INDEX IF EXISTS ix_audit_logs_timestamp_id"))
+    op.execute(sa.text("DROP INDEX IF EXISTS ix_manifests_job_created_id"))
+    op.execute(sa.text("DROP INDEX IF EXISTS ix_drive_assignments_drive_released_assigned_id"))
+    op.execute(sa.text("DROP INDEX IF EXISTS ix_drive_assignments_job_released_assigned_id"))
+    op.execute(sa.text("DROP INDEX IF EXISTS ix_export_files_job_id_id"))
+    op.execute(sa.text("DROP INDEX IF EXISTS ix_export_files_job_status"))
+    op.execute(sa.text("DROP INDEX IF EXISTS ix_export_files_job_id"))
+    op.execute(sa.text("DROP INDEX IF EXISTS ix_export_jobs_created_id"))
+    op.execute(sa.text("DROP INDEX IF EXISTS ix_export_jobs_status_created_id"))
     op.drop_index("ix_startup_analysis_entries_job_entry_path", table_name="startup_analysis_entries")
     op.drop_index("ix_job_chain_of_custody_snapshots_job_id", table_name="job_chain_of_custody_snapshots")
     op.drop_index("ix_export_files_project_status", table_name="export_files")
