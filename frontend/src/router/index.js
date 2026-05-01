@@ -46,6 +46,11 @@ const routes = [
         component: () => import('@/views/MountsView.vue'),
       },
       {
+        path: 'mounts/:id',
+        name: 'mount-detail',
+        component: () => import('@/views/MountDetailView.vue'),
+      },
+      {
         path: 'jobs',
         name: 'jobs',
         component: () => import('@/views/JobsView.vue'),
