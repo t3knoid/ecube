@@ -91,7 +91,7 @@ Setup initialize behavior:
 | POST | `/drives/{drive_id}/format` | admin/manager | Format drive with `ext4` or `exfat`; drive must be AVAILABLE and unmounted |
 | POST | `/drives/{drive_id}/prepare-eject` | admin/manager | Flush filesystem + unmount all partitions; transitions drive to AVAILABLE on success, stays IN_USE on failure. Returns `409` while an assigned job has started but is not yet completed. Separately, when active assignments contain timed-out or failed files, the first call returns `409` confirmation-required; retry with `?confirm_incomplete=true` to proceed. |
 
-Drive responses include both the stable `device_identifier` and the port-based `port_system_path` used as the UI `Device` value. When available, `serial_number` is exposed separately so operator views can show the physical port-based label and the device serial at the same time.
+Drive responses include both the stable `device_identifier` and the port-based `port_system_path` used as the UI `Device` value. The stable identifier is built from available USB metadata such as vendor ID, product ID, USB serial, optional disk serial, and bus path. When available, `serial_number` is exposed separately so operator views can show the physical port-based label and the extracted USB serial at the same time.
 
 ---
 
