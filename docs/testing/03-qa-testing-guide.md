@@ -1074,7 +1074,7 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 | 16 | Attempt to format an `IN_USE` drive | 409, `CONFLICT` — must be `AVAILABLE` |
 | 17 | Open the Initialize dialog when no eligible mounted project exists | UI shows a helper message, disables the project selector, and blocks submission |
 | 18 | Open Initialize for an AVAILABLE, mounted drive that already has a project binding, then click Cancel | The dialog shows the mounted destination context and any valid prior project selection; after cancel, the drive state, project binding, and Initialize availability remain unchanged |
-| 19 | View drive detail after initialization | Drive Detail shows the safe device label, does not display a `Filesystem Path` row, and does not expose raw internal identifiers |
+| 19 | View drive detail after initialization | Drive Detail shows the safe device label, total capacity, and last known available space when the drive is mounted; it does not display a `Filesystem Path` row, exposes `Browse` instead of a raw mount-path link, and does not expose raw internal identifiers |
 | 20 | View the mounts list and browse controls | Raw remote and local mount paths are redacted in the table; browse remains enabled only for mounted shares |
 | 21 | Operate the Initialize and Add Mount dialogs with keyboard only | Focus enters the dialog, Tab stays trapped within it, Escape closes it, and focus returns to the triggering control |
 | 22 | Use `Browse` in the Add Mount dialog with many discovered shares | The share picker opens, supports vertical scrolling, and selecting a share fills the `Remote path` field |
@@ -1193,6 +1193,7 @@ These tests exercise real hardware paths that must be validated during manual QA
 | 10 | Sync + unmount | Initialize drive, create/start a job, then prepare-eject | Filesystem flushed and unmounted before eject (verify via `mount` command — no partitions from that drive should be listed) |
 | 11 | Disabled port blocks AVAILABLE | Disable a port, plug in a drive to that port, run discovery | Drive appears in `DISCONNECTED` state (visible with `include_disconnected=true`); enable port + refresh → drive transitions to `AVAILABLE` |
 | 12 | Device labels stay aligned across UI | Open Drives, Jobs, and Create/Edit Job for the same connected drive | Drives shows the same `Device` value used by the Jobs list and the destination selector, and Create/Edit Job keeps the destination control labeled `Select device` |
+| 13 | Mounted drive surfaces available space and Browse entry | Open Drive Detail for a mounted managed USB drive | Drive Detail shows total capacity plus the last known available space value or `-` when no reading is available yet, and the mounted drive exposes a `Browse` button instead of a mount-path link |
 
 ### 12.6 End-to-End Copy Workflow
 
@@ -1238,6 +1239,7 @@ These tests exercise real hardware paths that must be validated during manual QA
 | 15a | Errored file status opens file detail dialog | Open Job Detail for a job whose current file page contains at least one row with a safe file-level `error_message`, then click the row's `ERROR` or `FAILED` status badge/icon | The errored row is visually emphasized, the status control is clickable only for errored rows, and the `File Error Details` dialog shows the file ID, relative path, status, and sanitized error text |
 | 16 | Files table relies on `View Hashes` instead of checksum listing | Expand the Files panel for a completed job and inspect the table headers and row actions | The table does not show a `Checksum` column, and authorized users still have `View Hashes` available for per-file hash inspection |
 | 17 | Admin can tune Job Detail files per page | Open `Configuration` as `admin`, update `Job Detail Files Per Page`, save, then reopen a large Job Detail files panel | The configuration field accepts values between 20 and 100, persists after save, and the Files panel uses the updated page size on the next load |
+| 18 | Job Detail summary shows related drive available space | Open Job Detail for a job with an assigned drive that has a persisted `available_bytes` value, then repeat with a job whose drive has no reading yet | The top summary shows destination, callback URL, and the related drive available space; when no reading exists, the available-space field shows `-` rather than blocking the page |
 
 Walk through the complete data export lifecycle:
 

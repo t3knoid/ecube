@@ -128,7 +128,7 @@ const canBrowse = computed(() => !!drive.value?.mount_path)
 const hasMountedProjectOptions = computed(() => mountedProjectOptions.value.length > 0)
 
 function formatBytes(value) {
-  if (typeof value !== 'number' || value <= 0) return '-'
+  if (typeof value !== 'number' || value < 0) return '-'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   let next = value
   let unit = 0
@@ -568,6 +568,7 @@ onBeforeUnmount(() => {
         <!-- Mount Point field removed -->
         <div><strong>{{ t('drives.filesystem') }}</strong><span>{{ drive.filesystem_type || '-' }}</span></div>
         <div><strong>{{ t('common.labels.size') }}</strong><span>{{ formatBytes(drive.capacity_bytes) }}</span></div>
+        <div><strong>{{ t('drives.availableSpace') }}</strong><span>{{ formatBytes(drive.available_bytes) }}</span></div>
         <div><strong>{{ t('dashboard.project') }}</strong><span>{{ drive.current_project_id || '-' }}</span></div>
         <div><strong>{{ t('jobs.evidence') }}</strong><span>{{ currentProjectEvidenceNumber || '-' }}</span></div>
         <div>

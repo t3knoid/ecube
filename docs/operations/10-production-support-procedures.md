@@ -210,7 +210,7 @@ ls /mnt/evidence  # Should list files without hang or delay
 ```bash
 # For disk full:
 # Stop job and check capacity before starting next job
-curl http://localhost:8000/drives | jq '.[] | {id, state, capacity_bytes, usb_drives_available}'
+curl http://localhost:8000/drives | jq '.[] | {id, current_state, capacity_bytes, available_bytes}'
 
 # For network/permission issues:
 # Verify mount and permissions

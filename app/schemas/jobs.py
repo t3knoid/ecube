@@ -219,6 +219,7 @@ class DriveInfoSchema(BaseModel):
     device_identifier: str = Field(..., description="Stable hardware identifier for the drive")
     filesystem_path: Optional[str] = Field(default=None, description="Current OS block device node (e.g. /dev/sdb)")
     capacity_bytes: Optional[int] = Field(default=None, description="Total storage capacity in bytes")
+    available_bytes: Optional[int] = Field(default=None, description="Last known available space in bytes for the mounted drive")
     filesystem_type: Optional[str] = Field(default=None, description="Detected filesystem label (e.g. ext4, exfat)")
     current_state: DriveState = Field(..., description="Current drive state (DISCONNECTED, AVAILABLE, IN_USE)")
     is_mounted: bool = Field(default=False, description="Whether the drive is still mounted on the host")
