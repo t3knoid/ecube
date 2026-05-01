@@ -85,7 +85,8 @@ class TestBrowseHappyPath:
 
         _make_drive_with_mount(db, mount_point)
 
-        with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]):
+        with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]), \
+             patch("app.services.browse_service.is_active_mount_point", return_value=True):
             response = client.get(f"/browse?path={mount_point}")
 
         assert response.status_code == 200
@@ -201,6 +202,25 @@ class TestBrowseSecurity:
         """Requesting a path that is not a registered mount root returns 403."""
         response = client.get("/browse?path=/etc")
         assert response.status_code == 403
+
+    def test_stale_usb_mount_path_returns_403(self, client, db, tmp_path):
+        """A USB drive path that is no longer actively mounted is rejected."""
+        mount_point = str(tmp_path)
+        (tmp_path / "stale.txt").write_text("stale")
+        _make_drive_with_mount(db, mount_point)
+
+        with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]), \
+             patch("app.services.browse_service.is_active_mount_point", return_value=False):
+            response = client.get(f"/browse?path={mount_point}")
+
+        assert response.status_code == 403
+        assert "no longer actively mounted" in response.json()["message"].lower()
+
+        from app.models.audit import AuditLog
+
+        entry = db.query(AuditLog).filter(AuditLog.action == "BROWSE_DENIED").order_by(AuditLog.id.desc()).first()
+        assert entry is not None
+        assert "no longer actively mounted" in entry.details["reason"].lower()
 
     def test_path_traversal_via_subdir_returns_400(self, client, db, tmp_path):
         """Subdir containing ../ that resolves outside the mount root returns 400."""
