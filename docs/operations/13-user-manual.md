@@ -322,6 +322,7 @@ The `Drives` page shows detected USB drives and their current state.
 Typical drive fields include:
 
 - Device (port-based identifier such as `2-1`)
+- Project when the drive has a related job association
 - Capacity
 - Related job ID when the drive is currently tied to a job
 - Current state
