@@ -885,6 +885,13 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
 }
 
+:deep(.data-table th),
+:deep(.data-table th > span),
+:deep(.data-table th .sort-button),
+:deep(.data-table th .sort-button > span) {
+  font-weight: var(--font-weight-bold);
+}
+
 .row-actions {
   display: flex;
   flex-wrap: wrap;
