@@ -854,11 +854,6 @@ def _persist_startup_analysis_cache(
     total_bytes = 0
     revision = int(job.startup_analysis_revision or 0) + 1
 
-    # Reuse the canonical scan helper first so copy-job startup analysis and
-    # direct scan callers observe the same source-disappearance and permission
-    # failures.
-    scan_source_files(job.source_path)
-
     job.startup_analysis_revision = revision
     job.startup_analysis_cache_present = False
     job.startup_analysis_entries = None
