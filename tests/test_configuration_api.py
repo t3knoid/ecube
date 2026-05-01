@@ -110,6 +110,10 @@ class TestConfigurationSchemaValidation:
         with pytest.raises(ValidationError):
             ConfigurationUpdateRequest(startup_analysis_batch_size=0)
 
+    def test_update_rejects_startup_analysis_batch_size_above_maximum(self):
+        with pytest.raises(ValidationError):
+            ConfigurationUpdateRequest(startup_analysis_batch_size=5001)
+
 
 class TestConfigurationEndpoints:
     def test_get_configuration_admin_allowed(self, admin_client):
@@ -179,6 +183,13 @@ class TestConfigurationEndpoints:
     def test_get_configuration_non_admin_forbidden(self, client):
         resp = client.get("/admin/configuration")
         assert resp.status_code == 403
+
+    def test_update_configuration_rejects_startup_analysis_batch_size_above_maximum(self, admin_client):
+        resp = admin_client.put(
+            "/admin/configuration",
+            json={"startup_analysis_batch_size": 5001},
+        )
+        assert resp.status_code == 422, resp.json()
 
     @patch("app.services.configuration_service.database_service._write_env_settings")
     @patch("app.services.configuration_service.configure_logging")
