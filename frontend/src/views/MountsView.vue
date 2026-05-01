@@ -900,6 +900,13 @@ onBeforeUnmount(() => {
   gap: var(--space-sm);
 }
 
+:deep(.data-table th),
+:deep(.data-table th > span),
+:deep(.data-table th .sort-button),
+:deep(.data-table th .sort-button > span) {
+  font-weight: var(--font-weight-bold);
+}
+
 .mount-status-icon {
   display: inline-flex;
   align-items: center;
