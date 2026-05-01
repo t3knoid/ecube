@@ -582,6 +582,10 @@
         "label": "DB Pool Recycle Seconds",
         "help": "Changes to this value are applied after service restart."
       },
+      "startup_analysis_batch_size": {
+        "label": "Startup Analysis Batch Size",
+        "help": "Maximum number of startup-analysis rows processed per batch while scanning, persisting, and validating source trees. Allowed range: 1 to 5000. Lower values reduce peak memory usage but increase database round trips."
+      },
       "copy_job_timeout": {
         "label": "Per-file Copy Timeout (seconds)",
         "help": "Maximum time allowed for one file copy/checksum attempt. Set to 0 to disable timeout enforcement."
