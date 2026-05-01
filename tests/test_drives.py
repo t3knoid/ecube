@@ -1006,7 +1006,7 @@ def test_prepare_eject_audits_incomplete_files_warning(manager_client, db):
         project_id="PROJ-001",
         evidence_number="EV-INCOMPLETE",
         source_path="/data",
-        status=JobStatus.RUNNING,
+        status=JobStatus.COMPLETED,
         file_count=2,
     )
     db.add(job)
@@ -1054,10 +1054,20 @@ def test_prepare_eject_blocks_when_incomplete_precheck_fails(manager_client, db)
         filesystem_path="/dev/sdb",
     )
     db.add(drive)
+
+    job = ExportJob(
+        project_id="PROJ-001",
+        evidence_number="EV-INCOMPLETE-PRECHECK",
+        source_path="/data",
+        status=JobStatus.COMPLETED,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
     db.commit()
 
     provider = _fake_eject()
-    with patch("app.services.drive_service.DriveAssignment", new=object()):
+    with patch("app.services.drive_service.ExportFile", new=object()):
         with patch("app.routers.drives.get_drive_eject", return_value=provider):
             response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
 
