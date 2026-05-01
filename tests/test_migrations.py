@@ -45,6 +45,13 @@ def migrated_engine(sqlite_db_path):
     engine.dispose()
 
 
+def _index_columns_by_name(inspector, table_name):
+    return {
+        index["name"]: tuple(index.get("column_names") or ())
+        for index in inspector.get_indexes(table_name)
+    }
+
+
 def test_upgrade_head_on_sqlite(migrated_engine):
     """upgrade() must run to HEAD without errors on SQLite and create all tables."""
     inspector = inspect(migrated_engine)
@@ -163,9 +170,19 @@ def test_audit_log_has_project_and_drive_columns_and_indexes(migrated_engine):
     assert "project_id" in columns
     assert "drive_id" in columns
 
-    index_names = {idx["name"] for idx in inspector.get_indexes("audit_logs")}
-    assert "ix_audit_logs_project_timestamp" in index_names
-    assert "ix_audit_logs_drive_timestamp" in index_names
+    indexes = _index_columns_by_name(inspector, "audit_logs")
+    assert indexes["ix_audit_logs_timestamp_id"] == ("timestamp", "id")
+    assert indexes["ix_audit_logs_project_timestamp_id"] == ("project_id", "timestamp", "id")
+    assert indexes["ix_audit_logs_job_timestamp_id"] == ("job_id", "timestamp", "id")
+    assert indexes["ix_audit_logs_drive_timestamp_id"] == ("drive_id", "timestamp", "id")
+    assert indexes["ix_audit_logs_action_drive_project_timestamp_id"] == (
+        "action",
+        "drive_id",
+        "project_id",
+        "timestamp",
+        "id",
+    )
+    assert "ix_audit_logs_action_timestamp" not in indexes
 
 
 def test_export_jobs_project_id_references_projects(migrated_engine):
@@ -199,9 +216,38 @@ def test_export_files_project_id_references_projects(migrated_engine):
         for fk in export_file_fks
     )
 
-    index_names = {idx["name"] for idx in inspector.get_indexes("export_files")}
-    assert "ix_export_files_project_id" in index_names
-    assert "ix_export_files_project_status" in index_names
+    indexes = _index_columns_by_name(inspector, "export_files")
+    assert indexes["ix_export_files_project_id"] == ("project_id",)
+    assert indexes["ix_export_files_project_status"] == ("project_id", "status")
+    assert indexes["ix_export_files_job_id"] == ("job_id",)
+    assert indexes["ix_export_files_job_status"] == ("job_id", "status")
+    assert indexes["ix_export_files_job_id_id"] == ("job_id", "id")
+
+
+def test_release_hot_path_indexes_are_present(migrated_engine):
+    inspector = inspect(migrated_engine)
+
+    export_job_indexes = _index_columns_by_name(inspector, "export_jobs")
+    assert export_job_indexes["ix_export_jobs_project_id"] == ("project_id",)
+    assert export_job_indexes["ix_export_jobs_status_created_id"] == ("status", "created_at", "id")
+    assert export_job_indexes["ix_export_jobs_created_id"] == ("created_at", "id")
+
+    drive_assignment_indexes = _index_columns_by_name(inspector, "drive_assignments")
+    assert drive_assignment_indexes["ix_drive_assignments_job_released_assigned_id"] == (
+        "job_id",
+        "released_at",
+        "assigned_at",
+        "id",
+    )
+    assert drive_assignment_indexes["ix_drive_assignments_drive_released_assigned_id"] == (
+        "drive_id",
+        "released_at",
+        "assigned_at",
+        "id",
+    )
+
+    manifest_indexes = _index_columns_by_name(inspector, "manifests")
+    assert manifest_indexes["ix_manifests_job_created_id"] == ("job_id", "created_at", "id")
 
 
 def test_upgrade_head_backfills_projects_from_legacy_export_jobs(sqlite_db_path):
