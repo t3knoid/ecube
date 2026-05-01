@@ -721,8 +721,8 @@ All job endpoints that return a single job use the `ExportJobSchema` response, w
 |-------|------|-------------|
 | `id` | integer | Unique drive identifier |
 | `port_system_path` | string or null | Port-based USB identifier used as the UI `Device` value |
-| `device_identifier` | string | Stable hardware identifier |
-| `serial_number` | string or null | USB serial number when available |
+| `device_identifier` | string | Stable hardware identifier built from available USB metadata such as vendor ID, product ID, USB serial, optional disk serial, and bus path |
+| `serial_number` | string or null | USB serial number when available, derived from the stable identifier for composite-key rows |
 | `filesystem_path` | string or null | OS block device node (e.g. `/dev/sdb`) |
 | `capacity_bytes` | integer or null | Total storage capacity in bytes |
 | `available_bytes` | integer or null | Last known available space in bytes for the mounted drive |
@@ -757,7 +757,7 @@ All job endpoints that return a single job use the `ExportJobSchema` response, w
   "drive": {
     "id": 3,
         "port_system_path": "2-1",
-    "device_identifier": "usb-Generic_Flash_Disk_12345-0:0",
+    "device_identifier": "usb|vid=0781|pid=5583|serial=4C530000220226223012|bus=2-1",
         "serial_number": "4C530000220226223012",
     "filesystem_path": "/dev/sdb1",
     "capacity_bytes": 64023257088,
