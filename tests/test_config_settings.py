@@ -155,7 +155,7 @@ class TestSettingsDefaults:
         assert s.startup_analysis_batch_size == 500
 
     def test_startup_analysis_batch_size_rejects_values_above_maximum(self):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValidationError):
             Settings(database_url="sqlite://", startup_analysis_batch_size=5001)
 
     def test_oidc_allowed_algorithms_default(self):
