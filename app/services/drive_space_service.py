@@ -22,6 +22,12 @@ _pending_lock = threading.Lock()
 _MAX_WORKERS = 2
 
 
+def _uses_sqlite_bind() -> bool:
+    bind = getattr(SessionLocal, "kw", {}).get("bind")
+    dialect = getattr(bind, "dialect", None)
+    return getattr(dialect, "name", None) == "sqlite"
+
+
 def _get_executor() -> ThreadPoolExecutor:
     global _executor
     if _executor is None:
@@ -55,6 +61,10 @@ def request_available_space_refresh(drive_id: Optional[int], *, probe: Optional[
         if drive_id in _pending_ids:
             return
         _pending_ids.add(drive_id)
+
+    if _uses_sqlite_bind():
+        _refresh_available_space_sync(drive_id, probe)
+        return
 
     try:
         _get_executor().submit(_refresh_available_space_sync, drive_id, probe)
