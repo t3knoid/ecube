@@ -334,6 +334,27 @@ describe('DrivesView rescan and filter loading', () => {
     expect(linkedCells.map((node) => node.text())).toEqual(['4'])
   })
 
+  it('uses the same project-level job fallback as Drive Detail when no drive-specific job exists', async () => {
+    mocks.getDrives.mockResolvedValue([
+      buildDrive({ id: 7, current_project_id: 'PROJ-007', display_device_label: 'Drive 7 - Port 7' }),
+    ])
+    mocks.listAllJobs.mockResolvedValue([
+      { id: 44, project_id: 'PROJ-007', evidence_number: 'EV-044', drive: { id: 8 } },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const linkedCells = wrapper.findAll('.cell-link')
+    expect(linkedCells).toHaveLength(1)
+    expect(linkedCells[0].text()).toBe('44')
+
+    await linkedCells[0].trigger('click')
+    await flushPromises()
+
+    expect(mocks.push).toHaveBeenLastCalledWith({ name: 'job-detail', params: { id: 44 } })
+  })
+
   it('does not show a stale job link for a formatted drive', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ id: 7, current_project_id: null })])
     mocks.listAllJobs.mockResolvedValue([
