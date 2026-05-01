@@ -256,6 +256,9 @@ class Settings(BaseSettings):
     # Copy engine tuning
     # ---------------------------------------------------------------------------
 
+    #: Batch size for startup-analysis discovery, persistence, and validation.
+    startup_analysis_batch_size: int = Field(default=500, ge=1)
+
     #: Chunk size in bytes for file copy and checksum computation.
     copy_chunk_size_bytes: int = 1_048_576
 

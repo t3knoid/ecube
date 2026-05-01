@@ -150,6 +150,10 @@ class TestSettingsDefaults:
         s = Settings(database_url="sqlite://")
         assert s.db_pool_recycle_seconds == -1
 
+    def test_startup_analysis_batch_size_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.startup_analysis_batch_size == 500
+
     def test_oidc_allowed_algorithms_default(self):
         s = Settings(database_url="sqlite://")
         assert s.oidc_allowed_algorithms == ["RS256", "RS384", "RS512", "ES256", "ES384", "ES512"]
