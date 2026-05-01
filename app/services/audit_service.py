@@ -22,6 +22,7 @@ from app.schemas.audit import (
     ManifestSummarySchema,
 )
 from app.services.callback_service import deliver_callback
+from app.utils.drive_identity import device_identifier_matches
 
 logger = logging.getLogger(__name__)
 
@@ -521,6 +522,22 @@ def _resolve_coc_targets(
                 status_code=409,
                 detail="drive_sn resolves to multiple drives; provide drive_id to select unambiguously",
             )
+        if drive is None:
+            serial_matches = [
+                candidate
+                for candidate in db.query(UsbDrive).all()
+                if device_identifier_matches(
+                    candidate.device_identifier,
+                    drive_sn,
+                    port_system_path=candidate.port_system_path,
+                )
+            ]
+            if len(serial_matches) > 1:
+                raise HTTPException(
+                    status_code=409,
+                    detail="drive_sn resolves to multiple drives; provide drive_id to select unambiguously",
+                )
+            drive = serial_matches[0] if serial_matches else None
         if drive is None:
             raise HTTPException(status_code=404, detail="No drive found for provided drive_sn")
         if project_id and drive.current_project_id and drive.current_project_id != project_id:

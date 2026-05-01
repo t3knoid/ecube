@@ -8,6 +8,7 @@ from app.models.hardware import UsbDrive, DriveState, UsbHub, UsbPort
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.services import drive_service
+from app.utils.drive_identity import build_persistent_device_identifier
 
 
 def _fake_eject(flush_ok=True, unmount_ok=True,
@@ -95,7 +96,12 @@ def test_list_drives_exposes_safe_usb_metadata_and_readable_label(client, db):
     db.flush()
 
     drive = UsbDrive(
-        device_identifier="SER-7777",
+        device_identifier=build_persistent_device_identifier(
+            "0951",
+            "1666",
+            "SER-7777",
+            "9-7",
+        ),
         manufacturer="Kingston",
         product_name="DataTraveler",
         port_id=port.id,
@@ -114,6 +120,7 @@ def test_list_drives_exposes_safe_usb_metadata_and_readable_label(client, db):
     assert match["port_number"] == 7
     assert match["speed"] == "5000"
     assert match["display_device_label"] == "Kingston DataTraveler - Port 7 (30GB)"
+    assert match["serial_number"] == "SER-7777"
 
 
 def test_list_drives_filter_by_project(client, db):
