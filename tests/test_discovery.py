@@ -18,7 +18,11 @@ from app.infrastructure.usb_discovery import (
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive, UsbHub, UsbPort
 from app.services.discovery_service import run_discovery_sync
-from app.utils.drive_identity import build_readable_device_label
+from app.utils.drive_identity import (
+    build_persistent_device_identifier,
+    build_readable_device_label,
+    extract_usb_serial_number,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -205,6 +209,60 @@ def test_build_readable_device_label_appends_scaled_capacity_suffix():
         )
         == "Archive Drive - Port 3 (2TB)"
     )
+
+
+def test_legacy_serial_identifier_is_upgraded_to_composite_identifier(db):
+    legacy = UsbDrive(device_identifier="SN-ABC123", current_state=DriveState.DISCONNECTED)
+    db.add(legacy)
+    db.commit()
+
+    composite_identifier = build_persistent_device_identifier(
+        "0781",
+        "5583",
+        "SN-ABC123",
+        "1-1",
+    )
+    topology = DiscoveredTopology(
+        hubs=[DiscoveredHub(system_identifier="usb1", name="Test Hub", vendor_id="1d6b", product_id="0002")],
+        ports=[DiscoveredPort(
+            hub_system_identifier="usb1",
+            port_number=1,
+            system_path="1-1",
+            vendor_id="0781",
+            product_id="5583",
+            speed="5000",
+        )],
+        drives=[DiscoveredDrive(
+            device_identifier=composite_identifier,
+            port_system_path="1-1",
+            filesystem_path="/dev/sdb",
+            capacity_bytes=64_000_000_000,
+            manufacturer="SanDisk",
+            product_name="Ultra",
+            speed="5000",
+        )],
+    )
+
+    summary = run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+
+    assert summary["drives_inserted"] == 0
+    assert summary["drives_updated"] == 1
+    assert db.query(UsbDrive).count() == 1
+
+    drive = db.query(UsbDrive).one()
+    assert drive.device_identifier == composite_identifier
+    assert drive.serial_number == "SN-ABC123"
+
+
+def test_extract_usb_serial_number_from_composite_identifier():
+    identifier = build_persistent_device_identifier(
+        "090c",
+        "1000",
+        "0414150000001328",
+        "2-2",
+    )
+
+    assert extract_usb_serial_number(identifier, port_system_path="2-2") == "0414150000001328"
 
 
 def test_sync_does_not_duplicate_drive_discovered_audit_for_unchanged_drive(db):

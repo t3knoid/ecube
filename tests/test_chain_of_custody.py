@@ -4,6 +4,7 @@ from typing import cast
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
 from app.models.jobs import DriveAssignment, ExportJob, JobStatus, Manifest
+from app.utils.drive_identity import build_persistent_device_identifier
 
 
 def _seed_drive(
@@ -665,6 +666,28 @@ class TestChainOfCustodyHandoff:
             params={"drive_sn": "COC-HANDOFF-SN"},
         )
         assert response.status_code == 200
+
+    def test_drive_sn_raw_serial_matches_composite_identifier(self, auditor_client, db):
+        drive = _seed_drive(
+            db,
+            device_identifier=build_persistent_device_identifier(
+                "090c",
+                "1000",
+                "SER-COMPOSITE-1",
+                "2-2",
+            ),
+            project_id="CASE-COMPOSITE",
+            state=DriveState.AVAILABLE,
+        )
+
+        response = auditor_client.get(
+            "/audit/chain-of-custody",
+            params={"drive_sn": "SER-COMPOSITE-1", "project_id": "CASE-COMPOSITE"},
+        )
+
+        assert response.status_code == 200
+        report_ids = [report["drive_id"] for report in response.json()["reports"]]
+        assert _as_int(drive.id) in report_ids
 
     def test_handoff_rejected_when_drive_has_no_project_binding(self, manager_client, db):
         """A handoff for a drive with no current_project_id and no caller-supplied
