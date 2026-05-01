@@ -1065,20 +1065,21 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 | 7 | Mount an `AVAILABLE` or `IN_USE` drive with a recognized filesystem | 200, `mount_path` is populated |
 | 8 | Mount a drive with `filesystem_type=unknown`, `unformatted`, or `NULL` | 409, `CONFLICT` — must have recognized filesystem |
 | 9 | Prepare-eject an `IN_USE` drive | 200, state → `AVAILABLE`, `mount_path` cleared |
-| 10 | Prepare-eject with incomplete active-assignment files (first attempt) | 409, `CONFLICT` with confirmation-required detail; drive remains `IN_USE` |
-| 11 | Confirmed prepare-eject with incomplete active-assignment files | Retry with `confirm_incomplete=true`; 200, state → `AVAILABLE`, `mount_path` cleared |
-| 12 | Audit events for incomplete-file prepare-eject flow | Execute rows 10 and 11, then query audit log | Audit includes `DRIVE_EJECT_CONFIRM_REQUIRED` for blocked first attempt and `DRIVE_EJECT_WITH_INCOMPLETE_FILES` for confirmed proceed attempt |
-| 13 | Prepare-eject an `AVAILABLE` drive | 409, `CONFLICT` |
-| 14 | Format-then-mount-initialize workflow: discover unformatted → format ext4 → mount → initialize | Each step succeeds; `mount_path` is populated before initialization and the drive transitions to `IN_USE` |
-| 15 | Attempt to format an `IN_USE` drive | 409, `CONFLICT` — must be `AVAILABLE` |
-| 16 | Open the Initialize dialog when no eligible mounted project exists | UI shows a helper message, disables the project selector, and blocks submission |
-| 17 | Open Initialize for an AVAILABLE, mounted drive that already has a project binding, then click Cancel | The dialog shows the mounted destination context and any valid prior project selection; after cancel, the drive state, project binding, and Initialize availability remain unchanged |
-| 18 | View drive detail after initialization | Drive Detail shows the safe device label, does not display a `Filesystem Path` row, and does not expose raw internal identifiers |
-| 19 | View the mounts list and browse controls | Raw remote and local mount paths are redacted in the table; browse remains enabled only for mounted shares |
-| 20 | Operate the Initialize and Add Mount dialogs with keyboard only | Focus enters the dialog, Tab stays trapped within it, Escape closes it, and focus returns to the triggering control |
-| 21 | Use `Browse` in the Add Mount dialog with many discovered shares | The share picker opens, supports vertical scrolling, and selecting a share fills the `Remote path` field |
-| 22 | Open Add Mount while demo mode is enabled | The share-discovery `Browse` control is hidden |
-| 23 | Trigger share browsing on a host missing `smbclient` or `showmount` | The dialog shows an actionable message telling the operator which host tool to install before retrying |
+| 10 | Prepare-eject with an assigned job in `RUNNING`, `PAUSING`, `PAUSED`, or `VERIFYING` | 409, `CONFLICT`; drive remains `IN_USE`; provider eject is not called |
+| 11 | Prepare-eject with incomplete active-assignment files (first attempt) | 409, `CONFLICT` with confirmation-required detail; drive remains `IN_USE` |
+| 12 | Confirmed prepare-eject with incomplete active-assignment files | Retry with `confirm_incomplete=true`; 200, state → `AVAILABLE`, `mount_path` cleared |
+| 13 | Audit events for incomplete-file prepare-eject flow | Execute rows 11 and 12, then query audit log | Audit includes `DRIVE_EJECT_CONFIRM_REQUIRED` for blocked first attempt and `DRIVE_EJECT_WITH_INCOMPLETE_FILES` for confirmed proceed attempt |
+| 14 | Prepare-eject an `AVAILABLE` drive | 409, `CONFLICT` |
+| 15 | Format-then-mount-initialize workflow: discover unformatted → format ext4 → mount → initialize | Each step succeeds; `mount_path` is populated before initialization and the drive transitions to `IN_USE` |
+| 16 | Attempt to format an `IN_USE` drive | 409, `CONFLICT` — must be `AVAILABLE` |
+| 17 | Open the Initialize dialog when no eligible mounted project exists | UI shows a helper message, disables the project selector, and blocks submission |
+| 18 | Open Initialize for an AVAILABLE, mounted drive that already has a project binding, then click Cancel | The dialog shows the mounted destination context and any valid prior project selection; after cancel, the drive state, project binding, and Initialize availability remain unchanged |
+| 19 | View drive detail after initialization | Drive Detail shows the safe device label, does not display a `Filesystem Path` row, and does not expose raw internal identifiers |
+| 20 | View the mounts list and browse controls | Raw remote and local mount paths are redacted in the table; browse remains enabled only for mounted shares |
+| 21 | Operate the Initialize and Add Mount dialogs with keyboard only | Focus enters the dialog, Tab stays trapped within it, Escape closes it, and focus returns to the triggering control |
+| 22 | Use `Browse` in the Add Mount dialog with many discovered shares | The share picker opens, supports vertical scrolling, and selecting a share fills the `Remote path` field |
+| 23 | Open Add Mount while demo mode is enabled | The share-discovery `Browse` control is hidden |
+| 24 | Trigger share browsing on a host missing `smbclient` or `showmount` | The dialog shows an actionable message telling the operator which host tool to install before retrying |
 
 ### 12.4.1 Filesystem Detection
 
