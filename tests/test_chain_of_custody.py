@@ -689,6 +689,39 @@ class TestChainOfCustodyHandoff:
         report_ids = [report["drive_id"] for report in response.json()["reports"]]
         assert _as_int(drive.id) in report_ids
 
+    def test_drive_sn_project_id_disambiguates_composite_identifier_matches(self, auditor_client, db):
+        selected_drive = _seed_drive(
+            db,
+            device_identifier=build_persistent_device_identifier(
+                "090c",
+                "1000",
+                "SER-DUPLICATE-1",
+                "2-2",
+            ),
+            project_id="CASE-ONE",
+            state=DriveState.AVAILABLE,
+        )
+        _seed_drive(
+            db,
+            device_identifier=build_persistent_device_identifier(
+                "090c",
+                "1000",
+                "SER-DUPLICATE-1",
+                "2-3",
+            ),
+            project_id="CASE-TWO",
+            state=DriveState.AVAILABLE,
+        )
+
+        response = auditor_client.get(
+            "/audit/chain-of-custody",
+            params={"drive_sn": "SER-DUPLICATE-1", "project_id": "CASE-ONE"},
+        )
+
+        assert response.status_code == 200
+        report_ids = [report["drive_id"] for report in response.json()["reports"]]
+        assert report_ids == [_as_int(selected_drive.id)]
+
     def test_handoff_rejected_when_drive_has_no_project_binding(self, manager_client, db):
         """A handoff for a drive with no current_project_id and no caller-supplied
         project_id must be rejected with 422; without a project context the
