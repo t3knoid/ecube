@@ -257,6 +257,9 @@
   },
   "mounts": {
     "title": "Mounts",
+    "detail": "Mount Detail",
+    "details": "Details",
+    "notFound": "Mount not found",
     "placeholder": "Mounts view will be implemented in a future phase.",
     "addDialogTitle": "Add Share",
     "editDialogTitle": "Edit Share",
