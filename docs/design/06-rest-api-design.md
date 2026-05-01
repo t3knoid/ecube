@@ -462,11 +462,13 @@ Optional query parameter: `confirm_incomplete` (boolean, default `false`).
 Performs the following steps in sequence:
 
 1. **Fast-fail validation:** Checks that drive is in `IN_USE` state before performing expensive OS operations
-2. Checks active drive assignments for incomplete files (`TIMEOUT` or `ERROR`)
+2. Checks for active unreleased drive assignments whose job has started and is not yet completed (`RUNNING`, `PAUSING`, `PAUSED`, or `VERIFYING`)
+    - If one exists, returns `409 Conflict` and does not eject
+3. Checks active drive assignments for incomplete files (`TIMEOUT` or `ERROR`)
     - If incomplete files exist and `confirm_incomplete=false`, returns `409 Conflict` with confirmation-required detail and does not eject
     - If incomplete files exist and `confirm_incomplete=true`, logs an elevated warning/audit event and continues
-3. Issues `sync(1)` to flush all pending filesystem writes to block devices
-4. Identifies and unmounts all partitions, volumes, and encrypted devices:
+4. Issues `sync(1)` to flush all pending filesystem writes to block devices
+5. Identifies and unmounts all partitions, volumes, and encrypted devices:
    - Discovers mount points via `/proc/mounts` parsing
    - Supports traditional partition naming: `sdb`, `sdb1`, `sdb2` (etc.)
    - Supports NVMe naming: `nvme0n1`, `nvme0n1p1`, `nvme0n1p2` (etc.)
