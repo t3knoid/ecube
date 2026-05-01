@@ -243,5 +243,8 @@ describe('MountDetailView', () => {
     expect(buttonTexts).toContain(i18n.global.t('mounts.browse'))
     expect(buttonTexts).not.toContain(i18n.global.t('common.actions.edit'))
     expect(buttonTexts).not.toContain(i18n.global.t('mounts.remove'))
+    expect(wrapper.text()).not.toContain('//server/share')
+    expect(wrapper.text()).not.toContain('/smb/project2')
+    expect(wrapper.text()).toContain(i18n.global.t('mounts.redactedValue'))
   })
 })
