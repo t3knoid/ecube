@@ -1037,17 +1037,17 @@ def _cached_startup_analysis_is_current(
         return False
 
     saw_root_directory = not source.is_dir()
-    offset = 0
+    last_directory_id: int | None = None
     while True:
-        directory_rows = startup_entry_repo.list_by_job(
+        directory_rows = startup_entry_repo.list_by_job_after_id(
             job.id,
             entry_type="directory",
+            after_id=last_directory_id,
             limit=STARTUP_ANALYSIS_BATCH_SIZE,
-            offset=offset,
         )
         if not directory_rows:
             break
-        offset += len(directory_rows)
+        last_directory_id = directory_rows[-1].id
         for directory_row in directory_rows:
             directory_path = source if directory_row.relative_path == "" else source / directory_row.relative_path
             try:

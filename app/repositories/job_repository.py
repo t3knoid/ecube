@@ -655,6 +655,27 @@ class StartupAnalysisEntryRepository:
             query = query.limit(limit)
         return query.all()
 
+    def list_by_job_after_id(
+        self,
+        job_id: int,
+        *,
+        entry_type: str | None = None,
+        after_id: int | None = None,
+        limit: int | None = None,
+    ) -> List[StartupAnalysisEntry]:
+        query = (
+            self.db.query(StartupAnalysisEntry)
+            .filter(StartupAnalysisEntry.job_id == job_id)
+            .order_by(StartupAnalysisEntry.id)
+        )
+        if entry_type is not None:
+            query = query.filter(StartupAnalysisEntry.entry_type == entry_type)
+        if after_id is not None:
+            query = query.filter(StartupAnalysisEntry.id > after_id)
+        if limit is not None:
+            query = query.limit(limit)
+        return query.all()
+
     def add_bulk(self, entries: List[StartupAnalysisEntry], *, commit: bool = True) -> None:
         if not entries:
             return
