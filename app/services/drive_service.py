@@ -12,7 +12,7 @@ from app.infrastructure.drive_format import DriveFormatter
 from app.infrastructure.drive_mount import DriveMountProvider
 from app.infrastructure import FilesystemDetector, validate_device_path
 from app.models.hardware import DriveState, UsbDrive
-from app.models.jobs import DriveAssignment, ExportFile, FileStatus
+from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
 from app.repositories.mount_repository import MountRepository
@@ -21,6 +21,14 @@ from app.utils.drive_identity import mask_serial_number
 from app.utils.sanitize import normalize_project_id, sanitize_error_message
 
 logger = logging.getLogger(__name__)
+
+
+PREPARE_EJECT_BLOCKING_JOB_STATUSES = (
+    JobStatus.RUNNING,
+    JobStatus.PAUSING,
+    JobStatus.PAUSED,
+    JobStatus.VERIFYING,
+)
 
 
 def _safe_drive_log_context(drive: UsbDrive, *, reason: Optional[str] = None) -> dict:
@@ -642,6 +650,34 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
         raise HTTPException(
             status_code=409,
             detail=f"Drive is not in IN_USE state; cannot prepare eject (current state: {initial_state.value})",
+        )
+
+    blocking_job = db.query(ExportJob).join(
+        DriveAssignment,
+        DriveAssignment.job_id == ExportJob.id,
+    ).filter(
+        DriveAssignment.drive_id == drive_id,
+        DriveAssignment.released_at.is_(None),
+        ExportJob.status.in_(PREPARE_EJECT_BLOCKING_JOB_STATUSES),
+    ).order_by(DriveAssignment.assigned_at.desc()).first()
+
+    if blocking_job:
+        logger.info(
+            "Prepare-eject blocked by started incomplete job",
+            extra={
+                "drive_id": drive_id,
+                "job_id": blocking_job.id,
+                "job_status": blocking_job.status.value,
+                "actor": actor,
+                "failure_class": "job_not_completed",
+            },
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Drive cannot be prepared for eject while assigned job {blocking_job.id} "
+                f"has started and is not yet completed (current status: {blocking_job.status.value})"
+            ),
         )
 
     # Check if the drive has any jobs with incomplete files (timeouts or errors).
