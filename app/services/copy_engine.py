@@ -6,15 +6,20 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, List, Optional, Protocol, Tuple
+from typing import Any, Callable, Iterator, List, Optional, Protocol, Tuple
 
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
-from app.models.jobs import ExportFile, FileStatus, JobStatus, StartupAnalysisStatus
+from app.models.jobs import ExportFile, FileStatus, JobStatus, StartupAnalysisEntry, StartupAnalysisStatus
 from app.repositories.audit_repository import AuditRepository
-from app.repositories.job_repository import DriveAssignmentRepository, FileRepository, JobRepository
+from app.repositories.job_repository import (
+    DriveAssignmentRepository,
+    FileRepository,
+    JobRepository,
+    StartupAnalysisEntryRepository,
+)
 from app.services.callback_service import deliver_callback
 from app.services.copy_worker_runtime import (
     register_active_copy_worker,
@@ -23,6 +28,10 @@ from app.services.copy_worker_runtime import (
 from app.utils.sanitize import describe_relative_paths, sanitize_error_message, validate_source_path
 
 logger = logging.getLogger(__name__)
+
+STARTUP_ANALYSIS_BATCH_SIZE = 500
+STARTUP_ANALYSIS_SAMPLE_LIMIT = 16
+COPY_PENDING_BATCH_MULTIPLIER = 4
 
 
 # ---------------------------------------------------------------------------
@@ -295,6 +304,12 @@ def _relative_path(f: Path, source: Path) -> Path:
     return f.relative_to(source) if source.is_dir() else Path(f.name)
 
 
+def _source_path_for_relative_path(source: Path, relative_path: str) -> Path:
+    if source.is_dir():
+        return source / Path(relative_path)
+    return source
+
+
 def _clear_startup_analysis_cache(job: Any) -> None:
     job.startup_analysis_status = StartupAnalysisStatus.NOT_ANALYZED
     job.startup_analysis_last_analyzed_at = None
@@ -304,10 +319,12 @@ def _clear_startup_analysis_cache(job: Any) -> None:
     job.startup_analysis_share_read_mbps = None
     job.startup_analysis_drive_write_mbps = None
     job.startup_analysis_estimated_duration_seconds = None
+    job.startup_analysis_cache_present = False
     job.startup_analysis_entries = None
 
 
 def _clear_startup_analysis_entries(job: Any) -> None:
+    job.startup_analysis_cache_present = False
     job.startup_analysis_entries = None
 
 
@@ -604,110 +621,113 @@ def _relative_directory_markers(source: Path, relative_paths: list[str]) -> dict
     return markers
 
 
-def _analyze_source_files(source: Path, files: list[Path]) -> tuple[dict[str, Path], dict[str, int], int, int, dict[str, int]]:
-    src_by_rel: dict[str, Path] = {}
-    size_by_rel: dict[str, int] = {}
+def _iter_source_tree(source_path: str) -> Iterator[tuple[str, Path]]:
+    source = Path(validate_source_path(source_path, usb_mount_base_path=settings.usb_mount_base_path))
+    try:
+        if not source.exists():
+            raise FileNotFoundError(source_path)
+        if source.is_file():
+            yield "file", source
+            return
+        if not source.is_dir():
+            raise FileNotFoundError(source_path)
+    except OSError as exc:
+        raise FileNotFoundError(source_path) from exc
 
-    for file_path in files:
-        rel = str(_relative_path(file_path, source))
-        size_bytes = file_path.stat().st_size if file_path.exists() else 0
-        src_by_rel[rel] = file_path
-        size_by_rel[rel] = size_bytes
+    scan_errors: list[OSError] = []
 
-    file_count = len(src_by_rel)
-    total_bytes = sum(size_by_rel.values())
-    directory_mtime_by_rel = _relative_directory_markers(source, list(src_by_rel.keys()))
-    return src_by_rel, size_by_rel, file_count, total_bytes, directory_mtime_by_rel
+    def _record_scan_error(exc: OSError) -> None:
+        scan_errors.append(exc)
+        logger.debug("Source scan entry became unavailable under %s: %s", source, exc)
 
+    for root, _dirs, filenames in os.walk(source, onerror=_record_scan_error):
+        root_path = Path(root)
+        yield "directory", root_path
+        for filename in filenames:
+            candidate = root_path / filename
+            try:
+                if candidate.is_file():
+                    yield "file", candidate
+            except OSError as exc:
+                _record_scan_error(exc)
 
-def _persist_startup_analysis_cache(job: Any, source: Path, files: list[Path]) -> tuple[dict[str, Path], dict[str, int], int, int]:
-    src_by_rel, size_by_rel, file_count, total_bytes, directory_mtime_by_rel = _analyze_source_files(source, files)
+    try:
+        source_still_exists = source.exists()
+    except OSError as exc:
+        _record_scan_error(exc)
+        source_still_exists = False
 
-    job.startup_analysis_file_count = file_count
-    job.startup_analysis_total_bytes = total_bytes
-    file_entries = [
-        {"relative_path": rel, "size_bytes": size_bytes}
-        for rel, size_bytes in size_by_rel.items()
-    ]
-    directory_entries = [
-        {
-            "entry_type": "directory",
-            "relative_path": rel_dir,
-            "mtime_ns": mtime_ns,
-        }
-        for rel_dir, mtime_ns in sorted(directory_mtime_by_rel.items())
-    ]
-    job.startup_analysis_entries = file_entries + directory_entries
-
-    return src_by_rel, size_by_rel, int(job.startup_analysis_file_count or 0), int(job.startup_analysis_total_bytes or 0)
+    if scan_errors:
+        if not source_still_exists:
+            raise FileNotFoundError(source_path) from scan_errors[0]
+        raise scan_errors[0]
 
 
-def _load_startup_analysis_cache(job: Any, source: Path) -> Optional[tuple[dict[str, Path], dict[str, int], int, int, dict[str, int]]]:
+def _load_legacy_startup_analysis_cache(
+    job: Any,
+) -> Optional[tuple[list[dict[str, int | str]], list[dict[str, int | str]], int, int]]:
     entries = job.startup_analysis_entries
     file_count = job.startup_analysis_file_count
     total_bytes = job.startup_analysis_total_bytes
 
-    if entries is None or file_count is None or total_bytes is None:
-        return None
-    if not isinstance(entries, list):
+    if entries is None or file_count is None or total_bytes is None or not isinstance(entries, list):
         return None
 
-    src_by_rel: dict[str, Path] = {}
-    size_by_rel: dict[str, int] = {}
-    directory_mtime_by_rel: dict[str, int] = {}
+    file_entries: list[dict[str, int | str]] = []
+    directory_entries: list[dict[str, int | str]] = []
     computed_total_bytes = 0
 
     for entry in entries:
         if not isinstance(entry, dict):
             return None
         entry_type = entry.get("entry_type", "file")
-        rel = entry.get("relative_path")
-        if not isinstance(rel, str) or not rel:
-            if entry_type == "directory" and rel == "":
-                pass
-            else:
-                return None
-        rel_path = Path(rel)
+        relative_path = entry.get("relative_path")
+        if not isinstance(relative_path, str):
+            return None
+        rel_path = Path(relative_path)
         if rel_path.is_absolute() or ".." in rel_path.parts:
             return None
         if entry_type == "directory":
             mtime_ns = entry.get("mtime_ns")
             if not isinstance(mtime_ns, int) or mtime_ns < 0:
                 return None
-            directory_mtime_by_rel[rel] = mtime_ns
+            directory_entries.append(
+                {
+                    "entry_type": "directory",
+                    "relative_path": relative_path,
+                    "mtime_ns": mtime_ns,
+                }
+            )
             continue
-
+        if not relative_path:
+            return None
         size_bytes = entry.get("size_bytes")
         if not isinstance(size_bytes, int) or size_bytes < 0:
             return None
-        src_by_rel[rel] = source / rel_path
-        size_by_rel[rel] = size_bytes
+        file_entries.append({"relative_path": relative_path, "size_bytes": size_bytes})
         computed_total_bytes += size_bytes
 
-    if len(src_by_rel) != int(file_count):
+    if len(file_entries) != int(file_count):
         return None
     if computed_total_bytes != int(total_bytes):
         return None
 
-    return src_by_rel, size_by_rel, int(file_count), int(total_bytes), directory_mtime_by_rel
+    return file_entries, directory_entries, int(file_count), int(total_bytes)
 
 
-def _cached_startup_analysis_is_current(
-    cached: tuple[dict[str, Path], dict[str, int], int, int, dict[str, int]],
+def _legacy_startup_analysis_cache_is_current(
     source: Path,
+    legacy_cache: tuple[list[dict[str, int | str]], list[dict[str, int | str]], int, int],
 ) -> bool:
-    src_by_rel, size_by_rel, file_count, total_bytes, directory_mtime_by_rel = cached
-
-    if source.is_dir() and "" not in directory_mtime_by_rel:
+    file_entries, directory_entries, file_count, total_bytes = legacy_cache
+    if len(file_entries) != file_count:
         return False
 
-    if len(src_by_rel) != file_count:
-        return False
-    if sum(size_by_rel.values()) != total_bytes:
-        return False
-
-    for rel, expected_size in size_by_rel.items():
-        file_path = src_by_rel[rel]
+    computed_total_bytes = 0
+    for entry in file_entries:
+        relative_path = str(entry["relative_path"])
+        expected_size = int(entry["size_bytes"])
+        file_path = _source_path_for_relative_path(source, relative_path)
         try:
             if not file_path.is_file():
                 return False
@@ -715,18 +735,294 @@ def _cached_startup_analysis_is_current(
                 return False
         except OSError:
             return False
+        computed_total_bytes += expected_size
 
-    for rel_dir, expected_mtime_ns in directory_mtime_by_rel.items():
-        directory_path = source if rel_dir == "" else source / rel_dir
+    if computed_total_bytes != total_bytes:
+        return False
+
+    saw_root_directory = not source.is_dir()
+    for entry in directory_entries:
+        relative_path = str(entry["relative_path"])
+        directory_path = source if relative_path == "" else source / relative_path
         try:
             if not directory_path.is_dir():
                 return False
-            if directory_path.stat().st_mtime_ns != expected_mtime_ns:
+            if directory_path.stat().st_mtime_ns != int(entry["mtime_ns"]):
                 return False
         except OSError:
             return False
+        if relative_path == "":
+            saw_root_directory = True
 
-    return True
+    return saw_root_directory
+
+
+def _persist_startup_analysis_file_batch(
+    db: Session,
+    job: Any,
+    file_batch: list[tuple[str, int]],
+    *,
+    revision: int,
+) -> None:
+    if not file_batch:
+        return
+
+    existing_rows = (
+        db.query(ExportFile)
+        .filter(
+            ExportFile.job_id == job.id,
+            ExportFile.relative_path.in_([relative_path for relative_path, _size_bytes in file_batch]),
+        )
+        .all()
+    )
+    existing_by_rel = {row.relative_path: row for row in existing_rows}
+    new_rows: list[ExportFile] = []
+
+    for relative_path, size_bytes in file_batch:
+        existing_row = existing_by_rel.get(relative_path)
+        if existing_row is None:
+            new_rows.append(
+                ExportFile(
+                    job_id=job.id,
+                    project_id=job.project_id,
+                    relative_path=relative_path,
+                    size_bytes=size_bytes,
+                    status=FileStatus.PENDING,
+                    retry_attempts=0,
+                    startup_analysis_revision=revision,
+                )
+            )
+            continue
+
+        existing_row.size_bytes = size_bytes
+        existing_row.startup_analysis_revision = revision
+        if existing_row.status != FileStatus.DONE:
+            existing_row.status = FileStatus.PENDING
+            existing_row.retry_attempts = 0
+            existing_row.error_message = None
+
+    if new_rows:
+        db.add_all(new_rows)
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+
+def _persist_startup_analysis_entry_batch(
+    startup_entry_repo: StartupAnalysisEntryRepository,
+    job_id: int,
+    entry_type: str,
+    entries: list[tuple[str, int]],
+) -> None:
+    startup_entry_repo.add_bulk(
+        [
+            StartupAnalysisEntry(
+                job_id=job_id,
+                entry_type=entry_type,
+                relative_path=relative_path,
+                size_bytes=value if entry_type == "file" else None,
+                mtime_ns=value if entry_type == "directory" else None,
+            )
+            for relative_path, value in entries
+        ]
+    )
+
+
+def _persist_startup_analysis_cache(
+    db: Session,
+    job: Any,
+    source: Path,
+    startup_entry_repo: StartupAnalysisEntryRepository,
+) -> tuple[int, int, list[Path]]:
+    file_batch: list[tuple[str, int]] = []
+    directory_batch: list[tuple[str, int]] = []
+    sample_files: list[Path] = []
+    file_count = 0
+    total_bytes = 0
+    revision = int(job.startup_analysis_revision or 0) + 1
+
+    job.startup_analysis_revision = revision
+    job.startup_analysis_cache_present = False
+    job.startup_analysis_entries = None
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    startup_entry_repo.delete_by_job(job.id)
+
+    for entry_type, path in _iter_source_tree(job.source_path):
+        if entry_type == "directory":
+            relative_directory = "" if path == source else str(_relative_path(path, source))
+            directory_batch.append((relative_directory, path.stat().st_mtime_ns))
+            if len(directory_batch) >= STARTUP_ANALYSIS_BATCH_SIZE:
+                _persist_startup_analysis_entry_batch(startup_entry_repo, job.id, "directory", directory_batch)
+                directory_batch = []
+            continue
+
+        relative_path = str(_relative_path(path, source))
+        size_bytes = path.stat().st_size if path.exists() else 0
+        file_batch.append((relative_path, size_bytes))
+        if len(sample_files) < STARTUP_ANALYSIS_SAMPLE_LIMIT:
+            sample_files.append(path)
+        file_count += 1
+        total_bytes += size_bytes
+
+        if len(file_batch) >= STARTUP_ANALYSIS_BATCH_SIZE:
+            _persist_startup_analysis_file_batch(db, job, file_batch, revision=revision)
+            _persist_startup_analysis_entry_batch(startup_entry_repo, job.id, "file", file_batch)
+            file_batch = []
+
+    if file_batch:
+        _persist_startup_analysis_file_batch(db, job, file_batch, revision=revision)
+        _persist_startup_analysis_entry_batch(startup_entry_repo, job.id, "file", file_batch)
+    if directory_batch:
+        _persist_startup_analysis_entry_batch(startup_entry_repo, job.id, "directory", directory_batch)
+
+    db.query(ExportFile).filter(
+        ExportFile.job_id == job.id,
+        ExportFile.startup_analysis_revision != revision,
+    ).delete(synchronize_session=False)
+
+    job.startup_analysis_file_count = file_count
+    job.startup_analysis_total_bytes = total_bytes
+    job.startup_analysis_cache_present = True
+    job.startup_analysis_entries = None
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return file_count, total_bytes, sample_files
+
+
+def _persist_legacy_startup_analysis_cache(
+    db: Session,
+    job: Any,
+    source: Path,
+    startup_entry_repo: StartupAnalysisEntryRepository,
+    legacy_cache: tuple[list[dict[str, int | str]], list[dict[str, int | str]], int, int],
+) -> list[Path]:
+    file_entries, directory_entries, file_count, total_bytes = legacy_cache
+    revision = int(job.startup_analysis_revision or 0) + 1
+    job.startup_analysis_revision = revision
+    job.startup_analysis_cache_present = False
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    startup_entry_repo.delete_by_job(job.id)
+
+    sample_files: list[Path] = []
+    for start in range(0, len(file_entries), STARTUP_ANALYSIS_BATCH_SIZE):
+        batch_entries = file_entries[start:start + STARTUP_ANALYSIS_BATCH_SIZE]
+        file_batch = [
+            (str(entry["relative_path"]), int(entry["size_bytes"]))
+            for entry in batch_entries
+        ]
+        _persist_startup_analysis_file_batch(db, job, file_batch, revision=revision)
+        _persist_startup_analysis_entry_batch(startup_entry_repo, job.id, "file", file_batch)
+        for relative_path, _size_bytes in file_batch:
+            if len(sample_files) >= STARTUP_ANALYSIS_SAMPLE_LIMIT:
+                break
+            sample_files.append(_source_path_for_relative_path(source, relative_path))
+
+    for start in range(0, len(directory_entries), STARTUP_ANALYSIS_BATCH_SIZE):
+        batch_entries = directory_entries[start:start + STARTUP_ANALYSIS_BATCH_SIZE]
+        directory_batch = [
+            (str(entry["relative_path"]), int(entry["mtime_ns"]))
+            for entry in batch_entries
+        ]
+        _persist_startup_analysis_entry_batch(startup_entry_repo, job.id, "directory", directory_batch)
+
+    db.query(ExportFile).filter(
+        ExportFile.job_id == job.id,
+        ExportFile.startup_analysis_revision != revision,
+    ).delete(synchronize_session=False)
+
+    job.startup_analysis_file_count = file_count
+    job.startup_analysis_total_bytes = total_bytes
+    job.startup_analysis_cache_present = True
+    job.startup_analysis_entries = None
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return sample_files
+
+
+def _cached_startup_analysis_is_current(
+    job: Any,
+    source: Path,
+    file_repo: FileRepository,
+    startup_entry_repo: StartupAnalysisEntryRepository,
+) -> bool:
+    file_count = int(job.startup_analysis_file_count or 0)
+    total_bytes = int(job.startup_analysis_total_bytes or 0)
+    revision = int(job.startup_analysis_revision or 0)
+    if file_count <= 0 or total_bytes < 0 or revision <= 0:
+        return False
+
+    validated_file_count = 0
+    validated_total_bytes = 0
+    last_file_id: int | None = None
+    while True:
+        file_rows = file_repo.list_by_job_after_id(job.id, after_id=last_file_id, limit=STARTUP_ANALYSIS_BATCH_SIZE)
+        if not file_rows:
+            break
+        last_file_id = file_rows[-1].id
+        for file_row in file_rows:
+            if int(file_row.startup_analysis_revision or 0) != revision:
+                return False
+            file_path = _source_path_for_relative_path(source, file_row.relative_path)
+            expected_size = int(file_row.size_bytes or 0)
+            try:
+                if not file_path.is_file():
+                    return False
+                if file_path.stat().st_size != expected_size:
+                    return False
+            except OSError:
+                return False
+            validated_file_count += 1
+            validated_total_bytes += expected_size
+
+    if validated_file_count != file_count or validated_total_bytes != total_bytes:
+        return False
+
+    saw_root_directory = not source.is_dir()
+    offset = 0
+    while True:
+        directory_rows = startup_entry_repo.list_by_job(
+            job.id,
+            entry_type="directory",
+            limit=STARTUP_ANALYSIS_BATCH_SIZE,
+            offset=offset,
+        )
+        if not directory_rows:
+            break
+        offset += len(directory_rows)
+        for directory_row in directory_rows:
+            directory_path = source if directory_row.relative_path == "" else source / directory_row.relative_path
+            try:
+                if not directory_path.is_dir():
+                    return False
+                if directory_path.stat().st_mtime_ns != int(directory_row.mtime_ns or 0):
+                    return False
+            except OSError:
+                return False
+            if directory_row.relative_path == "":
+                saw_root_directory = True
+
+    return saw_root_directory
 
 
 def prepare_job_startup_analysis(
@@ -741,37 +1037,56 @@ def prepare_job_startup_analysis(
         job_repo = JobRepository(db)
         file_repo = FileRepository(db)
         audit_repo = AuditRepository(db)
+        startup_entry_repo = StartupAnalysisEntryRepository(db)
 
         job = job_repo.get(job_id)
         if not job:
             raise FileNotFoundError(f"Job {job_id} not found")
 
         source = Path(job.source_path)
-        cached_startup_analysis = _load_startup_analysis_cache(job, source)
         reused_cached_analysis = False
+        sample_files: list[Path] = []
 
-        if cached_startup_analysis is None:
-            files = scan_source_files(job.source_path)
-            src_by_rel, size_by_rel, cached_file_count, cached_total_bytes = _persist_startup_analysis_cache(job, source, files)
-        elif _cached_startup_analysis_is_current(cached_startup_analysis, source):
+        if bool(job.startup_analysis_cache_present) and _cached_startup_analysis_is_current(job, source, file_repo, startup_entry_repo):
             reused_cached_analysis = True
-            src_by_rel, size_by_rel, cached_file_count, cached_total_bytes, _directory_mtime_by_rel = cached_startup_analysis
+            cached_file_count = int(job.startup_analysis_file_count or 0)
+            cached_total_bytes = int(job.startup_analysis_total_bytes or 0)
+            sample_rows = file_repo.list_by_job(job_id, limit=STARTUP_ANALYSIS_SAMPLE_LIMIT)
+            sample_files = [
+                _source_path_for_relative_path(source, file_row.relative_path)
+                for file_row in sample_rows
+            ]
         else:
-            job.startup_analysis_status = StartupAnalysisStatus.STALE
-            try:
-                job_repo.save(job)
-            except Exception:
-                logger.exception("DB commit failed while marking startup analysis stale", extra={"job_id": job_id})
-            files = scan_source_files(job.source_path)
-            logger.info(
-                "Refreshing stale startup analysis cache",
-                extra={
-                    "job_id": job_id,
-                    "cached_file_count": cached_startup_analysis[2],
-                    "current_file_count": len(files),
-                },
-            )
-            src_by_rel, size_by_rel, cached_file_count, cached_total_bytes = _persist_startup_analysis_cache(job, source, files)
+            legacy_cache = _load_legacy_startup_analysis_cache(job)
+            previous_file_count = int(job.startup_analysis_file_count or 0)
+            if job.startup_analysis_cached:
+                job.startup_analysis_status = StartupAnalysisStatus.STALE
+                try:
+                    job_repo.save(job)
+                except Exception:
+                    logger.exception("DB commit failed while marking startup analysis stale", extra={"job_id": job_id})
+
+            if legacy_cache is not None and _legacy_startup_analysis_cache_is_current(source, legacy_cache):
+                sample_files = _persist_legacy_startup_analysis_cache(db, job, source, startup_entry_repo, legacy_cache)
+                cached_file_count = int(job.startup_analysis_file_count or 0)
+                cached_total_bytes = int(job.startup_analysis_total_bytes or 0)
+                reused_cached_analysis = True
+            else:
+                cached_file_count, cached_total_bytes, sample_files = _persist_startup_analysis_cache(
+                    db,
+                    job,
+                    source,
+                    startup_entry_repo,
+                )
+                if previous_file_count > 0:
+                    logger.info(
+                        "Refreshing stale startup analysis cache",
+                        extra={
+                            "job_id": job_id,
+                            "cached_file_count": previous_file_count,
+                            "current_file_count": cached_file_count,
+                        },
+                    )
 
         benchmark_details: dict[str, Optional[float] | Optional[int] | int] = {
             "share_read_mbps": None,
@@ -782,7 +1097,7 @@ def prepare_job_startup_analysis(
         if manual:
             benchmark_details = _measure_startup_analysis_transfer_rates(
                 job,
-                [src_by_rel[rel] for rel in sorted(src_by_rel.keys())],
+                sample_files,
                 cached_total_bytes,
             )
             job.startup_analysis_share_read_mbps = benchmark_details["share_read_mbps"]
@@ -795,8 +1110,6 @@ def prepare_job_startup_analysis(
             raise ValueError("Source path contains no transferable files")
 
         existing_files = file_repo.list_by_job(job_id)
-        existing_by_rel = {ef.relative_path: ef for ef in existing_files}
-
         for ef in existing_files:
             if ef.status != FileStatus.DONE:
                 ef.status = FileStatus.PENDING
@@ -807,20 +1120,6 @@ def prepare_job_startup_analysis(
         except Exception:
             db.rollback()
             raise
-
-        new_files = [
-            ExportFile(
-                job_id=job_id,
-                relative_path=rel,
-                size_bytes=size_by_rel[rel],
-                status=FileStatus.PENDING,
-                retry_attempts=0,
-            )
-            for rel in src_by_rel
-            if rel not in existing_by_rel
-        ]
-        if new_files:
-            file_repo.add_bulk(new_files)
 
         job.file_count = cached_file_count
         job.total_bytes = cached_total_bytes
@@ -880,8 +1179,6 @@ def prepare_job_startup_analysis(
                     exc=audit_exc,
                 )
         return {
-            "src_by_rel": src_by_rel,
-            "size_by_rel": size_by_rel,
             "file_count": cached_file_count,
             "total_bytes": cached_total_bytes,
             "reused_cached_analysis": reused_cached_analysis,
@@ -1262,7 +1559,6 @@ def run_copy_job(job_id: int) -> None:
             target = Path(job.target_mount_path) if job.target_mount_path else None
 
             preparation = prepare_job_startup_analysis(job_id)
-            src_by_rel = preparation["src_by_rel"]
 
             job = job_repo.get(job_id)
             if preparation["reused_cached_analysis"]:
@@ -1278,16 +1574,6 @@ def run_copy_job(job_id: int) -> None:
                 except Exception:
                     logger.error("Failed to write audit log for JOB_STARTUP_ANALYSIS_REUSED")
 
-            committed_files = file_repo.list_by_job(job_id)
-
-            # Re-query to get stable IDs; only submit PENDING (non-DONE) files.
-            pending_files = [ef for ef in committed_files if ef.status == FileStatus.PENDING]
-            file_pairs = [
-                (src_by_rel[ef.relative_path], ef.id)
-                for ef in pending_files
-                if ef.relative_path in src_by_rel
-            ]
-
             max_retries = job.max_file_retries if job.max_file_retries is not None else settings.copy_default_max_retries
             retry_delay = float(job.retry_delay_seconds) if job.retry_delay_seconds is not None else settings.copy_default_retry_delay_seconds
 
@@ -1298,37 +1584,57 @@ def run_copy_job(job_id: int) -> None:
                 thread_name_prefix=f"copy-job-{job_id}",
             )
             try:
-                futures = {
-                    executor.submit(_process_file, ef_id, src, target, max_retries, retry_delay): ef_id
-                    for src, ef_id in file_pairs
-                }
-                for future in as_completed(futures):
-                    try:
-                        future.result()
-                    except Exception:
-                        # Worker already recorded FileStatus.ERROR in its own session;
-                        # unexpected exceptions are caught here to let other workers finish.
-                        pass
-
-                    db.expire_all()
-                    latest_job = job_repo.get(job_id)
-                    latest_started_at_key = _normalize_started_at(
-                        latest_job.started_at if latest_job else None
+                pending_after_id: int | None = None
+                batch_limit = max(1, (job.thread_count or settings.copy_default_thread_count) * COPY_PENDING_BATCH_MULTIPLIER)
+                while True:
+                    pending_files = file_repo.list_pending_by_job_after_id(
+                        job_id,
+                        after_id=pending_after_id,
+                        limit=batch_limit,
                     )
-                    if latest_job and latest_started_at_key and latest_started_at_key != run_started_at_key:
-                        for pending in futures:
-                            if not pending.done():
-                                pending.cancel()
-                        logger.info(
-                            "Skipping stale copy worker after newer resume",
-                            extra={"job_id": job_id, "started_at": str(run_started_at)},
+                    if not pending_files:
+                        break
+                    pending_after_id = pending_files[-1].id
+                    futures = {
+                        executor.submit(
+                            _process_file,
+                            ef.id,
+                            _source_path_for_relative_path(source, ef.relative_path),
+                            target,
+                            max_retries,
+                            retry_delay,
+                        ): ef.id
+                        for ef in pending_files
+                    }
+                    for future in as_completed(futures):
+                        try:
+                            future.result()
+                        except Exception:
+                            # Worker already recorded FileStatus.ERROR in its own session;
+                            # unexpected exceptions are caught here to let other workers finish.
+                            pass
+
+                        db.expire_all()
+                        latest_job = job_repo.get(job_id)
+                        latest_started_at_key = _normalize_started_at(
+                            latest_job.started_at if latest_job else None
                         )
-                        return
-                    if latest_job and latest_job.status in (JobStatus.PAUSING, JobStatus.PAUSED):
-                        pause_requested = True
-                        for pending in futures:
-                            if not pending.done():
-                                pending.cancel()
+                        if latest_job and latest_started_at_key and latest_started_at_key != run_started_at_key:
+                            for pending in futures:
+                                if not pending.done():
+                                    pending.cancel()
+                            logger.info(
+                                "Skipping stale copy worker after newer resume",
+                                extra={"job_id": job_id, "started_at": str(run_started_at)},
+                            )
+                            return
+                        if latest_job and latest_job.status in (JobStatus.PAUSING, JobStatus.PAUSED):
+                            pause_requested = True
+                            for pending in futures:
+                                if not pending.done():
+                                    pending.cancel()
+                            break
+                    if pause_requested:
                         break
 
             finally:
@@ -1382,6 +1688,9 @@ def run_copy_job(job_id: int) -> None:
                         and job.startup_analysis_cached
                     ):
                         cache_clear_details = _startup_analysis_cache_details(job)
+                        db.query(StartupAnalysisEntry).filter(
+                            StartupAnalysisEntry.job_id == job_id,
+                        ).delete(synchronize_session=False)
                         _clear_startup_analysis_entries(job)
                         cache_cleared = True
                     try:
