@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.exceptions import ConflictError, ECUBEException, EncodingError
 from app.models.hardware import DriveState, UsbDrive
-from app.models.jobs import DriveAssignment, ExportFile, ExportJob, JobStatus, Manifest, StartupAnalysisStatus
+from app.models.jobs import DriveAssignment, ExportFile, ExportJob, JobStatus, Manifest, StartupAnalysisEntry, StartupAnalysisStatus
 from app.models.network import MountStatus
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
@@ -639,6 +639,7 @@ def _clear_job_startup_analysis_cache(job_row: Any) -> dict[str, int]:
     job_row.startup_analysis_share_read_mbps = None
     job_row.startup_analysis_drive_write_mbps = None
     job_row.startup_analysis_estimated_duration_seconds = None
+    job_row.startup_analysis_cache_present = False
     job_row.startup_analysis_entries = None
     return details
 
@@ -652,6 +653,7 @@ def _mark_job_startup_analysis_stale(job_row: Any) -> None:
     job_row.startup_analysis_share_read_mbps = None
     job_row.startup_analysis_drive_write_mbps = None
     job_row.startup_analysis_estimated_duration_seconds = None
+    job_row.startup_analysis_cache_present = False
     job_row.startup_analysis_entries = None
 
 
@@ -667,6 +669,7 @@ def _has_persisted_startup_analysis_state(job_row: Any) -> bool:
             cast(Optional[float], job_row.startup_analysis_share_read_mbps),
             cast(Optional[float], job_row.startup_analysis_drive_write_mbps),
             cast(Optional[int], job_row.startup_analysis_estimated_duration_seconds),
+            cast(Optional[bool], job_row.startup_analysis_cache_present),
             cast(Optional[object], job_row.startup_analysis_entries),
         )
     )
@@ -812,6 +815,7 @@ def update_job(
     job_row.callback_url = body.callback_url
     if source_path_changed:
         db.query(ExportFile).filter(ExportFile.job_id == job_id).delete(synchronize_session=False)
+        db.query(StartupAnalysisEntry).filter(StartupAnalysisEntry.job_id == job_id).delete(synchronize_session=False)
         job_row.file_count = 0
         job_row.total_bytes = 0
         job_row.copied_bytes = 0
@@ -872,7 +876,8 @@ def complete_job(
 
     previous_status = current_status.value
     cache_clear_details: Optional[dict[str, int]] = None
-    if cast(Optional[object], job_row.startup_analysis_entries) is not None:
+    if bool(cast(Optional[bool], job_row.startup_analysis_cache_present) or cast(Optional[object], job_row.startup_analysis_entries) is not None):
+        db.query(StartupAnalysisEntry).filter(StartupAnalysisEntry.job_id == job_id).delete(synchronize_session=False)
         cache_clear_details = _clear_job_startup_analysis_cache(job_row)
     job_row.status = JobStatus.COMPLETED
     if cast(Optional[datetime], job_row.completed_at) is None:
@@ -962,7 +967,8 @@ def clear_job_startup_analysis_cache(
     cache_clear_details: Optional[dict[str, int]] = None
     active_drive_id: Optional[int] = None
 
-    if cast(Optional[object], job_row.startup_analysis_entries) is not None:
+    if bool(cast(Optional[bool], job_row.startup_analysis_cache_present) or cast(Optional[object], job_row.startup_analysis_entries) is not None):
+        db.query(StartupAnalysisEntry).filter(StartupAnalysisEntry.job_id == job_id).delete(synchronize_session=False)
         cache_clear_details = _clear_job_startup_analysis_cache(job_row)
         try:
             job_repo.save(job)
