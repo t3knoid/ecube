@@ -378,6 +378,7 @@ def upgrade() -> None:
         sa.Column("filesystem_path", sa.String, nullable=True),
         sa.Column("filesystem_type", sa.String(), nullable=True),
         sa.Column("capacity_bytes", sa.BigInteger, nullable=True),
+        sa.Column("available_bytes", sa.BigInteger, nullable=True),
         sa.Column("encryption_status", sa.String, nullable=True),
         sa.Column(
             "current_state",

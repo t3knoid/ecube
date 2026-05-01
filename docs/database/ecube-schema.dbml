@@ -230,6 +230,7 @@ Table usb_drives {
   product_name varchar
   filesystem_path varchar
   capacity_bytes bigint
+  available_bytes bigint
   encryption_status varchar
   filesystem_type varchar
   current_state drive_state [default: 'AVAILABLE']

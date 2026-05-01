@@ -385,13 +385,11 @@ How many drives are ready for use?
 <ul><li>
 Device (port-based identifier such as <code>2-1</code>)
 </li><li>
-Serial Number
-</li><li>
-Filesystem type
+Project when the drive has a related job association
 </li><li>
 Capacity
 </li><li>
-Assigned project
+Related job ID when the drive is currently tied to a job
 </li><li>
 Current state
 </li></ul>
@@ -434,23 +432,26 @@ Refresh the current drive list
 </li><li>
 Trigger a rescan of connected drives
 </li><li>
-Search by device, serial number, or project information
+Search by device or project information
 </li><li>
 Filter by drive state
 </li><li>
 Sort results
 </li></ul>
+<p>When ECUBE can correlate a drive to a related job, the <code>Job ID</code> value on the Drives page acts as a direct link into that job's detail view. Drives without a related job keep the current placeholder behavior instead of showing a stale or guessed job ID.</p>
 <h2 id="4-3-drive-detail-page">4.3 Drive Detail Page</h2>
 <p>Selecting a drive opens a detail view showing:</p>
 <ul><li>
-The port-based <code>Device</code> value, the separate <code>Serial Number</code> value, and filesystem details, with sensitive path values shown as <code>Protected</code> in standard operator views when appropriate
+The drive ID, the port-based <code>Device</code> value, filesystem type, total capacity, last known available space, and current status
 </li><li>
-Current project assignment
+Current project assignment together with the related evidence number and job ID when a job is associated with the drive
 </li><li>
 Current status badge
 </li><li>
 Available actions such as format, initialize, and prepare eject
 </li></ul>
+<p>If ECUBE does not yet have a current mounted-drive free-space reading for that drive, the available-space field shows <code>-</code> instead of blocking the page.</p>
+<p>If a related job exists, the <code>Job ID</code> value on Drive Detail uses the same direct Job Detail navigation pattern as the clickable job context on the Drives page.</p>
 <p>Reference screen:</p>
 <h2 id="4-4-formatting-a-drive">4.4 Formatting a Drive</h2>
 <p>If your role allows it, you can format a drive from the detail page.</p>
@@ -501,6 +502,7 @@ The drive <strong>cannot</strong> be initialized for a <em>different</em> projec
 The drive can be physically removed once the operation completes.
 </li></ul>
 <p>If ECUBE reports that the drive is still busy, the confirmation dialog closes cleanly and the page shows a specific retry message. Close any open shell, file browser, or process still using the mounted drive, then retry <code>Prepare Eject</code>.</p>
+<p>If the drive is still assigned to a job that has started and is not yet completed, <code>Prepare Eject</code> is blocked. This includes jobs in <code>RUNNING</code>, <code>PAUSING</code>, <code>PAUSED</code>, or <code>VERIFYING</code>. Complete or otherwise finish the active job before retrying <code>Prepare Eject</code>.</p>
 <p>If ECUBE detects timed-out or failed files in active drive assignments, the first <code>Prepare Eject</code> attempt is blocked with an explicit confirmation-required warning. Review the warning details, then confirm a second prompt to continue with ejection.</p>
 <blockquote><p>Use <code>Chain of Custody</code> from <code>Job Detail</code> to record legal handoff details for the job's assigned drive. The handoff is stored in ECUBE's audit and CoC records without adding a separate archived drive state.</p></blockquote>
 <p class="help-back-to-top"><a href="#help-toc-title">Back to top</a></p>
@@ -569,7 +571,7 @@ Use <code>Clear saved credentials</code> if you need to remove previously stored
 <p>The directory browser allows users to explore the contents of active mount points (USB drives and network shares) before creating an export job.</p>
 <p><strong>Accessing the browser:</strong></p>
 <ul><li>
-<strong>From Drive Detail:</strong> Click the mount path link on any mounted drive to open the directory browser rooted at that drive's mount point.
+<strong>From Drive Detail:</strong> Click the <code>Browse</code> button on any mounted drive to open the directory browser rooted at that drive's mount point.
 </li><li>
 <strong>From Mounts:</strong> Click the <code>Browse</code> button on any mounted network share. The button is disabled for shares that are not currently mounted.
 </li></ul>
@@ -674,6 +676,7 @@ If you enable <code>Run job immediately</code>, the job will start as soon as cr
 <blockquote><p><strong>Page visibility:</strong> <code>admin</code>, <code>manager</code>, <code>processor</code>, <code>auditor</code></p></blockquote>
 <blockquote><p><strong>Restricted actions:</strong> <code>Analyze</code>, <code>Edit</code>, <code>Start</code>, <code>Retry Failed Files</code>, <code>Pause</code>, <code>Complete</code>, <code>Verify</code>, and <code>Manifest</code> are enabled for <code>admin</code>, <code>manager</code>, and <code>processor</code> when the current job state allows them. <code>Chain of Custody</code> is available to roles that can open the job-scoped chain-of-custody workflow. Within that report, <code>Custody Handoff</code> appears only for <code>admin</code> and <code>manager</code> when the loaded report still shows incomplete custody. <code>Archive</code> and <code>Clear startup analysis cache</code> remain limited to <code>admin</code> and <code>manager</code> when the current job state allows them. <code>Delete</code> is shown only for eligible pending jobs. Hash inspection and source/destination comparison remain available to <code>admin</code> and <code>auditor</code>.</p></blockquote>
 <p>The job detail page provides deeper inspection and follow-up controls.</p>
+<p>Near the top of the page, Job Detail also shows the selected destination, the last known available space for the related drive when ECUBE has one, and the current job-specific webhook callback URL.</p>
 <p>Typical functions include:</p>
 <ul><li>
 Run manual startup analysis before copy starts so the operator can review discovered files and estimated bytes

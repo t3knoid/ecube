@@ -814,8 +814,6 @@ def _persist_startup_analysis_file_batch(
         db.rollback()
         raise
 
-    for file_row in existing_rows:
-        db.expunge(file_row)
     for file_row in new_rows:
         db.expunge(file_row)
 

@@ -649,6 +649,7 @@ Example response:
     "serial_number": "4C530000220226223012",
     "filesystem_path": "/dev/sdg",
     "capacity_bytes": 15376000000,
+    "available_bytes": 9437184000,
     "filesystem_type": "ext4",
     "current_state": "IN_USE",
     "current_project_id": "PROJECT-42"
@@ -661,6 +662,7 @@ Example response:
     "serial_number": "A1B2C3D4E5F60001",
     "filesystem_path": "/dev/sdh",
     "capacity_bytes": 64023257088,
+    "available_bytes": null,
     "filesystem_type": "exfat",
     "current_state": "AVAILABLE",
     "current_project_id": null
@@ -1106,8 +1108,10 @@ project before committing, consistent with auto-assignment behaviour.
 > **Drive Capacity Warning**
 >
 > ECUBE does **not** validate free space on the target drive before or during
-> copy operations. The system tracks `capacity_bytes` (total drive size from
-> sysfs) but does not compare source data size against available drive space.
+> copy operations. The system now exposes `available_bytes` as the last known
+> available space reading for mounted USB drives and continues to track
+> `capacity_bytes` (total drive size from sysfs), but it does not compare
+> source data size against available drive space before or during copy.
 > If the drive fills up during a copy, individual files will fail with write
 > errors.
 >

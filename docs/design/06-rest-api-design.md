@@ -725,6 +725,7 @@ All job endpoints that return a single job use the `ExportJobSchema` response, w
 | `serial_number` | string or null | USB serial number when available |
 | `filesystem_path` | string or null | OS block device node (e.g. `/dev/sdb`) |
 | `capacity_bytes` | integer or null | Total storage capacity in bytes |
+| `available_bytes` | integer or null | Last known available space in bytes for the mounted drive |
 | `filesystem_type` | string or null | Detected filesystem label |
 | `current_state` | string | `DISCONNECTED`, `AVAILABLE`, `IN_USE` |
 | `is_mounted` | boolean | Whether the related drive is still mounted on the host |
@@ -760,6 +761,7 @@ All job endpoints that return a single job use the `ExportJobSchema` response, w
         "serial_number": "4C530000220226223012",
     "filesystem_path": "/dev/sdb1",
     "capacity_bytes": 64023257088,
+    "available_bytes": 32170311680,
     "filesystem_type": "exfat",
     "current_state": "IN_USE",
         "is_mounted": true,

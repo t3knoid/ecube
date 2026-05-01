@@ -27,6 +27,7 @@ from app.schemas.jobs import (
     JobStartupAnalysisClearRequest,
     JobUpdate,
 )
+from app.services.drive_space_service import request_available_space_refresh_for_drive
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500
 from app.services import audit_service, job_service
 from app.utils.client_ip import get_client_ip
@@ -209,6 +210,7 @@ def _redact_ip(job, user: CurrentUser, db: Session) -> ExportJobSchema:
     assignment_repo = DriveAssignmentRepository(db)
     active = assignment_repo.get_active_for_job(job.id)
     if active and getattr(active, "drive", None):
+        request_available_space_refresh_for_drive(active.drive)
         schema.drive = DriveInfoSchema.model_validate(active.drive)
         schema.drive.is_mounted = bool(getattr(active.drive, "mount_path", None))
 
@@ -263,6 +265,7 @@ def _enrich_jobs_bulk(
 
         active = assignments_map.get(job.id)
         if active and getattr(active, "drive", None):
+            request_available_space_refresh_for_drive(active.drive)
             schema.drive = DriveInfoSchema.model_validate(active.drive)
             schema.drive.is_mounted = bool(getattr(active.drive, "mount_path", None))
 
