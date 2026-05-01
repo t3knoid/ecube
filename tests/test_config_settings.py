@@ -374,6 +374,7 @@ class TestCopyJobTimeout:
         with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
             with patch("app.services.copy_engine.settings") as mock_settings:
                 mock_settings.copy_job_timeout = 1  # 1 second timeout
+                mock_settings.startup_analysis_batch_size = 500
                 mock_settings.copy_chunk_size_bytes = 1_048_576
                 mock_settings.copy_default_max_retries = 3
                 mock_settings.copy_default_retry_delay_seconds = 1.0
@@ -415,6 +416,7 @@ class TestCopyJobTimeout:
         with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
             with patch("app.services.copy_engine.settings") as mock_settings:
                 mock_settings.copy_job_timeout = 0
+                mock_settings.startup_analysis_batch_size = 500
                 mock_settings.copy_chunk_size_bytes = 1_048_576
                 mock_settings.copy_default_max_retries = 3
                 mock_settings.copy_default_retry_delay_seconds = 1.0
