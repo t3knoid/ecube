@@ -128,8 +128,12 @@ This makes `user_roles` the day-to-day control plane while preserving OS-group f
 - Foreign keys enforce hub→port→drive and job→file relationships.
 - `usb_hubs.system_identifier` and `usb_ports.system_path` carry **unique constraints**, ensuring each hub and port maps to exactly one row. The discovery upsert logic relies on these keys for stable identity across sync cycles.
 - Enumerated statuses should be constrained by check/enum types.
-- Index by `project_id`, `status`, and recent timestamps for UI queries.
-- CoC retrieval performance should be supported by indexes on audit query paths, including composite indexes on (`audit_logs.project_id`, `audit_logs.timestamp`), (`audit_logs.drive_id`, `audit_logs.timestamp`), and (`audit_logs.action`, `audit_logs.timestamp`).
+- Index the current hot paths explicitly rather than relying on broad generic coverage.
+- `export_jobs` should support job-list and health queries with indexes on `project_id`, (`status`, `created_at`, `id`), and (`created_at`, `id`).
+- `export_files` should support job-file listing, grouped counts, and status-scoped file summaries with indexes on `project_id`, (`project_id`, `status`), `job_id`, (`job_id`, `status`), and (`job_id`, `id`).
+- `drive_assignments` should support active assignment lookups with composite indexes on (`job_id`, `released_at`, `assigned_at`, `id`) and (`drive_id`, `released_at`, `assigned_at`, `id`).
+- `manifests` should support per-job manifest retrieval with an index on (`job_id`, `created_at`, `id`).
+- CoC and audit retrieval performance should be supported by indexes on audit query paths, including (`audit_logs.timestamp`, `audit_logs.id`), (`audit_logs.project_id`, `audit_logs.timestamp`, `audit_logs.id`), (`audit_logs.job_id`, `audit_logs.timestamp`, `audit_logs.id`), (`audit_logs.drive_id`, `audit_logs.timestamp`, `audit_logs.id`), and the chain-of-custody handoff lifecycle filter (`audit_logs.action`, `audit_logs.drive_id`, `audit_logs.project_id`, `audit_logs.timestamp`, `audit_logs.id`).
 
 ## Physical Schema Reference (Current ORM)
 
