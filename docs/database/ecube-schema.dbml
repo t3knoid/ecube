@@ -148,7 +148,9 @@ Table export_jobs {
   created_at timestamptz
 
   indexes {
+    (created_at, id) [name: 'ix_export_jobs_created_id']
     project_id [name: 'ix_export_jobs_project_id']
+    (status, created_at, id) [name: 'ix_export_jobs_status_created_id']
   }
 }
 
@@ -181,6 +183,9 @@ Table export_files {
   startup_analysis_revision int [not null, default: 0]
 
   indexes {
+    job_id [name: 'ix_export_files_job_id']
+    (job_id, id) [name: 'ix_export_files_job_id_id']
+    (job_id, status) [name: 'ix_export_files_job_status']
     project_id [name: 'ix_export_files_project_id']
     (project_id, status) [name: 'ix_export_files_project_status']
   }
@@ -205,6 +210,10 @@ Table manifests {
   manifest_path varchar
   format varchar [default: 'JSON']
   created_at timestamptz
+
+  indexes {
+    (job_id, created_at, id) [name: 'ix_manifests_job_created_id']
+  }
 }
 
 Table startup_analysis_entries {
@@ -256,6 +265,14 @@ Table audit_logs {
   job_id int
   details json
   client_ip varchar(45)
+
+  indexes {
+    (action, drive_id, project_id, timestamp, id) [name: 'ix_audit_logs_action_drive_project_timestamp_id']
+    (drive_id, timestamp, id) [name: 'ix_audit_logs_drive_timestamp_id']
+    (job_id, timestamp, id) [name: 'ix_audit_logs_job_timestamp_id']
+    (project_id, timestamp, id) [name: 'ix_audit_logs_project_timestamp_id']
+    (timestamp, id) [name: 'ix_audit_logs_timestamp_id']
+  }
 }
 
 Table drive_assignments {
@@ -266,6 +283,11 @@ Table drive_assignments {
   copied_bytes bigint [not null, default: 0]
   assigned_at timestamptz
   released_at timestamptz
+
+  indexes {
+    (drive_id, released_at, assigned_at, id) [name: 'ix_drive_assignments_drive_released_assigned_id']
+    (job_id, released_at, assigned_at, id) [name: 'ix_drive_assignments_job_released_assigned_id']
+  }
 }
 
 Ref: audit_logs.drive_id > usb_drives.id

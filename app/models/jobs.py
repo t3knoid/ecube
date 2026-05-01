@@ -41,6 +41,11 @@ class StartupAnalysisStatus(str, enum.Enum):
 
 class ExportJob(Base):
     __tablename__ = "export_jobs"
+    __table_args__ = (
+        Index("ix_export_jobs_status_created_id", "status", "created_at", "id"),
+        Index("ix_export_jobs_created_id", "created_at", "id"),
+    )
+
     id = Column(Integer, primary_key=True)
     project_id = Column(String, ForeignKey("projects.normalized_project_id"), nullable=False, index=True)
     evidence_number = Column(String, nullable=False)
@@ -101,6 +106,9 @@ class ExportJob(Base):
 class ExportFile(Base):
     __tablename__ = "export_files"
     __table_args__ = (
+        Index("ix_export_files_job_id", "job_id"),
+        Index("ix_export_files_job_status", "job_id", "status"),
+        Index("ix_export_files_job_id_id", "job_id", "id"),
         Index("ix_export_files_project_status", "project_id", "status"),
     )
 
@@ -137,6 +145,10 @@ class StartupAnalysisEntry(Base):
 
 class Manifest(Base):
     __tablename__ = "manifests"
+    __table_args__ = (
+        Index("ix_manifests_job_created_id", "job_id", "created_at", "id"),
+    )
+
     id = Column(Integer, primary_key=True)
     job_id = Column(Integer, ForeignKey("export_jobs.id"), nullable=False)
     manifest_path = Column(String)
@@ -147,6 +159,11 @@ class Manifest(Base):
 
 class DriveAssignment(Base):
     __tablename__ = "drive_assignments"
+    __table_args__ = (
+        Index("ix_drive_assignments_job_released_assigned_id", "job_id", "released_at", "assigned_at", "id"),
+        Index("ix_drive_assignments_drive_released_assigned_id", "drive_id", "released_at", "assigned_at", "id"),
+    )
+
     id = Column(Integer, primary_key=True)
     drive_id = Column(Integer, ForeignKey("usb_drives.id"), nullable=False)
     job_id = Column(Integer, ForeignKey("export_jobs.id"), nullable=False)
