@@ -1252,6 +1252,65 @@ def test_prepare_job_startup_analysis_persists_entries_in_batches(db, tmp_path):
     ).count() == 5
 
 
+def test_prepare_job_startup_analysis_refresh_failure_preserves_previous_cache(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "file.txt").write_bytes(b"content")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    job.startup_analysis_status = StartupAnalysisStatus.READY
+    job.startup_analysis_file_count = 1
+    job.startup_analysis_total_bytes = len(b"content")
+    job.startup_analysis_cache_present = True
+    job.startup_analysis_revision = 1
+    db.add(
+        ExportFile(
+            job_id=job.id,
+            relative_path="file.txt",
+            size_bytes=len(b"content"),
+            status=FileStatus.PENDING,
+            startup_analysis_revision=1,
+        )
+    )
+    db.add(
+        StartupAnalysisEntry(
+            job_id=job.id,
+            entry_type="directory",
+            relative_path="",
+            mtime_ns=source_dir.stat().st_mtime_ns,
+        )
+    )
+    db.commit()
+
+    (source_dir / "extra.txt").write_bytes(b"more")
+
+    original_persist_file_batch = copy_engine._persist_startup_analysis_file_batch
+
+    def _fail_after_first_file_batch(*args, **kwargs):
+        original_persist_file_batch(*args, **kwargs)
+        raise RuntimeError("boom")
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine._persist_startup_analysis_file_batch", side_effect=_fail_after_first_file_batch):
+            with pytest.raises(RuntimeError, match="boom"):
+                copy_engine.prepare_job_startup_analysis(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+    file_rows = db.query(ExportFile).filter(ExportFile.job_id == job.id).order_by(ExportFile.id).all()
+    directory_rows = db.query(StartupAnalysisEntry).filter(StartupAnalysisEntry.job_id == job.id).all()
+
+    assert job.startup_analysis_cached is True
+    assert job.startup_analysis_revision == 1
+    assert job.startup_analysis_file_count == 1
+    assert job.startup_analysis_total_bytes == len(b"content")
+    assert [(row.relative_path, row.startup_analysis_revision) for row in file_rows] == [("file.txt", 1)]
+    assert [(row.entry_type, row.relative_path) for row in directory_rows] == [("directory", "")]
+
+
 def test_run_copy_job_accumulates_active_duration_on_resume(db, tmp_path):
     """Completed jobs retain previously accrued active duration after resume."""
     source_dir = tmp_path / "source"
