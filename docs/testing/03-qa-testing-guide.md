@@ -1193,7 +1193,7 @@ These tests exercise real hardware paths that must be validated during manual QA
 | 10 | Sync + unmount | Initialize drive, create/start a job, then prepare-eject | Filesystem flushed and unmounted before eject (verify via `mount` command — no partitions from that drive should be listed) |
 | 11 | Disabled port blocks AVAILABLE | Disable a port, plug in a drive to that port, run discovery | Drive appears in `DISCONNECTED` state (visible with `include_disconnected=true`); enable port + refresh → drive transitions to `AVAILABLE` |
 | 12 | Device labels stay aligned across UI | Open Drives, Jobs, and Create/Edit Job for the same connected drive | Drives shows the same `Device` value used by the Jobs list and the destination selector, and Create/Edit Job keeps the destination control labeled `Select device` |
-| 13 | Mounted drive surfaces available space and Browse entry | Open Drive Detail for a mounted managed USB drive, then return to Drives | Drive Detail shows total capacity plus the last known available space value or `-` when no reading is available yet, the mounted drive exposes a `Browse` button instead of a mount-path link, and the Drives page shows the matching available-space column value when present |
+| 13 | Mounted drive surfaces available space and Browse entry | Open Drive Detail for a mounted managed USB drive | Drive Detail shows total capacity plus the last known available space value or `-` when no reading is available yet, and the mounted drive exposes a `Browse` button instead of a mount-path link |
 
 ### 12.6 End-to-End Copy Workflow
 
