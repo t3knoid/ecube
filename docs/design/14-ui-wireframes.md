@@ -584,7 +584,7 @@ Shown when a drive row is selected (slide-out panel or detail page).
 | Drive State | Format | Initialize | Eject |
 |-------------|--------|------------|-------|
 | DISCONNECTED | disabled | disabled | disabled |
-| AVAILABLE   | enabled | enabled (if FS present) | disabled |
+| AVAILABLE   | enabled | enabled (if destination mounted) | disabled |
 | IN_USE      | disabled | disabled | enabled |
 
 **Key Interaction:** When a drive row or detail view has a valid related job, the `Job ID` context can open the existing Job Detail page for that job.
