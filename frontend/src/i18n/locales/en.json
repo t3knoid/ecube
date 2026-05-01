@@ -52,6 +52,7 @@
     "device": "Device",
     "serialNumber": "Serial Number",
     "filesystem": "Filesystem",
+    "availableSpace": "Available Space",
     "filesystemPath": "Filesystem Path",
     "rescan": "Rescan",
     "searchPlaceholder": "Search by device, path, project, or ID",

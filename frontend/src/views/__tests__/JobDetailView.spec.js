@@ -218,7 +218,7 @@ describe('JobDetailView start action', () => {
       startup_analysis_ready: false,
       source_path: '/nfs/project-001/evidence',
       target_mount_path: '/mnt/ecube/1',
-      drive: { id: 1 },
+      drive: { id: 1, available_bytes: 2048 },
     })
     mocks.analyzeJob.mockResolvedValue({
       id: 6,
@@ -233,7 +233,7 @@ describe('JobDetailView start action', () => {
       startup_analysis_ready: false,
       source_path: '/nfs/project-001/evidence',
       target_mount_path: '/mnt/ecube/1',
-      drive: { id: 1 },
+      drive: { id: 1, available_bytes: 2048 },
     })
     mocks.getJobFiles.mockResolvedValue({ files: [], total_files: 0, returned_files: 0, page: 1, page_size: 40 })
     mocks.getDrives.mockResolvedValue([
@@ -256,6 +256,14 @@ describe('JobDetailView start action', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+  })
+
+  it('shows the related drive available space when present', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Available Space')
+    expect(wrapper.text()).toContain('2.0 KB')
   })
 
   it('shows the validation detail instead of a generic conflict message', async () => {

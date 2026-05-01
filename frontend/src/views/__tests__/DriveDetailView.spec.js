@@ -63,6 +63,7 @@ function buildDrive(overrides = {}) {
     current_state: 'AVAILABLE',
     current_project_id: 'PROJ-007',
     capacity_bytes: 1024,
+    available_bytes: 512,
     port_id: 1,
     ...overrides,
   }
@@ -126,6 +127,16 @@ describe('DriveDetailView mount workflow', () => {
       { id: 4, status: 'UNMOUNTED', project_id: 'PROJ-HIDDEN' },
     ])
     mocks.mountDrive.mockResolvedValue(buildDrive({}))
+  })
+
+  it('shows the last known available space and handles zero bytes safely', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ available_bytes: 0 })])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Available Space')
+    expect(wrapper.text()).toContain('0.0 B')
   })
 
   it('shows the Mount action for managers and updates the mount point after success', async () => {
