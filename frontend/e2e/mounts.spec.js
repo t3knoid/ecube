@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { setupAuthenticatedPage } from './helpers/app.js'
+import { routeJson, setupAuthenticatedPage } from './helpers/app.js'
 import { expectNoCriticalA11yViolations } from './helpers/a11y.js'
 
 test('mounts add/edit/test/remove flow', async ({ page }) => {
@@ -11,6 +11,8 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
   const patchPayloads = []
   const candidateValidatePayloads = []
   const validatePayloads = []
+
+  await routeJson(page, '**/api/jobs**', [])
 
   await page.route('**/api/mounts', async (route) => {
     if (route.request().method() === 'GET') {
@@ -141,7 +143,11 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
     },
   ])
 
-  await page.getByRole('button', { name: 'Edit' }).nth(1).click()
+  await page.getByRole('button', { name: 'Details' }).nth(1).click()
+  await expect(page).toHaveURL(/\/mounts\/11$/)
+  await expect(page.getByRole('heading', { name: 'Mount Detail #11' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Edit' }).click()
   await expect(page.getByRole('heading', { name: 'Edit Share' })).toBeVisible()
   const editDialog = page.getByRole('dialog', { name: 'Edit Share' })
   await expect(page.getByLabel('Local Mount Point')).toHaveValue('/nfs/case-2026-001')
@@ -194,8 +200,12 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
     },
   ])
 
-  await page.getByRole('button', { name: 'Remove' }).first().click()
-  await page.getByRole('button', { name: 'Remove' }).last().click()
+  await expect(page.getByText('Share updated successfully.')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Remove' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Remove' }).click()
+
+  await expect(page).toHaveURL(/\/mounts$/)
 
   await expectNoCriticalA11yViolations(page)
 })
@@ -205,6 +215,8 @@ test('mounts mobile overflow menu stays visible without expanding the row', asyn
   await setupAuthenticatedPage(page, ['admin'])
 
   const mounts = [{ id: 10, type: 'SMB', remote_path: '//server/project', local_mount_point: '/smb/project', project_id: 'CASE-2026-001', status: 'MOUNTED' }]
+
+  await routeJson(page, '**/api/jobs**', [])
 
   await page.route('**/api/mounts', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mounts) })
