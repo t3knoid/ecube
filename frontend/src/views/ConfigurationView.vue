@@ -40,6 +40,7 @@ const form = ref({
   db_pool_size: 5,
   db_pool_max_overflow: 10,
   db_pool_recycle_seconds: -1,
+  startup_analysis_batch_size: 500,
   copy_job_timeout: 3600,
   job_detail_files_page_size: 40,
   callback_default_url: '',
@@ -62,6 +63,7 @@ const fieldOrder = [
   'db_pool_size',
   'db_pool_max_overflow',
   'db_pool_recycle_seconds',
+  'startup_analysis_batch_size',
   'copy_job_timeout',
   'job_detail_files_page_size',
   'callback_default_url',
@@ -383,6 +385,15 @@ onMounted(loadConfiguration)
 
       <article class="panel">
         <h2>{{ t('configuration.sections.copyJobs') }}</h2>
+
+        <label for="cfg-startup-analysis-batch-size">{{ t('configuration.fields.startup_analysis_batch_size.label') }}</label>
+        <input
+          id="cfg-startup-analysis-batch-size"
+          v-model.number="form.startup_analysis_batch_size"
+          type="number"
+          min="1"
+        />
+        <p class="field-help">{{ t('configuration.fields.startup_analysis_batch_size.help') }}</p>
 
         <label for="cfg-copy-job-timeout">{{ t('configuration.fields.copy_job_timeout.label') }}</label>
         <input id="cfg-copy-job-timeout" v-model.number="form.copy_job_timeout" type="number" min="0" />
