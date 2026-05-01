@@ -18,6 +18,7 @@ from app.infrastructure.usb_discovery import (
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive, UsbHub, UsbPort
 from app.services.discovery_service import run_discovery_sync
+from app.utils.drive_identity import build_readable_device_label
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +134,7 @@ def test_initial_sync_audit_includes_safe_drive_metadata_shape(db):
     assert log is not None
     observed = log.details["observed_drives"]
     assert len(observed) == 1
-    assert observed[0]["device_label"] == "SanDisk Ultra - Port 1"
+    assert observed[0]["device_label"] == "SanDisk Ultra - Port 1 (60GB)"
     assert observed[0]["manufacturer"] == "SanDisk"
     assert observed[0]["product_name"] == "Ultra"
     assert observed[0]["port_number"] == 1
@@ -152,7 +153,7 @@ def test_initial_sync_emits_drive_discovered_audit_log(db):
     assert log.drive_id == drive.id
     assert log.details["drive_id"] == drive.id
     assert log.details["device_identifier"] == drive.device_identifier
-    assert log.details["device_label"] == "SanDisk Ultra - Port 1"
+    assert log.details["device_label"] == "SanDisk Ultra - Port 1 (60GB)"
     assert log.details["filesystem_path"] == "[redacted]"
     assert log.details["filesystem_type"] == "unformatted"
     assert log.details["capacity_bytes"] == 64_000_000_000
@@ -183,6 +184,27 @@ def test_initial_sync_drive_discovered_audit_handles_missing_optional_fields(db)
     assert log.details["vendor_id"] is None
     assert log.details["product_id"] is None
     assert log.details["speed"] is None
+
+
+def test_build_readable_device_label_appends_scaled_capacity_suffix():
+    assert (
+        build_readable_device_label(
+            "General",
+            "USB Flash Disk",
+            2,
+            capacity_bytes=32_000_000_000,
+        )
+        == "General USB Flash Disk - Port 2 (30GB)"
+    )
+    assert (
+        build_readable_device_label(
+            "Archive",
+            "Drive",
+            3,
+            capacity_bytes=2 * 1024 ** 4,
+        )
+        == "Archive Drive - Port 3 (2TB)"
+    )
 
 
 def test_sync_does_not_duplicate_drive_discovered_audit_for_unchanged_drive(db):
