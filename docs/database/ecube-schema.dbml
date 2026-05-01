@@ -142,6 +142,8 @@ Table export_jobs {
   startup_analysis_share_read_mbps float
   startup_analysis_drive_write_mbps float
   startup_analysis_estimated_duration_seconds int
+  startup_analysis_cache_present boolean [not null, default: false]
+  startup_analysis_revision int [not null, default: 0]
   startup_analysis_entries json
   created_at timestamptz
 
@@ -176,6 +178,7 @@ Table export_files {
   status file_status [default: 'PENDING']
   error_message text
   retry_attempts int [default: 0]
+  startup_analysis_revision int [not null, default: 0]
 
   indexes {
     project_id [name: 'ix_export_files_project_id']
@@ -202,6 +205,21 @@ Table manifests {
   manifest_path varchar
   format varchar [default: 'JSON']
   created_at timestamptz
+}
+
+Table startup_analysis_entries {
+  id int [pk, not null]
+  job_id int [not null]
+  entry_type varchar [not null]
+  relative_path varchar [not null]
+  size_bytes bigint
+  mtime_ns bigint
+  created_at timestamptz [not null]
+
+  indexes {
+    (job_id, entry_type, relative_path) [unique, name: 'ix_startup_analysis_entries_job_entry_path']
+    job_id [name: 'ix_startup_analysis_entries_job_id']
+  }
 }
 
 Table usb_drives {
@@ -258,5 +276,6 @@ Ref: export_files.project_id > projects.normalized_project_id
 Ref: export_jobs.project_id > projects.normalized_project_id
 Ref: job_chain_of_custody_snapshots.job_id > export_jobs.id
 Ref: manifests.job_id > export_jobs.id
+Ref: startup_analysis_entries.job_id > export_jobs.id
 Ref: usb_drives.port_id > usb_ports.id
 Ref: usb_ports.hub_id > usb_hubs.id
