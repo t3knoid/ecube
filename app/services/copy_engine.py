@@ -763,6 +763,7 @@ def _persist_startup_analysis_file_batch(
     file_batch: list[tuple[str, int]],
     *,
     revision: int,
+    commit: bool = True,
 ) -> None:
     if not file_batch:
         return
@@ -805,10 +806,18 @@ def _persist_startup_analysis_file_batch(
         db.add_all(new_rows)
 
     try:
-        db.commit()
+        if commit:
+            db.commit()
+        else:
+            db.flush()
     except Exception:
         db.rollback()
         raise
+
+    for file_row in existing_rows:
+        db.expunge(file_row)
+    for file_row in new_rows:
+        db.expunge(file_row)
 
 
 def _persist_startup_analysis_entry_batch(
@@ -816,19 +825,22 @@ def _persist_startup_analysis_entry_batch(
     job_id: int,
     entry_type: str,
     entries: list[tuple[str, int]],
+    *,
+    commit: bool = True,
 ) -> None:
-    startup_entry_repo.add_bulk(
-        [
-            StartupAnalysisEntry(
-                job_id=job_id,
-                entry_type=entry_type,
-                relative_path=relative_path,
-                size_bytes=value if entry_type == "file" else None,
-                mtime_ns=value if entry_type == "directory" else None,
-            )
-            for relative_path, value in entries
-        ]
-    )
+    startup_entries = [
+        StartupAnalysisEntry(
+            job_id=job_id,
+            entry_type=entry_type,
+            relative_path=relative_path,
+            size_bytes=value if entry_type == "file" else None,
+            mtime_ns=value if entry_type == "directory" else None,
+        )
+        for relative_path, value in entries
+    ]
+    startup_entry_repo.add_bulk(startup_entries, commit=commit)
+    for startup_entry in startup_entries:
+        startup_entry_repo.db.expunge(startup_entry)
 
 
 def _persist_startup_analysis_cache(
@@ -847,20 +859,21 @@ def _persist_startup_analysis_cache(
     job.startup_analysis_revision = revision
     job.startup_analysis_cache_present = False
     job.startup_analysis_entries = None
-    try:
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
 
-    startup_entry_repo.delete_by_job(job.id)
+    startup_entry_repo.delete_by_job(job.id, commit=False)
 
     for entry_type, path in _iter_source_tree(job.source_path):
         if entry_type == "directory":
             relative_directory = "" if path == source else str(_relative_path(path, source))
             directory_batch.append((relative_directory, path.stat().st_mtime_ns))
             if len(directory_batch) >= STARTUP_ANALYSIS_BATCH_SIZE:
-                _persist_startup_analysis_entry_batch(startup_entry_repo, job.id, "directory", directory_batch)
+                _persist_startup_analysis_entry_batch(
+                    startup_entry_repo,
+                    job.id,
+                    "directory",
+                    directory_batch,
+                    commit=False,
+                )
                 directory_batch = []
             continue
 
@@ -873,15 +886,33 @@ def _persist_startup_analysis_cache(
         total_bytes += size_bytes
 
         if len(file_batch) >= STARTUP_ANALYSIS_BATCH_SIZE:
-            _persist_startup_analysis_file_batch(db, job, file_batch, revision=revision)
-            _persist_startup_analysis_entry_batch(startup_entry_repo, job.id, "file", file_batch)
+            _persist_startup_analysis_file_batch(db, job, file_batch, revision=revision, commit=False)
+            _persist_startup_analysis_entry_batch(
+                startup_entry_repo,
+                job.id,
+                "file",
+                file_batch,
+                commit=False,
+            )
             file_batch = []
 
     if file_batch:
-        _persist_startup_analysis_file_batch(db, job, file_batch, revision=revision)
-        _persist_startup_analysis_entry_batch(startup_entry_repo, job.id, "file", file_batch)
+        _persist_startup_analysis_file_batch(db, job, file_batch, revision=revision, commit=False)
+        _persist_startup_analysis_entry_batch(
+            startup_entry_repo,
+            job.id,
+            "file",
+            file_batch,
+            commit=False,
+        )
     if directory_batch:
-        _persist_startup_analysis_entry_batch(startup_entry_repo, job.id, "directory", directory_batch)
+        _persist_startup_analysis_entry_batch(
+            startup_entry_repo,
+            job.id,
+            "directory",
+            directory_batch,
+            commit=False,
+        )
 
     db.query(ExportFile).filter(
         ExportFile.job_id == job.id,
@@ -912,13 +943,8 @@ def _persist_legacy_startup_analysis_cache(
     revision = int(job.startup_analysis_revision or 0) + 1
     job.startup_analysis_revision = revision
     job.startup_analysis_cache_present = False
-    try:
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
 
-    startup_entry_repo.delete_by_job(job.id)
+    startup_entry_repo.delete_by_job(job.id, commit=False)
 
     sample_files: list[Path] = []
     for start in range(0, len(file_entries), STARTUP_ANALYSIS_BATCH_SIZE):
@@ -927,8 +953,14 @@ def _persist_legacy_startup_analysis_cache(
             (str(entry["relative_path"]), int(entry["size_bytes"]))
             for entry in batch_entries
         ]
-        _persist_startup_analysis_file_batch(db, job, file_batch, revision=revision)
-        _persist_startup_analysis_entry_batch(startup_entry_repo, job.id, "file", file_batch)
+        _persist_startup_analysis_file_batch(db, job, file_batch, revision=revision, commit=False)
+        _persist_startup_analysis_entry_batch(
+            startup_entry_repo,
+            job.id,
+            "file",
+            file_batch,
+            commit=False,
+        )
         for relative_path, _size_bytes in file_batch:
             if len(sample_files) >= STARTUP_ANALYSIS_SAMPLE_LIMIT:
                 break
@@ -940,7 +972,13 @@ def _persist_legacy_startup_analysis_cache(
             (str(entry["relative_path"]), int(entry["mtime_ns"]))
             for entry in batch_entries
         ]
-        _persist_startup_analysis_entry_batch(startup_entry_repo, job.id, "directory", directory_batch)
+        _persist_startup_analysis_entry_batch(
+            startup_entry_repo,
+            job.id,
+            "directory",
+            directory_batch,
+            commit=False,
+        )
 
     db.query(ExportFile).filter(
         ExportFile.job_id == job.id,
