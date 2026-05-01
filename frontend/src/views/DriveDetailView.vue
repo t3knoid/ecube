@@ -143,6 +143,20 @@ function protectedValue(value) {
   return value ? t('common.labels.protected') : '-'
 }
 
+function isValidJobId(value) {
+  const normalizedJobId = Number(value)
+  return Number.isInteger(normalizedJobId) && normalizedJobId > 0
+}
+
+function openRelatedJob() {
+  const targetJobId = Number(relatedJobId.value)
+  if (!Number.isInteger(targetJobId) || targetJobId <= 0) return
+  router.push({
+    name: 'job-detail',
+    params: { id: targetJobId },
+  })
+}
+
 async function loadDrive() {
   loading.value = true
   clearBanners()
@@ -556,6 +570,20 @@ onBeforeUnmount(() => {
         <div><strong>{{ t('common.labels.size') }}</strong><span>{{ formatBytes(drive.capacity_bytes) }}</span></div>
         <div><strong>{{ t('dashboard.project') }}</strong><span>{{ drive.current_project_id || '-' }}</span></div>
         <div><strong>{{ t('jobs.evidence') }}</strong><span>{{ currentProjectEvidenceNumber || '-' }}</span></div>
+        <div>
+          <strong>{{ t('jobs.jobId') }}</strong>
+          <span>
+            <button
+              v-if="isValidJobId(relatedJobId)"
+              class="cell-link"
+              type="button"
+              @click="openRelatedJob"
+            >
+              {{ relatedJobId }}
+            </button>
+            <template v-else>-</template>
+          </span>
+        </div>
         <div><strong>{{ t('common.labels.status') }}</strong><StatusBadge :status="drive.current_state" :label="driveStateLabel(drive.current_state)" /></div>
       </div>
 
@@ -720,6 +748,21 @@ onBeforeUnmount(() => {
 
 .detail-grid > div > strong {
   font-weight: var(--font-weight-bold);
+}
+
+.cell-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-link);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
+.cell-link:hover,
+.cell-link:focus-visible {
+  text-decoration-thickness: 2px;
 }
 
 .action-row {
