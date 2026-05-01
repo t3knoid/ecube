@@ -823,6 +823,51 @@ def test_prepare_eject_blocks_started_non_completed_jobs(manager_client, db, sta
     provider.prepare_eject.assert_not_called()
 
 
+def test_prepare_eject_audits_started_non_completed_job_block(manager_client, db):
+    from app.models.audit import AuditLog
+
+    drive = UsbDrive(
+        device_identifier="USB005-BLOCK-AUDIT",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        filesystem_path="/dev/sdb",
+        mount_path="/mnt/ecube/usb005-block-audit",
+    )
+    db.add(drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-001",
+        evidence_number="EV-EJECT-BLOCK-AUDIT",
+        source_path="/data",
+        status=JobStatus.PAUSED,
+    )
+    db.add(job)
+    db.flush()
+
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.commit()
+
+    provider = _fake_eject()
+    with patch("app.routers.drives.get_drive_eject", return_value=provider):
+        response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+
+    assert response.status_code == 409
+    provider.prepare_eject.assert_not_called()
+
+    log = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "DRIVE_EJECT_REJECTED_ACTIVE_JOB")
+        .first()
+    )
+    assert log is not None
+    assert log.drive_id == drive.id
+    assert log.project_id == "PROJ-001"
+    assert log.details["drive_id"] == drive.id
+    assert log.details["job_id"] == job.id
+    assert log.details["job_status"] == JobStatus.PAUSED.value
+
+
 def test_prepare_eject_allows_completed_assigned_job(manager_client, db):
     drive = UsbDrive(
         device_identifier="USB005-COMPLETED",
