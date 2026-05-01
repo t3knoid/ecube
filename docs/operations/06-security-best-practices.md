@@ -254,15 +254,17 @@ Topology-specific notes:
 
 ## 8. Directory Browse Hardening
 
-The `GET /browse` endpoint allows authenticated users to list directory contents of active mount points (USB drives and network shares). Three layers protect against unauthorized filesystem access:
+The `GET /browse` endpoint allows authenticated users to list directory contents of active mount points (USB drives and network shares). Four layers protect against unauthorized filesystem access:
 
 1. **Database validation:** The `path` parameter must match a registered, active mount root in the database. Arbitrary paths are rejected with `403`.
-2. **Realpath containment:** The `subdir` parameter is resolved via `os.path.realpath` and checked to be within the mount root. Path-traversal attempts (`../../etc`) are rejected with `400`.
-3. **Prefix allowlist:** The resolved path must start with one of the `BROWSE_ALLOWED_PREFIXES` values. This provides defence-in-depth against mount-root misconfiguration.
+2. **Active USB mount validation:** USB browse requests are checked against the authoritative mount table before any directory listing occurs. If the database still contains a stale `mount_path` but the drive is no longer actively mounted, the request is rejected with `403`.
+3. **Realpath containment:** The `subdir` parameter is resolved via `os.path.realpath` and checked to be within the mount root. Path-traversal attempts (`../../etc`) are rejected with `400`.
+4. **Prefix allowlist:** The resolved path must start with one of the `BROWSE_ALLOWED_PREFIXES` values. This provides defence-in-depth against mount-root misconfiguration.
 
 **Recommendations:**
 
 - Override `BROWSE_ALLOWED_PREFIXES` to match your actual mount hierarchy. The default (`/mnt/ecube/`, `/nfs/`, `/smb/`) covers common layouts but may be broader than needed.
+- On deployments where the ECUBE service does not share the operator shell's mount namespace, stale USB browse requests still fail closed because mount-state validation uses the authoritative host mount table when needed.
 - Tune `BROWSE_MAX_DIR_ENTRIES` (default `50000`) to cap the number of entries a single directory listing may return. Directories exceeding the limit are rejected with `400`. Set to `0` to disable the limit.
 - Avoid adding broad prefixes like `/` or `/home` to the allowlist.
 - Symlinks within browsed directories are listed as `type: "symlink"` but are not followed or navigable.
