@@ -1686,6 +1686,9 @@ FROM (VALUES
 ) AS v (sys_p, dev_id, fs_path, proj_id)
 ON CONFLICT (device_identifier) DO NOTHING;
 
+-- Note: these `device_identifier` values are synthetic fixture keys for repeatable QA setup.
+-- Real discovered rows now store composite identifiers built from USB metadata.
+
 -- ============================================================================
 -- 3. Network Mount Setup (one test mount per project)
 -- ============================================================================
