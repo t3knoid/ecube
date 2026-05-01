@@ -27,6 +27,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.infrastructure.mount_info import is_active_mount_point
 from app.models.hardware import DriveState, UsbDrive
 from app.models.network import MountStatus, NetworkMount
 from app.schemas.browse import BrowseEntry, BrowseResponse, EntryType
@@ -294,6 +295,12 @@ def list_directory(
             raise HTTPException(
                 status_code=403,
                 detail="The requested path is not a registered active mount root.",
+            )
+
+        if root_source == "usb_drive" and not is_active_mount_point(db_mount_root):
+            raise HTTPException(
+                status_code=403,
+                detail="The requested USB drive is no longer actively mounted.",
             )
 
         # 2 & 3. Resolve path from the trusted DB root + user subdir; validate
