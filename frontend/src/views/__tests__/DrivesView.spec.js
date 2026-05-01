@@ -186,6 +186,7 @@ describe('DrivesView rescan and filter loading', () => {
     expect(wrapper.text()).toContain('Kingston DataTraveler - Port 4')
     expect(wrapper.text()).toContain('PROJ-001')
     expect(wrapper.text()).toContain('9')
+    expect(wrapper.find('.column-labels').text()).not.toContain(i18n.global.t('common.labels.size'))
   })
 
   it('does not match drives by serial number once the serial control is removed', async () => {
@@ -246,7 +247,7 @@ describe('DrivesView rescan and filter loading', () => {
     expect(wrapper.text()).toContain(i18n.global.t('browse.browseContents'))
   })
 
-  it('omits size in mobile view while keeping compact status and row action controls', async () => {
+  it('keeps the size column absent in mobile view while preserving compact status and row action controls', async () => {
     viewportState.mobile = true
     installMatchMediaMock()
     mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/1' })])
