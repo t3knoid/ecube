@@ -1,5 +1,7 @@
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.exceptions import ConflictError
 from app.infrastructure.drive_eject import EjectResult
 from app.models.hardware import UsbDrive, DriveState, UsbHub, UsbPort
@@ -778,6 +780,78 @@ def test_prepare_eject(manager_client, db):
     # Project binding is preserved through eject so re-insert for the same
     # project is allowed without a format, and cross-project reuse is blocked.
     assert data["current_project_id"] == "PROJ-001"
+
+
+@pytest.mark.parametrize("status", [
+    JobStatus.RUNNING,
+    JobStatus.PAUSING,
+    JobStatus.PAUSED,
+    JobStatus.VERIFYING,
+])
+def test_prepare_eject_blocks_started_non_completed_jobs(manager_client, db, status):
+    drive = UsbDrive(
+        device_identifier=f"USB005-BLOCK-{status.value}",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        filesystem_path="/dev/sdb",
+        mount_path="/mnt/ecube/usb005-block",
+    )
+    db.add(drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-001",
+        evidence_number=f"EV-EJECT-BLOCK-{status.value}",
+        source_path="/data",
+        status=status,
+    )
+    db.add(job)
+    db.flush()
+
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.commit()
+
+    provider = _fake_eject()
+    with patch("app.routers.drives.get_drive_eject", return_value=provider):
+        response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+
+    assert response.status_code == 409
+    assert response.json()["message"] == (
+        f"Drive cannot be prepared for eject while assigned job {job.id} has started "
+        f"and is not yet completed (current status: {status.value})"
+    )
+    provider.prepare_eject.assert_not_called()
+
+
+def test_prepare_eject_allows_completed_assigned_job(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB005-COMPLETED",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        filesystem_path="/dev/sdb",
+        mount_path="/mnt/ecube/usb005-completed",
+    )
+    db.add(drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-001",
+        evidence_number="EV-EJECT-COMPLETED",
+        source_path="/data",
+        status=JobStatus.COMPLETED,
+    )
+    db.add(job)
+    db.flush()
+
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.commit()
+
+    provider = _fake_eject()
+    with patch("app.routers.drives.get_drive_eject", return_value=provider):
+        response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+
+    assert response.status_code == 200
+    provider.prepare_eject.assert_called_once_with("/dev/sdb")
 
 
 def test_reinitialize_same_project_after_eject(manager_client, db):
