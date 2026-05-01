@@ -60,11 +60,9 @@ function mountView() {
               <div class="column-labels">{{ (columns || []).map((column) => column.label).join(' ') }}</div>
               <div v-for="row in rows" :key="row.id" class="row-stub">
                 <span class="row-device">{{ row.display_device_label || row.port_system_path || '-' }}</span>
-                <span class="row-serial">{{ row.serial_number || '-' }}</span>
-                <span class="row-evidence">{{ row.current_project_evidence_number || '-' }}</span>
+                <span class="row-job-id">{{ row.current_project_job_id || '-' }}</span>
                 <slot name="cell-current_state" :row="row" />
-                <slot name="cell-current_project_id" :row="row" />
-                <slot name="cell-current_project_evidence_number" :row="row" />
+                <slot name="cell-current_project_job_id" :row="row" />
                 <slot name="cell-actions" :row="row" />
               </div>
               <div class="rows-count">{{ rows.length }}</div>
@@ -162,18 +160,8 @@ describe('DrivesView rescan and filter loading', () => {
     expect(mocks.getDrives).toHaveBeenLastCalledWith({ include_disconnected: true })
   })
 
-  it('renders project IDs in uppercase even when the data arrives mixed-case', async () => {
-    mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'proj-123' })])
-
-    const wrapper = mountView()
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('PROJ-123')
-    expect(wrapper.text()).not.toContain('proj-123')
-  })
-
-  it('shows the readable device label and serial number in separate columns', async () => {
-    mocks.listAllJobs.mockResolvedValue([{ id: 9, project_id: 'PROJ-001', evidence_number: 'EV-009' }])
+  it('shows the readable device label and related job ID in the list', async () => {
+    mocks.listAllJobs.mockResolvedValue([{ id: 9, project_id: 'PROJ-001', evidence_number: 'EV-009', drive: { id: 1 } }])
     mocks.getDrives.mockResolvedValue([
       buildDrive({
         device_identifier: 'SER-ONLY',
@@ -191,11 +179,34 @@ describe('DrivesView rescan and filter loading', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain(i18n.global.t('drives.device'))
-    expect(wrapper.text()).toContain(i18n.global.t('drives.serialNumber'))
-    expect(wrapper.text()).toContain(i18n.global.t('jobs.evidence'))
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.jobId'))
     expect(wrapper.text()).toContain('Kingston DataTraveler - Port 4')
-    expect(wrapper.text()).toContain('SER-ONLY')
-    expect(wrapper.text()).toContain('EV-009')
+    expect(wrapper.text()).toContain('9')
+  })
+
+  it('does not match drives by serial number once the serial control is removed', async () => {
+    mocks.getDrives.mockResolvedValue([
+      buildDrive({
+        id: 1,
+        display_device_label: 'Kingston DataTraveler - Port 4',
+        serial_number: 'SER-ONLY',
+        current_project_id: 'PROJ-001',
+      }),
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const searchInput = wrapper.find('input[type="text"]')
+    await searchInput.setValue('SER-ONLY')
+    await flushPromises()
+
+    expect(wrapper.find('.rows-count').text()).toBe('0')
+
+    await searchInput.setValue('PROJ-001')
+    await flushPromises()
+
+    expect(wrapper.find('.rows-count').text()).toBe('1')
   })
 
   it('shows the Browse action for a mounted available drive', async () => {
@@ -231,7 +242,7 @@ describe('DrivesView rescan and filter loading', () => {
     expect(wrapper.text()).toContain(i18n.global.t('browse.browseContents'))
   })
 
-  it('omits serial, filesystem, and size columns in mobile view while keeping compact status and row action controls', async () => {
+  it('omits size in mobile view while keeping compact status and row action controls', async () => {
     viewportState.mobile = true
     installMatchMediaMock()
     mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/1' })])
@@ -240,18 +251,17 @@ describe('DrivesView rescan and filter loading', () => {
     await flushPromises()
 
     const labels = wrapper.find('.column-labels').text()
-    expect(labels).not.toContain(i18n.global.t('drives.serialNumber'))
     expect(labels).not.toContain(i18n.global.t('drives.filesystem'))
     expect(labels).not.toContain(i18n.global.t('common.labels.size'))
     expect(wrapper.find('.drive-status-icon').attributes('aria-label')).toBe(i18n.global.t('drives.states.available'))
     expect(wrapper.find('.row-actions-toggle-dots').exists()).toBe(true)
   })
 
-  it('removes the filesystem column and shows project evidence in the list', async () => {
+  it('removes the filesystem, project, and evidence columns from the list', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-123' })])
     mocks.listAllJobs.mockResolvedValue([
-      { id: 12, project_id: 'PROJ-123', evidence_number: 'EV-123' },
-      { id: 11, project_id: 'PROJ-123', evidence_number: 'EV-OLDER' },
+      { id: 12, project_id: 'PROJ-123', evidence_number: 'EV-123', drive: { id: 1 } },
+      { id: 11, project_id: 'PROJ-123', evidence_number: 'EV-OLDER', drive: { id: 2 } },
     ])
 
     const wrapper = mountView()
@@ -259,11 +269,13 @@ describe('DrivesView rescan and filter loading', () => {
 
     const labels = wrapper.find('.column-labels').text()
     expect(labels).not.toContain(i18n.global.t('drives.filesystem'))
-    expect(labels).toContain(i18n.global.t('jobs.evidence'))
-    expect(wrapper.find('.row-evidence').text()).toBe('EV-123')
+    expect(labels).not.toContain(i18n.global.t('dashboard.project'))
+    expect(labels).not.toContain(i18n.global.t('jobs.evidence'))
+    expect(labels).toContain(i18n.global.t('jobs.jobId'))
+    expect(wrapper.find('.row-job-id').text()).toBe('12')
   })
 
-  it('links the project and evidence values to the related job detail', async () => {
+  it('links the job ID value to the related job detail', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-123' })])
     mocks.listAllJobs.mockResolvedValue([
       { id: 44, project_id: 'PROJ-123', evidence_number: 'EV-123', drive: { id: 1 } },
@@ -273,15 +285,10 @@ describe('DrivesView rescan and filter loading', () => {
     await flushPromises()
 
     const linkedCells = wrapper.findAll('.cell-link')
-    expect(linkedCells.map((node) => node.text())).toContain('PROJ-123')
-    expect(linkedCells.map((node) => node.text())).toContain('EV-123')
+    expect(linkedCells).toHaveLength(1)
+    expect(linkedCells[0].text()).toBe('44')
 
     await linkedCells[0].trigger('click')
-    await flushPromises()
-
-    expect(mocks.push).toHaveBeenCalledWith({ name: 'job-detail', params: { id: 44 } })
-
-    await linkedCells[1].trigger('click')
     await flushPromises()
 
     expect(mocks.push).toHaveBeenLastCalledWith({ name: 'job-detail', params: { id: 44 } })
@@ -304,8 +311,8 @@ describe('DrivesView rescan and filter loading', () => {
     const driveOneLinks = rows[0].findAll('.cell-link')
     const driveTwoLinks = rows[1].findAll('.cell-link')
 
-    expect(driveOneLinks.map((node) => node.text())).toEqual(['PROJ-123', 'EV-007'])
-    expect(driveTwoLinks.map((node) => node.text())).toEqual(['PROJ-123', 'EV-004'])
+    expect(driveOneLinks.map((node) => node.text())).toEqual(['7'])
+    expect(driveTwoLinks.map((node) => node.text())).toEqual(['4'])
 
     await driveTwoLinks[0].trigger('click')
     await flushPromises()
@@ -313,7 +320,7 @@ describe('DrivesView rescan and filter loading', () => {
     expect(mocks.push).toHaveBeenLastCalledWith({ name: 'job-detail', params: { id: 4 } })
   })
 
-  it('uses jobs beyond the first backend page when deriving related evidence links', async () => {
+  it('uses jobs beyond the first backend page when deriving related job links', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ id: 2, current_project_id: 'PROJ-123', display_device_label: 'Drive 2 - Port 2' })])
     mocks.listAllJobs.mockResolvedValue([
       { id: 7, project_id: 'PROJ-123', evidence_number: 'EV-007', drive: { id: 1 } },
@@ -324,10 +331,10 @@ describe('DrivesView rescan and filter loading', () => {
     await flushPromises()
 
     const linkedCells = wrapper.findAll('.cell-link')
-    expect(linkedCells.map((node) => node.text())).toEqual(['PROJ-123', 'EV-004'])
+    expect(linkedCells.map((node) => node.text())).toEqual(['4'])
   })
 
-  it('does not show stale project evidence or job links for a formatted drive', async () => {
+  it('does not show a stale job link for a formatted drive', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ id: 7, current_project_id: null })])
     mocks.listAllJobs.mockResolvedValue([
       { id: 44, project_id: 'PROJ-OLD', evidence_number: 'EV-OLD', drive: { id: 7 } },
@@ -336,12 +343,11 @@ describe('DrivesView rescan and filter loading', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.find('.row-evidence').text()).toBe('-')
-    expect(wrapper.text()).not.toContain('EV-OLD')
+    expect(wrapper.find('.row-job-id').text()).toBe('-')
     expect(wrapper.find('.cell-link').exists()).toBe(false)
   })
 
-  it('sorts by project in ascending and descending order and keeps that sort after refresh', async () => {
+  it('sorts by related job ID in ascending and descending order and keeps that sort after refresh', async () => {
     mocks.getDrives
       .mockResolvedValueOnce([
         buildDrive({ id: 1, current_project_id: 'proj-200', display_device_label: 'Drive C - Port 1', port_system_path: '2-1' }),
@@ -353,12 +359,23 @@ describe('DrivesView rescan and filter loading', () => {
         buildDrive({ id: 5, current_project_id: 'PROJ-150', display_device_label: 'Drive A - Port 5', port_system_path: '2-5' }),
         buildDrive({ id: 6, current_project_id: 'PROJ-250', display_device_label: 'Drive B - Port 6', port_system_path: '2-6' }),
       ])
+    mocks.listAllJobs
+      .mockResolvedValueOnce([
+        { id: 200, project_id: 'PROJ-200', drive: { id: 1 } },
+        { id: 50, project_id: 'PROJ-050', drive: { id: 2 } },
+        { id: 100, project_id: 'PROJ-100', drive: { id: 3 } },
+      ])
+      .mockResolvedValueOnce([
+        { id: 300, project_id: 'PROJ-300', drive: { id: 4 } },
+        { id: 150, project_id: 'PROJ-150', drive: { id: 5 } },
+        { id: 250, project_id: 'PROJ-250', drive: { id: 6 } },
+      ])
 
     const wrapper = mountView()
     await flushPromises()
 
     const selects = wrapper.findAll('select')
-    await selects[1].setValue('current_project_id')
+    await selects[1].setValue('current_project_job_id')
     await flushPromises()
 
     let rows = wrapper.findAll('.row-stub')
@@ -375,7 +392,7 @@ describe('DrivesView rescan and filter loading', () => {
     await refreshButton.trigger('click')
     await flushPromises()
 
-    expect(wrapper.findAll('select')[1].element.value).toBe('current_project_id')
+    expect(wrapper.findAll('select')[1].element.value).toBe('current_project_job_id')
     rows = wrapper.findAll('.row-stub')
     expect(rows.map((row) => row.find('.row-device').text())).toEqual(['Drive C - Port 4', 'Drive B - Port 6', 'Drive A - Port 5'])
   })
