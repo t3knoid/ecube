@@ -99,6 +99,7 @@ def test_list_drives_exposes_safe_usb_metadata_and_readable_label(client, db):
         manufacturer="Kingston",
         product_name="DataTraveler",
         port_id=port.id,
+        capacity_bytes=32_000_000_000,
         current_state=DriveState.AVAILABLE,
     )
     db.add(drive)
@@ -112,7 +113,7 @@ def test_list_drives_exposes_safe_usb_metadata_and_readable_label(client, db):
     assert match["product_name"] == "DataTraveler"
     assert match["port_number"] == 7
     assert match["speed"] == "5000"
-    assert match["display_device_label"] == "Kingston DataTraveler - Port 7"
+    assert match["display_device_label"] == "Kingston DataTraveler - Port 7 (30GB)"
 
 
 def test_list_drives_filter_by_project(client, db):
