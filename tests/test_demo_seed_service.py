@@ -333,6 +333,95 @@ def test_select_seed_drive_for_port_matches_legacy_serial_against_composite_iden
     assert selected is not None
     assert selected.id == drive.id
 
+
+def test_seed_demo_environment_accepts_legacy_serial_for_composite_identifier(db, tmp_path, monkeypatch):
+    from app.infrastructure.usb_discovery import DiscoveredDrive, DiscoveredHub, DiscoveredPort, DiscoveredTopology
+    from app.models.hardware import UsbHub
+    from app.services.demo_seed_service import seed_demo_environment
+
+    mount_provider = _FakeDriveMountProvider()
+    demo_root = tmp_path / "demo-share"
+    demo_root.mkdir()
+    (demo_root / "demo-metadata.json").write_text(
+        json.dumps(
+            {
+                "managed_by": "ecube-demo-seed-v1",
+                "usb_seed": {
+                    "enabled": True,
+                    "drives": [
+                        {
+                            "port_system_path": "1-1",
+                            "project_id": 1,
+                            "device_identifier": "usb-demo-serial",
+                        }
+                    ]
+                },
+                "projects": [{"id": 1, "project_name": "DEMO-CASE-001"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "app.services.demo_seed_service.settings.demo_accounts",
+        [],
+        raising=False,
+    )
+
+    hub = UsbHub(name="Existing hub", system_identifier="usb1")
+    db.add(hub)
+    db.flush()
+    port = UsbPort(hub_id=hub.id, port_number=1, system_path="1-1", enabled=False)
+    db.add(port)
+    db.flush()
+
+    topology = DiscoveredTopology(
+        hubs=[DiscoveredHub(system_identifier="usb1", name="Existing hub", vendor_id="090c", product_id="1000")],
+        ports=[
+            DiscoveredPort(
+                hub_system_identifier="usb1",
+                port_number=1,
+                system_path="1-1",
+                vendor_id="090c",
+                product_id="1000",
+                speed="5000",
+            )
+        ],
+        drives=[
+            DiscoveredDrive(
+                device_identifier=build_persistent_device_identifier(
+                    "090c",
+                    "1000",
+                    "usb-demo-serial",
+                    "1-1",
+                ),
+                port_system_path="1-1",
+                filesystem_path="/dev/sdb1",
+                manufacturer="Demo",
+                product_name="USB",
+                speed="5000",
+            )
+        ],
+    )
+
+    result = seed_demo_environment(
+        db,
+        data_root=demo_root,
+        provider=_FakeOsUserProvider(),
+        shared_password="SharedDemo#123",
+        actor="demo-seed",
+        topology_source=lambda: topology,
+        filesystem_detector=_FakeFilesystemDetector(),
+        mount_provider=mount_provider,
+    )
+
+    drive = db.query(UsbDrive).one()
+    assert result.usb_drives_seeded == 1
+    assert result.usb_drives_mounted == 1
+    assert drive.current_project_id == "DEMO-CASE-001"
+    assert drive.current_state == DriveState.IN_USE
+    assert len(mount_provider.mounted) == 1
+
 def test_seed_demo_environment_uses_current_usb_drive_when_port_has_history(db, tmp_path, monkeypatch):
     from app.infrastructure.usb_discovery import DiscoveredDrive, DiscoveredHub, DiscoveredPort, DiscoveredTopology
     from app.models.hardware import UsbHub
