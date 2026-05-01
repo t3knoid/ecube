@@ -532,6 +532,12 @@ def _resolve_coc_targets(
                     port_system_path=candidate.port_system_path,
                 )
             ]
+            if project_id:
+                project_scoped_matches = [
+                    candidate for candidate in serial_matches if candidate.current_project_id == project_id
+                ]
+                if project_scoped_matches:
+                    serial_matches = project_scoped_matches
             if len(serial_matches) > 1:
                 raise HTTPException(
                     status_code=409,
