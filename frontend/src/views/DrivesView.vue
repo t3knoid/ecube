@@ -42,36 +42,15 @@ const activeBrowsedDrive = computed(() =>
 )
 
 const columns = computed(() => {
-  const nextColumns = [
+  return [
     { key: 'id', label: t('common.labels.id'), align: 'right' },
     { key: 'display_device_label', label: t('drives.device') },
     { key: 'current_project_id', label: t('dashboard.project') },
-    { key: 'capacity_bytes', label: t('common.labels.size'), align: 'right' },
     { key: 'current_state', label: t('common.labels.status') },
     { key: 'current_project_job_id', label: t('jobs.jobId'), align: 'right' },
     { key: 'actions', label: '', align: 'center' },
   ]
-
-  if (isMobileViewport.value) {
-    return nextColumns.filter(
-      (column) => column.key !== 'capacity_bytes',
-    )
-  }
-
-  return nextColumns
 })
-
-function formatBytes(value) {
-  if (typeof value !== 'number' || value <= 0) return '-'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let next = value
-  let unit = 0
-  while (next >= 1024 && unit < units.length - 1) {
-    next /= 1024
-    unit += 1
-  }
-  return `${next.toFixed(next >= 10 ? 0 : 1)} ${units[unit]}`
-}
 
 function isValidJobId(value) {
   const normalizedJobId = Number(value)
@@ -385,9 +364,6 @@ onBeforeUnmount(() => {
           <span aria-hidden="true">{{ driveStatusIcon(row.current_state) }}</span>
         </span>
         <StatusBadge v-else :status="row.current_state" :label="driveStateLabel(row.current_state)" />
-      </template>
-      <template #cell-capacity_bytes="{ row }">
-        {{ formatBytes(row.capacity_bytes) }}
       </template>
       <template #cell-actions="{ row }">
         <div class="row-actions">
