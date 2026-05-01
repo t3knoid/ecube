@@ -8,6 +8,7 @@ Create a commit message for the currently staged git changes in this ECUBE works
 
 Instructions:
 - Inspect only staged changes. Ignore unstaged and untracked changes unless the user explicitly asks for them.
+- If there are no staged changes, check if there are workspace changes and base the message on those, but preface it with "No staged changes, but workspace changes include: ...". If there are no changes at all, say "No changes to commit."
 - Base the message on the actual behavior change, not a file-by-file changelog.
 - Prefer ECUBE-relevant framing such as project isolation, auditability, job behavior, drive lifecycle, mount handling, copy behavior, API behavior, or UI behavior.
 - If the staged changes span both backend and frontend, write a message that reflects the shared outcome rather than listing both layers separately.
