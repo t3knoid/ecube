@@ -47,6 +47,25 @@ export function isExpiredAuthPayload(data) {
   return message.includes('expired')
 }
 
+export function isUnauthorizedAuthPayload(data) {
+  if (!data || typeof data !== 'object') return false
+
+  const code = typeof data.code === 'string' ? data.code.trim().toUpperCase() : ''
+  const message = normalizeErrorMessage(data, '').trim().toLowerCase()
+
+  return code === 'UNAUTHORIZED' && message === 'missing authentication token'
+}
+
+function resetAuthAndRedirect(data) {
+  sessionStorage.removeItem(STORAGE_TOKEN_KEY)
+  window.dispatchEvent(new Event(AUTH_RESET_EVENT))
+
+  if (window.location.pathname !== LOGIN_PATH) {
+    const isExpired = isExpiredAuthPayload(data)
+    window.location.href = isExpired ? `${LOGIN_PATH}?${EXPIRED_QUERY_KEY}=${EXPIRED_QUERY_VALUE}` : LOGIN_PATH
+  }
+}
+
 const apiClient = axios.create({
   baseURL: '',
   timeout: 30000,
@@ -66,8 +85,8 @@ apiClient.interceptors.request.use((config) => {
 
 // Response interceptor: handle auth errors
 // Intentionally store-agnostic to avoid a circular dependency
-// (store → api/auth → api/client → store). Instead, 401 dispatches a global
-// auth-reset event that main.js wires to authStore.clearAuth().
+// (store → api/auth → api/client → store). Instead, auth-loss responses
+// dispatch a global auth-reset event that main.js wires to authStore.clearAuth().
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -82,14 +101,8 @@ apiClient.interceptors.response.use(
     const data = error.response?.data || {}
     const requestUrl = error.config?.url || ''
 
-    if (status === 401) {
-      sessionStorage.removeItem(STORAGE_TOKEN_KEY)
-      window.dispatchEvent(new Event(AUTH_RESET_EVENT))
-      if (window.location.pathname !== LOGIN_PATH) {
-        // Only show the expired banner when the backend explicitly says so.
-        const isExpired = isExpiredAuthPayload(data)
-        window.location.href = isExpired ? `${LOGIN_PATH}?${EXPIRED_QUERY_KEY}=${EXPIRED_QUERY_VALUE}` : LOGIN_PATH
-      }
+    if (status === 401 || isUnauthorizedAuthPayload(data)) {
+      resetAuthAndRedirect(data)
     } else if (status === 403) {
       warning(i18n.global.t('common.errors.insufficientPermissions'))
     } else if (status === 409) {

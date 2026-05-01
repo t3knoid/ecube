@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { AUTH_RESET_EVENT } from '@/constants/auth.js'
+import { AUTH_RESET_EVENT, EXPIRED_QUERY_KEY, EXPIRED_QUERY_VALUE } from '@/constants/auth.js'
+import { LOGIN_PATH } from '@/constants/routes.js'
 import { STORAGE_TOKEN_KEY } from '@/constants/storage.js'
 
 vi.mock('axios', () => {
@@ -96,6 +97,79 @@ describe('api/client interceptors', () => {
 
     expect(isExpiredAuthPayload({ message: 'Token expired' })).toBe(true)
     expect(isExpiredAuthPayload({ message: 'Unauthorized' })).toBe(false)
+  })
+
+  it('detects the backend unauthorized payload shape', async () => {
+    const { isUnauthorizedAuthPayload } = await import('@/api/client.js')
+
+    expect(
+      isUnauthorizedAuthPayload({
+        code: 'UNAUTHORIZED',
+        message: 'Missing authentication token',
+      }),
+    ).toBe(true)
+    expect(
+      isUnauthorizedAuthPayload({
+        code: 'FORBIDDEN',
+        message: 'Missing authentication token',
+      }),
+    ).toBe(false)
+  })
+
+  it('redirects to login when backend unauthorized payload is returned outside the 401 branch', async () => {
+    sessionStorage.setItem(STORAGE_TOKEN_KEY, 'abc123')
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
+    const originalLocation = window.location
+    delete window.location
+    window.location = { href: '' }
+
+    const { default: apiClient } = await import('@/api/client.js')
+    const responseInterceptor = apiClient._responseHandlers[0].failure
+
+    await expect(
+      responseInterceptor({
+        response: {
+          status: 403,
+          data: {
+            code: 'UNAUTHORIZED',
+            message: 'Missing authentication token',
+            trace_id: 'trace-123',
+          },
+        },
+      }),
+    ).rejects.toBeTruthy()
+
+    expect(sessionStorage.getItem(STORAGE_TOKEN_KEY)).toBeNull()
+    expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({ type: AUTH_RESET_EVENT }))
+    expect(window.location.href).toBe(LOGIN_PATH)
+    expect(warning).not.toHaveBeenCalled()
+
+    window.location = originalLocation
+  })
+
+  it('keeps expired-session redirect behavior for 401 responses', async () => {
+    sessionStorage.setItem(STORAGE_TOKEN_KEY, 'abc123')
+    const originalLocation = window.location
+    delete window.location
+    window.location = { href: '' }
+
+    const { default: apiClient } = await import('@/api/client.js')
+    const responseInterceptor = apiClient._responseHandlers[0].failure
+
+    await expect(
+      responseInterceptor({
+        response: {
+          status: 401,
+          data: {
+            message: 'Token expired',
+          },
+        },
+      }),
+    ).rejects.toBeTruthy()
+
+    expect(window.location.href).toBe(`${LOGIN_PATH}?${EXPIRED_QUERY_KEY}=${EXPIRED_QUERY_VALUE}`)
+
+    window.location = originalLocation
   })
 
   it('handles 409 using backend message', async () => {
