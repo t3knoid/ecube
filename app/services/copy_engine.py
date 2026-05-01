@@ -29,7 +29,6 @@ from app.utils.sanitize import describe_relative_paths, sanitize_error_message, 
 
 logger = logging.getLogger(__name__)
 
-STARTUP_ANALYSIS_BATCH_SIZE = 500
 STARTUP_ANALYSIS_SAMPLE_LIMIT = 16
 COPY_PENDING_BATCH_MULTIPLIER = 4
 
@@ -847,6 +846,7 @@ def _persist_startup_analysis_cache(
     source: Path,
     startup_entry_repo: StartupAnalysisEntryRepository,
 ) -> tuple[int, int, list[Path]]:
+    batch_size = settings.startup_analysis_batch_size
     file_batch: list[tuple[str, int]] = []
     directory_batch: list[tuple[str, int]] = []
     sample_files: list[Path] = []
@@ -864,7 +864,7 @@ def _persist_startup_analysis_cache(
         if entry_type == "directory":
             relative_directory = "" if path == source else str(_relative_path(path, source))
             directory_batch.append((relative_directory, path.stat().st_mtime_ns))
-            if len(directory_batch) >= STARTUP_ANALYSIS_BATCH_SIZE:
+            if len(directory_batch) >= batch_size:
                 _persist_startup_analysis_entry_batch(
                     startup_entry_repo,
                     job.id,
@@ -883,7 +883,7 @@ def _persist_startup_analysis_cache(
         file_count += 1
         total_bytes += size_bytes
 
-        if len(file_batch) >= STARTUP_ANALYSIS_BATCH_SIZE:
+        if len(file_batch) >= batch_size:
             _persist_startup_analysis_file_batch(db, job, file_batch, revision=revision, commit=False)
             _persist_startup_analysis_entry_batch(
                 startup_entry_repo,
@@ -937,6 +937,7 @@ def _persist_legacy_startup_analysis_cache(
     startup_entry_repo: StartupAnalysisEntryRepository,
     legacy_cache: tuple[list[dict[str, int | str]], list[dict[str, int | str]], int, int],
 ) -> list[Path]:
+    batch_size = settings.startup_analysis_batch_size
     file_entries, directory_entries, file_count, total_bytes = legacy_cache
     revision = int(job.startup_analysis_revision or 0) + 1
     job.startup_analysis_revision = revision
@@ -945,8 +946,8 @@ def _persist_legacy_startup_analysis_cache(
     startup_entry_repo.delete_by_job(job.id, commit=False)
 
     sample_files: list[Path] = []
-    for start in range(0, len(file_entries), STARTUP_ANALYSIS_BATCH_SIZE):
-        batch_entries = file_entries[start:start + STARTUP_ANALYSIS_BATCH_SIZE]
+    for start in range(0, len(file_entries), batch_size):
+        batch_entries = file_entries[start:start + batch_size]
         file_batch = [
             (str(entry["relative_path"]), int(entry["size_bytes"]))
             for entry in batch_entries
@@ -964,8 +965,8 @@ def _persist_legacy_startup_analysis_cache(
                 break
             sample_files.append(_source_path_for_relative_path(source, relative_path))
 
-    for start in range(0, len(directory_entries), STARTUP_ANALYSIS_BATCH_SIZE):
-        batch_entries = directory_entries[start:start + STARTUP_ANALYSIS_BATCH_SIZE]
+    for start in range(0, len(directory_entries), batch_size):
+        batch_entries = directory_entries[start:start + batch_size]
         directory_batch = [
             (str(entry["relative_path"]), int(entry["mtime_ns"]))
             for entry in batch_entries
@@ -1002,6 +1003,7 @@ def _cached_startup_analysis_is_current(
     file_repo: FileRepository,
     startup_entry_repo: StartupAnalysisEntryRepository,
 ) -> bool:
+    batch_size = settings.startup_analysis_batch_size
     file_count = int(job.startup_analysis_file_count or 0)
     total_bytes = int(job.startup_analysis_total_bytes or 0)
     revision = int(job.startup_analysis_revision or 0)
@@ -1012,7 +1014,7 @@ def _cached_startup_analysis_is_current(
     validated_total_bytes = 0
     last_file_id: int | None = None
     while True:
-        file_rows = file_repo.list_by_job_after_id(job.id, after_id=last_file_id, limit=STARTUP_ANALYSIS_BATCH_SIZE)
+        file_rows = file_repo.list_by_job_after_id(job.id, after_id=last_file_id, limit=batch_size)
         if not file_rows:
             break
         last_file_id = file_rows[-1].id
@@ -1041,7 +1043,7 @@ def _cached_startup_analysis_is_current(
             job.id,
             entry_type="directory",
             after_id=last_directory_id,
-            limit=STARTUP_ANALYSIS_BATCH_SIZE,
+            limit=batch_size,
         )
         if not directory_rows:
             break
