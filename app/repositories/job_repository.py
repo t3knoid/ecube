@@ -655,20 +655,26 @@ class StartupAnalysisEntryRepository:
             query = query.limit(limit)
         return query.all()
 
-    def add_bulk(self, entries: List[StartupAnalysisEntry]) -> None:
+    def add_bulk(self, entries: List[StartupAnalysisEntry], *, commit: bool = True) -> None:
         if not entries:
             return
         self.db.add_all(entries)
         try:
-            self.db.commit()
+            if commit:
+                self.db.commit()
+            else:
+                self.db.flush()
         except Exception:
             self.db.rollback()
             raise
 
-    def delete_by_job(self, job_id: int) -> None:
+    def delete_by_job(self, job_id: int, *, commit: bool = True) -> None:
         self.db.query(StartupAnalysisEntry).filter(StartupAnalysisEntry.job_id == job_id).delete()
         try:
-            self.db.commit()
+            if commit:
+                self.db.commit()
+            else:
+                self.db.flush()
         except Exception:
             self.db.rollback()
             raise
