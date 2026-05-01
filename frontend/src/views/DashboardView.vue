@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getSystemHealth } from '@/api/introspection.js'
 import { getDrives } from '@/api/drives.js'
@@ -12,6 +13,7 @@ import { calculateJobProgress, isJobProgressActive } from '@/utils/jobProgress.j
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
 const { t } = useI18n()
+const router = useRouter()
 
 const health = ref({ status: 'unknown', database: 'unknown', active_jobs: 0 })
 const drives = ref([])
@@ -41,6 +43,12 @@ const healthColumns = computed(() => [
 
 function formatProjectId(value) {
   return normalizeProjectId(value) || '-'
+}
+
+function openJobDetail(jobId) {
+  const normalizedJobId = Number(jobId)
+  if (!Number.isInteger(normalizedJobId) || normalizedJobId < 1) return
+  router.push({ name: 'job-detail', params: { id: normalizedJobId } })
 }
 
 function progressPercent(job) {
@@ -145,6 +153,17 @@ onUnmounted(() => {
     <article class="panel">
       <h2>{{ t('jobs.activeJobs') }}</h2>
       <DataTable :columns="healthColumns" :rows="activeJobs" row-key="id" :empty-text="t('dashboard.noActiveJobs')">
+        <template #cell-id="{ row }">
+          <button
+            v-if="Number.isInteger(Number(row.id)) && Number(row.id) > 0"
+            class="cell-link"
+            type="button"
+            @click="openJobDetail(row.id)"
+          >
+            {{ row.id }}
+          </button>
+          <span v-else class="job-id-text">{{ row.id ?? '-' }}</span>
+        </template>
         <template #cell-project_id="{ row }">{{ formatProjectId(row.project_id) }}</template>
         <template #cell-status="{ row }">
           <StatusBadge :status="row.status" />
@@ -205,6 +224,21 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: var(--space-xs) 0;
+}
+
+.cell-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-link);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
+.cell-link:hover,
+.cell-link:focus-visible {
+  text-decoration-thickness: 2px;
 }
 
 .dashboard-progress-cell {

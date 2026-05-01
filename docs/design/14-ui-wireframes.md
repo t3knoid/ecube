@@ -448,6 +448,8 @@ Displayed when user submits a password that fails policy validation (422 respons
 
 The default landing page after login. Provides an at-a-glance overview of system status and quick access to primary workflows.
 
+The active-jobs table on this screen treats valid `Job ID` values as the navigation entry point into Job Detail. If a row ever lacks a valid job identifier, the cell falls back to plain text rather than rendering a broken control.
+
 ```
 ┌──────────────┬───────────────────────────────────────────────────────────────┐
 │              │  Dashboard                                                    │
@@ -488,6 +490,8 @@ The default landing page after login. Provides an at-a-glance overview of system
 ```
 
 **Use Cases Covered:** UC-8.1, UC-8.2, UC-4.1 (summary), UC-5.1 (summary), UC-6.3 (summary)
+
+**Key Interaction:** Selecting a valid `Job ID` from the Dashboard active-jobs table opens the existing Job Detail page for that row.
 
 ---
 
