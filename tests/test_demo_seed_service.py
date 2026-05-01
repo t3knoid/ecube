@@ -8,6 +8,7 @@ from app.models.jobs import DriveAssignment, ExportJob, JobStatus
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.user_role_repository import UserRoleRepository
+from app.utils.drive_identity import build_persistent_device_identifier
 
 
 class _FakeOsUserProvider:
@@ -296,6 +297,41 @@ def test_seed_demo_environment_can_seed_connected_usb_drives_from_metadata(db, t
     assert result.usb_drives_seeded == 1
     assert result.usb_drives_mounted == 1
     assert len(mount_provider.mounted) == 1
+
+
+def test_select_seed_drive_for_port_matches_legacy_serial_against_composite_identifier(db):
+    from app.models.hardware import UsbHub
+    from app.services.demo_seed_service import _select_seed_drive_for_port
+
+    hub = UsbHub(name="Demo Hub", system_identifier="usb-demo-composite")
+    db.add(hub)
+    db.flush()
+
+    port = UsbPort(hub_id=hub.id, port_number=1, system_path="2-2", enabled=True)
+    db.add(port)
+    db.flush()
+
+    drive = UsbDrive(
+        device_identifier=build_persistent_device_identifier(
+            "090c",
+            "1000",
+            "usb-demo-serial",
+            "2-2",
+        ),
+        port_id=port.id,
+        current_state=DriveState.AVAILABLE,
+    )
+    db.add(drive)
+    db.commit()
+
+    selected = _select_seed_drive_for_port(
+        db,
+        port_id=port.id,
+        expected_device_identifier="usb-demo-serial",
+    )
+
+    assert selected is not None
+    assert selected.id == drive.id
 
 def test_seed_demo_environment_uses_current_usb_drive_when_port_has_history(db, tmp_path, monkeypatch):
     from app.infrastructure.usb_discovery import DiscoveredDrive, DiscoveredHub, DiscoveredPort, DiscoveredTopology

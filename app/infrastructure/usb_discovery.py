@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 from dataclasses import dataclass, field
 from typing import List, Optional, Protocol
 
 from app.config import settings
 from app.infrastructure.mount_info import read_mount_points
+from app.utils.drive_identity import build_persistent_device_identifier
 
 
 @dataclass
@@ -56,8 +58,7 @@ class DiscoveredDrive:
     """A USB mass-storage drive attached to a port."""
 
     device_identifier: str
-    """Stable identifier – serial number when available, otherwise the sysfs
-    device path."""
+    """Stable persistent identifier built from available USB/device metadata."""
     port_system_path: Optional[str] = None
     """``system_path`` of the parent :class:`DiscoveredPort`, if known."""
     filesystem_path: Optional[str] = None
@@ -148,6 +149,33 @@ def _read_capacity_bytes(dev_path: str) -> Optional[int]:
         except ValueError:
             pass
     return None
+
+
+def _read_udev_properties(device_path: str) -> dict[str, str]:
+    """Return udev properties for a block device path, or an empty dict."""
+    try:
+        result = subprocess.run(
+            ["udevadm", "info", "--query=property", "--name", device_path],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return {}
+
+    if result.returncode != 0:
+        return {}
+
+    props: dict[str, str] = {}
+    for line in result.stdout.splitlines():
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if key and value:
+            props[key] = value
+    return props
 
 
 # Mount-point parsing moved to app.infrastructure.mount_info
@@ -261,10 +289,10 @@ def discover_usb_topology() -> DiscoveredTopology:
                 serial = _read_sysfs_attr(dev_path, "serial")
                 manufacturer = _read_sysfs_attr(dev_path, "manufacturer")
                 product_name = _read_sysfs_attr(dev_path, "product")
-                device_id = serial if serial else dev
                 block_node = _block_device_for_sysfs_path(dev_path)
                 if block_node or interface_class == "00":
                     capacity: Optional[int] = None
+                    udev_props: dict[str, str] = {}
                     if block_node:
                         # Attempt to read capacity from /sys/block/<name>/size
                         block_name = os.path.basename(block_node)
@@ -272,9 +300,31 @@ def discover_usb_topology() -> DiscoveredTopology:
                             f"{settings.sysfs_block_path}/{block_name}"
                         )
                         capacity = cap
+                        udev_props = _read_udev_properties(block_node)
+
+                    usb_vendor_id = udev_props.get("ID_USB_VENDOR_ID") or port_vendor_id
+                    usb_product_id = udev_props.get("ID_USB_MODEL_ID") or port_product_id
+                    usb_serial_number = (
+                        udev_props.get("ID_USB_SERIAL_SHORT")
+                        or udev_props.get("ID_SERIAL_SHORT")
+                        or serial
+                    )
+                    disk_serial_number = (
+                        udev_props.get("ID_SCSI_SERIAL")
+                        or udev_props.get("SCSI_IDENT_SERIAL")
+                    )
+                    if disk_serial_number and usb_serial_number and disk_serial_number == usb_serial_number:
+                        disk_serial_number = None
+
                     topology.drives.append(
                         DiscoveredDrive(
-                            device_identifier=device_id,
+                            device_identifier=build_persistent_device_identifier(
+                                usb_vendor_id,
+                                usb_product_id,
+                                usb_serial_number,
+                                dev,
+                                disk_serial_number=disk_serial_number,
+                            ),
                             port_system_path=dev,
                             filesystem_path=block_node,
                             capacity_bytes=capacity,
