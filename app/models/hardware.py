@@ -92,6 +92,7 @@ class UsbDrive(Base):
             self.manufacturer,
             self.product_name,
             self.port_number,
+            capacity_bytes=self.capacity_bytes,
             fallback_label=self.port_system_path or self.device_identifier,
         )
 
