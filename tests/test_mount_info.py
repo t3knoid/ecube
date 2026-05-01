@@ -30,6 +30,31 @@ def test_read_mount_table_returns_empty_dict_on_oserror(monkeypatch):
     assert result == {}
 
 
+def test_read_mount_table_prefers_host_mounts_when_namespace_differs(monkeypatch):
+    monkeypatch.setattr(mount_info.settings, "procfs_mounts_path", "/proc/mounts")
+
+    def fake_readlink(path: str) -> str:
+        mapping = {
+            "/proc/self/ns/mnt": "mnt:[4026534000]",
+            "/proc/1/ns/mnt": "mnt:[4026531840]",
+        }
+        return mapping[path]
+
+    opened_paths = []
+
+    def fake_open(path, *args, **kwargs):
+        opened_paths.append(path)
+        return mock_open(read_data="/dev/sdb1 /mnt/ecube/7 ext4 rw 0 0\n")()
+
+    monkeypatch.setattr(mount_info.os, "readlink", fake_readlink)
+
+    with patch("builtins.open", side_effect=fake_open):
+        result = mount_info.read_mount_table()
+
+    assert result == {"/mnt/ecube/7": "/dev/sdb1"}
+    assert opened_paths == ["/proc/1/mounts"]
+
+
 def test_read_mount_points_filters_non_device_sources(monkeypatch):
     monkeypatch.setattr(
         mount_info,
@@ -87,3 +112,14 @@ def test_find_device_mount_point_returns_none_when_device_not_found(monkeypatch)
     monkeypatch.setattr(mount_info, "read_mount_points", lambda: {"/dev/sdb1": "/mnt/ecube/8"})
 
     assert mount_info.find_device_mount_point("/dev/sdz1") is None
+
+
+def test_is_active_mount_point_matches_normalized_mount_root(monkeypatch):
+    monkeypatch.setattr(
+        mount_info,
+        "read_mount_table",
+        lambda: {"/mnt/ecube/7": "/dev/sdb1"},
+    )
+
+    assert mount_info.is_active_mount_point("/mnt/ecube/7/") is True
+    assert mount_info.is_active_mount_point("/mnt/ecube/8") is False
