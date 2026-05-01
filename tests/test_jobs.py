@@ -727,6 +727,7 @@ def test_get_job(client, db):
         current_state=DriveState.AVAILABLE,
         current_project_id="PROJ-001",
         mount_path="/mnt/ecube/get-001",
+        available_bytes=4096,
     ))
     db.commit()
 
@@ -744,6 +745,7 @@ def test_get_job(client, db):
     response = client.get(f"/jobs/{job_id}")
     assert response.status_code == 200
     assert response.json()["id"] == job_id
+    assert response.json()["drive"]["available_bytes"] == 4096
 
 
 def test_get_job_includes_latest_manifest_created_at(client, db):

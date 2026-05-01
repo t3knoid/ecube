@@ -17,6 +17,7 @@ from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
 from app.repositories.mount_repository import MountRepository
 from app.services.audit_service import log_and_audit
+from app.services.drive_space_service import request_available_space_refresh_for_drive
 from app.utils.drive_identity import mask_serial_number
 from app.utils.sanitize import normalize_project_id, sanitize_error_message
 
@@ -113,7 +114,10 @@ def get_all_drives(
 ) -> List[UsbDrive]:
     repo = DriveRepository(db)
     if project_id is not None:
-        return repo.list_by_project(project_id)
+        drives = repo.list_by_project(project_id)
+        for drive in drives:
+            request_available_space_refresh_for_drive(drive)
+        return drives
     if states:
         try:
             parsed = [DriveState(s) for s in states]
@@ -123,10 +127,19 @@ def get_all_drives(
                 status_code=422,
                 detail=f"Invalid state filter. Valid values: {valid}",
             )
-        return repo.list_by_states(parsed)
+        drives = repo.list_by_states(parsed)
+        for drive in drives:
+            request_available_space_refresh_for_drive(drive)
+        return drives
     if include_disconnected:
-        return repo.list_all()
-    return repo.list_by_states([DriveState.AVAILABLE, DriveState.IN_USE])  # DISCONNECTED excluded by default
+        drives = repo.list_all()
+        for drive in drives:
+            request_available_space_refresh_for_drive(drive)
+        return drives
+    drives = repo.list_by_states([DriveState.AVAILABLE, DriveState.IN_USE])  # DISCONNECTED excluded by default
+    for drive in drives:
+        request_available_space_refresh_for_drive(drive)
+    return drives
 
 
 def initialize_drive(
@@ -1015,6 +1028,7 @@ def format_drive(
         )
 
     drive.filesystem_type = filesystem_type
+    drive.available_bytes = None
     # Formatting wipes all previous data, so the project binding is cleared.
     # The drive is now clean and can be initialized for any project.
     prior_project_id = drive.current_project_id
