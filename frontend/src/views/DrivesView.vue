@@ -11,7 +11,7 @@ import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 import { useStatusLabels } from '@/composables/useStatusLabels.js'
 import { formatDriveIdentity } from '@/utils/driveIdentity.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
-import { buildDriveJobMap, getDriveJob } from '@/utils/projectEvidence.js'
+import { buildDriveJobMap, buildProjectEvidenceMap, getDriveJob, getProjectEvidenceJobId } from '@/utils/projectEvidence.js'
 
 const { t } = useI18n()
 const { driveStateLabel } = useStatusLabels()
@@ -140,6 +140,7 @@ async function loadDrives() {
     const jobs = jobResult.status === 'fulfilled' ? (jobResult.value || []) : []
 
     driveJobById.value = buildDriveJobMap(jobs)
+    const evidenceByProject = buildProjectEvidenceMap(jobs)
 
     drives.value = (driveResult.value || []).map((item) => {
       const drive = normalizeProjectRecord(item, ['current_project_id'])
@@ -147,7 +148,9 @@ async function loadDrives() {
       const assignedJob = hasActiveProjectBinding ? getDriveJob(drive.id, driveJobById.value) : null
       return {
         ...drive,
-        current_project_job_id: assignedJob?.jobId ?? null,
+        current_project_job_id: hasActiveProjectBinding
+          ? assignedJob?.jobId ?? getProjectEvidenceJobId(drive.current_project_id, evidenceByProject)
+          : null,
       }
     })
   } catch {
