@@ -172,7 +172,7 @@ A typical file now contains both the staged project list and the runtime demo se
         "id": 1,
         "port_system_path": "1-1",
         "project_id": 1,
-        "device_identifier": "usb-demo-001"
+        "device_identifier": "usb|vid=090c|pid=1000|serial=usb-demo-001|bus=1-1"
       }
     ]
   },
@@ -649,7 +649,7 @@ Use the following sample as a starting point for a managed demo deployment:
         "id": 1,
         "port_system_path": "1-1",
         "project_id": 1,
-        "device_identifier": "usb-demo-001"
+        "device_identifier": "usb|vid=090c|pid=1000|serial=usb-demo-001|bus=1-1"
       }
     ]
   },

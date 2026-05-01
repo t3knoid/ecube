@@ -645,7 +645,7 @@ Example response:
     "id": 1,
     "port_id": 3,
     "port_system_path": "2-1",
-    "device_identifier": "4C530000220226223012",
+    "device_identifier": "usb|vid=0781|pid=5583|serial=4C530000220226223012|bus=2-1",
     "serial_number": "4C530000220226223012",
     "filesystem_path": "/dev/sdg",
     "capacity_bytes": 15376000000,
@@ -658,7 +658,7 @@ Example response:
     "id": 2,
     "port_id": 4,
     "port_system_path": "2-2",
-    "device_identifier": "A1B2C3D4E5F60001",
+    "device_identifier": "usb|vid=0951|pid=1666|serial=A1B2C3D4E5F60001|bus=2-2",
     "serial_number": "A1B2C3D4E5F60001",
     "filesystem_path": "/dev/sdh",
     "capacity_bytes": 64023257088,
@@ -670,7 +670,7 @@ Example response:
 ]
 ```
 
-The UI treats `port_system_path` as the canonical `Device` label. `device_identifier` remains the stable hardware identifier, and `serial_number` exposes the serial separately when available.
+The UI treats `port_system_path` as the canonical `Device` label. `device_identifier` remains the stable hardware identifier and is now emitted as a composite value built from available USB metadata. `serial_number` exposes the extracted USB serial separately when available.
 
 You can still do additional client-side filtering with `jq`:
 
