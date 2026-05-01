@@ -25,6 +25,7 @@ from app.models.users import UserRole
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
 from app.services import discovery_service, drive_service
+from app.utils.drive_identity import device_identifier_matches
 from app.utils.sanitize import normalize_project_id
 
 logger = logging.getLogger(__name__)
@@ -609,7 +610,11 @@ def _select_seed_drive_for_port(
     normalized_expected_identifier = _optional_seed_string(expected_device_identifier)
     if normalized_expected_identifier is not None:
         for drive in candidates:
-            if drive.device_identifier == normalized_expected_identifier:
+            if device_identifier_matches(
+                drive.device_identifier,
+                normalized_expected_identifier,
+                port_system_path=drive.port_system_path,
+            ):
                 return drive
 
     return max(

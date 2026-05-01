@@ -216,7 +216,10 @@ class DriveInfoSchema(BaseModel):
     manufacturer: Optional[str] = Field(default=None, description="USB manufacturer string when available")
     product_name: Optional[str] = Field(default=None, description="USB product string when available")
     display_device_label: str = Field(..., description="Operator-friendly drive label built from safe USB metadata")
-    device_identifier: str = Field(..., description="Stable hardware identifier for the drive")
+    device_identifier: str = Field(
+        ...,
+        description="Stable hardware identifier for the drive built from available USB metadata",
+    )
     filesystem_path: Optional[str] = Field(default=None, description="Current OS block device node (e.g. /dev/sdb)")
     capacity_bytes: Optional[int] = Field(default=None, description="Total storage capacity in bytes")
     available_bytes: Optional[int] = Field(default=None, description="Last known available space in bytes for the mounted drive")

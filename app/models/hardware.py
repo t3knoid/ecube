@@ -2,7 +2,7 @@ from sqlalchemy import Boolean, Column, Integer, String, BigInteger, Enum, Forei
 from sqlalchemy.orm import relationship, validates
 from sqlalchemy.sql import func
 from app.database import Base
-from app.utils.drive_identity import build_readable_device_label
+from app.utils.drive_identity import build_readable_device_label, extract_usb_serial_number
 from app.utils.sanitize import normalize_project_id
 import enum
 
@@ -81,10 +81,10 @@ class UsbDrive(Base):
 
     @property
     def serial_number(self):
-        port_system_path = self.port_system_path
-        if port_system_path and self.device_identifier == port_system_path:
-            return None
-        return self.device_identifier or None
+        return extract_usb_serial_number(
+            self.device_identifier,
+            port_system_path=self.port_system_path,
+        )
 
     @property
     def display_device_label(self):

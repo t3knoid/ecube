@@ -44,13 +44,14 @@ class UsbDriveSchema(BaseModel):
     device_identifier: str = Field(
         ...,
         description=(
-            "Stable hardware identifier for the drive (USB serial when available, otherwise sysfs path); "
+            "Stable hardware identifier for the drive built from available USB metadata "
+            "(for example vendor ID, product ID, USB serial, optional disk serial, and bus path); "
             "distinct from the /dev block node reported in filesystem_path"
         ),
     )
     serial_number: Optional[str] = Field(
         default=None,
-        description="USB serial number when available; null when the stable identifier falls back to the port path",
+        description="USB serial number when available; derived from the stable identifier for composite-key rows",
     )
     filesystem_path: Optional[str] = Field(
         default=None,
