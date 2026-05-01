@@ -44,7 +44,7 @@ class ConfigurationUpdateRequest(StrictIntMixin, BaseModel):
     db_pool_size: Optional[StrictInt] = Field(default=None, ge=1, le=100)
     db_pool_max_overflow: Optional[StrictInt] = Field(default=None, ge=0, le=200)
     db_pool_recycle_seconds: Optional[StrictInt] = Field(default=None, ge=-1)
-    startup_analysis_batch_size: Optional[StrictInt] = Field(default=None, ge=1)
+    startup_analysis_batch_size: Optional[StrictInt] = Field(default=None, ge=1, le=5000)
     copy_job_timeout: Optional[StrictInt] = Field(default=None, ge=0)
     job_detail_files_page_size: Optional[StrictInt] = Field(default=None, ge=20, le=100)
     callback_default_url: Optional[StrictSafeStr] = Field(

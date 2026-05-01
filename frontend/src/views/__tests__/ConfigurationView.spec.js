@@ -126,6 +126,7 @@ describe('ConfigurationView logging defaults', () => {
 
     const batchSizeInput = wrapper.find('#cfg-startup-analysis-batch-size')
     expect(batchSizeInput.element.value).toBe('250')
+  expect(batchSizeInput.attributes('max')).toBe('5000')
 
     await batchSizeInput.setValue('125')
     await wrapper.find('.action-row .btn.btn-primary').trigger('click')

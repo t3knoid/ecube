@@ -392,6 +392,7 @@ onMounted(loadConfiguration)
           v-model.number="form.startup_analysis_batch_size"
           type="number"
           min="1"
+          max="5000"
         />
         <p class="field-help">{{ t('configuration.fields.startup_analysis_batch_size.help') }}</p>
 
