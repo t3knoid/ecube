@@ -2283,6 +2283,10 @@ select {
   align-items: center;
 }
 
+.hash-grid > span {
+  font-weight: var(--font-weight-bold);
+}
+
 .compare-form select,
 .compare-form strong {
   min-width: 0;
