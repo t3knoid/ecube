@@ -295,6 +295,8 @@ describe('DriveDetailView mount workflow', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('EV-STALE')
+    expect(wrapper.text()).toContain('44')
+    expect(wrapper.find('.cell-link').exists()).toBe(true)
 
     const formatButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.format'))
     expect(formatButton).toBeTruthy()
@@ -308,6 +310,9 @@ describe('DriveDetailView mount workflow', () => {
     expect(mocks.formatDrive).toHaveBeenCalledWith(7, { filesystem_type: 'ext4' })
     expect(wrapper.text()).not.toContain('EV-STALE')
     expect(wrapper.text()).toContain(`${i18n.global.t('jobs.evidence')}-`)
+    expect(wrapper.text()).not.toContain('44')
+    expect(wrapper.text()).toContain(`${i18n.global.t('jobs.jobId')}-`)
+    expect(wrapper.find('.cell-link').exists()).toBe(false)
   })
 
   it('hides Enable Drive when the drive is disconnected and not physically detected', async () => {
