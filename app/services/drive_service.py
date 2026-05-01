@@ -662,6 +662,25 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
     ).order_by(DriveAssignment.assigned_at.desc()).first()
 
     if blocking_job:
+        try:
+            audit_repo.add(
+                action="DRIVE_EJECT_REJECTED_ACTIVE_JOB",
+                user=actor,
+                project_id=drive.current_project_id,
+                drive_id=drive_id,
+                details={
+                    "drive_id": drive_id,
+                    "job_id": blocking_job.id,
+                    "job_status": blocking_job.status.value,
+                    "message": (
+                        "Prepare-eject rejected because the assigned job has started "
+                        "and is not yet completed"
+                    ),
+                },
+                client_ip=client_ip,
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for DRIVE_EJECT_REJECTED_ACTIVE_JOB")
         logger.info(
             "Prepare-eject blocked by started incomplete job",
             extra={
