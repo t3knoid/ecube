@@ -264,6 +264,7 @@
     "addDialogTitle": "Add Share",
     "editDialogTitle": "Edit Share",
     "remotePath": "Remote Path",
+    "redactedValue": "[REDACTED]",
     "nfsClientVersion": "NFS Client Version",
     "nfsClientVersionDefaultOption": "Use default ({version})",
     "nfsClientVersionHelp": "Select the NFS protocol version ECUBE should request for this mount.",
