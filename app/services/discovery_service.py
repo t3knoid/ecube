@@ -49,19 +49,22 @@ from app.models.hardware import DriveState, UsbDrive, UsbPort
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
 from app.repositories.hardware_repository import HubRepository, PortRepository
-from app.utils.drive_identity import build_readable_device_label, mask_serial_number
+from app.utils.drive_identity import (
+    build_readable_device_label,
+    extract_usb_serial_number,
+    is_persistent_device_identifier,
+    mask_serial_number,
+)
 from app.utils.sanitize import normalize_project_id
 
 logger = logging.getLogger(__name__)
 
 
 def _serial_number_from_identifier(device_identifier: Optional[str], port_system_path: Optional[str]) -> Optional[str]:
-    identifier = str(device_identifier or "").strip()
-    if not identifier:
-        return None
-    if port_system_path and identifier == port_system_path:
-        return None
-    return identifier
+    return extract_usb_serial_number(
+        device_identifier,
+        port_system_path=port_system_path,
+    )
 
 
 def _build_discovered_drive_metadata(discovered_drive, discovered_port=None, *, drive_id: Optional[int] = None) -> dict:
@@ -253,6 +256,29 @@ def run_discovery_sync(
             .one_or_none()
         )
 
+        discovered_serial_number = _serial_number_from_identifier(
+            discovered_drive.device_identifier,
+            discovered_drive.port_system_path,
+        )
+
+        if existing is None and discovered_serial_number:
+            legacy_by_serial = (
+                db.query(UsbDrive)
+                .filter(UsbDrive.device_identifier == discovered_serial_number)
+                .one_or_none()
+            )
+            if legacy_by_serial is not None and not is_persistent_device_identifier(legacy_by_serial.device_identifier):
+                existing = legacy_by_serial
+
+        if existing is None and discovered_drive.port_system_path:
+            legacy_by_port = (
+                db.query(UsbDrive)
+                .filter(UsbDrive.device_identifier == discovered_drive.port_system_path)
+                .one_or_none()
+            )
+            if legacy_by_port is not None and not is_persistent_device_identifier(legacy_by_port.device_identifier):
+                existing = legacy_by_port
+
         port_id: Optional[int] = None
         if discovered_drive.port_system_path:
             port_id = port_id_by_system_path.get(discovered_drive.port_system_path)
@@ -317,6 +343,9 @@ def run_discovery_sync(
         else:
             # Existing drive — update mutable fields.
             changed = False
+            if existing.device_identifier != discovered_drive.device_identifier:
+                existing.device_identifier = discovered_drive.device_identifier
+                changed = True
             if port_id is not None and existing.port_id != port_id:
                 existing.port_id = port_id
                 changed = True
