@@ -6,7 +6,7 @@
 | Version | 1.0 DRAFT |
 | Date | May 2026 |
 | Status | Draft for Review |
-| Author | ECUBE Engineering Team |
+| Author | Frank Refol |
 | Reviewers | TBD |
 | Approval | TBD |
 
