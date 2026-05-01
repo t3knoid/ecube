@@ -165,6 +165,7 @@ This section documents the concrete table layout represented by the SQLAlchemy m
 - `device_identifier` (String, required, unique)
 - `filesystem_path` (String, nullable)
 - `capacity_bytes` (BigInteger, nullable)
+- `available_bytes` (BigInteger, nullable)
 - `encryption_status` (String, nullable)
 - `filesystem_type` (String, nullable)
 - `current_state` (Enum `DriveState: DISCONNECTED | AVAILABLE | IN_USE`, `native_enum=False`, default `AVAILABLE`)

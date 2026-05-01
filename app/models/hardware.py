@@ -53,6 +53,7 @@ class UsbDrive(Base):
     product_name = Column(String, nullable=True)
     filesystem_path = Column(String)
     capacity_bytes = Column(BigInteger)
+    available_bytes = Column(BigInteger)
     encryption_status = Column(String)
     filesystem_type = Column(String, nullable=True)
     current_state = Column(
