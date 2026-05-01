@@ -138,6 +138,22 @@ def _job_coc_snapshots_table_exists(inspector: sa.Inspector) -> bool:
     return "job_chain_of_custody_snapshots" in inspector.get_table_names()
 
 
+def _startup_analysis_entries_table_exists(inspector: sa.Inspector) -> bool:
+    return "startup_analysis_entries" in inspector.get_table_names()
+
+
+def _export_jobs_has_startup_analysis_cache_present(inspector: sa.Inspector) -> bool:
+    return any(column.get("name") == "startup_analysis_cache_present" for column in inspector.get_columns("export_jobs"))
+
+
+def _export_jobs_has_startup_analysis_revision(inspector: sa.Inspector) -> bool:
+    return any(column.get("name") == "startup_analysis_revision" for column in inspector.get_columns("export_jobs"))
+
+
+def _export_files_has_startup_analysis_revision(inspector: sa.Inspector) -> bool:
+    return any(column.get("name") == "startup_analysis_revision" for column in inspector.get_columns("export_files"))
+
+
 def _create_job_coc_snapshots_table() -> None:
     op.create_table(
         "job_chain_of_custody_snapshots",
@@ -153,6 +169,25 @@ def _create_job_coc_snapshots_table() -> None:
         "ix_job_chain_of_custody_snapshots_job_id",
         "job_chain_of_custody_snapshots",
         ["job_id"],
+        unique=True,
+    )
+
+
+def _create_startup_analysis_entries_table() -> None:
+    op.create_table(
+        "startup_analysis_entries",
+        sa.Column("id", sa.Integer(), primary_key=True),
+        sa.Column("job_id", sa.Integer(), sa.ForeignKey("export_jobs.id"), nullable=False),
+        sa.Column("entry_type", sa.String(), nullable=False),
+        sa.Column("relative_path", sa.String(), nullable=False),
+        sa.Column("size_bytes", sa.BigInteger(), nullable=True),
+        sa.Column("mtime_ns", sa.BigInteger(), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+    )
+    op.create_index(
+        "ix_startup_analysis_entries_job_entry_path",
+        "startup_analysis_entries",
+        ["job_id", "entry_type", "relative_path"],
         unique=True,
     )
 
@@ -276,6 +311,20 @@ def _upgrade_legacy_project_schema(inspector: sa.Inspector, existing_tables: set
             )
 
 
+def _upgrade_startup_analysis_schema(inspector: sa.Inspector) -> None:
+    if not _export_jobs_has_startup_analysis_cache_present(inspector):
+        with op.batch_alter_table("export_jobs") as batch_op:
+            batch_op.add_column(sa.Column("startup_analysis_cache_present", sa.Boolean(), nullable=False, server_default="0"))
+    if not _export_jobs_has_startup_analysis_revision(inspector):
+        with op.batch_alter_table("export_jobs") as batch_op:
+            batch_op.add_column(sa.Column("startup_analysis_revision", sa.Integer(), nullable=False, server_default="0"))
+    if not _export_files_has_startup_analysis_revision(inspector):
+        with op.batch_alter_table("export_files") as batch_op:
+            batch_op.add_column(sa.Column("startup_analysis_revision", sa.Integer(), nullable=False, server_default="0"))
+    if not _startup_analysis_entries_table_exists(inspector):
+        _create_startup_analysis_entries_table()
+
+
 def upgrade() -> None:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
@@ -292,6 +341,7 @@ def upgrade() -> None:
         _upgrade_legacy_project_schema(inspector, existing_tables)
         if "export_files" in existing_tables:
             _upgrade_legacy_export_file_project_schema(inspector)
+            _upgrade_startup_analysis_schema(inspector)
         return
 
     op.create_table(
@@ -431,6 +481,8 @@ def upgrade() -> None:
         sa.Column("startup_analysis_share_read_mbps", sa.Float(), nullable=True),
         sa.Column("startup_analysis_drive_write_mbps", sa.Float(), nullable=True),
         sa.Column("startup_analysis_estimated_duration_seconds", sa.Integer(), nullable=True),
+        sa.Column("startup_analysis_cache_present", sa.Boolean(), nullable=False, server_default="0"),
+        sa.Column("startup_analysis_revision", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("startup_analysis_entries", sa.JSON().with_variant(JSONB(), "postgresql"), nullable=True),
         sa.Column(
             "created_at",
@@ -458,9 +510,12 @@ def upgrade() -> None:
         ),
         sa.Column("error_message", sa.Text, nullable=True),
         sa.Column("retry_attempts", sa.Integer(), nullable=True, server_default="0"),
+        sa.Column("startup_analysis_revision", sa.Integer(), nullable=False, server_default="0"),
     )
     op.create_index("ix_export_files_project_id", "export_files", ["project_id"])
     op.create_index("ix_export_files_project_status", "export_files", ["project_id", "status"])
+
+    _create_startup_analysis_entries_table()
 
     op.create_table(
         "manifests",
@@ -573,6 +628,7 @@ def downgrade() -> None:
     op.execute(sa.text("DROP INDEX IF EXISTS ix_audit_logs_action_timestamp"))
     op.execute(sa.text("DROP INDEX IF EXISTS ix_audit_logs_drive_timestamp"))
     op.execute(sa.text("DROP INDEX IF EXISTS ix_audit_logs_project_timestamp"))
+    op.drop_index("ix_startup_analysis_entries_job_entry_path", table_name="startup_analysis_entries")
     op.drop_index("ix_job_chain_of_custody_snapshots_job_id", table_name="job_chain_of_custody_snapshots")
     op.drop_index("ix_export_files_project_status", table_name="export_files")
     op.drop_index("ix_export_files_project_id", table_name="export_files")
@@ -590,6 +646,7 @@ def downgrade() -> None:
     op.drop_table("audit_logs")
     op.drop_table("drive_assignments")
     op.drop_table("manifests")
+    op.drop_table("startup_analysis_entries")
     op.drop_table("export_files")
     op.drop_table("job_chain_of_custody_snapshots")
     op.drop_table("export_jobs")
