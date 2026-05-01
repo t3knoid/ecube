@@ -704,7 +704,11 @@ def _seed_connected_usb_drives(
         if drive.id in processed_drive_ids:
             continue
 
-        if expected_device_identifier and drive.device_identifier != expected_device_identifier:
+        if expected_device_identifier and not device_identifier_matches(
+            drive.device_identifier,
+            expected_device_identifier,
+            port_system_path=drive.port_system_path,
+        ):
             logger.info(
                 "Configured demo USB device mismatch",
                 extra={
