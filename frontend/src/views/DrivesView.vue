@@ -11,7 +11,7 @@ import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 import { useStatusLabels } from '@/composables/useStatusLabels.js'
 import { formatDriveIdentity } from '@/utils/driveIdentity.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
-import { buildDriveJobMap, buildProjectEvidenceMap, getDriveJob, getProjectEvidence } from '@/utils/projectEvidence.js'
+import { buildDriveJobMap, getDriveJob } from '@/utils/projectEvidence.js'
 
 const { t } = useI18n()
 const { driveStateLabel } = useStatusLabels()
@@ -29,7 +29,6 @@ const page = ref(1)
 const pageSize = ref(10)
 const isMobileViewport = ref(false)
 const driveJobById = ref(new Map())
-const projectEvidenceById = ref(new Map())
 let mobileViewportQuery = null
 
 /** Drive ID currently being browsed (null = none open). */
@@ -46,19 +45,15 @@ const columns = computed(() => {
   const nextColumns = [
     { key: 'id', label: t('common.labels.id'), align: 'right' },
     { key: 'display_device_label', label: t('drives.device') },
-    { key: 'serial_number', label: t('drives.serialNumber') },
     { key: 'capacity_bytes', label: t('common.labels.size'), align: 'right' },
     { key: 'current_state', label: t('common.labels.status') },
-    { key: 'current_project_id', label: t('dashboard.project') },
-    { key: 'current_project_evidence_number', label: t('jobs.evidence') },
+    { key: 'current_project_job_id', label: t('jobs.jobId'), align: 'right' },
     { key: 'actions', label: '', align: 'center' },
   ]
 
   if (isMobileViewport.value) {
     return nextColumns.filter(
-      (column) =>
-        column.key !== 'serial_number' &&
-        column.key !== 'capacity_bytes',
+      (column) => column.key !== 'capacity_bytes',
     )
   }
 
@@ -77,8 +72,9 @@ function formatBytes(value) {
   return `${next.toFixed(next >= 10 ? 0 : 1)} ${units[unit]}`
 }
 
-function formatProjectId(value) {
-  return normalizeProjectId(value) || '-'
+function isValidJobId(value) {
+  const normalizedJobId = Number(value)
+  return Number.isInteger(normalizedJobId) && normalizedJobId > 0
 }
 
 function normalizeStatusValue(status) {
@@ -143,7 +139,6 @@ async function loadDrives() {
 
     const jobs = jobResult.status === 'fulfilled' ? (jobResult.value || []) : []
 
-    projectEvidenceById.value = buildProjectEvidenceMap(jobs)
     driveJobById.value = buildDriveJobMap(jobs)
 
     drives.value = (driveResult.value || []).map((item) => {
@@ -153,9 +148,6 @@ async function loadDrives() {
       return {
         ...drive,
         current_project_job_id: assignedJob?.jobId ?? null,
-        current_project_evidence_number: hasActiveProjectBinding
-          ? assignedJob?.evidenceNumber || getProjectEvidence(drive.current_project_id, projectEvidenceById.value)
-          : '',
       }
     })
   } catch {
@@ -175,9 +167,8 @@ const filtered = computed(() => {
       drive.manufacturer,
       drive.product_name,
       drive.port_system_path,
-      drive.serial_number,
       drive.current_project_id,
-      drive.current_project_evidence_number,
+      drive.current_project_job_id,
       drive.filesystem_path,
       String(drive.id),
     ]
@@ -347,10 +338,8 @@ onBeforeUnmount(() => {
       <select v-model="sortKey" :aria-label="t('drives.sortBy')">
         <option value="id">{{ t('common.labels.id') }}</option>
         <option value="display_device_label">{{ t('drives.device') }}</option>
-        <option value="serial_number">{{ t('drives.serialNumber') }}</option>
         <option value="current_state">{{ t('common.labels.status') }}</option>
-        <option value="current_project_id">{{ t('dashboard.project') }}</option>
-        <option value="current_project_evidence_number">{{ t('jobs.evidence') }}</option>
+        <option value="current_project_job_id">{{ t('jobs.jobId') }}</option>
       </select>
       <button class="btn" @click="setSort(sortKey)">
         {{ sortDir === 'asc' ? t('drives.sortAsc') : t('drives.sortDesc') }}
@@ -361,30 +350,16 @@ onBeforeUnmount(() => {
       <template #cell-display_device_label="{ row }">
         {{ formatDriveIdentity(row) }}
       </template>
-      <template #cell-serial_number="{ row }">
-        {{ row.serial_number || '-' }}
-      </template>
-      <template #cell-current_project_id="{ row }">
+      <template #cell-current_project_job_id="{ row }">
         <button
-          v-if="row.current_project_job_id"
+          v-if="isValidJobId(row.current_project_job_id)"
           class="cell-link"
           type="button"
           @click="openRelatedJob(row.current_project_job_id)"
         >
-          {{ formatProjectId(row.current_project_id) }}
+          {{ row.current_project_job_id }}
         </button>
-        <span v-else>{{ formatProjectId(row.current_project_id) }}</span>
-      </template>
-      <template #cell-current_project_evidence_number="{ row }">
-        <button
-          v-if="row.current_project_job_id && row.current_project_evidence_number"
-          class="cell-link"
-          type="button"
-          @click="openRelatedJob(row.current_project_job_id)"
-        >
-          {{ row.current_project_evidence_number }}
-        </button>
-        <span v-else>{{ row.current_project_evidence_number || '-' }}</span>
+        <span v-else>-</span>
       </template>
       <template #cell-current_state="{ row }">
         <span
