@@ -396,7 +396,7 @@ Optional expected hardware identifier for the device attached at the configured 
 
 - Type: string or `null`
 - Example: use the real discovered value for the attached device on that port
-- Effect: when provided, ECUBE only seeds the USB drive if the actual attached device matches this identifier exactly
+- Effect: when provided, ECUBE only seeds the USB drive if the actual attached device matches this identifier. New discoveries use the composite persistent identifier, and older metadata that still records the legacy raw serial value is still accepted for compatibility.
 - Recommendation: replace any sample placeholder with the actual discovered identifier, or omit this property if you want the binding to rely on the configured USB port alone
 
 To enumerate ready-to-paste `usb_seed.drives` objects for the currently connected host USB disks, run the repository helper from the project root.
@@ -405,7 +405,7 @@ To enumerate ready-to-paste `usb_seed.drives` objects for the currently connecte
 bash ./scripts/print_demo_usb_seed_json.sh
 ```
 
-The helper prints comma-separated JSON objects containing `id`, `port_system_path`, `project_id`, and `device_identifier`. Pass a different project ID as the first argument or a different starting ID as the second argument when you want to prepare entries for another demo project, for example `bash ./scripts/print_demo_usb_seed_json.sh 2 10`.
+The helper prints comma-separated JSON objects containing `id`, `port_system_path`, `project_id`, and `device_identifier`. The emitted `device_identifier` value is the current composite persistent identifier for the attached drive. Pass a different project ID as the first argument or a different starting ID as the second argument when you want to prepare entries for another demo project, for example `bash ./scripts/print_demo_usb_seed_json.sh 2 10`.
 
 ### mount_seed
 
