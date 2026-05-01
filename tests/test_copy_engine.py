@@ -720,7 +720,7 @@ def test_run_copy_job_marks_job_failed_when_source_scan_disappears(db, tmp_path)
 
     with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
         with patch(
-            "app.services.copy_engine.scan_source_files",
+            "app.services.copy_engine._iter_source_tree",
             side_effect=FileNotFoundError("/proc/12345 disappeared"),
         ):
             copy_engine.run_copy_job(job.id)
@@ -741,7 +741,7 @@ def test_run_copy_job_marks_job_failed_when_source_scan_permission_denied(db, tm
 
     with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
         with patch(
-            "app.services.copy_engine.scan_source_files",
+            "app.services.copy_engine._iter_source_tree",
             side_effect=PermissionError(f"[Errno 13] Permission denied: '{source_dir}'"),
         ):
             copy_engine.run_copy_job(job.id)
@@ -1577,7 +1577,7 @@ def test_run_copy_job_persists_sanitized_job_failure_reason_for_unexpected_excep
 
     with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
         with patch(
-            "app.services.copy_engine.scan_source_files",
+            "app.services.copy_engine._iter_source_tree",
             side_effect=RuntimeError(f"provider exploded while copying {source_file} to {target_file}"),
         ):
             copy_engine.run_copy_job(job.id)

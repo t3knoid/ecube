@@ -16,6 +16,7 @@ from app.config import settings
 from app.infrastructure.device_path import validate_device_path
 from app.infrastructure.filesystem_detection import FilesystemDetector
 from app.infrastructure.drive_format import DriveFormatter
+from app.infrastructure.drive_space import DriveSpaceProbe
 from app.infrastructure.usb_discovery import DriveDiscoveryProvider
 from app.infrastructure.drive_eject import (
     DriveEjectProvider,
@@ -30,6 +31,7 @@ from app.infrastructure.pam_protocol import PamAuthenticator
 __all__ = [
     "FilesystemDetector",
     "DriveFormatter",
+    "DriveSpaceProbe",
     "DriveDiscoveryProvider",
     "DriveEjectProvider",
     "EjectError",
@@ -40,6 +42,7 @@ __all__ = [
     "PamAuthenticator",
     "get_filesystem_detector",
     "get_drive_formatter",
+    "get_drive_space_probe",
     "get_drive_discovery",
     "get_drive_eject",
     "get_drive_mount",
@@ -62,6 +65,10 @@ def _linux_filesystem_detector() -> type[FilesystemDetector]:
 def _linux_drive_formatter() -> type[DriveFormatter]:
     from app.infrastructure.drive_format import LinuxDriveFormatter
     return LinuxDriveFormatter
+
+def _linux_drive_space_probe() -> type[DriveSpaceProbe]:
+    from app.infrastructure.drive_space import LinuxDriveSpaceProbe
+    return LinuxDriveSpaceProbe
 
 def _linux_drive_discovery() -> type[DriveDiscoveryProvider]:
     from app.infrastructure.usb_discovery import LinuxDriveDiscovery
@@ -94,6 +101,10 @@ _FILESYSTEM_DETECTOR_REGISTRY: dict[str, Callable[[], type[FilesystemDetector]]]
 
 _DRIVE_FORMATTER_REGISTRY: dict[str, Callable[[], type[DriveFormatter]]] = {
     "linux": _linux_drive_formatter,
+}
+
+_DRIVE_SPACE_PROBE_REGISTRY: dict[str, Callable[[], type[DriveSpaceProbe]]] = {
+    "linux": _linux_drive_space_probe,
 }
 
 _DRIVE_DISCOVERY_REGISTRY: dict[str, Callable[[], type[DriveDiscoveryProvider]]] = {
@@ -137,6 +148,11 @@ def get_filesystem_detector() -> FilesystemDetector:
 def get_drive_formatter() -> DriveFormatter:
     """Return the platform-appropriate :class:`DriveFormatter`."""
     return _resolve(_DRIVE_FORMATTER_REGISTRY, "DriveFormatter")
+
+
+def get_drive_space_probe() -> DriveSpaceProbe:
+    """Return the platform-appropriate :class:`DriveSpaceProbe`."""
+    return _resolve(_DRIVE_SPACE_PROBE_REGISTRY, "DriveSpaceProbe")
 
 
 def get_drive_discovery() -> DriveDiscoveryProvider:
