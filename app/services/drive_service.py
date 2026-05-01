@@ -1014,6 +1014,19 @@ def format_drive(
             },
         )
 
+    free_bytes: Optional[int] = None
+    try:
+        free_bytes = formatter.probe_free_bytes(drive.filesystem_path, filesystem_type)
+    except Exception as exc:
+        logger.debug(
+            "Post-format free-space probe failed",
+            extra={
+                "drive_id": drive_id,
+                "filesystem_path": drive.filesystem_path,
+                "raw_error": str(exc),
+            },
+        )
+
     drive.filesystem_type = filesystem_type
     drive.available_bytes = None
     # Formatting wipes all previous data, so the project binding is cleared.
@@ -1056,6 +1069,7 @@ def format_drive(
                 "filesystem_path": drive.filesystem_path,
                 "filesystem_type": filesystem_type,
                 "detected_filesystem_type": detected_filesystem_type,
+                "free_bytes": free_bytes,
                 "capacity_bytes": drive.capacity_bytes,
                 "actor": actor,
             },
