@@ -60,8 +60,10 @@ function mountView() {
               <div class="column-labels">{{ (columns || []).map((column) => column.label).join(' ') }}</div>
               <div v-for="row in rows" :key="row.id" class="row-stub">
                 <span class="row-device">{{ row.display_device_label || row.port_system_path || '-' }}</span>
+                <span class="row-project">{{ row.current_project_job_id ? row.current_project_id || '-' : '-' }}</span>
                 <span class="row-job-id">{{ row.current_project_job_id || '-' }}</span>
                 <slot name="cell-current_state" :row="row" />
+                <slot name="cell-current_project_id" :row="row" />
                 <slot name="cell-current_project_job_id" :row="row" />
                 <slot name="cell-actions" :row="row" />
               </div>
@@ -160,7 +162,7 @@ describe('DrivesView rescan and filter loading', () => {
     expect(mocks.getDrives).toHaveBeenLastCalledWith({ include_disconnected: true })
   })
 
-  it('shows the readable device label and related job ID in the list', async () => {
+  it('shows the readable device label, project, and related job ID in the list', async () => {
     mocks.listAllJobs.mockResolvedValue([{ id: 9, project_id: 'PROJ-001', evidence_number: 'EV-009', drive: { id: 1 } }])
     mocks.getDrives.mockResolvedValue([
       buildDrive({
@@ -179,8 +181,10 @@ describe('DrivesView rescan and filter loading', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain(i18n.global.t('drives.device'))
+    expect(wrapper.text()).toContain(i18n.global.t('dashboard.project'))
     expect(wrapper.text()).toContain(i18n.global.t('jobs.jobId'))
     expect(wrapper.text()).toContain('Kingston DataTraveler - Port 4')
+    expect(wrapper.text()).toContain('PROJ-001')
     expect(wrapper.text()).toContain('9')
   })
 
@@ -257,7 +261,7 @@ describe('DrivesView rescan and filter loading', () => {
     expect(wrapper.find('.row-actions-toggle-dots').exists()).toBe(true)
   })
 
-  it('removes the filesystem, project, and evidence columns from the list', async () => {
+  it('shows project and job ID columns while keeping filesystem and evidence absent from the list', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-123' })])
     mocks.listAllJobs.mockResolvedValue([
       { id: 12, project_id: 'PROJ-123', evidence_number: 'EV-123', drive: { id: 1 } },
@@ -269,9 +273,10 @@ describe('DrivesView rescan and filter loading', () => {
 
     const labels = wrapper.find('.column-labels').text()
     expect(labels).not.toContain(i18n.global.t('drives.filesystem'))
-    expect(labels).not.toContain(i18n.global.t('dashboard.project'))
     expect(labels).not.toContain(i18n.global.t('jobs.evidence'))
+    expect(labels).toContain(i18n.global.t('dashboard.project'))
     expect(labels).toContain(i18n.global.t('jobs.jobId'))
+    expect(wrapper.find('.row-project').text()).toBe('PROJ-123')
     expect(wrapper.find('.row-job-id').text()).toBe('12')
   })
 
@@ -347,6 +352,7 @@ describe('DrivesView rescan and filter loading', () => {
 
     const linkedCells = wrapper.findAll('.cell-link')
     expect(linkedCells).toHaveLength(1)
+    expect(wrapper.find('.row-project').text()).toBe('PROJ-007')
     expect(linkedCells[0].text()).toBe('44')
 
     await linkedCells[0].trigger('click')
@@ -364,6 +370,7 @@ describe('DrivesView rescan and filter loading', () => {
     const wrapper = mountView()
     await flushPromises()
 
+    expect(wrapper.find('.row-project').text()).toBe('-')
     expect(wrapper.find('.row-job-id').text()).toBe('-')
     expect(wrapper.find('.cell-link').exists()).toBe(false)
   })

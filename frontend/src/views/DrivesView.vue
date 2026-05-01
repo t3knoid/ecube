@@ -45,6 +45,7 @@ const columns = computed(() => {
   const nextColumns = [
     { key: 'id', label: t('common.labels.id'), align: 'right' },
     { key: 'display_device_label', label: t('drives.device') },
+    { key: 'current_project_id', label: t('dashboard.project') },
     { key: 'capacity_bytes', label: t('common.labels.size'), align: 'right' },
     { key: 'current_state', label: t('common.labels.status') },
     { key: 'current_project_job_id', label: t('jobs.jobId'), align: 'right' },
@@ -75,6 +76,10 @@ function formatBytes(value) {
 function isValidJobId(value) {
   const normalizedJobId = Number(value)
   return Number.isInteger(normalizedJobId) && normalizedJobId > 0
+}
+
+function formatProjectId(value) {
+  return normalizeProjectId(value) || '-'
 }
 
 function normalizeStatusValue(status) {
@@ -341,6 +346,7 @@ onBeforeUnmount(() => {
       <select v-model="sortKey" :aria-label="t('drives.sortBy')">
         <option value="id">{{ t('common.labels.id') }}</option>
         <option value="display_device_label">{{ t('drives.device') }}</option>
+        <option value="current_project_id">{{ t('dashboard.project') }}</option>
         <option value="current_state">{{ t('common.labels.status') }}</option>
         <option value="current_project_job_id">{{ t('jobs.jobId') }}</option>
       </select>
@@ -352,6 +358,9 @@ onBeforeUnmount(() => {
     <DataTable :columns="columns" :rows="paged" :empty-text="t('drives.empty')">
       <template #cell-display_device_label="{ row }">
         {{ formatDriveIdentity(row) }}
+      </template>
+      <template #cell-current_project_id="{ row }">
+        <span>{{ isValidJobId(row.current_project_job_id) ? formatProjectId(row.current_project_id) : '-' }}</span>
       </template>
       <template #cell-current_project_job_id="{ row }">
         <button
