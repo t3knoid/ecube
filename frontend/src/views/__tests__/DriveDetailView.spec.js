@@ -584,6 +584,11 @@ describe('DriveDetailView mount workflow', () => {
     await ejectButton.trigger('click')
     await flushPromises()
 
+    expect(mocks.listJobs).toHaveBeenCalledWith({
+      drive_id: 7,
+      statuses: ['RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING'],
+      limit: 1,
+    }, { timeout: 5000 })
     expect(mocks.prepareEjectDrive).not.toHaveBeenCalled()
     expect(wrapper.find('.confirm-dialog-stub').exists()).toBe(false)
     expect(wrapper.text()).toContain(i18n.global.t('drives.ejectBlockedActiveJob', { jobId: 44 }))
@@ -614,6 +619,24 @@ describe('DriveDetailView mount workflow', () => {
     expect(mocks.prepareEjectDrive).not.toHaveBeenCalled()
     expect(wrapper.find('.confirm-dialog-stub').exists()).toBe(false)
     expect(wrapper.text()).toContain(i18n.global.t('drives.ejectBlockedActiveJob', { jobId: 45 }))
+  })
+
+  it('blocks prepare eject when the drive has an active paused job', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'IN_USE' })])
+    mocks.listJobs.mockResolvedValue([{ id: 46, status: 'PAUSED' }])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const ejectButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.prepareEject'))
+    expect(ejectButton).toBeTruthy()
+
+    await ejectButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.prepareEjectDrive).not.toHaveBeenCalled()
+    expect(wrapper.find('.confirm-dialog-stub').exists()).toBe(false)
+    expect(wrapper.text()).toContain(i18n.global.t('drives.ejectBlockedActiveJob', { jobId: 46 }))
   })
 
   it('surfaces a preflight error and does not open the eject dialog when the jobs request fails', async () => {
