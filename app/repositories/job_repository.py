@@ -16,6 +16,7 @@ from app.models.jobs import (
     JobChainOfCustodySnapshot,
     JobStatus,
     Manifest,
+    StartupAnalysisEntry,
 )
 
 
@@ -233,6 +234,45 @@ class FileRepository:
         )
         if offset:
             query = query.offset(offset)
+        if limit is not None:
+            query = query.limit(limit)
+        return query.all()
+
+    def list_by_job_after_id(
+        self,
+        job_id: int,
+        *,
+        after_id: int | None = None,
+        limit: int | None = None,
+    ) -> List[ExportFile]:
+        query = (
+            self.db.query(ExportFile)
+            .filter(ExportFile.job_id == job_id)
+            .order_by(ExportFile.id)
+        )
+        if after_id is not None:
+            query = query.filter(ExportFile.id > after_id)
+        if limit is not None:
+            query = query.limit(limit)
+        return query.all()
+
+    def list_pending_by_job_after_id(
+        self,
+        job_id: int,
+        *,
+        after_id: int | None = None,
+        limit: int | None = None,
+    ) -> List[ExportFile]:
+        query = (
+            self.db.query(ExportFile)
+            .filter(
+                ExportFile.job_id == job_id,
+                ExportFile.status == FileStatus.PENDING,
+            )
+            .order_by(ExportFile.id)
+        )
+        if after_id is not None:
+            query = query.filter(ExportFile.id > after_id)
         if limit is not None:
             query = query.limit(limit)
         return query.all()
@@ -581,6 +621,52 @@ class FileRepository:
             .where(DriveAssignment.id == assignment_id)
             .values(file_count=DriveAssignment.file_count + 1)
         )
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+
+
+class StartupAnalysisEntryRepository:
+    """Persistence helpers for normalized startup-analysis entries."""
+
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def list_by_job(
+        self,
+        job_id: int,
+        *,
+        entry_type: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> List[StartupAnalysisEntry]:
+        query = (
+            self.db.query(StartupAnalysisEntry)
+            .filter(StartupAnalysisEntry.job_id == job_id)
+            .order_by(StartupAnalysisEntry.id)
+        )
+        if entry_type is not None:
+            query = query.filter(StartupAnalysisEntry.entry_type == entry_type)
+        if offset:
+            query = query.offset(offset)
+        if limit is not None:
+            query = query.limit(limit)
+        return query.all()
+
+    def add_bulk(self, entries: List[StartupAnalysisEntry]) -> None:
+        if not entries:
+            return
+        self.db.add_all(entries)
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+
+    def delete_by_job(self, job_id: int) -> None:
+        self.db.query(StartupAnalysisEntry).filter(StartupAnalysisEntry.job_id == job_id).delete()
         try:
             self.db.commit()
         except Exception:
