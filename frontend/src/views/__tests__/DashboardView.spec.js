@@ -7,6 +7,13 @@ const mocks = vi.hoisted(() => ({
   getSystemHealth: vi.fn(),
   getDrives: vi.fn(),
   listJobs: vi.fn(),
+  push: vi.fn(),
+}))
+
+vi.mock('vue-router', () => ({
+  useRouter: () => ({
+    push: mocks.push,
+  }),
 }))
 
 vi.mock('@/api/introspection.js', () => ({
@@ -36,6 +43,9 @@ function mountView() {
           template: `
             <div>
               <div v-for="row in rows" :key="row.id" class="row-stub">
+                <slot name="cell-id" :row="row">
+                  <span class="row-id">{{ row.id }}</span>
+                </slot>
                 <slot name="cell-progress" :row="row" />
               </div>
             </div>
@@ -59,6 +69,7 @@ describe('DashboardView active jobs', () => {
     mocks.getSystemHealth.mockReset()
     mocks.getDrives.mockReset()
     mocks.listJobs.mockReset()
+    mocks.push.mockReset()
 
     mocks.getSystemHealth.mockResolvedValue({ status: 'ok', database: 'connected', active_jobs: 1 })
     mocks.getDrives.mockResolvedValue([])
@@ -143,5 +154,54 @@ describe('DashboardView active jobs', () => {
 
     expect(wrapper.find('.dashboard-progress-mobile-label').text()).toBe('40%')
     expect(wrapper.find('.progress-stub').text()).toBe('40/100 40%')
+  })
+
+  it('renders the Job ID cell as a link to Job Detail for active jobs', async () => {
+    mocks.listJobs.mockResolvedValue([
+      {
+        id: 44,
+        project_id: 'PROJ-001',
+        status: 'RUNNING',
+        copied_bytes: 1000,
+        total_bytes: 1000,
+        file_count: 5,
+        files_succeeded: 2,
+        files_failed: 0,
+      },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const jobLink = wrapper.find('.cell-link')
+    expect(jobLink.exists()).toBe(true)
+    expect(jobLink.text()).toBe('44')
+
+    await jobLink.trigger('click')
+    await flushPromises()
+
+    expect(mocks.push).toHaveBeenCalledWith({ name: 'job-detail', params: { id: 44 } })
+  })
+
+  it('falls back to plain text when an active job row has no valid id', async () => {
+    mocks.listJobs.mockResolvedValue([
+      {
+        id: null,
+        project_id: 'PROJ-001',
+        status: 'RUNNING',
+        copied_bytes: 1000,
+        total_bytes: 1000,
+        file_count: 5,
+        files_succeeded: 2,
+        files_failed: 0,
+      },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('.cell-link').exists()).toBe(false)
+    expect(wrapper.find('.job-id-text').text()).toBe('-')
+    expect(mocks.push).not.toHaveBeenCalled()
   })
 })
