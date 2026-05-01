@@ -4,7 +4,9 @@ import i18n from '@/i18n/index.js'
 import MountsView from '@/views/MountsView.vue'
 
 const mocks = vi.hoisted(() => ({
+  push: vi.fn(),
   getMounts: vi.fn(),
+  listAllJobs: vi.fn(),
   createMount: vi.fn(),
   updateMount: vi.fn(),
   deleteMount: vi.fn(),
@@ -25,6 +27,10 @@ const viewportState = vi.hoisted(() => ({
 
 const matchMediaListeners = vi.hoisted(() => new Set())
 
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: mocks.push }),
+}))
+
 vi.mock('@/api/mounts.js', () => ({
   getMounts: (...args) => mocks.getMounts(...args),
   createMount: (...args) => mocks.createMount(...args),
@@ -38,6 +44,10 @@ vi.mock('@/api/mounts.js', () => ({
 
 vi.mock('@/api/auth.js', () => ({
   getPublicAuthConfig: (...args) => mocks.getPublicAuthConfig(...args),
+}))
+
+vi.mock('@/api/jobs.js', () => ({
+  listAllJobs: (...args) => mocks.listAllJobs(...args),
 }))
 
 vi.mock('@/stores/auth.js', () => ({
@@ -73,6 +83,10 @@ function mountView() {
             <div>
               <div class="column-labels">{{ (columns || []).map((column) => column.label).join('|') }}</div>
               <div v-for="row in rows" :key="row.id" class="row-stub">
+                <span class="row-project">{{ row.project_id || '-' }}</span>
+                <span class="row-job-id">{{ row.current_project_job_id || '-' }}</span>
+                <slot name="cell-project_id" :row="row" />
+                <slot name="cell-current_project_job_id" :row="row" />
                 <slot name="cell-status" :row="row" />
                 <slot name="cell-actions" :row="row" />
               </div>
@@ -134,7 +148,9 @@ describe('MountsView removal flow', () => {
     viewportState.mobile = false
     matchMediaListeners.clear()
     installMatchMediaMock()
+    mocks.push.mockReset()
     mocks.getMounts.mockReset()
+    mocks.listAllJobs.mockReset()
     mocks.createMount.mockReset()
     mocks.updateMount.mockReset()
     mocks.deleteMount.mockReset()
@@ -147,6 +163,7 @@ describe('MountsView removal flow', () => {
     mocks.createMount.mockResolvedValue({})
     mocks.updateMount.mockResolvedValue({})
     mocks.deleteMount.mockResolvedValue({})
+  mocks.listAllJobs.mockResolvedValue([])
     mocks.validateAllMounts.mockResolvedValue([])
     mocks.validateMountCandidate.mockResolvedValue(buildMount({ id: 999, status: 'MOUNTED' }))
     mocks.validateMount.mockResolvedValue(buildMount())
@@ -235,6 +252,29 @@ describe('MountsView removal flow', () => {
     expect(labels).not.toContain(i18n.global.t('mounts.lastChecked'))
     expect(wrapper.find('.mount-status-icon').attributes('aria-label')).toBe('MOUNTED')
     expect(wrapper.find('.row-actions-toggle-dots').exists()).toBe(true)
+  })
+
+  it('shows the related project job ID and links it to Job Detail', async () => {
+    mocks.getMounts.mockResolvedValue([buildMount({ project_id: 'PROJ-011' })])
+    mocks.listAllJobs.mockResolvedValue([
+      { id: 27, project_id: 'PROJ-011', evidence_number: 'EV-027' },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const labels = wrapper.find('.column-labels').text()
+    expect(labels).toContain(i18n.global.t('dashboard.project'))
+    expect(labels).toContain(i18n.global.t('jobs.jobId'))
+
+    const jobButton = wrapper.find('.cell-link')
+    expect(jobButton.exists()).toBe(true)
+    expect(jobButton.text()).toBe('27')
+
+    await jobButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.push).toHaveBeenCalledWith({ name: 'job-detail', params: { id: 27 } })
   })
 
   it('uppercases the project ID as the operator types and submits it normalized', async () => {
