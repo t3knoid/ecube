@@ -1,6 +1,6 @@
 from itertools import chain
 
-from sqlalchemy import Column, Integer, String, BigInteger, Enum, ForeignKey, DateTime, Text, JSON, Float, Index, event
+from sqlalchemy import Boolean, Column, Integer, String, BigInteger, Enum, ForeignKey, DateTime, Text, JSON, Float, Index, event
 from sqlalchemy.dialects.postgresql import JSONB, insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session, relationship, validates
@@ -69,6 +69,8 @@ class ExportJob(Base):
     startup_analysis_share_read_mbps = Column(Float, nullable=True)
     startup_analysis_drive_write_mbps = Column(Float, nullable=True)
     startup_analysis_estimated_duration_seconds = Column(Integer, nullable=True)
+    startup_analysis_cache_present = Column(Boolean, default=False, nullable=False, server_default="0")
+    startup_analysis_revision = Column(Integer, default=0, nullable=False, server_default="0")
     startup_analysis_entries = Column(JSON().with_variant(JSONB(), "postgresql"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     project = relationship(Project, back_populates="jobs")
@@ -76,6 +78,11 @@ class ExportJob(Base):
     manifests = relationship("Manifest", back_populates="job")
     assignments = relationship("DriveAssignment", back_populates="job")
     coc_snapshot = relationship("JobChainOfCustodySnapshot", back_populates="job", uselist=False)
+    startup_analysis_rows = relationship(
+        "StartupAnalysisEntry",
+        back_populates="job",
+        cascade="all, delete-orphan",
+    )
 
     @validates("project_id")
     def _normalize_project_id(self, _key, value):
@@ -84,7 +91,7 @@ class ExportJob(Base):
 
     @property
     def startup_analysis_cached(self) -> bool:
-        return self.startup_analysis_entries is not None
+        return bool(self.startup_analysis_cache_present or self.startup_analysis_entries is not None)
 
     @property
     def startup_analysis_ready(self) -> bool:
@@ -106,8 +113,26 @@ class ExportFile(Base):
     status = Column(Enum(FileStatus, native_enum=False), default=FileStatus.PENDING)
     error_message = Column(Text)
     retry_attempts = Column(Integer, default=0)
+    startup_analysis_revision = Column(Integer, default=0, nullable=False, server_default="0")
     job = relationship("ExportJob", back_populates="files")
     project = relationship(Project, back_populates="files")
+
+
+class StartupAnalysisEntry(Base):
+    __tablename__ = "startup_analysis_entries"
+    __table_args__ = (
+        Index("ix_startup_analysis_entries_job_entry_path", "job_id", "entry_type", "relative_path", unique=True),
+    )
+
+    id = Column(Integer, primary_key=True)
+    job_id = Column(Integer, ForeignKey("export_jobs.id"), nullable=False, index=True)
+    entry_type = Column(String, nullable=False)
+    relative_path = Column(String, nullable=False)
+    size_bytes = Column(BigInteger, nullable=True)
+    mtime_ns = Column(BigInteger, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    job = relationship("ExportJob", back_populates="startup_analysis_rows")
 
 
 class Manifest(Base):

@@ -11,7 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base
 from app.models.hardware import DriveState, UsbDrive, UsbHub, UsbPort
-from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, Manifest
+from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, Manifest, StartupAnalysisEntry
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.models.projects import Project
 from app.repositories.audit_repository import AuditRepository
@@ -22,6 +22,7 @@ from app.repositories.job_repository import (
     FileRepository,
     JobRepository,
     ManifestRepository,
+    StartupAnalysisEntryRepository,
 )
 from app.repositories.mount_repository import MountRepository
 
@@ -848,6 +849,28 @@ def test_bulk_list_error_messages_no_errors_returns_empty(db):
 
     result = repo.bulk_list_error_messages([j.id])
     assert j.id not in result
+
+
+def test_startup_analysis_entry_repo_list_by_job_after_id(db):
+    repo = StartupAnalysisEntryRepository(db)
+    job = _make_job(db)
+
+    first = StartupAnalysisEntry(job_id=job.id, entry_type="directory", relative_path="", mtime_ns=1)
+    second = StartupAnalysisEntry(job_id=job.id, entry_type="directory", relative_path="nested", mtime_ns=2)
+    third = StartupAnalysisEntry(job_id=job.id, entry_type="file", relative_path="file.txt", size_bytes=3)
+    db.add_all([first, second, third])
+    db.commit()
+    db.refresh(first)
+    db.refresh(second)
+
+    rows = repo.list_by_job_after_id(
+        job.id,
+        entry_type="directory",
+        after_id=first.id,
+        limit=10,
+    )
+
+    assert [(row.entry_type, row.relative_path) for row in rows] == [("directory", "nested")]
 
 
 # ---------------------------------------------------------------------------
