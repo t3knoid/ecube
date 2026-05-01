@@ -256,6 +256,11 @@ class Settings(BaseSettings):
     # Copy engine tuning
     # ---------------------------------------------------------------------------
 
+    #: Batch size for startup-analysis discovery, persistence, and validation.
+    #: The upper bound keeps operator tuning from reintroducing unbounded
+    #: startup-analysis memory growth on large source trees.
+    startup_analysis_batch_size: int = Field(default=500, ge=1, le=5000)
+
     #: Chunk size in bytes for file copy and checksum computation.
     copy_chunk_size_bytes: int = 1_048_576
 

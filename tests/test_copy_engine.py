@@ -1236,7 +1236,7 @@ def test_prepare_job_startup_analysis_persists_entries_in_batches(db, tmp_path):
 
     job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
 
-    with patch.object(copy_engine, "STARTUP_ANALYSIS_BATCH_SIZE", 2):
+    with patch.object(copy_engine.settings, "startup_analysis_batch_size", 2):
         with patch("app.services.copy_engine._persist_startup_analysis_file_batch", wraps=copy_engine._persist_startup_analysis_file_batch) as persist_file_batch:
             copy_engine.prepare_job_startup_analysis(job.id)
 

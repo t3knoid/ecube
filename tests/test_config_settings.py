@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
+from pydantic import ValidationError
 
 from app.auth_providers import LdapGroupRoleResolver, get_role_resolver
 from app.config import Settings
@@ -149,6 +150,14 @@ class TestSettingsDefaults:
     def test_db_pool_recycle_seconds_default(self):
         s = Settings(database_url="sqlite://")
         assert s.db_pool_recycle_seconds == -1
+
+    def test_startup_analysis_batch_size_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.startup_analysis_batch_size == 500
+
+    def test_startup_analysis_batch_size_rejects_values_above_maximum(self):
+        with pytest.raises(ValidationError):
+            Settings(database_url="sqlite://", startup_analysis_batch_size=5001)
 
     def test_oidc_allowed_algorithms_default(self):
         s = Settings(database_url="sqlite://")
@@ -366,6 +375,7 @@ class TestCopyJobTimeout:
         with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
             with patch("app.services.copy_engine.settings") as mock_settings:
                 mock_settings.copy_job_timeout = 1  # 1 second timeout
+                mock_settings.startup_analysis_batch_size = 500
                 mock_settings.copy_chunk_size_bytes = 1_048_576
                 mock_settings.copy_default_max_retries = 3
                 mock_settings.copy_default_retry_delay_seconds = 1.0
@@ -407,6 +417,7 @@ class TestCopyJobTimeout:
         with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
             with patch("app.services.copy_engine.settings") as mock_settings:
                 mock_settings.copy_job_timeout = 0
+                mock_settings.startup_analysis_batch_size = 500
                 mock_settings.copy_chunk_size_bytes = 1_048_576
                 mock_settings.copy_default_max_retries = 3
                 mock_settings.copy_default_retry_delay_seconds = 1.0
