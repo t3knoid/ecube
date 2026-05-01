@@ -1,8 +1,10 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getMounts, createMount, updateMount, deleteMount, validateMount, validateMountCandidate, discoverMountShares } from '@/api/mounts.js'
 import { getPublicAuthConfig } from '@/api/auth.js'
+import { listAllJobs } from '@/api/jobs.js'
 import { normalizeErrorMessage } from '@/api/client.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
@@ -11,11 +13,14 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
+import { buildProjectEvidenceMap, getProjectEvidenceJobId } from '@/utils/projectEvidence.js'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
+const router = useRouter()
 
 const mounts = ref([])
+const mountJobByProject = ref(new Map())
 const loading = ref(false)
 const saving = ref(false)
 const dialogTesting = ref(false)
@@ -113,6 +118,7 @@ const columns = computed(() => {
     { key: 'type', label: t('common.labels.type') },
     { key: 'project_id', label: t('dashboard.project') },
     { key: 'status', label: t('common.labels.status') },
+    { key: 'current_project_job_id', label: t('jobs.jobId'), align: 'right' },
     { key: 'last_checked_at', label: t('mounts.lastChecked') },
     { key: 'actions', label: '', align: 'center' },
   ]
@@ -182,13 +188,41 @@ async function loadMounts() {
   loading.value = true
   error.value = ''
   try {
-    const response = await getMounts()
-    mounts.value = (response || []).map((item) => normalizeProjectRecord(item, ['project_id']))
+    const [mountResult, jobResult] = await Promise.allSettled([
+      getMounts(),
+      listAllJobs({ include_archived: true }),
+    ])
+
+    if (mountResult.status !== 'fulfilled') {
+      throw mountResult.reason
+    }
+
+    const jobs = jobResult.status === 'fulfilled' ? (jobResult.value || []) : []
+    mountJobByProject.value = buildProjectEvidenceMap(jobs)
+
+    mounts.value = (mountResult.value || []).map((item) => {
+      const mount = normalizeProjectRecord(item, ['project_id'])
+      return {
+        ...mount,
+        current_project_job_id: getProjectEvidenceJobId(mount.project_id, mountJobByProject.value),
+      }
+    })
   } catch (requestError) {
     error.value = normalizeErrorMessage(requestError?.response?.data, t('common.errors.networkError'))
   } finally {
     loading.value = false
   }
+}
+
+function isValidJobId(value) {
+  const normalizedJobId = Number(value)
+  return Number.isInteger(normalizedJobId) && normalizedJobId > 0
+}
+
+function openRelatedJob(jobId) {
+  const normalizedJobId = Number(jobId)
+  if (!Number.isInteger(normalizedJobId) || normalizedJobId < 1) return
+  router.push({ name: 'job-detail', params: { id: normalizedJobId } })
 }
 
 async function loadPublicAuthConfig() {
@@ -676,6 +710,17 @@ onBeforeUnmount(() => {
 
     <DataTable :columns="columns" :rows="paged" :empty-text="t('mounts.empty')">
       <template #cell-project_id="{ row }">{{ formatProjectId(row.project_id) }}</template>
+      <template #cell-current_project_job_id="{ row }">
+        <button
+          v-if="isValidJobId(row.current_project_job_id)"
+          class="cell-link"
+          type="button"
+          @click="openRelatedJob(row.current_project_job_id)"
+        >
+          {{ row.current_project_job_id }}
+        </button>
+        <span v-else>-</span>
+      </template>
       <template #cell-status="{ row }">
         <span
           v-if="isMobileViewport"
@@ -889,6 +934,21 @@ onBeforeUnmount(() => {
 .view-root {
   display: grid;
   gap: var(--space-md);
+}
+
+.cell-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-link);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
+.cell-link:hover,
+.cell-link:focus-visible {
+  text-decoration-thickness: 2px;
 }
 
 .header-row,

@@ -1174,6 +1174,7 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 | 13 | Preserve stored credentials on edit when fields are left blank | Edit an existing SMB mount in the UI, change only remote path or project ID, and save without entering credential values | Update succeeds and the existing stored credentials remain in effect |
 | 14 | Explicitly clear stored credentials during edit | Edit an existing SMB mount in the UI, click `Clear saved credentials`, and save | Update request clears stored username/password/credentials file and no replacement credential values are required |
 | 15 | Returned mount error keeps edit dialog open | Edit a mount so the backend returns an updated mount object with `status: ERROR` | The dialog remains open and shows the returned failure state instead of showing a success-only close path |
+| 16 | Mounts list shows related Job ID for the mounted project | Seed or create a job for the same project as a listed mount, then open Mounts | The row shows `Project` and `Job ID`, selecting `Job ID` opens the matching Job Detail page, and rows without a valid related job keep the `Job ID` cell non-actionable |
 
 ### 12.5 USB Hardware Validation
 
