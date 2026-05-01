@@ -1597,6 +1597,7 @@ def update_mount(mount_id: int, mount_data: MountUpdate, db: Session, actor: Opt
                     credentials_file=resolved_credentials["credentials_file"],
                     username=resolved_credentials["username"],
                     password=resolved_credentials["password"],
+                    nfs_client_version=mount.nfs_client_version,
                 )
 
         if success:
