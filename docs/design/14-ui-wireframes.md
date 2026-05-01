@@ -505,15 +505,15 @@ The active-jobs table on this screen treats valid `Job ID` values as the navigat
 │  ◎ Dashboard │                                                               │
 │  ◉ Drives    │  Filter: [ All States ▾ ]   Search: [ __________________ 🔍] │
 │  ◎ Mounts    │                                                               │
-│  ◎ Jobs      │  ┌────┬────────┬────────┬────────┬────────┐│
-│  ◎ Audit     │  │ ID │ Device │ Size   │ State  │ Job ID ││
-│              │  ├────┼────────┼────────┼────────┼────────┤│
-│              │  │ 1  │ 2-1    │ 64 GB  │🟢IN_USE│ 301    ││
-│              │  │ 2  │ 2-2    │ 64 GB  │🟡AVAIL │ —      ││
-│              │  │ 3  │ 2-3    │ 32 GB  │🟡AVAIL │ —      ││
-│              │  │ 4  │ 2-4    │ 128 GB │🟢IN_USE│ 287    ││
-│              │  │ 5  │ 2-5    │ —      │⚪DISCON│ —      ││
-│              │  └────┴────────┴────────┴────────┴────────┘│
+│  ◎ Jobs      │  ┌────┬────────┬──────────┬────────┬────────┬────────┐│
+│  ◎ Audit     │  │ ID │ Device │ Project  │ Size   │ State  │ Job ID ││
+│              │  ├────┼────────┼──────────┼────────┼────────┼────────┤│
+│              │  │ 1  │ 2-1    │ PROJ-301 │ 64 GB  │🟢IN_USE│ 301    ││
+│              │  │ 2  │ 2-2    │ —        │ 64 GB  │🟡AVAIL │ —      ││
+│              │  │ 3  │ 2-3    │ —        │ 32 GB  │🟡AVAIL │ —      ││
+│              │  │ 4  │ 2-4    │ PROJ-287 │ 128 GB │🟢IN_USE│ 287    ││
+│              │  │ 5  │ 2-5    │ —        │ —      │⚪DISCON│ —      ││
+│              │  └────┴────────┴──────────┴────────┴────────┴────────┘│
 │              │                                                               │
 │              │  Click a row to view drive details and available actions.      │
 │              │                                                               │
