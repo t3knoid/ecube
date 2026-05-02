@@ -337,7 +337,8 @@ const isJobFullyComplete = computed(() => {
   return Number(job.value?.files_failed || 0) === 0 && Number(job.value?.files_timed_out || 0) === 0
 })
 const canVerify = computed(() => canOperate.value && isJobFullyComplete.value)
-const canDownloadManifest = computed(() => canOperate.value && isJobFullyComplete.value)
+const hasGeneratedManifest = computed(() => Boolean(job.value?.latest_manifest_created_at))
+const canDownloadManifest = computed(() => canOperate.value && isJobFullyComplete.value && hasGeneratedManifest.value)
 
 const primaryActionKeys = computed(() => {
   const status = currentStatus.value
