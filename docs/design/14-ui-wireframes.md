@@ -520,16 +520,16 @@ The active-jobs table on this screen treats valid `Job ID` values as the navigat
 │              │  [ Manage Ports ]  [ Manage Hubs ]  (admin/manager — 4c/4d)   │
 │              │                                                               │
 │              │  ┌─ Lifecycle Reference ─────────────────────────────────────┐ │
-│              │  │   DISCONNECTED ──▶ AVAILABLE ──▶ IN_USE                   │ │
-│              │  │     ▲      (format)    (initialize)  │                    │ │
-│              │  │     │         ▲                       │ (eject)           │ │
-│              │  │     │         └───────────────────────┘                   │ │
-│              │  │  (removed)                                                │ │
+│              │  │   DISCONNECTED ──▶ UNMOUNTED ──▶ AVAILABLE ──▶ IN_USE     │ │
+│              │  │     ▲                │             (initialize)  │        │ │
+│              │  │     │                └──────────▶ (enable port)  │        │ │
+│              │  │     │                      ▲                     │ (eject)│ │
+│              │  │     │         (removed)    └────── (format) ─────┘        │ │
 │              │  └──────────────────────────────────────────────────────────┘ │
 └──────────────┴───────────────────────────────────────────────────────────────┘
 ```
 
-**State color key:** 🟢 IN_USE (green) · 🟡 AVAILABLE (yellow) · ⚪ DISCONNECTED (gray)
+**State color key:** 🟢 IN_USE (green) · 🟡 AVAILABLE (yellow) · 🟠 UNMOUNTED (amber) · ⚪ DISCONNECTED (gray)
 
 ### 4b — Drive Detail Panel (UC-4.7, UC-4.4, UC-4.5, UC-4.6)
 
@@ -584,6 +584,7 @@ Shown when a drive row is selected (slide-out panel or detail page).
 | Drive State | Format | Initialize | Eject |
 |-------------|--------|------------|-------|
 | DISCONNECTED | disabled | disabled | disabled |
+| UNMOUNTED | disabled | disabled | disabled |
 | AVAILABLE   | enabled | enabled (if destination mounted) | disabled |
 | IN_USE      | disabled | disabled | enabled |
 
@@ -613,8 +614,8 @@ Accessible from the Drive Management screen via a "Manage Ports" button. Visible
 │              │  └────┴────────┴──────────────────────────┴──────┴──────┴───────┴─────────────────┴────────┘│
 │              │                                                                          │
 │              │  ⚠ Changes take effect on the next discovery refresh.                     │
-│              │    Drives on disabled ports remain in DISCONNECTED state.                  │
-│              │    AVAILABLE drives are demoted to DISCONNECTED when port disabled.        │
+│              │    Drives on disabled ports remain in UNMOUNTED state.                     │
+│              │    AVAILABLE drives are demoted to UNMOUNTED when port disabled.           │
 │              │    Drives already IN_USE are not affected.                                │
 │              │                                                                          │
 │              │  [ Refresh Drives ] — run discovery after enabling ports                  │

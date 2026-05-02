@@ -376,7 +376,7 @@ List all drives with state and project assignment.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `project_id` | string | No | When provided, return only drives bound to this project. When omitted, return all drives. |
-| `state` | string (repeatable) | No | Filter by drive state. May be specified multiple times (e.g. `?state=IN_USE&state=AVAILABLE`). Valid values: `DISCONNECTED`, `AVAILABLE`, `IN_USE`. When omitted, connected states (`AVAILABLE`, `IN_USE`) are returned unless `include_disconnected=true` is also set. |
+| `state` | string (repeatable) | No | Filter by drive state. May be specified multiple times (e.g. `?state=IN_USE&state=AVAILABLE`). Valid values: `DISCONNECTED`, `UNMOUNTED`, `AVAILABLE`, `IN_USE`. When omitted, non-disconnected states (`UNMOUNTED`, `AVAILABLE`, `IN_USE`) are returned unless `include_disconnected=true` is also set. |
 | `include_disconnected` | boolean | No | When `true`, `DISCONNECTED` drives are included in the response. Default: `false`. Has no effect when `state` is explicitly provided. |
 
 **Roles:** `admin`, `manager`, `processor`, `auditor`
@@ -549,7 +549,7 @@ List all USB ports with their current enablement state and hardware metadata.
 
 ### `PATCH /admin/ports/{port_id}`
 
-Enable or disable a USB port for ECUBE use. Disabled ports cause newly discovered or reconnecting drives to remain in `DISCONNECTED` state instead of transitioning to `AVAILABLE`. Drives already in `AVAILABLE` state on a disabled port are demoted to `DISCONNECTED` on the next discovery sync.
+Enable or disable a USB port for ECUBE use. Disabled ports cause newly discovered or reconnecting drives to remain in `UNMOUNTED` state instead of transitioning to `AVAILABLE`. Drives already in `AVAILABLE` state on a disabled port are demoted to `UNMOUNTED` on the next discovery sync.
 
 **Roles:** `admin`, `manager`
 
@@ -587,7 +587,7 @@ Enable or disable a USB port for ECUBE use. Disabled ports cause newly discovere
 
 - The enablement change takes effect on the next discovery sync.
 - Drives already in `IN_USE` state on a disabled port are **not** affected — project isolation takes priority.
-- Drives with no associated port (`port_id = NULL`) are treated as disabled — they remain in `DISCONNECTED` state.
+- Drives with no associated port (`port_id = NULL`) are treated as disabled while physically present — they remain in `UNMOUNTED` state.
 
 **Audit events:**
 
@@ -727,7 +727,7 @@ All job endpoints that return a single job use the `ExportJobSchema` response, w
 | `capacity_bytes` | integer or null | Total storage capacity in bytes |
 | `available_bytes` | integer or null | Last known available space in bytes for the mounted drive |
 | `filesystem_type` | string or null | Detected filesystem label |
-| `current_state` | string | `DISCONNECTED`, `AVAILABLE`, `IN_USE` |
+| `current_state` | string | `DISCONNECTED`, `UNMOUNTED`, `AVAILABLE`, `IN_USE` |
 | `is_mounted` | boolean | Whether the related drive is still mounted on the host |
 | `current_project_id` | string or null | Bound project ID |
 
