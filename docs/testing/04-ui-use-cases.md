@@ -213,11 +213,11 @@ Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 
 | UC-9.1 | View current runtime configuration settings | Admin | admin |
 | UC-9.2 | Update logging settings (`log_level`, `log_format`, log rotation) | Admin | admin |
 | UC-9.3 | Enable/disable file logging and set log file path | Admin | admin |
-| UC-9.4 | Update copy and DB pool runtime settings (`copy_job_timeout`, `job_detail_files_page_size`, `db_pool_size`, `db_pool_max_overflow`) | Admin | admin |
+| UC-9.4 | Update copy and DB pool runtime settings (`copy_job_timeout`, `job_detail_files_page_size`, `mkfs_exfat_cluster_size`, `db_pool_size`, `db_pool_max_overflow`) | Admin | admin |
 | UC-9.5 | Review restart-required changes after save | Admin | admin |
 | UC-9.6 | Request ECUBE service restart from UI confirmation dialog | Admin | admin |
 
-**UI Implication:** Admin-only `Configuration` page provides editable logging, copy job timeout, Job Detail files-per-page, and DB pool fields, localized error handling, and a restart-required panel. Save applies supported changes immediately where possible and lists deferred settings that require service restart.
+**UI Implication:** Admin-only `Configuration` page provides editable logging, copy job timeout, exFAT cluster size, Job Detail files-per-page, and DB pool fields, localized error handling, and a restart-required panel. Save applies supported changes immediately where possible and lists deferred settings that require service restart.
 
 ---
 
