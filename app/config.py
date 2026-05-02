@@ -313,6 +313,12 @@ class Settings(BaseSettings):
     #: Path to the ``mkfs.exfat`` binary.
     mkfs_exfat_path: str = "/sbin/mkfs.exfat"
 
+    #: Cluster size passed to ``mkfs.exfat``.  ``4K`` is the default because it
+    #: preserves capacity for the common case where evidence sets include at
+    #: least some small files; larger sizes are better suited only for drives
+    #: storing very large files without small-file slack concerns.
+    mkfs_exfat_cluster_size: str = "4K"
+
     #: Path to the ``dumpe2fs`` binary used for best-effort ext4 free-space probing.
     dumpe2fs_path: str = "/sbin/dumpe2fs"
 
