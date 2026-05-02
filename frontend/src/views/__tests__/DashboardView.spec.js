@@ -156,6 +156,25 @@ describe('DashboardView active jobs', () => {
     expect(wrapper.find('.progress-stub').text()).toBe('40/100 40%')
   })
 
+  it('includes unmounted drives in the dashboard drive summary', async () => {
+    mocks.listJobs.mockResolvedValue([])
+    mocks.getDrives.mockResolvedValue([
+      { id: 1, current_state: 'DISCONNECTED' },
+      { id: 2, current_state: 'UNMOUNTED' },
+      { id: 3, current_state: 'AVAILABLE' },
+      { id: 4, current_state: 'IN_USE' },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const summaryRows = wrapper.findAll('.summary-row').map((row) => row.text())
+    expect(summaryRows).toContain(`${i18n.global.t('drives.states.disconnected')}1`)
+    expect(summaryRows).toContain(`${i18n.global.t('drives.states.unmounted')}1`)
+    expect(summaryRows).toContain(`${i18n.global.t('drives.states.available')}1`)
+    expect(summaryRows).toContain(`${i18n.global.t('drives.states.inUse')}1`)
+  })
+
   it('renders the Job ID cell as a link to Job Detail for active jobs', async () => {
     mocks.listJobs.mockResolvedValue([
       {

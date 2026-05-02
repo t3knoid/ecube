@@ -35,7 +35,7 @@ Parallel file transfer threads keep USB drives fed at maximum write speed. If a 
 
 ### Hardware-Aware Drive Management
 
-ECUBE automatically discovers USB hubs, ports, and drives through the Linux sysfs topology. No manual device configuration. Drives are tracked through a deterministic state machine (Disconnected → Available → In Use) with full lifecycle auditability.
+ECUBE automatically discovers USB hubs, ports, and drives through the Linux sysfs topology. No manual device configuration. Drives are tracked through a deterministic state machine (Disconnected → Unmounted → Available → In Use) with full lifecycle auditability, separating absent media from physically present drives that are not yet operator-ready.
 
 ### Role-Based Access Control
 
