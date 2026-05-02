@@ -399,7 +399,9 @@ def run_discovery_sync(
                 existing.current_state = DriveState.IN_USE
                 changed = True
             # Re-activate physically present drives when the port becomes enabled.
-            elif existing.current_state in (DriveState.DISCONNECTED, DriveState.DISABLED) and port_enabled:
+            # Legacy UNMOUNTED rows from pre-DISABLED releases should also
+            # reconcile forward instead of remaining stranded.
+            elif existing.current_state in (DriveState.DISCONNECTED, DriveState.DISABLED, DriveState.UNMOUNTED) and port_enabled:
                 if existing.mount_path and has_project_binding:
                     existing.current_state = DriveState.IN_USE
                 else:
