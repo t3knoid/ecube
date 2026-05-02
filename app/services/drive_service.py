@@ -408,10 +408,10 @@ def mount_drive(
     initial_filesystem_path = drive.filesystem_path
     initial_project_id = drive.current_project_id
 
-    if initial_state not in (DriveState.AVAILABLE, DriveState.IN_USE):
+    if initial_state not in (DriveState.UNMOUNTED, DriveState.AVAILABLE, DriveState.IN_USE):
         raise HTTPException(
             status_code=409,
-            detail="Drive must be AVAILABLE or IN_USE before it can be mounted",
+            detail="Drive must be UNMOUNTED, AVAILABLE, or IN_USE before it can be mounted",
         )
 
     if drive.filesystem_type in {None, "unformatted", "unknown"}:
@@ -592,6 +592,10 @@ def mount_drive(
             raise HTTPException(status_code=409, detail=detail)
 
     drive.mount_path = mount_point
+    if initial_state == DriveState.UNMOUNTED:
+        drive.current_state = (
+            DriveState.IN_USE if bool(normalize_project_id(initial_project_id)) else DriveState.AVAILABLE
+        )
     try:
         drive_repo.save(drive)
     except Exception:
