@@ -23,6 +23,7 @@ const refreshing = ref(false)
 const error = ref('')
 const search = ref('')
 const stateFilter = ref('ALL')
+const showDisconnected = ref(false)
 const sortKey = ref('id')
 const sortDir = ref('asc')
 const page = ref(1)
@@ -71,8 +72,11 @@ function driveStatusTone(status) {
   if (['COMPLETED', 'DONE', 'MOUNTED', 'CONNECTED', 'AVAILABLE', 'OK', 'TRUE'].includes(value)) {
     return 'success'
   }
-  if (['FAILED', 'ERROR', 'DISCONNECTED', 'UNMOUNTED', 'FALSE'].includes(value)) {
+  if (['FAILED', 'ERROR', 'DISCONNECTED', 'FALSE'].includes(value)) {
     return 'danger'
+  }
+  if (['UNMOUNTED'].includes(value)) {
+    return 'warning'
   }
   if (['RUNNING', 'VERIFYING', 'COPYING', 'IN_USE', 'DEGRADED'].includes(value)) {
     return 'warning'
@@ -109,7 +113,7 @@ async function loadDrives() {
   error.value = ''
   try {
     const params = {}
-    if (stateFilter.value === 'ALL' || stateFilter.value === 'DISCONNECTED') {
+    if (showDisconnected.value) {
       params.include_disconnected = true
     }
     const [driveResult, jobResult] = await Promise.allSettled([
@@ -199,16 +203,11 @@ function setSort(key) {
 }
 
 async function resetToAllAndReload() {
-  const previousState = stateFilter.value
-  const previousIncludesDisconnected = previousState === 'ALL' || previousState === 'DISCONNECTED'
-
-  if (previousState !== 'ALL') {
+  if (stateFilter.value !== 'ALL') {
     stateFilter.value = 'ALL'
   }
 
-  if (previousIncludesDisconnected) {
-    await loadDrives()
-  }
+  await loadDrives()
 }
 
 async function refreshList() {
@@ -233,15 +232,13 @@ async function rescan() {
   }
 }
 
-watch(stateFilter, (newValue, oldValue) => {
+watch(stateFilter, () => {
   page.value = 1
+})
 
-  const nextIncludesDisconnected = newValue === 'ALL' || newValue === 'DISCONNECTED'
-  const previousIncludesDisconnected = oldValue === 'ALL' || oldValue === 'DISCONNECTED'
-
-  if (nextIncludesDisconnected !== previousIncludesDisconnected) {
-    loadDrives()
-  }
+watch(showDisconnected, () => {
+  page.value = 1
+  loadDrives()
 })
 
 function openDrive(drive) {
@@ -318,10 +315,14 @@ onBeforeUnmount(() => {
       <input v-model="search" type="text" :placeholder="t('drives.searchPlaceholder')" :aria-label="t('drives.searchPlaceholder')" />
       <select v-model="stateFilter" :aria-label="t('drives.allStates')">
         <option value="ALL">{{ t('drives.allStates') }}</option>
-        <option value="DISCONNECTED">{{ t('drives.states.disconnected') }}</option>
+        <option value="UNMOUNTED">{{ t('drives.states.unmounted') }}</option>
         <option value="AVAILABLE">{{ t('drives.states.available') }}</option>
         <option value="IN_USE">{{ t('drives.states.inUse') }}</option>
       </select>
+      <label>
+        <input v-model="showDisconnected" type="checkbox" />
+        {{ t('drives.showDisconnected') }}
+      </label>
       <select v-model="sortKey" :aria-label="t('drives.sortBy')">
         <option value="id">{{ t('common.labels.id') }}</option>
         <option value="display_device_label">{{ t('drives.device') }}</option>
