@@ -661,9 +661,15 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
     initial_state = drive.current_state
     initial_device_path = drive.filesystem_path
 
-    # Fail fast if the drive is not in the required IN_USE state.
+    # Fail fast if the drive is not in an ejectable state.
     # Don't waste time on expensive OS operations for invalid preconditions.
-    if initial_state != DriveState.IN_USE:
+    if initial_state == DriveState.AVAILABLE:
+        if not drive.mount_path:
+            raise HTTPException(
+                status_code=409,
+                detail="Drive is not mounted; refresh drive status and retry prepare-eject",
+            )
+    elif initial_state != DriveState.IN_USE:
         if drive.mount_path:
             raise HTTPException(
                 status_code=409,
@@ -671,7 +677,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
             )
         raise HTTPException(
             status_code=409,
-            detail=f"Drive is not in IN_USE state; cannot prepare eject (current state: {initial_state.value})",
+            detail=f"Drive is not in an ejectable state; cannot prepare eject (current state: {initial_state.value})",
         )
 
     blocking_job = db.query(ExportJob).join(
@@ -810,7 +816,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
         # Drive was deleted between reads (unlikely but possible).
         raise HTTPException(status_code=404, detail="Drive not found")
 
-    # Verify the drive state is still IN_USE (required precondition for prepare-eject).
+    # Verify the drive state is still the same ejectable state we validated earlier.
     # If another request changed the state, reject with 409 Conflict.
     if drive.current_state != initial_state:
         raise HTTPException(

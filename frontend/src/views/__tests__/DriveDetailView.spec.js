@@ -182,6 +182,16 @@ describe('DriveDetailView mount workflow', () => {
     expect(labels).not.toContain(i18n.global.t('drives.mount'))
   })
 
+  it('shows Prepare Eject for a mounted available drive', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'AVAILABLE', mount_path: '/mnt/ecube/7' })])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const labels = wrapper.findAll('button').map((node) => node.text())
+    expect(labels).toContain(i18n.global.t('drives.prepareEject'))
+  })
+
   it('keeps recovery actions consistent when enable reloads a mounted in-use drive', async () => {
     mocks.getDrives
       .mockResolvedValueOnce([buildDrive({ current_state: 'DISABLED', filesystem_path: '/dev/sdb1', port_id: 1 })])
