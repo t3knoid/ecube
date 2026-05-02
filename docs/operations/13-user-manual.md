@@ -448,8 +448,6 @@ The `Mounts` page manages source locations used for export jobs.
 You can typically:
 
 - Refresh the mount list
-- Validate all mounts
-- Validate an individual mount
 - Add a new mount definition
 - Open Mount Detail for an existing mount definition
 
@@ -496,7 +494,9 @@ When you save, ECUBE updates the existing mount record instead of creating a new
 
 ### 8.2 Testing Mount Connectivity
 
-Use `Test` or `Test All` to verify that configured source mounts are reachable and valid before creating jobs that depend on them.
+Use `Test` inside the `Add Share` dialog before creating a new mount, or inside the `Edit Share` dialog before saving changes to an existing mount.
+
+The dialog must show a successful test result before `Create` or `Save` becomes available. This keeps mount validation tied to the exact configuration you are about to persist rather than to a separate list-level action.
 
 ### 8.3 Removing a Mount
 
