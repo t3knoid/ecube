@@ -606,13 +606,14 @@ Every USB drive passes through four states:
 | State | Meaning |
 |-------|----------|
 | `DISCONNECTED` | Drive known to the database but not physically present |
-| `UNMOUNTED` | Drive physically present but not yet operator-ready, typically because its port is disabled |
+| `DISABLED` | Drive physically present but blocked by a disabled port |
+| `UNMOUNTED` | Drive physically present on an enabled port but not currently mounted |
 | `AVAILABLE` | Drive is present and ready to be formatted (if needed) and assigned to a project |
 | `IN_USE` | Drive is bound to a project and actively receiving evidence |
 
 Key behaviors:
 
-- **Discovery sync** detects newly inserted drives and transitions them to `AVAILABLE` only when the drive's USB port is **enabled**. Drives that are physically present on disabled ports remain in `UNMOUNTED` state until the port is enabled and a subsequent discovery sync runs. If a port is disabled while a drive is already `AVAILABLE`, the next sync demotes the drive to `UNMOUNTED`. Drives with no associated port (`port_id = NULL`) are treated as disabled while present and remain `UNMOUNTED`. Drives in `IN_USE` state are never affected by port enablement — project isolation takes priority.
+- **Discovery sync** detects newly inserted drives and transitions them to `AVAILABLE` only when the drive's USB port is **enabled**. Drives that are physically present on disabled ports remain in `DISABLED` state until the port is enabled and a subsequent discovery sync runs. If a port is disabled while a drive is already `AVAILABLE`, the next sync demotes the drive to `DISABLED`. Drives with no associated port (`port_id = NULL`) are treated as disabled while present and remain `DISABLED`. Drives in `IN_USE` state are never affected by port enablement — project isolation takes priority.
 - **Format** writes a filesystem to the drive (stays `AVAILABLE`) and **clears any existing project binding** (`current_project_id → null`). Required before a drive can be assigned to a new project. A drive with no recognized filesystem cannot be initialized.
 - **Initialize** binds a drive to a project (`AVAILABLE → IN_USE`). See the Initialize Drive section below for state-aware guard rules.
 - **Eject** flushes writes, unmounts, and returns the drive to `AVAILABLE` (`IN_USE → AVAILABLE`). The project binding and filesystem type are **preserved** so the same drive can be re-initialized for the same project without reformatting.
