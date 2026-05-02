@@ -90,6 +90,225 @@ def _emit_job_lifecycle_callback(
         )
 
 
+def _latest_manifest_is_current(job: ExportJob, manifest: Optional[Manifest]) -> bool:
+    manifest_row = _row(manifest) if manifest is not None else None
+    manifest_path = cast(Optional[str], getattr(manifest_row, "manifest_path", None)) if manifest_row is not None else None
+    created_at = cast(Optional[datetime], getattr(manifest_row, "created_at", None)) if manifest_row is not None else None
+    completed_at = cast(Optional[datetime], getattr(_row(job), "completed_at", None))
+
+    if not manifest_path or not os.path.exists(manifest_path):
+        return False
+    if completed_at is None or created_at is None:
+        return True
+    return created_at >= completed_at
+
+
+def _generate_manifest_for_job(
+    job_id: int,
+    db: Session,
+    *,
+    actor: Optional[str] = None,
+    client_ip: Optional[str] = None,
+    strict: bool,
+) -> tuple[ExportJob, bool]:
+    job_repo = JobRepository(db)
+    manifest_repo = ManifestRepository(db)
+    audit_repo = AuditRepository(db)
+    file_repo = FileRepository(db)
+
+    job = job_repo.get(job_id)
+    if not job:
+        if strict:
+            raise HTTPException(status_code=404, detail="Job not found")
+        raise LookupError("Job not found")
+
+    job_row = _row(job)
+    if cast(JobStatus, job_row.status) != JobStatus.COMPLETED:
+        if strict:
+            raise HTTPException(status_code=409, detail="Only completed jobs can generate a manifest")
+        return job, False
+
+    _done, failed, timed_out = file_repo.count_done_errors_and_timeouts(job_id)
+    if failed or timed_out:
+        if strict:
+            raise HTTPException(
+                status_code=409,
+                detail="Only clean completed jobs can generate a manifest",
+            )
+        return job, False
+
+    latest_manifest = manifest_repo.get_latest_for_job(job_id)
+    if _latest_manifest_is_current(job, latest_manifest):
+        return job, False
+
+    job_project_id = cast(Optional[str], job_row.project_id)
+    assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
+    assignment_row = _row(assignment) if assignment is not None else None
+    active_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
+    target_mount_path = (
+        cast(Optional[str], getattr(assignment_row.drive, "mount_path", None))
+        if assignment_row is not None and getattr(assignment_row, "drive", None) is not None
+        else None
+    )
+    generated_at_dt = datetime.now(timezone.utc)
+    generated_at = generated_at_dt.isoformat()
+    generated_by = actor or "system"
+    manifest_data = {
+        "job_id": cast(int, job_row.id),
+        "project_id": job_project_id,
+        "evidence_number": cast(Optional[str], job_row.evidence_number),
+        "generated_at": generated_at,
+        "generated_by": generated_by,
+        "files": [
+            {
+                "path": f.relative_path,
+                "checksum": f.checksum,
+                "size_bytes": f.size_bytes,
+            }
+            for f in job.files
+        ],
+    }
+
+    def audit_manifest_failure(error_message: str, manifest_file: Optional[str] = None) -> None:
+        try:
+            audit_repo.add(
+                action="MANIFEST_CREATE_FAILED",
+                user=actor,
+                project_id=job_project_id,
+                drive_id=active_drive_id,
+                job_id=job_id,
+                details={
+                    "project_id": job_project_id,
+                    "drive_id": active_drive_id,
+                    "manifest_file": manifest_file,
+                    "generated_at": generated_at,
+                    "generated_by": generated_by,
+                    "error": error_message,
+                },
+                client_ip=client_ip,
+            )
+        except Exception:
+            logger.error("Failed to write audit log for MANIFEST_CREATE_FAILED")
+
+    if not target_mount_path:
+        manifest_error = "Assigned drive is not mounted"
+        if strict:
+            logger.warning(
+                "Manifest generation rejected",
+                extra={"job_id": job_id, "project_id": job_project_id, "reason": "drive_not_mounted"},
+            )
+            audit_manifest_failure(manifest_error)
+            raise HTTPException(status_code=409, detail=manifest_error)
+        logger.info(
+            "Skipping automatic manifest generation",
+            extra={"job_id": job_id, "project_id": job_project_id, "reason": "drive_not_mounted"},
+        )
+        return job, False
+
+    candidate_path = os.path.join(target_mount_path, "manifest.json")
+    manifest_name = os.path.basename(candidate_path)
+    try:
+        os.makedirs(target_mount_path, exist_ok=True)
+        with open(candidate_path, "w", encoding="utf-8") as fp:
+            json.dump(manifest_data, fp, indent=2)
+    except Exception as exc:
+        manifest_error = "Manifest file could not be written"
+        logger.info(
+            "Manifest file write failed",
+            extra={"job_id": job_id, "project_id": job_project_id, "reason": "write_failed"},
+        )
+        logger.debug(
+            "Manifest file write failure details",
+            extra={"job_id": job_id, "project_id": job_project_id, "path": candidate_path, "raw_error": str(exc)},
+        )
+        audit_manifest_failure(manifest_error, manifest_name)
+        if strict:
+            raise HTTPException(status_code=500, detail=manifest_error) from exc
+        return job, False
+
+    try:
+        manifest_repo.add(Manifest(job_id=job_id, manifest_path=candidate_path, format="JSON"))
+    except Exception as exc:
+        logger.info(
+            "Manifest persistence failed",
+            extra={"job_id": job_id, "project_id": job_project_id, "reason": "db_write_failed"},
+        )
+        logger.debug(
+            "Manifest persistence failure details",
+            extra={"job_id": job_id, "project_id": job_project_id, "raw_error": str(exc)},
+        )
+        if strict:
+            raise HTTPException(
+                status_code=500,
+                detail="Database error while creating manifest",
+            ) from exc
+        return job, False
+
+    logger.info(
+        "MANIFEST_CREATED",
+        extra={
+            "job_id": job_id,
+            "project_id": job_project_id,
+            "drive_id": active_drive_id,
+            "actor": actor or "system",
+            "manifest_file": manifest_name,
+            "result": "written",
+        },
+    )
+    try:
+        audit_repo.add(
+            action="MANIFEST_CREATED",
+            user=actor,
+            project_id=job_project_id,
+            drive_id=active_drive_id,
+            job_id=job_id,
+            details={
+                "project_id": job_project_id,
+                "drive_id": active_drive_id,
+                "manifest_file": manifest_name,
+                "generated_at": generated_at,
+                "generated_by": generated_by,
+                "error": None,
+            },
+            client_ip=client_ip,
+        )
+    except Exception:
+        logger.error("Failed to write audit log for MANIFEST_CREATED")
+    db.refresh(job)
+    _emit_job_lifecycle_callback(
+        job,
+        event="MANIFEST_CREATED",
+        actor=actor,
+        event_at=generated_at_dt,
+        event_details={
+            "manifest_file": manifest_name,
+            "generated_at": generated_at,
+            "generated_by": generated_by,
+        },
+    )
+    return job, True
+
+
+def auto_generate_manifest_for_completed_job(
+    job_id: int,
+    db: Session,
+    *,
+    actor: Optional[str] = None,
+    client_ip: Optional[str] = None,
+) -> bool:
+    try:
+        _job, created = _generate_manifest_for_job(
+            job_id,
+            db,
+            actor=actor,
+            client_ip=client_ip,
+            strict=False,
+        )
+        return created
+    except LookupError:
+        return False
+
+
 def list_jobs(
     db: Session,
     limit: int = 200,
@@ -941,6 +1160,12 @@ def complete_job(
         event_at=cast(Optional[datetime], job_row.completed_at),
         event_details={"previous_status": previous_status},
     )
+    auto_generate_manifest_for_completed_job(
+        job.id,
+        db,
+        actor=actor,
+        client_ip=client_ip,
+    )
     return job
 
 
@@ -1528,154 +1753,12 @@ def verify_job(
 
 
 def create_manifest(job_id: int, db: Session, actor: Optional[str] = None, client_ip: Optional[str] = None) -> ExportJob:
-    job_repo = JobRepository(db)
-    manifest_repo = ManifestRepository(db)
-    audit_repo = AuditRepository(db)
-    file_repo = FileRepository(db)
-
-    job = job_repo.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-
-    job_row = _row(job)
-    if cast(JobStatus, job_row.status) != JobStatus.COMPLETED:
-        raise HTTPException(status_code=409, detail="Only completed jobs can generate a manifest")
-
-    _done, failed, timed_out = file_repo.count_done_errors_and_timeouts(job_id)
-    if failed or timed_out:
-        raise HTTPException(
-            status_code=409,
-            detail="Only clean completed jobs can generate a manifest",
-        )
-
-    job_project_id = cast(Optional[str], job_row.project_id)
-    assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
-    assignment_row = _row(assignment) if assignment is not None else None
-    active_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
-    target_mount_path = (
-        cast(Optional[str], getattr(assignment_row.drive, "mount_path", None))
-        if assignment_row is not None and getattr(assignment_row, "drive", None) is not None
-        else None
-    )
-    generated_at_dt = datetime.now(timezone.utc)
-    generated_at = generated_at_dt.isoformat()
-    generated_by = actor or "system"
-    manifest_data = {
-        "job_id": cast(int, job_row.id),
-        "project_id": job_project_id,
-        "evidence_number": cast(Optional[str], job_row.evidence_number),
-        "generated_at": generated_at,
-        "generated_by": generated_by,
-        "files": [
-            {
-                "path": f.relative_path,
-                "checksum": f.checksum,
-                "size_bytes": f.size_bytes,
-            }
-            for f in job.files
-        ],
-    }
-
-    def audit_manifest_failure(error_message: str, manifest_file: Optional[str] = None) -> None:
-        try:
-            audit_repo.add(
-                action="MANIFEST_CREATE_FAILED",
-                user=actor,
-                project_id=job_project_id,
-                drive_id=active_drive_id,
-                job_id=job_id,
-                details={
-                    "project_id": job_project_id,
-                    "drive_id": active_drive_id,
-                    "manifest_file": manifest_file,
-                    "generated_at": generated_at,
-                    "generated_by": generated_by,
-                    "error": error_message,
-                },
-                client_ip=client_ip,
-            )
-        except Exception:
-            logger.error("Failed to write audit log for MANIFEST_CREATE_FAILED")
-
-    if not target_mount_path:
-        manifest_error = "Assigned drive is not mounted"
-        logger.warning(
-            "Manifest generation rejected",
-            extra={"job_id": job_id, "project_id": job_project_id, "reason": "drive_not_mounted"},
-        )
-        audit_manifest_failure(manifest_error)
-        raise HTTPException(status_code=409, detail=manifest_error)
-
-    candidate_path = os.path.join(target_mount_path, "manifest.json")
-    manifest_name = os.path.basename(candidate_path)
-    try:
-        os.makedirs(target_mount_path, exist_ok=True)
-        with open(candidate_path, "w", encoding="utf-8") as fp:
-            json.dump(manifest_data, fp, indent=2)
-    except Exception as exc:
-        manifest_error = "Manifest file could not be written"
-        logger.warning(
-            "Manifest file write failed",
-            extra={"job_id": job_id, "project_id": job_project_id},
-        )
-        logger.debug(
-            "Manifest file write failure details",
-            {"path": candidate_path, "raw_error": str(exc)},
-        )
-        audit_manifest_failure(manifest_error, manifest_name)
-        raise HTTPException(status_code=500, detail=manifest_error) from exc
-
-    try:
-        manifest_repo.add(
-            Manifest(job_id=job_id, manifest_path=candidate_path, format="JSON")
-        )
-    except Exception:
-        logger.error("DB commit failed while creating manifest for job %s", job_id)
-        raise HTTPException(
-            status_code=500,
-            detail="Database error while creating manifest",
-        )
-
-    logger.info(
-        f"MANIFEST_CREATED job_id={job_id} project_id={job_project_id} format=JSON actor={actor or 'system'} result=written",
-        extra={
-            "job_id": job_id,
-            "project_id": job_project_id,
-            "drive_id": active_drive_id,
-            "actor": actor or "system",
-            "result": "written",
-        },
-    )
-    try:
-        audit_repo.add(
-            action="MANIFEST_CREATED",
-            user=actor,
-            project_id=job_project_id,
-            drive_id=active_drive_id,
-            job_id=job_id,
-            details={
-                "project_id": job_project_id,
-                "drive_id": active_drive_id,
-                "manifest_file": manifest_name,
-                "generated_at": generated_at,
-                "generated_by": generated_by,
-                "error": None,
-            },
-            client_ip=client_ip,
-        )
-    except Exception:
-        logger.error("Failed to write audit log for MANIFEST_CREATED")
-    db.refresh(job)
-    _emit_job_lifecycle_callback(
-        job,
-        event="MANIFEST_CREATED",
+    job, _created = _generate_manifest_for_job(
+        job_id,
+        db,
         actor=actor,
-        event_at=generated_at_dt,
-        event_details={
-            "manifest_file": manifest_name,
-            "generated_at": generated_at,
-            "generated_by": generated_by,
-        },
+        client_ip=client_ip,
+        strict=True,
     )
     return job
 
