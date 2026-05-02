@@ -172,8 +172,8 @@ This section documents the concrete table layout represented by the SQLAlchemy m
 - `available_bytes` (BigInteger, nullable)
 - `encryption_status` (String, nullable)
 - `filesystem_type` (String, nullable)
-- `current_state` (Enum `DriveState: DISCONNECTED | UNMOUNTED | AVAILABLE | IN_USE`, `native_enum=False`, default `AVAILABLE`)
-  - Transitions: `DISCONNECTED ↔ UNMOUNTED ↔ AVAILABLE` (discovery and port enablement), `AVAILABLE → IN_USE` (init), `IN_USE → AVAILABLE` (prepare-eject)
+- `current_state` (Enum `DriveState: DISCONNECTED | DISABLED | UNMOUNTED | AVAILABLE | IN_USE`, `native_enum=False`, default `AVAILABLE`)
+  - Transitions: `DISCONNECTED ↔ DISABLED ↔ AVAILABLE` (discovery and port enablement), `AVAILABLE → IN_USE` (init), `IN_USE → AVAILABLE` (prepare-eject), with `UNMOUNTED` retained for legacy compatibility rows until discovery reconciles them.
 - `current_project_id` (String, nullable)
 - `last_seen_at` (DateTime with timezone, auto-updated on change)
 
