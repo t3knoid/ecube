@@ -339,17 +339,18 @@ def list_directory(
         #         containment (anti-traversal) and allowlist (defence-in-depth).
         real_root, real_target = _resolve_and_validate(db_mount_root, subdir)
 
-        # 4. List directory -- iterate with os.scandir() so we can bail out
-        #    early when the DoS cap (BROWSE_MAX_DIR_ENTRIES) is exceeded
-        #    without materializing the full listing in memory.  Only names
-        #    are collected (DirEntry.name); the page slice is stat'd later.
+        # 4. List directory using streaming pagination so page requests do not
+        #    materialize or globally sort the entire directory in memory.
         max_entries = settings.browse_max_dir_entries
         try:
-            names: list[str] = []
+            start = (page - 1) * page_size
+            page_names: list[str] = []
+            seen_entries = 0
+            has_more = False
             with os.scandir(real_target) as it:
                 for entry in it:
-                    names.append(entry.name)
-                    if max_entries and len(names) > max_entries:
+                    seen_entries += 1
+                    if max_entries and seen_entries > max_entries:
                         raise HTTPException(
                             status_code=400,
                             detail=(
@@ -358,7 +359,13 @@ def list_directory(
                                 f"Use a more specific subdir."
                             ),
                         )
-            all_names = sorted(names)
+                    if seen_entries <= start:
+                        continue
+                    if len(page_names) < page_size:
+                        page_names.append(entry.name)
+                        continue
+                    has_more = True
+                    break
         except FileNotFoundError as exc:
             _log_browse_failure(
                 root_source=root_source,
@@ -428,11 +435,6 @@ def list_directory(
                 detail="Failed to list the directory due to a filesystem error.",
             )
 
-        total = len(all_names)
-
-        start = (page - 1) * page_size
-        page_names = all_names[start : start + page_size]
-
         entries = []
         for name in page_names:
             entry = _stat_entry(real_target, name)
@@ -452,8 +454,8 @@ def list_directory(
                 "resolved_path": real_target,
                 "page": page,
                 "page_size": page_size,
-                "total": total,
                 "entry_count": len(entries),
+                "has_more": has_more,
             },
             client_ip=client_ip,
         )
@@ -462,9 +464,9 @@ def list_directory(
             path=requested_root,
             subdir=subdir,
             entries=entries,
-            total=total,
             page=page,
             page_size=page_size,
+            has_more=has_more,
         )
     except HTTPException as exc:
         if exc.status_code == 403:

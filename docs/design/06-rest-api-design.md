@@ -2027,7 +2027,7 @@ Host metrics plus ECUBE process diagnostics and active copy-thread correlation.
 
 ### `GET /browse`
 
-Return a paginated directory listing for an active USB drive mount path or network share mount point.
+Return a paginated directory listing for an active USB drive mount path or a trusted network-share selector.
 
 **Roles:** `admin`, `manager`, `processor`, `auditor`
 
@@ -2035,19 +2035,20 @@ Return a paginated directory listing for an active USB drive mount path or netwo
 
 | Parameter | Type | Default | Constraints | Description |
 |-----------|------|---------|-------------|-------------|
-| `path` | string | *(required)* | `StrictSafeStr` | Mount root to browse. Must be an active USB drive `mount_path` or a network mount `local_mount_point` registered in the system. |
+| `path` | string | optional | `StrictSafeStr` | USB or legacy browse root selector. Must be an active USB drive `mount_path` or an active registered mount root. |
+| `mount_id` | integer | optional | `>= 1` | Trusted network mount identifier used to browse a mounted share without exposing its local mount path to the client. Provide exactly one of `path` or `mount_id`. |
 | `subdir` | string | `""` | `StrictSafeStr` | Relative subdirectory within the mount root. |
 | `page` | integer | `1` | `≥ 1` | Page number (1-based). |
 | `page_size` | integer | `100` | `1 ≤ page_size ≤ 500` | Entries per page. |
 
 **Security model:**
 
-1. `path` must match a registered, active mount root from the database.
+1. Exactly one of `path` or `mount_id` must be supplied. `path` must match a registered, active mount root from the database; `mount_id` must resolve to a mounted registered network share.
 2. `subdir` containment is verified via `realpath` — path-traversal attempts (e.g. `../../etc`) are rejected with `400`.
 3. The resolved path must start with one of the configured `BROWSE_ALLOWED_PREFIXES`.
 4. Every call is audit-logged with action `BROWSE_DIRECTORY`.
 
-**Response:** `200 OK` — `BrowseResponse` object containing `entries` (array of `{name, type, size, modified_at}`), `total`, `page`, `page_size`, `path`, `subdir`.
+**Response:** `200 OK` — `BrowseResponse` object containing `entries` (array of `{name, type, size, modified_at}`), `page`, `page_size`, `has_more`, `path`, and `subdir`.
 
 Entry `type` values: `"file"`, `"directory"`, `"symlink"`. Symlinks are listed but not followed.
 
