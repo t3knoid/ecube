@@ -446,6 +446,84 @@ def _reject_source_path_overlap(
         )
 
 
+def _reject_start_when_drive_capacity_is_insufficient(
+    *,
+    job: ExportJob,
+    audit_repo: AuditRepository,
+    actor: Optional[str],
+    client_ip: Optional[str],
+    assignment: Optional[DriveAssignment],
+) -> None:
+    job_row = _row(job)
+    if cast(JobStatus, job_row.status) != JobStatus.PENDING:
+        return
+    if int(cast(Optional[int], job_row.copied_bytes) or 0) > 0:
+        return
+    if not bool(getattr(job, "startup_analysis_ready", False)):
+        return
+
+    estimated_source_bytes = cast(Optional[int], job_row.startup_analysis_total_bytes)
+    if estimated_source_bytes is None:
+        return
+
+    assignment_row = _row(assignment) if assignment is not None else None
+    drive = getattr(assignment_row, "drive", None) if assignment_row is not None else None
+    drive_row = _row(drive) if drive is not None else None
+    available_bytes = cast(Optional[int], getattr(drive_row, "available_bytes", None)) if drive_row is not None else None
+    if available_bytes is None:
+        return
+
+    shortfall_bytes = int(estimated_source_bytes) - int(available_bytes)
+    if shortfall_bytes <= 0:
+        return
+
+    job_id = cast(int, job_row.id)
+    project_id = cast(Optional[str], job_row.project_id)
+    drive_id = cast(Optional[int], getattr(assignment_row, "drive_id", None)) if assignment_row is not None else None
+    logger.info(
+        "Job start rejected because destination space is insufficient",
+        extra={
+            "job_id": job_id,
+            "project_id": project_id,
+            "drive_id": drive_id,
+            "reason": "drive_capacity_shortfall",
+            "estimated_source_bytes": int(estimated_source_bytes),
+            "available_bytes": int(available_bytes),
+            "shortfall_bytes": shortfall_bytes,
+        },
+    )
+
+    try:
+        audit_repo.add(
+            action="JOB_START_REJECTED_CAPACITY",
+            user=actor,
+            project_id=project_id,
+            drive_id=drive_id,
+            job_id=job_id,
+            details={
+                "project_id": project_id,
+                "drive_id": drive_id,
+                "estimated_source_bytes": int(estimated_source_bytes),
+                "available_bytes": int(available_bytes),
+                "shortfall_bytes": shortfall_bytes,
+            },
+            client_ip=client_ip,
+        )
+    except Exception:
+        logger.error("Failed to write audit log for JOB_START_REJECTED_CAPACITY")
+
+    raise ConflictError(
+        (
+            "Selected drive does not have enough available space to start this copy. "
+            f"Estimated source size: {int(estimated_source_bytes)} bytes; "
+            f"available drive space: {int(available_bytes)} bytes; "
+            f"shortfall: {shortfall_bytes} bytes. "
+            "Choose another drive or use the follow-on overflow workflow."
+        ),
+        code="DRIVE_CAPACITY_SHORTFALL",
+    )
+
+
 def archive_job(
     job_id: int,
     *,
@@ -1423,6 +1501,15 @@ def start_job(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
+    _reject_start_when_drive_capacity_is_insufficient(
+        job=job,
+        audit_repo=audit_repo,
+        actor=actor,
+        client_ip=client_ip,
+        assignment=assignment,
+    )
+
     # Transition to RUNNING inside the locked transaction so that any concurrent
     # request arriving after this commit will observe the updated state and be
     # rejected with 409 before the background copy task begins.
@@ -1442,7 +1529,6 @@ def start_job(
             detail="Database error while starting job",
         )
 
-    assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
     assignment_row = _row(assignment) if assignment is not None else None
     active_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
     job_project_id = cast(Optional[str], job_row.project_id)
