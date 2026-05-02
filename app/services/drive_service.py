@@ -136,7 +136,7 @@ def get_all_drives(
         for drive in drives:
             request_available_space_refresh_for_drive(drive)
         return drives
-    drives = repo.list_by_states([DriveState.AVAILABLE, DriveState.IN_USE])  # DISCONNECTED excluded by default
+    drives = repo.list_by_states([DriveState.UNMOUNTED, DriveState.AVAILABLE, DriveState.IN_USE])  # DISCONNECTED excluded by default
     for drive in drives:
         request_available_space_refresh_for_drive(drive)
     return drives
@@ -160,11 +160,11 @@ def initialize_drive(
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
 
-    # DISCONNECTED drives are not physically accessible (not present or on a disabled port).
-    # Initialization requires the drive to be AVAILABLE so that a filesystem is
-    # present and the drive is reachable.  Attempting to initialize from DISCONNECTED is
+    # DISCONNECTED drives are physically absent. UNMOUNTED drives are still
+    # present but not operator-ready. Initialization requires AVAILABLE so the
+    # drive is reachable and ready. Attempting to initialize from these states is
     # always a precondition failure.
-    if drive.current_state == DriveState.DISCONNECTED:
+    if drive.current_state in (DriveState.DISCONNECTED, DriveState.UNMOUNTED):
         try:
             audit_repo.add(
                 action="INIT_REJECTED_NOT_AVAILABLE",
@@ -183,7 +183,11 @@ def initialize_drive(
             logger.error("Failed to write audit log for INIT_REJECTED_NOT_AVAILABLE")
         raise HTTPException(
             status_code=409,
-            detail="Drive is DISCONNECTED (not present or port disabled) and cannot be initialized.",
+            detail=(
+                "Drive is DISCONNECTED (not physically present) and cannot be initialized."
+                if drive.current_state == DriveState.DISCONNECTED
+                else "Drive is UNMOUNTED (physically present but not operator-ready) and cannot be initialized."
+            ),
         )
 
     # Project isolation is state-dependent:
