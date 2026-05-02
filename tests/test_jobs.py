@@ -2415,6 +2415,8 @@ def test_create_manifest_overwrites_manifest_json_and_includes_metadata(client, 
     assert manifest_payload["job_id"] == job.id
     assert manifest_payload["generated_by"] == "test-user"
     assert manifest_payload["generated_at"]
+    manifest_audits = db.query(AuditLog).filter(AuditLog.action == "MANIFEST_CREATED", AuditLog.job_id == job.id).all()
+    assert len(manifest_audits) == 1
 
 
 def test_download_manifest_returns_latest_manifest_as_json_attachment(client, db, tmp_path):
@@ -2607,9 +2609,44 @@ def test_create_manifest_writes_application_log_line(client, db, caplog, tmp_pat
 
     assert response.status_code == 200
     messages = [record.getMessage() for record in caplog.records]
-    manifest_messages = [message for message in messages if f"MANIFEST_CREATED job_id={job_id}" in message]
+    manifest_messages = [message for message in messages if message == "MANIFEST_CREATED"]
     assert manifest_messages
     assert all("manifest_path=" not in message for message in manifest_messages)
+
+
+def test_complete_job_generates_manifest_when_drive_is_mounted(client, db, tmp_path):
+    drive = UsbDrive(
+        device_identifier="USB-COMPLETE-MANIFEST-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-COMPLETE-MANIFEST-001",
+        mount_path=str(tmp_path),
+    )
+    db.add(drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-COMPLETE-MANIFEST-001",
+        evidence_number="EV-COMPLETE-MANIFEST-001",
+        source_path="/data/evidence",
+        target_mount_path=str(tmp_path),
+        status=JobStatus.PAUSED,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.commit()
+
+    response = client.post(f"/jobs/{job.id}/complete")
+
+    assert response.status_code == 200
+    manifest_path = tmp_path / "manifest.json"
+    assert manifest_path.exists()
+    manifest = db.query(Manifest).filter(Manifest.job_id == job.id).order_by(Manifest.id.desc()).first()
+    assert manifest is not None
+    assert manifest.manifest_path == str(manifest_path)
+    audit = db.query(AuditLog).filter(AuditLog.action == "MANIFEST_CREATED", AuditLog.job_id == job.id).first()
+    assert audit is not None
+    assert audit.details["manifest_file"] == "manifest.json"
 
 
 def test_complete_job_from_paused_state_writes_audit_log(client, db):

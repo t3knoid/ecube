@@ -142,12 +142,12 @@ test('jobs create, start, compare, and manifest flow', async ({ page }) => {
   await expect(page.getByText('EV-77-UPDATED')).toBeVisible()
 
   await expect(page.getByRole('button', { name: 'Verify' })).toBeDisabled()
-  await expect(page.getByRole('button', { name: 'Generate Manifest' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Download Manifest' })).toBeDisabled()
 
   await page.getByRole('button', { name: 'Start' }).click()
   await expect(page.locator('.progress-bar')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Verify' })).toBeEnabled()
-  await expect(page.getByRole('button', { name: 'Generate Manifest' })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'Download Manifest' })).toBeEnabled()
 
   await expect(page.locator('.status-badge').filter({ hasText: 'COMPLETED' }).first()).toBeVisible()
   await page.getByRole('button', { name: 'Show files' }).click()
@@ -164,9 +164,9 @@ test('jobs create, start, compare, and manifest flow', async ({ page }) => {
   await expect(hashViewerDialog).toBeHidden()
 
   const manifestDownload = page.waitForEvent('download')
-  await page.getByRole('button', { name: 'Generate Manifest' }).click()
+  await page.getByRole('button', { name: 'Download Manifest' }).click()
   const download = await manifestDownload
-  await expect(page.getByText('Manifest generated successfully.')).toBeVisible()
+  await expect(page.getByText('Manifest download started.')).toBeVisible()
   await expect(page.getByText('/mnt/ecube/1/manifest.json')).toBeVisible()
   expect(download.suggestedFilename()).toBe('manifest.json')
 
