@@ -41,6 +41,7 @@ const form = ref({
   db_pool_max_overflow: 10,
   db_pool_recycle_seconds: -1,
   startup_analysis_batch_size: 500,
+  mkfs_exfat_cluster_size: '4K',
   copy_job_timeout: 3600,
   job_detail_files_page_size: 40,
   callback_default_url: '',
@@ -64,6 +65,7 @@ const fieldOrder = [
   'db_pool_max_overflow',
   'db_pool_recycle_seconds',
   'startup_analysis_batch_size',
+  'mkfs_exfat_cluster_size',
   'copy_job_timeout',
   'job_detail_files_page_size',
   'callback_default_url',
@@ -75,6 +77,7 @@ const fieldOrder = [
 const levelOptions = ['DEBUG', 'INFO', 'WARNING', 'ERROR']
 const formatOptions = ['text', 'json']
 const nfsClientVersionOptions = ['4.2', '4.1', '4.0', '3']
+const exfatClusterSizeOptions = ['4K', '64K', '128K', '256K']
 
 const hasChanges = computed(() => {
   for (const key of fieldOrder) {
@@ -399,6 +402,12 @@ onMounted(loadConfiguration)
         <label for="cfg-copy-job-timeout">{{ t('configuration.fields.copy_job_timeout.label') }}</label>
         <input id="cfg-copy-job-timeout" v-model.number="form.copy_job_timeout" type="number" min="0" />
         <p class="field-help">{{ t('configuration.fields.copy_job_timeout.help') }}</p>
+
+        <label for="cfg-mkfs-exfat-cluster-size">{{ t('configuration.fields.mkfs_exfat_cluster_size.label') }}</label>
+        <select id="cfg-mkfs-exfat-cluster-size" v-model="form.mkfs_exfat_cluster_size">
+          <option v-for="option in exfatClusterSizeOptions" :key="option" :value="option">{{ option }}</option>
+        </select>
+        <p class="field-help">{{ t('configuration.fields.mkfs_exfat_cluster_size.help') }}</p>
 
         <label for="cfg-job-detail-files-page-size">{{ t('configuration.fields.job_detail_files_page_size.label') }}</label>
         <input
