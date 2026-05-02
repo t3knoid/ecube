@@ -155,6 +155,10 @@ class TestSettingsDefaults:
         s = Settings(database_url="sqlite://")
         assert s.startup_analysis_batch_size == 500
 
+    def test_mkfs_exfat_cluster_size_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.mkfs_exfat_cluster_size == "4K"
+
     def test_startup_analysis_batch_size_rejects_values_above_maximum(self):
         with pytest.raises(ValidationError):
             Settings(database_url="sqlite://", startup_analysis_batch_size=5001)
