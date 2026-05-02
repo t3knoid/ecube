@@ -36,6 +36,7 @@ function buildResponse(overrides = {}) {
     db_pool_size: 5,
     db_pool_max_overflow: 10,
     db_pool_recycle_seconds: -1,
+    startup_analysis_batch_size: 500,
     copy_job_timeout: 3600,
     job_detail_files_page_size: 40,
     callback_default_url: null,
@@ -110,6 +111,28 @@ describe('ConfigurationView logging defaults', () => {
     await flushPromises()
 
     expect(mocks.updateConfiguration).toHaveBeenCalledWith({ job_detail_files_page_size: 80 })
+  })
+
+  it('loads and saves the startup analysis batch size', async () => {
+    mocks.getConfiguration.mockResolvedValue(buildResponse({ startup_analysis_batch_size: 250 }))
+    mocks.updateConfiguration.mockResolvedValue({
+      restart_required: false,
+      restart_required_settings: [],
+      applied_immediately: ['startup_analysis_batch_size'],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const batchSizeInput = wrapper.find('#cfg-startup-analysis-batch-size')
+    expect(batchSizeInput.element.value).toBe('250')
+  expect(batchSizeInput.attributes('max')).toBe('5000')
+
+    await batchSizeInput.setValue('125')
+    await wrapper.find('.action-row .btn.btn-primary').trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateConfiguration).toHaveBeenCalledWith({ startup_analysis_batch_size: 125 })
   })
 
   it('loads and saves the system-wide callback default URL', async () => {

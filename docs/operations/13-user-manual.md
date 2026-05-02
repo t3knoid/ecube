@@ -978,6 +978,7 @@ What this page is for:
 
 - Adjusting logging behavior (level, format, and file logging options)
 - Adjusting selected database pool settings exposed by the UI
+- Tuning startup-analysis batch size to balance peak memory use against database round trips during large source-tree scans
 - Setting or clearing the system-wide `Default Callback URL` used for job webhooks when a job does not supply its own callback URL
 - Setting or clearing the write-only webhook signing secret used for the `X-ECUBE-Signature` header
 - Setting or clearing the outbound webhook proxy URL used for callback delivery
@@ -1004,6 +1005,7 @@ Important operational notes:
 
 - Restart actions are never automatic from this page and always require explicit confirmation.
 - Restarting the application service can interrupt active operations. Prefer using a maintenance window or an idle period.
+- `Startup Analysis Batch Size` accepts values from `1` to `5000`. Lower values reduce peak memory use during startup analysis; higher values reduce database round trips.
 - The `Default Callback URL` must be a valid `https://` URL and is overridden by any job-specific `Webhook callback URL` entered on the Jobs page or Job Detail edit dialog.
 - The `Outbound Callback Proxy URL` must be a valid `http://` or `https://` URL and must not contain embedded credentials.
 - The `Webhook Signing Secret` field is write-only. Leave it blank to keep the current secret, enter a new value to rotate it, or use the clear checkbox to remove it.
