@@ -53,7 +53,7 @@ test('auditor cannot run write actions', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Analyze' })).toBeDisabled()
   await expect(page.getByRole('button', { name: 'Start' })).toBeDisabled()
   await expect(page.getByRole('button', { name: 'Verify' })).toBeDisabled()
-  await expect(page.getByRole('button', { name: 'Generate Manifest' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Download Manifest' })).toBeDisabled()
 
   await expectNoCriticalA11yViolations(page)
 })

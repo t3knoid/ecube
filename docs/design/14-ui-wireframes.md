@@ -803,7 +803,7 @@ Archived jobs are hidden from the default Jobs list. The list view exposes a `Sh
 │  └─────────────────────────────────────────────────────────────────────┘     │
 │                                                                              │
 │  ┌─ Actions ───────────────────────────────────────────────────────────┐     │
-│  │  [ Start ] (disabled—running)   [ Verify ]   [ Generate Manifest ] │     │
+│  │  [ Start ] (disabled—running)   [ Verify ]   [ Download Manifest ] │     │
 │  │  [ Archive ] (shown only for admin/manager on eligible terminal jobs) │   │
 │  └─────────────────────────────────────────────────────────────────────┘     │
 │                                                                              │
