@@ -565,6 +565,7 @@ class AuditLog(Base):
 | `ROLE_REVOCATION` | User role removed | user, role, revoked_by |
 | `JOB_CREATED` | Export job created | job_id, project_id, creator, source_path |
 | `JOB_STARTED` | Copy job started | job_id, operator, drive_id, thread_count |
+| `JOB_START_REJECTED_CAPACITY` | Copy start blocked before file work because estimated source bytes exceed the assigned drive's last known available space | job_id, operator, drive_id, estimated_source_bytes, available_bytes, shortfall_bytes |
 | `JOB_COMPLETED` | Job reached terminal completion after all files finished, including partial-success runs with file errors or timeouts | job_id, files_copied, bytes_copied, duration, error_count, timeout_count |
 | `JOB_FAILED` | Job ended with failure | job_id, operator, error_message |
 | `JOB_VERIFIED` | Manifest verification completed | job_id, verifier, result (passed/failed) |
