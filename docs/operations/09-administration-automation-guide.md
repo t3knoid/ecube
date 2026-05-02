@@ -606,12 +606,13 @@ Every USB drive passes through four states:
 | State | Meaning |
 |-------|----------|
 | `DISCONNECTED` | Drive known to the database but not physically present |
+| `UNMOUNTED` | Drive physically present but not yet operator-ready, typically because its port is disabled |
 | `AVAILABLE` | Drive is present and ready to be formatted (if needed) and assigned to a project |
 | `IN_USE` | Drive is bound to a project and actively receiving evidence |
 
 Key behaviors:
 
-- **Discovery sync** detects newly inserted drives and transitions `DISCONNECTED → AVAILABLE` — but only if the drive's USB port is **enabled**. Drives on disabled ports remain in `DISCONNECTED` state until the port is enabled and a subsequent discovery sync runs. If a port is disabled while a drive is already `AVAILABLE`, the next sync demotes the drive to `DISCONNECTED`. Drives with no associated port (`port_id = NULL`) are treated as disabled and remain `DISCONNECTED`. Drives in `IN_USE` state are never affected by port enablement — project isolation takes priority.
+- **Discovery sync** detects newly inserted drives and transitions them to `AVAILABLE` only when the drive's USB port is **enabled**. Drives that are physically present on disabled ports remain in `UNMOUNTED` state until the port is enabled and a subsequent discovery sync runs. If a port is disabled while a drive is already `AVAILABLE`, the next sync demotes the drive to `UNMOUNTED`. Drives with no associated port (`port_id = NULL`) are treated as disabled while present and remain `UNMOUNTED`. Drives in `IN_USE` state are never affected by port enablement — project isolation takes priority.
 - **Format** writes a filesystem to the drive (stays `AVAILABLE`) and **clears any existing project binding** (`current_project_id → null`). Required before a drive can be assigned to a new project. A drive with no recognized filesystem cannot be initialized.
 - **Initialize** binds a drive to a project (`AVAILABLE → IN_USE`). See the Initialize Drive section below for state-aware guard rules.
 - **Eject** flushes writes, unmounts, and returns the drive to `AVAILABLE` (`IN_USE → AVAILABLE`). The project binding and filesystem type are **preserved** so the same drive can be re-initialized for the same project without reformatting.
@@ -621,7 +622,7 @@ Key behaviors:
 ### List Drives
 
 Returns all known USB drives with their current state, device path, serial
-number, and project assignment. By default, disconnected (`DISCONNECTED`) drives are excluded. Add `include_disconnected=true` to include them. If one or more `state` filters are provided, those explicit states are used.
+number, and project assignment. By default, physically present non-disconnected drives (`UNMOUNTED`, `AVAILABLE`, `IN_USE`) are returned while disconnected (`DISCONNECTED`) drives are excluded. Add `include_disconnected=true` to include them. If one or more `state` filters are provided, those explicit states are used.
 
 ```bash
 # Requires any authenticated role
@@ -904,7 +905,8 @@ and `current_project_id` set to the provided project ID.
 > | Condition | Result |
 > |-----------|--------|
 > | No mounted share is assigned to the requested `project_id` | 409 — mount and assign a share for that project first |
-> | Drive is `DISCONNECTED` (not present or port disabled) | 409 — not accessible; insert drive or enable port first |
+> | Drive is `DISCONNECTED` (not physically present) | 409 — not accessible; insert drive first |
+> | Drive is `UNMOUNTED` (present but port disabled / not ready) | 409 — not accessible; enable the port first |
 > | Drive is `IN_USE` and `project_id` differs from binding | 403 — project isolation violation |
 > | Drive is `AVAILABLE` and `project_id` differs from binding | 409 — format required before reassigning to a new project |
 > | Drive is `AVAILABLE` and `project_id` matches binding (or drive has no prior binding) | Allowed — transitions to `IN_USE` |

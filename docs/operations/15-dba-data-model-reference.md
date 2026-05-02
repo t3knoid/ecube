@@ -126,7 +126,7 @@ This section captures the primary physical schema details used by DBAs.
 
 ### Core Enumerations
 
-- `drive_state`: `DISCONNECTED`, `AVAILABLE`, `IN_USE`
+- `drive_state`: `DISCONNECTED`, `UNMOUNTED`, `AVAILABLE`, `IN_USE`
 - `mount_type`: `NFS`, `SMB`
 - `mount_status`: `MOUNTED`, `UNMOUNTED`, `ERROR`
 - `job_status`: `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `VERIFYING`
@@ -180,13 +180,17 @@ sequenceDiagram
 ```mermaid
 stateDiagram-v2
   [*] --> EMPTY
-  DISCONNECTED --> AVAILABLE: Discovery detects present drive
+  DISCONNECTED --> UNMOUNTED: Discovery detects drive on disabled port
+  DISCONNECTED --> AVAILABLE: Discovery detects present drive on enabled port
+  UNMOUNTED --> AVAILABLE: Port enabled and discovery reruns
   AVAILABLE --> IN_USE: Initialize with project_id
   IN_USE --> AVAILABLE: Prepare-eject
+  AVAILABLE --> UNMOUNTED: Port disabled while drive still present
   AVAILABLE --> DISCONNECTED: Drive removed
   IN_USE --> IN_USE: Project isolation enforced
 
   state "Disconnected" as DISCONNECTED
+  state "Unmounted" as UNMOUNTED
 ```
 
 ### Startup Reconciliation
