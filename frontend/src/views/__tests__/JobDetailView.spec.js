@@ -1777,6 +1777,37 @@ describe('JobDetailView start action', () => {
     expect(manifestButton.attributes('disabled')).toBeDefined()
   })
 
+  it('keeps manifest disabled when a clean completed job has no generated manifest yet', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 100,
+      total_bytes: 100,
+      file_count: 1,
+      files_succeeded: 1,
+      files_failed: 0,
+      files_timed_out: 0,
+      completed_at: '2026-04-29T12:00:00Z',
+      latest_manifest_created_at: null,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const verifyButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.verify'))
+    const manifestButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.manifest'))
+
+    expect(verifyButton).toBeTruthy()
+    expect(manifestButton).toBeTruthy()
+    expect(verifyButton.attributes('disabled')).toBeUndefined()
+    expect(manifestButton.attributes('disabled')).toBeDefined()
+  })
+
   it('shows a completion summary with start time, copy threads, and transfer metrics', async () => {
     mocks.getJob.mockResolvedValue({
       id: 6,
@@ -2112,6 +2143,8 @@ describe('JobDetailView start action', () => {
       thread_count: 4,
       copied_bytes: 10485760,
       total_bytes: 10485760,
+      completed_at: '2026-04-29T12:00:00Z',
+      latest_manifest_created_at: '2026-04-29T12:01:00Z',
     })
     mocks.downloadManifest.mockResolvedValue({
       data: new Blob(['{"job_id":6}'], { type: 'application/json' }),
