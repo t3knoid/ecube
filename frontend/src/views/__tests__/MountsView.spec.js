@@ -497,7 +497,7 @@ describe('MountsView removal flow', () => {
     await flushPromises()
 
     expect(wrapper.text()).not.toContain('/smb/demo-case-002')
-    expect(wrapper.find('.directory-browser-stub').text()).toContain('demo-case-002')
+    expect(wrapper.find('.directory-browser-stub').text()).toContain('PROJ-011')
   })
 
   it('does not render remote or local path columns in the mounts table', async () => {

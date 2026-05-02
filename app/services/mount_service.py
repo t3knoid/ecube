@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.mount_repository import MountRepository
-from app.schemas.network import MountCreate, MountShareDiscoveryItem, MountShareDiscoveryRequest, MountShareDiscoveryResponse, MountUpdate
+from app.schemas.network import MountCreate, MountShareDiscoveryItem, MountShareDiscoveryRequest, MountShareDiscoveryResponse, MountUpdate, NetworkMountSchema
 from app.config import settings
 from app.exceptions import ConflictError, EncodingError
 from app.services.mount_credentials_service import decrypt_mount_secret, encrypt_mount_secret
@@ -43,6 +43,8 @@ _ENCRYPTED_CREDENTIAL_ATTRS = {
     "password": "encrypted_password",
     "credentials_file": "encrypted_credentials_file",
 }
+_MOUNT_PATH_VIEWER_ROLES = frozenset({"admin", "manager"})
+_REDACTED_MOUNT_PATH_VALUE = "[REDACTED]"
 
 
 def _log_mount_debug_failure(
@@ -1774,8 +1776,24 @@ def remove_mount(mount_id: int, db: Session, actor: Optional[str] = None,
         )
 
 
-def list_mounts(db: Session):
-    return MountRepository(db).list_all()
+def _can_view_mount_paths(user_roles: Optional[list[str]]) -> bool:
+    return any(role in _MOUNT_PATH_VIEWER_ROLES for role in (user_roles or []))
+
+
+def _redact_mount_paths(mount: NetworkMount) -> NetworkMountSchema:
+    return NetworkMountSchema.model_validate(mount).model_copy(
+        update={
+            "remote_path": _REDACTED_MOUNT_PATH_VALUE,
+            "local_mount_point": _REDACTED_MOUNT_PATH_VALUE,
+        }
+    )
+
+
+def list_mounts(db: Session, user_roles: Optional[list[str]] = None):
+    mounts = MountRepository(db).list_all()
+    if _can_view_mount_paths(user_roles):
+        return mounts
+    return [_redact_mount_paths(mount) for mount in mounts]
 
 
 def validate_all_mounts(db: Session, actor: Optional[str] = None,

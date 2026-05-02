@@ -60,7 +60,7 @@ const publicAuthConfig = ref({
 
 const mountId = computed(() => Number(route.params.id))
 const canManageMounts = computed(() => authStore.hasAnyRole(['admin', 'manager']))
-const canBrowse = computed(() => mountRecord.value?.status === 'MOUNTED' && !!mountRecord.value?.local_mount_point)
+const canBrowse = computed(() => mountRecord.value?.status === 'MOUNTED' && Number.isInteger(mountRecord.value?.id))
 const redactedMountValue = computed(() => t('mounts.redactedValue'))
 const visibleRemotePath = computed(() => {
   if (!mountRecord.value?.remote_path) return '-'
@@ -447,12 +447,12 @@ onBeforeUnmount(() => {
       <p v-if="!canManageMounts" class="muted">{{ t('auth.insufficientPermissions') }}</p>
     </article>
 
-    <section v-if="browseExpanded && mountRecord?.local_mount_point" class="browse-panel">
+    <section v-if="browseExpanded && mountRecord?.id" class="browse-panel">
       <header class="browse-panel-header">
         <h2>{{ t('browse.browseMountContents') }}</h2>
         <button class="btn" @click="browseExpanded = false">{{ t('common.actions.close') }}</button>
       </header>
-      <DirectoryBrowser :mount-path="mountRecord.local_mount_point" />
+      <DirectoryBrowser :mount-id="mountRecord.id" :root-label="mountRecord.project_id || t('mounts.browse')" />
     </section>
 
     <ConfirmDialog

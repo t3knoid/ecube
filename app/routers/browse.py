@@ -13,8 +13,9 @@ filesystem call:
 """
 
 import logging
+from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, require_roles
@@ -42,11 +43,19 @@ _DEFAULT_PAGE_SIZE = 100
 )
 def browse_directory(
     request: Request,
-    path: StrictSafeStr = Query(
-        ...,
+    path: Optional[StrictSafeStr] = Query(
+        default=None,
         description=(
             "The mount root to browse. Must be an active USB drive mount path "
             "or network mount local mount point registered in the system."
+        ),
+    ),
+    mount_id: Optional[int] = Query(
+        default=None,
+        ge=1,
+        description=(
+            "Trusted network mount identifier to browse without exposing the "
+            "local mount path to the client."
         ),
     ),
     subdir: StrictSafeStr = Query(
@@ -82,8 +91,15 @@ def browse_directory(
 
     **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
     """
+    if (path is None) == (mount_id is None):
+        raise HTTPException(
+            status_code=422,
+            detail="Provide exactly one of path or mount_id.",
+        )
+
     return browse_service.list_directory(
         path=path,
+        mount_id=mount_id,
         subdir=subdir,
         page=page,
         page_size=page_size,
