@@ -173,6 +173,7 @@ describe('DashboardView active jobs', () => {
     expect(summaryRows).toContain(`${i18n.global.t('drives.states.disabled')}1`)
     expect(summaryRows).toContain(`${i18n.global.t('drives.states.available')}1`)
     expect(summaryRows).toContain(`${i18n.global.t('drives.states.inUse')}1`)
+    expect(summaryRows).not.toContain(`${i18n.global.t('drives.states.unmounted')}1`)
   })
 
   it('renders the Job ID cell as a link to Job Detail for active jobs', async () => {

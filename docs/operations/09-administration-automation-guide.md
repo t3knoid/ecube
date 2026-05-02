@@ -607,7 +607,6 @@ Every USB drive passes through four states:
 |-------|----------|
 | `DISCONNECTED` | Drive known to the database but not physically present |
 | `DISABLED` | Drive physically present but blocked by a disabled port |
-| `UNMOUNTED` | Drive physically present on an enabled port but not currently mounted |
 | `AVAILABLE` | Drive is present and ready to be formatted (if needed) and assigned to a project |
 | `IN_USE` | Drive is bound to a project and actively receiving evidence |
 
@@ -623,7 +622,7 @@ Key behaviors:
 ### List Drives
 
 Returns all known USB drives with their current state, device path, serial
-number, and project assignment. By default, physically present non-disconnected drives (`UNMOUNTED`, `AVAILABLE`, `IN_USE`) are returned while disconnected (`DISCONNECTED`) drives are excluded. Add `include_disconnected=true` to include them. If one or more `state` filters are provided, those explicit states are used.
+number, and project assignment. By default, physically present non-disconnected drives (`DISABLED`, `AVAILABLE`, `IN_USE`) are returned while disconnected (`DISCONNECTED`) drives are excluded. Add `include_disconnected=true` to include them. If one or more `state` filters are provided, those explicit states are used.
 
 ```bash
 # Requires any authenticated role
@@ -907,7 +906,7 @@ and `current_project_id` set to the provided project ID.
 > |-----------|--------|
 > | No mounted share is assigned to the requested `project_id` | 409 — mount and assign a share for that project first |
 > | Drive is `DISCONNECTED` (not physically present) | 409 — not accessible; insert drive first |
-> | Drive is `UNMOUNTED` (present but port disabled / not ready) | 409 — not accessible; enable the port first |
+> | Drive is `DISABLED` (present but port disabled / not ready) | 409 — not accessible; enable the port first |
 > | Drive is `IN_USE` and `project_id` differs from binding | 403 — project isolation violation |
 > | Drive is `AVAILABLE` and `project_id` differs from binding | 409 — format required before reassigning to a new project |
 > | Drive is `AVAILABLE` and `project_id` matches binding (or drive has no prior binding) | Allowed — transitions to `IN_USE` |

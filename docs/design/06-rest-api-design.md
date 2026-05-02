@@ -376,7 +376,7 @@ List all drives with state and project assignment.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `project_id` | string | No | When provided, return only drives bound to this project. When omitted, return all drives. |
-| `state` | string (repeatable) | No | Filter by drive state. May be specified multiple times (e.g. `?state=IN_USE&state=AVAILABLE`). Valid values: `DISCONNECTED`, `UNMOUNTED`, `AVAILABLE`, `IN_USE`. When omitted, non-disconnected states (`UNMOUNTED`, `AVAILABLE`, `IN_USE`) are returned unless `include_disconnected=true` is also set. |
+| `state` | string (repeatable) | No | Filter by drive state. May be specified multiple times (e.g. `?state=IN_USE&state=AVAILABLE`). Valid values: `DISCONNECTED`, `DISABLED`, `UNMOUNTED`, `AVAILABLE`, `IN_USE`. When omitted, non-disconnected active states (`DISABLED`, `AVAILABLE`, `IN_USE`) are returned unless `include_disconnected=true` is also set. |
 | `include_disconnected` | boolean | No | When `true`, `DISCONNECTED` drives are included in the response. Default: `false`. Has no effect when `state` is explicitly provided. |
 
 **Roles:** `admin`, `manager`, `processor`, `auditor`
