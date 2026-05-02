@@ -1060,7 +1060,8 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 | 2 | Initialize a drive with `filesystem_type=NULL` | 409, `CONFLICT` — must have recognized filesystem |
 | 3 | Initialize a drive with `filesystem_type=unformatted` | 409, `CONFLICT` — must have recognized filesystem |
 | 4 | Initialize a drive with `filesystem_type=unknown` | 409, `CONFLICT` — must have recognized filesystem |
-| 5 | Initialize a `DISCONNECTED` drive (not present / disabled port) | 409, `CONFLICT`; audit `INIT_REJECTED_NOT_AVAILABLE` recorded; note: `GET /drives` excludes disconnected drives by default — use `include_disconnected=true` to see them |
+| 5 | Initialize a `DISCONNECTED` drive (not present) | 409, `CONFLICT`; audit `INIT_REJECTED_NOT_AVAILABLE` recorded; note: `GET /drives` excludes disconnected drives by default — use `include_disconnected=true` to see them |
+| 5a | Initialize a `UNMOUNTED` drive (present but disabled / not ready) | 409, `CONFLICT`; audit `INIT_REJECTED_NOT_AVAILABLE` recorded with `current_state=UNMOUNTED` |
 | 6 | Initialize an `AVAILABLE` drive that is not mounted even though the project share is `MOUNTED` | 409, `CONFLICT`; audit `INIT_REJECTED_NOT_MOUNTED` recorded |
 | 7 | Mount an `AVAILABLE` or `IN_USE` drive with a recognized filesystem | 200, `mount_path` is populated |
 | 8 | Mount a drive with `filesystem_type=unknown`, `unformatted`, or `NULL` | 409, `CONFLICT` — must have recognized filesystem |
@@ -1124,15 +1125,15 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 | 8 | Enable port — processor denied | `PATCH /admin/ports/{port_id}` with processor token | 403, `FORBIDDEN` |
 | 9 | Enable non-existent port | `PATCH /admin/ports/99999` with `{"enabled": true}` | 404, `NOT_FOUND` |
 | 10 | Ports default to disabled | Discover a new port, then `GET /admin/ports` | New port has `enabled: false` |
-| 11 | Drive on disabled port stays DISCONNECTED | Plug in drive on disabled port, run `POST /drives/refresh` | `GET /drives?include_disconnected=true` shows drive in `DISCONNECTED` state |
+| 11 | Drive on disabled port stays UNMOUNTED | Plug in drive on disabled port, run `POST /drives/refresh` | `GET /drives` shows drive in `UNMOUNTED` state |
 | 12 | Drive on enabled port becomes AVAILABLE | Enable port, run `POST /drives/refresh` | `GET /drives` shows drive in `AVAILABLE` state |
 | 13 | Disable port — IN_USE drive unaffected | Disable a port with an `IN_USE` drive, run `POST /drives/refresh` | Drive remains `IN_USE` (project isolation priority) |
-| 14 | Disable port — AVAILABLE drive demoted | Enable port, confirm drive is `AVAILABLE`, disable port, run `POST /drives/refresh` | Drive transitions to `DISCONNECTED`; `GET /drives` (default) no longer returns it |
-| 15 | Orphan drive stays DISCONNECTED | Discover a drive with no matching port (`port_id = NULL`), run `POST /drives/refresh` | Drive remains in `DISCONNECTED` state (unknown port treated as disabled); only visible with `include_disconnected=true` |
+| 14 | Disable port — AVAILABLE drive demoted | Enable port, confirm drive is `AVAILABLE`, disable port, run `POST /drives/refresh` | Drive transitions to `UNMOUNTED`; `GET /drives` still returns it by default |
+| 15 | Orphan drive stays UNMOUNTED | Discover a drive with no matching port (`port_id = NULL`), run `POST /drives/refresh` | Drive remains in `UNMOUNTED` state (unknown port treated as disabled) |
 | 16 | PORT_ENABLED audit log | `GET /audit?action=PORT_ENABLED` after enabling a port | Audit entry with `port_id`, `system_path`, `hub_id`, `enabled`, `path` |
 | 17 | PORT_DISABLED audit log | `GET /audit?action=PORT_DISABLED` after disabling a port | Audit entry with `port_id`, `system_path`, `hub_id`, `enabled`, `path` |
 | 18 | Enable Drive hidden for absent disconnected drive | Open the drive detail view for a historical `DISCONNECTED` drive with no detected device path | The operator does not see an actionable Enable Drive control |
-| 19 | Enable Drive available for physically detected disconnected drive | Insert a drive on a disabled but known port, refresh, then open drive detail as admin or manager | The Enable Drive action is available; after enable plus refresh the drive becomes `AVAILABLE` or remains `IN_USE` if already mounted |
+| 19 | Enable Drive available for physically detected unmounted drive | Insert a drive on a disabled but known port, refresh, then open drive detail as admin or manager | The Enable Drive action is available for the `UNMOUNTED` drive; after enable plus refresh the drive becomes `AVAILABLE` or remains `IN_USE` if already mounted |
 
 ### 12.4.4 Hub & Port Identification Enrichment
 
@@ -1184,17 +1185,17 @@ These tests exercise real hardware paths that must be validated during manual QA
 
 | # | Test | Steps | Expected |
 |---|------|-------|----------|
-| 1 | Hot-plug detection | Plug in a USB drive, wait 30 seconds | `GET /drives` shows the new drive (in `DISCONNECTED` state if port is disabled, or `AVAILABLE` if port is enabled); disconnected drives require `include_disconnected=true` |
+| 1 | Hot-plug detection | Plug in a USB drive, wait 30 seconds | `GET /drives` shows the new drive in `UNMOUNTED` state if its port is disabled, or `AVAILABLE` if its port is enabled |
 | 2 | USB topology | `GET /introspection/usb/topology` and open the System `USB Topology` tab | Shows real device values, serial numbers when available, sorted `Device` order, and no rows with entirely empty USB metadata |
 | 3 | Physical eject | Initialize drive → prepare-eject → physically remove | After the next discovery cycle, `GET /drives?include_disconnected=true` lists the drive with `current_state=DISCONNECTED`; audit shows `DRIVE_EJECT_PREPARED` |
 | 4 | Re-plug same drive | Remove and re-insert the same drive | Drive reappears as `AVAILABLE` with the same `port_system_path`/Device value and the same stable `device_identifier` (after discovery cycle) |
 | 5 | Multiple drives | Plug in 2+ drives simultaneously | All drives appear in `/drives`; each can be initialized to different projects |
-| 6 | Drives list shows all drives on first load | Keep one drive disconnected or historically discovered and one drive connected, then open the Drives page without changing filters | The page defaults to `All`, shows both connected and disconnected drives immediately, and does not require the operator to switch filters before seeing disconnected media |
+| 6 | Drives list hides disconnected rows by default | Keep one historical `DISCONNECTED` drive and one connected drive, then open the Drives page without changing filters | The page defaults to `All`, shows `UNMOUNTED`, `AVAILABLE`, and `IN_USE` drives only, and requires `Show Disconnected drives` before absent hardware appears |
 | 7 | Project and Job ID reflect the assigned job | Initialize or seed two drives so they share a project but have different assigned jobs and evidence numbers, then open Drives | Each row shows `Project` and `Job ID`, the Filesystem, Evidence, and Size columns are absent, the project value matches the selected drive's assigned job, and selecting the job ID opens the matching Job Detail for that drive's assignment rather than another drive on the same project |
 | 8 | Drive Detail job metadata follows the selected drive assignment | From the scenario above, open Drive Detail for each drive | The `Evidence` and `Job ID` values match the selected drive's assigned job, even when another drive on the same project has a different evidence number |
 | 9 | Formatted drives clear stale drive-job UI state | Format one of the drives from the scenario above, then stay on Drive Detail and return to Drives | Once formatting clears the project binding, Drive Detail shows `Evidence` and `Job ID` as `-`, the Drives row no longer shows the old job ID value, and stale job links are not shown for that drive |
 | 10 | Sync + unmount | Initialize drive, create/start a job, then prepare-eject | Filesystem flushed and unmounted before eject (verify via `mount` command — no partitions from that drive should be listed) |
-| 11 | Disabled port blocks AVAILABLE | Disable a port, plug in a drive to that port, run discovery | Drive appears in `DISCONNECTED` state (visible with `include_disconnected=true`); enable port + refresh → drive transitions to `AVAILABLE` |
+| 11 | Disabled port blocks AVAILABLE | Disable a port, plug in a drive to that port, run discovery | Drive appears in `UNMOUNTED` state; enable port + refresh → drive transitions to `AVAILABLE` |
 | 12 | Device labels stay aligned across UI | Open Drives, Jobs, and Create/Edit Job for the same connected drive | Drives shows the same `Device` value used by the Jobs list and the destination selector, and Create/Edit Job keeps the destination control labeled `Select device` |
 | 13 | Mounted drive surfaces capacity, available space, and Browse entry | Open Drive Detail for a mounted managed USB drive | The Drives list does not show a Size column, Drive Detail shows total capacity plus the last known available space value or `-` when no reading is available yet, and the mounted drive exposes a `Browse` button instead of a mount-path link |
 

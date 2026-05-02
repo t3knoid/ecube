@@ -51,6 +51,7 @@ Enum file_status {
 
 Enum drive_state {
   DISCONNECTED
+  UNMOUNTED
   AVAILABLE
   IN_USE
 }
