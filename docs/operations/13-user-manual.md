@@ -338,7 +338,7 @@ Every drive moves through a defined set of states. Actions available in the UI d
 | `DISCONNECTED` | Drive is known to the system but is not currently physically present. | None from Drive Detail until the hardware reappears |
 | `DISABLED` | Drive is physically present but attached to a disabled port, so it is not yet available for ECUBE operations. | Enable Drive |
 | `UNMOUNTED` | Legacy compatibility state for older rows that have not yet been reconciled by discovery. | Mount when the drive is otherwise ready |
-| `AVAILABLE` | Drive is present on an enabled port and ready to be formatted or assigned to a project. | Format, Initialize |
+| `AVAILABLE` | Drive is present on an enabled port and ready to be formatted or assigned to a project. | Format, Initialize, Prepare Eject when mounted |
 | `IN_USE` | Drive is assigned to a project. Jobs can target this drive. | Prepare Eject |
 
 State transitions follow this order:
@@ -423,7 +423,7 @@ Before initializing a drive:
 
 ### 7.6 Prepare Eject
 
-Use `Prepare Eject` before physically removing a drive. This flushes pending writes, unmounts the filesystem, and transitions the drive to `AVAILABLE`.
+Use `Prepare Eject` before physically removing a mounted drive. The action is available for `IN_USE` drives and for `AVAILABLE` drives that still have an active mount. ECUBE flushes pending writes, unmounts the filesystem, and transitions the drive to `AVAILABLE`.
 
 After a successful prepare-eject:
 
@@ -433,6 +433,8 @@ After a successful prepare-eject:
 - The drive can be physically removed once the operation completes.
 
 If ECUBE reports that the drive is still busy, the confirmation dialog closes cleanly and the page shows a specific retry message. Close any open shell, file browser, or process still using the mounted drive, then retry `Prepare Eject`.
+
+If the drive is already `AVAILABLE` but still mounted, a failed prepare-eject leaves it in `AVAILABLE` so the operator can retry after resolving the blocking condition.
 
 If the drive is still assigned to a job that has started and is not yet completed, `Prepare Eject` is blocked. This includes jobs in `RUNNING`, `PAUSING`, `PAUSED`, or `VERIFYING`. Complete or otherwise finish the active job before retrying `Prepare Eject`.
 
