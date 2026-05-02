@@ -55,10 +55,13 @@ class LinuxDriveFormatter:
             raise RuntimeError(f"Unsupported filesystem type: {filesystem_type!r}")
 
         mkfs_binary = getattr(settings, settings_attr)
+        mkfs_cmd = [mkfs_binary, device_path]
+        if filesystem_type == "exfat":
+            mkfs_cmd = [mkfs_binary, "-c", settings.mkfs_exfat_cluster_size, device_path]
 
         try:
             subprocess.run(
-                _with_sudo([mkfs_binary, device_path]),
+                _with_sudo(mkfs_cmd),
                 check=True,
                 capture_output=True,
                 timeout=settings.subprocess_timeout_seconds,

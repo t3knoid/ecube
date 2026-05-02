@@ -37,6 +37,7 @@ function buildResponse(overrides = {}) {
     db_pool_max_overflow: 10,
     db_pool_recycle_seconds: -1,
     startup_analysis_batch_size: 500,
+    mkfs_exfat_cluster_size: '4K',
     copy_job_timeout: 3600,
     job_detail_files_page_size: 40,
     callback_default_url: null,
@@ -133,6 +134,27 @@ describe('ConfigurationView logging defaults', () => {
     await flushPromises()
 
     expect(mocks.updateConfiguration).toHaveBeenCalledWith({ startup_analysis_batch_size: 125 })
+  })
+
+  it('loads and saves the exFAT cluster size', async () => {
+    mocks.getConfiguration.mockResolvedValue(buildResponse({ mkfs_exfat_cluster_size: '64K' }))
+    mocks.updateConfiguration.mockResolvedValue({
+      restart_required: false,
+      restart_required_settings: [],
+      applied_immediately: ['mkfs_exfat_cluster_size'],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const clusterSizeInput = wrapper.find('#cfg-mkfs-exfat-cluster-size')
+    expect(clusterSizeInput.element.value).toBe('64K')
+
+    await clusterSizeInput.setValue('4K')
+    await wrapper.find('.action-row .btn.btn-primary').trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateConfiguration).toHaveBeenCalledWith({ mkfs_exfat_cluster_size: '4K' })
   })
 
   it('loads and saves the system-wide callback default URL', async () => {
