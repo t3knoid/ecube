@@ -914,7 +914,7 @@ def test_add_mount_logs_useful_info_on_nfs_failure(manager_client, db, caplog):
     )
 
 
-def test_list_mounts(client, db):
+def test_list_mounts(manager_client, db):
     mount = NetworkMount(
         type=MountType.NFS,
         remote_path="192.168.1.1:/data",
@@ -924,11 +924,30 @@ def test_list_mounts(client, db):
     db.add(mount)
     db.commit()
 
-    response = client.get("/mounts")
+    response = manager_client.get("/mounts")
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 1
     assert data[0]["local_mount_point"] == "/mnt/data"
+
+
+def test_list_mounts_redacts_sensitive_paths_for_auditor(auditor_client, db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="192.168.1.1:/data",
+        local_mount_point="/mnt/data",
+        status=MountStatus.MOUNTED,
+    )
+    db.add(mount)
+    db.commit()
+
+    response = auditor_client.get("/mounts")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["remote_path"] == "[REDACTED]"
+    assert data[0]["local_mount_point"] == "[REDACTED]"
 
 
 def test_delete_mount(manager_client, db):

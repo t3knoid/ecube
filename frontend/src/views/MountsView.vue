@@ -346,9 +346,7 @@ function browseLabel(mount) {
 }
 
 function mountRootLabel(mount) {
-  const mountPath = String(mount?.local_mount_point || '').trim()
-  const parts = mountPath.split('/').filter(Boolean)
-  return parts.at(-1) || t('mounts.browse')
+  return formatProjectId(mount?.project_id)
 }
 
 function formValid() {
@@ -741,8 +739,8 @@ onBeforeUnmount(() => {
           <button class="btn" @click="openMountDetails(row.id)">{{ t('mounts.details') }}</button>
           <button
             class="btn"
-            :disabled="row.status !== 'MOUNTED' || !row.local_mount_point"
-            :title="row.status !== 'MOUNTED' || !row.local_mount_point ? t('mounts.browseUnavailable') : ''"
+            :disabled="row.status !== 'MOUNTED'"
+            :title="row.status !== 'MOUNTED' ? t('mounts.browseUnavailable') : ''"
             :aria-expanded="browsingMountId === row.id"
             :aria-label="browseLabel(row)"
             @click="toggleBrowse(row.id)"
@@ -767,8 +765,8 @@ onBeforeUnmount(() => {
             </button>
             <button
               class="btn row-action-menu-browse"
-              :disabled="row.status !== 'MOUNTED' || !row.local_mount_point"
-              :title="row.status !== 'MOUNTED' || !row.local_mount_point ? t('mounts.browseUnavailable') : ''"
+              :disabled="row.status !== 'MOUNTED'"
+              :title="row.status !== 'MOUNTED' ? t('mounts.browseUnavailable') : ''"
               :aria-expanded="browsingMountId === row.id"
               :aria-label="browseLabel(row)"
               @click="handleMenuBrowse(row, $event)"
@@ -791,7 +789,7 @@ onBeforeUnmount(() => {
         {{ t('browse.browseMountContents') }}: {{ formatProjectId(activeBrowsedMount.project_id) }}
       </h3>
       <DirectoryBrowser
-        :mount-path="activeBrowsedMount.local_mount_point"
+        :mount-id="activeBrowsedMount.id"
         :root-label="mountRootLabel(activeBrowsedMount)"
       />
     </section>
