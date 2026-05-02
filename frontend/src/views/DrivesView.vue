@@ -316,6 +316,7 @@ onBeforeUnmount(() => {
       <select v-model="stateFilter" :aria-label="t('drives.allStates')">
         <option value="ALL">{{ t('drives.allStates') }}</option>
         <option value="DISABLED">{{ t('drives.states.disabled') }}</option>
+        <option value="UNMOUNTED">{{ t('drives.states.unmounted') }}</option>
         <option value="AVAILABLE">{{ t('drives.states.available') }}</option>
         <option value="IN_USE">{{ t('drives.states.inUse') }}</option>
       </select>
