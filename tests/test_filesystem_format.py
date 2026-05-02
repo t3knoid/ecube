@@ -93,6 +93,19 @@ def test_linux_drive_formatter_uses_sudo_when_configured(monkeypatch):
     assert cmd[-2:] == ["/sbin/mkfs.ext4", "/dev/sdb"]
 
 
+def test_linux_drive_formatter_passes_explicit_cluster_size_for_exfat(monkeypatch):
+    formatter = LinuxDriveFormatter()
+
+    monkeypatch.setattr("app.infrastructure.drive_format.settings.use_sudo", False)
+    monkeypatch.setattr("app.infrastructure.drive_format.settings.mkfs_exfat_cluster_size", "4K")
+
+    with patch("app.infrastructure.drive_format.subprocess.run") as mock_run:
+        formatter.format("/dev/sdb", "exfat")
+
+    cmd = mock_run.call_args.args[0]
+    assert cmd == ["/sbin/mkfs.exfat", "-c", "4K", "/dev/sdb"]
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
