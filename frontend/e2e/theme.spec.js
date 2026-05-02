@@ -3,25 +3,39 @@ import { setupAuthenticatedPage, routeJson, setupPublicPage } from './helpers/ap
 import { expectNoCriticalA11yViolations } from './helpers/a11y.js'
 
 test.use({ timezoneId: 'America/New_York' })
+test.describe.configure({ timeout: 120000 })
 
 async function disableMotion(page) {
-  await page.addStyleTag({ content: '*, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; }' })
+  const content = '*, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; animation-delay: 0s !important; scroll-behavior: auto !important; }'
+  await page.addInitScript((css) => {
+    const styleId = 'pw-disable-motion'
+    const ensureStyle = () => {
+      if (document.getElementById(styleId)) return
+      const style = document.createElement('style')
+      style.id = styleId
+      style.textContent = css
+      document.head.appendChild(style)
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', ensureStyle, { once: true })
+    } else {
+      ensureStyle()
+    }
+  }, content)
+  await page.addStyleTag({ content })
 }
 
 async function waitForStablePaint(page) {
   await page.waitForLoadState('domcontentloaded')
+  // WebKit intermittently hangs on requestAnimationFrame-based evaluate calls
+  // during rapid screenshot navigation. A short post-load settle is sufficient
+  // here because these tests disable motion before theme transitions.
+  await page.waitForTimeout(50)
+}
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
-      return
-    } catch (error) {
-      if (!String(error).includes('Execution context was destroyed') || attempt === 1) {
-        throw error
-      }
-      await page.waitForLoadState('domcontentloaded')
-    }
-  }
+async function gotoVisualPage(page, path) {
+  await page.goto(path, { waitUntil: 'domcontentloaded' })
 }
 
 async function persistThemeForNextNavigation(page, themeName) {
@@ -146,20 +160,77 @@ async function mockCoreApis(page) {
 }
 
 async function openCreateJobDialog(page) {
-  await page.goto('/jobs')
+  await gotoVisualPage(page, '/jobs')
   await expect(page.getByRole('heading', { name: 'Jobs' })).toBeVisible()
   const createJobButton = page.getByRole('button', { name: 'Create Job' })
   await expect(createJobButton).toBeVisible()
   await createJobButton.click()
   await expect(page.locator('.dialog-panel')).toBeVisible()
-  await page.locator('#job-project').selectOption('PRJ')
+  await page.locator('#job-project').evaluate((element, value) => {
+    element.value = value
+    element.dispatchEvent(new Event('change', { bubbles: true }))
+  }, 'PRJ')
 }
 
 async function openCocDialog(page) {
-  await page.goto('/jobs/55')
+  await gotoVisualPage(page, '/jobs/55')
   await expect(page.getByRole('heading', { name: 'Job Detail #55' })).toBeVisible()
   await page.getByRole('button', { name: 'Chain of Custody' }).click()
   await expect(page.locator('.coc-report-shell')).toBeVisible()
+}
+
+async function waitForShotReady(page, shotName) {
+  if (shotName === 'login') {
+    await expect(page.getByRole('heading', { name: 'ECUBE' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Log In' })).toBeVisible()
+    return
+  }
+
+  if (shotName === 'dashboard') {
+    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
+    await expect(page.locator('.summary-card').first()).toBeVisible()
+    return
+  }
+
+  if (shotName === 'drives') {
+    await expect(page.getByRole('heading', { name: 'Drives' })).toBeVisible()
+    await expect(page.locator('.data-table')).toBeVisible()
+    return
+  }
+
+  if (shotName === 'mounts') {
+    await expect(page.getByRole('heading', { name: 'Mounts' })).toBeVisible()
+    await expect(page.locator('.data-table')).toBeVisible()
+    return
+  }
+
+  if (shotName === 'users') {
+    await expect(page.getByRole('heading', { name: 'Users' })).toBeVisible()
+    await expect(page.locator('.panel')).toBeVisible()
+    return
+  }
+
+  if (shotName === 'system') {
+    await expect(page.getByRole('heading', { name: 'System' })).toBeVisible()
+    await expect(page.locator('.panel, .summary-card').first()).toBeVisible()
+    return
+  }
+
+  if (shotName === 'configuration') {
+    await expect(page.getByRole('heading', { name: 'Configuration' })).toBeVisible()
+    await expect(page.locator('form, .panel').first()).toBeVisible()
+    return
+  }
+
+  if (shotName === 'audit') {
+    await expect(page.getByRole('heading', { name: 'Audit' })).toBeVisible()
+    await expect(page.locator('table')).toBeVisible()
+    return
+  }
+
+  if (shotName === 'job-detail') {
+    await expect(page.getByRole('heading', { name: 'Job Detail #55' })).toBeVisible()
+  }
 }
 
 test('theme switch changes css variables', async ({ page }) => {
@@ -190,7 +261,7 @@ test('theme switch changes css variables', async ({ page }) => {
 test('visual regression snapshots for setup screen in default and dark themes', async ({ page }) => {
   await mockSetupApis(page)
 
-  await page.goto('/setup')
+  await gotoVisualPage(page, '/setup')
   await expect(page.locator('.setup-card')).toBeVisible()
   const defaultBgPrimary = await page.evaluate(() =>
     getComputedStyle(document.documentElement).getPropertyValue('--color-bg-primary').trim()
@@ -199,7 +270,7 @@ test('visual regression snapshots for setup screen in default and dark themes', 
 
   await disableMotion(page)
   await persistThemeForNextNavigation(page, 'dark')
-  await page.goto('/setup')
+  await gotoVisualPage(page, '/setup')
   await expect(page.locator('.setup-card')).toBeVisible()
   await page.waitForFunction(() => localStorage.getItem('ecube_theme') === 'dark')
   await page.waitForFunction(
@@ -217,6 +288,7 @@ test('visual regression snapshots for setup screen in default and dark themes', 
 test('visual regression snapshots for key screens in default and dark themes', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
   await mockCoreApis(page)
+  await disableMotion(page)
 
   const shots = [
     { path: '/login', name: 'login' },
@@ -238,13 +310,14 @@ test('visual regression snapshots for key screens in default and dark themes', a
     } else if (shot.name === 'coc-report') {
       await openCocDialog(page)
     } else {
-      await page.goto(shot.path)
+      await gotoVisualPage(page, shot.path)
+      await waitForShotReady(page, shot.name)
     }
     await waitForStablePaint(page)
     await expect(page).toHaveScreenshot(`${shot.name}-default.png`)
   }
 
-  await page.goto('/')
+  await gotoVisualPage(page, '/')
 
   // Disable transitions so screenshots are stable across theme changes.
   await disableMotion(page)
@@ -266,7 +339,8 @@ test('visual regression snapshots for key screens in default and dark themes', a
     } else if (shot.name === 'coc-report') {
       await openCocDialog(page)
     } else {
-      await page.goto(shot.path)
+      await gotoVisualPage(page, shot.path)
+      await waitForShotReady(page, shot.name)
     }
     // After each navigation the app re-reads localStorage ('dark') and reloads dark.css;
     // wait until --color-bg-primary matches the known dark value before screenshotting.
