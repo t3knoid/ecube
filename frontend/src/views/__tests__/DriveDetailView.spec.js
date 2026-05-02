@@ -174,7 +174,7 @@ describe('DriveDetailView mount workflow', () => {
 
   it('keeps recovery actions consistent when enable reloads a mounted in-use drive', async () => {
     mocks.getDrives
-      .mockResolvedValueOnce([buildDrive({ current_state: 'UNMOUNTED', filesystem_path: '/dev/sdb1', port_id: 1 })])
+      .mockResolvedValueOnce([buildDrive({ current_state: 'DISABLED', filesystem_path: '/dev/sdb1', port_id: 1 })])
       .mockResolvedValueOnce([buildDrive({ current_state: 'IN_USE', mount_path: '/mnt/ecube/7', filesystem_path: '/dev/sdb1', current_project_id: null })])
     mocks.enablePort.mockResolvedValue({ id: 1, enabled: true })
     mocks.refreshDrives.mockResolvedValue({ ok: true })
@@ -201,6 +201,19 @@ describe('DriveDetailView mount workflow', () => {
     expect(formatButton.attributes('disabled')).toBeDefined()
     expect(initializeButton.attributes('disabled')).toBeDefined()
     expect(ejectButton.attributes('disabled')).toBeUndefined()
+  })
+
+  it('shows Disabled for a physically present disabled drive', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'DISABLED', filesystem_path: '/dev/sdb1', port_id: 1 })])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('drives.states.disabled'))
+    expect(wrapper.text()).toContain(i18n.global.t('drives.enable'))
+
+    const labels = wrapper.findAll('button').map((node) => node.text())
+    expect(labels).not.toContain(i18n.global.t('drives.mount'))
   })
 
   it('disables the Format action when the drive is mounted', async () => {

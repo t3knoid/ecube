@@ -440,7 +440,7 @@ def upgrade() -> None:
         sa.Column(
             "current_state",
             sa.Enum(
-                "DISCONNECTED", "UNMOUNTED", "AVAILABLE", "IN_USE",
+                "DISCONNECTED", "DISABLED", "UNMOUNTED", "AVAILABLE", "IN_USE",
                 name="drivestate",
                 native_enum=False,
             ),
