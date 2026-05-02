@@ -591,15 +591,15 @@ def test_refresh_endpoint_admin_succeeds(admin_client, db, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_new_drive_on_disabled_port_inserted_as_unmounted(db):
-    """A newly discovered drive on a disabled port should be UNMOUNTED, not AVAILABLE."""
+def test_new_drive_on_disabled_port_inserted_as_disabled(db):
+    """A newly discovered drive on a disabled port should be DISABLED, not AVAILABLE."""
     topology = _simple_topology()
     # Port defaults to enabled=False, so all new ports are disabled.
     summary = run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
 
     assert summary["drives_inserted"] == 1
     drive = db.query(UsbDrive).one()
-    assert drive.current_state == DriveState.UNMOUNTED
+    assert drive.current_state == DriveState.DISABLED
     assert drive.filesystem_path == "/dev/sdb"
 
 
@@ -622,8 +622,8 @@ def test_new_drive_on_enabled_port_inserted_as_available(db):
     assert drive.current_state == DriveState.AVAILABLE
 
 
-def test_reconnecting_drive_on_disabled_port_stays_unmounted(db):
-    """A drive reconnecting to a disabled port should stay UNMOUNTED."""
+def test_reconnecting_drive_on_disabled_port_stays_disabled(db):
+    """A drive reconnecting to a disabled port should stay DISABLED."""
     topology = _simple_topology()
 
     # Create port as enabled so the drive gets AVAILABLE.
@@ -644,10 +644,10 @@ def test_reconnecting_drive_on_disabled_port_stays_unmounted(db):
     port.enabled = False
     db.commit()
 
-    # Reconnect the drive — should stay UNMOUNTED because the port is disabled.
+    # Reconnect the drive — should stay DISABLED because the port is disabled.
     run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
     db.refresh(drive)
-    assert drive.current_state == DriveState.UNMOUNTED
+    assert drive.current_state == DriveState.DISABLED
 
 
 def test_existing_tests_still_pass_with_enabled_port(db):
@@ -691,7 +691,7 @@ def test_disabled_port_drive_reconciles_to_available_when_reenabled_and_mounted_
     run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
 
     drive = db.query(UsbDrive).filter(UsbDrive.device_identifier == "SN-MOUNTED-REENABLE").one()
-    assert drive.current_state == DriveState.UNMOUNTED
+    assert drive.current_state == DriveState.DISABLED
 
     port = db.query(UsbPort).one()
     port.enabled = True
@@ -732,7 +732,7 @@ def test_disabled_port_drive_reconciles_to_in_use_when_reenabled_and_mounted_wit
     run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
 
     drive = db.query(UsbDrive).filter(UsbDrive.device_identifier == "SN-MOUNTED-BOUND").one()
-    assert drive.current_state == DriveState.UNMOUNTED
+    assert drive.current_state == DriveState.DISABLED
 
     drive.current_project_id = "PROJ-BOUND"
     db.commit()
@@ -751,9 +751,9 @@ def test_disabled_port_drive_reconciles_to_in_use_when_reenabled_and_mounted_wit
 
 
 def test_available_drive_demoted_when_port_disabled(db):
-    """An AVAILABLE drive on a port that is later disabled should become UNMOUNTED."""
+    """An AVAILABLE drive on a port that is later disabled should become DISABLED."""
     topology = _simple_topology()
-    # First sync creates port (disabled by default) + drive (UNMOUNTED).
+    # First sync creates port (disabled by default) + drive (DISABLED).
     run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
     _enable_all_ports(db)
     # Second sync promotes the drive to AVAILABLE.
@@ -766,10 +766,10 @@ def test_available_drive_demoted_when_port_disabled(db):
     port.enabled = False
     db.commit()
 
-    # Next sync should demote the drive to UNMOUNTED.
+    # Next sync should demote the drive to DISABLED.
     summary = run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
     db.refresh(drive)
-    assert drive.current_state == DriveState.UNMOUNTED
+    assert drive.current_state == DriveState.DISABLED
     assert summary["drives_updated"] == 1
 
 
