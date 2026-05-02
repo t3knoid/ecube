@@ -421,6 +421,30 @@ def test_mount_drive_success(manager_client, db):
     assert "mount_path" not in audit.details
 
 
+def test_mount_unmounted_drive_normalizes_to_available(manager_client, db):
+    from app.config import settings
+
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-UNMOUNTED",
+        current_state=DriveState.UNMOUNTED,
+        filesystem_type="ext4",
+        filesystem_path="/dev/sdz",
+    )
+    db.add(drive)
+    db.commit()
+
+    provider = MagicMock()
+    provider.mount_drive.return_value = (True, None)
+
+    with patch("app.routers.drives.get_drive_mount", return_value=provider):
+        response = manager_client.post(f"/drives/{drive.id}/mount")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["current_state"] == "AVAILABLE"
+    assert data["mount_path"] == f"{settings.usb_mount_base_path}/{drive.id}"
+
+
 def test_mount_drive_requires_recognized_filesystem(manager_client, db):
     drive = UsbDrive(
         device_identifier="USB-MOUNT-001B",

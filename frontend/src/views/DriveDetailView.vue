@@ -112,7 +112,7 @@ const canInitialize = computed(
 )
 const canMount = computed(
   () => canManage.value
-    && ['AVAILABLE', 'IN_USE'].includes(drive.value?.current_state)
+    && ['UNMOUNTED', 'AVAILABLE', 'IN_USE'].includes(drive.value?.current_state)
     && !drive.value?.mount_path
     && !!drive.value?.filesystem_path,
 )
