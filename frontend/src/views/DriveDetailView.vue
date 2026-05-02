@@ -122,7 +122,11 @@ const initializeMountedDestinationText = computed(() => (
     : t('drives.initializeMountRequired')
 ))
 const canEject = computed(
-  () => drive.value?.current_state === 'IN_USE' && canManage.value,
+  () => canManage.value
+    && (
+      drive.value?.current_state === 'IN_USE'
+      || (drive.value?.current_state === 'AVAILABLE' && !!drive.value?.mount_path)
+    ),
 )
 const canBrowse = computed(() => !!drive.value?.mount_path)
 const hasMountedProjectOptions = computed(() => mountedProjectOptions.value.length > 0)
