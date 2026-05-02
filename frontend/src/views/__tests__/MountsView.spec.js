@@ -180,47 +180,47 @@ describe('MountsView removal flow', () => {
     })
   })
 
-  it('removes an unmounted entry immediately without showing confirmation', async () => {
-    mocks.getMounts
-      .mockResolvedValueOnce([buildMount({ status: 'UNMOUNTED' })])
-      .mockResolvedValueOnce([])
+  it('opens the mount detail page from the desktop details action', async () => {
+    mocks.getMounts.mockResolvedValueOnce([buildMount({ status: 'UNMOUNTED' })])
 
     const wrapper = mountView()
     await flushPromises()
 
-    const removeButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.remove'))
-    expect(removeButton).toBeTruthy()
+    const detailButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.details'))
+    expect(detailButton).toBeTruthy()
 
-    await removeButton.trigger('click')
+    await detailButton.trigger('click')
     await flushPromises()
 
-    expect(mocks.deleteMount).toHaveBeenCalledWith(11)
-    expect(wrapper.text()).not.toContain(i18n.global.t('mounts.removeConfirmTitle'))
+    expect(mocks.push).toHaveBeenCalledWith({ name: 'mount-detail', params: { id: 11 } })
   })
 
-  it('still shows confirmation before removing an active mounted entry', async () => {
+  it('does not expose edit or remove buttons in the desktop action row', async () => {
     mocks.getMounts.mockResolvedValue([buildMount({ status: 'MOUNTED' })])
 
     const wrapper = mountView()
     await flushPromises()
 
-    const removeButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.remove'))
-    expect(removeButton).toBeTruthy()
-
-    await removeButton.trigger('click')
-    await flushPromises()
-
-    expect(mocks.deleteMount).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain(i18n.global.t('mounts.removeConfirmTitle'))
+    const labels = wrapper.findAll('button').map((node) => node.text())
+    expect(labels).toContain(i18n.global.t('mounts.details'))
+    expect(labels).toContain(i18n.global.t('mounts.browse'))
+    expect(labels).not.toContain(i18n.global.t('common.actions.edit'))
+    expect(labels).not.toContain(i18n.global.t('mounts.remove'))
   })
 
-  it('forwards compact row action menu buttons to the existing browse and remove handlers', async () => {
-    mocks.getMounts
-      .mockResolvedValueOnce([buildMount({ status: 'MOUNTED', local_mount_point: '/smb/demo-case-002' })])
-      .mockResolvedValueOnce([])
+  it('forwards compact row action menu buttons to the details and browse handlers', async () => {
+    mocks.getMounts.mockResolvedValueOnce([buildMount({ status: 'MOUNTED', local_mount_point: '/smb/demo-case-002' })])
 
     const wrapper = mountView()
     await flushPromises()
+
+    const detailButton = wrapper.find('.row-action-menu-details')
+    expect(detailButton.exists()).toBe(true)
+
+    await detailButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.push).toHaveBeenCalledWith({ name: 'mount-detail', params: { id: 11 } })
 
     const browseButton = wrapper.find('.row-action-menu-browse')
     expect(browseButton.exists()).toBe(true)
@@ -229,14 +229,6 @@ describe('MountsView removal flow', () => {
     await flushPromises()
 
     expect(wrapper.find('.directory-browser-stub').exists()).toBe(true)
-
-    const removeButton = wrapper.find('.row-action-menu-remove')
-    expect(removeButton.exists()).toBe(true)
-
-    await removeButton.trigger('click')
-    await flushPromises()
-
-    expect(wrapper.text()).toContain(i18n.global.t('mounts.removeConfirmTitle'))
   })
 
   it('omits wide metadata columns in mobile view while keeping compact status and the row menu trigger', async () => {
@@ -505,7 +497,7 @@ describe('MountsView removal flow', () => {
     await flushPromises()
 
     expect(wrapper.text()).not.toContain('/smb/demo-case-002')
-    expect(wrapper.find('.directory-browser-stub').text()).toContain('demo-case-002')
+    expect(wrapper.find('.directory-browser-stub').text()).toContain('PROJ-011')
   })
 
   it('does not render remote or local path columns in the mounts table', async () => {
@@ -629,60 +621,6 @@ describe('MountsView removal flow', () => {
     expect(wrapper.text()).toContain('Install smbclient on the ECUBE host, then try again.')
   })
 
-  it('opens the existing dialog in edit mode with the selected mount prefilled', async () => {
-    mocks.getMounts.mockResolvedValue([buildMount({ project_id: 'PROJ-EDIT', remote_path: '//server/edit-share', local_mount_point: '/smb/edit-share' })])
-
-    const wrapper = mountView()
-    await flushPromises()
-
-    const editButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit'))
-    expect(editButton).toBeTruthy()
-
-    await editButton.trigger('click')
-    await flushPromises()
-
-    expect(wrapper.find(`#${'add-mount-dialog-title'}`).text()).toBe(i18n.global.t('mounts.editDialogTitle'))
-    expect(wrapper.find('#mount-remote-path').element.value).toBe('//server/edit-share')
-    expect(wrapper.find('#mount-project-id').element.value).toBe('PROJ-EDIT')
-    expect(wrapper.find('#mount-local-path').element.value).toBe('/smb/edit-share')
-    expect(wrapper.find('#mount-local-path').attributes('readonly')).toBeDefined()
-  })
-
-  it('submits edit mode through updateMount without creating a new mount', async () => {
-    mocks.getMounts.mockResolvedValue([buildMount({ id: 42, remote_path: '//server/original-share', project_id: 'PROJ-OLD' })])
-    mocks.validateMount.mockResolvedValue(buildMount({ id: 42, status: 'MOUNTED' }))
-
-    const wrapper = mountView()
-    await flushPromises()
-
-    const editButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit'))
-    expect(editButton).toBeTruthy()
-
-    await editButton.trigger('click')
-    await flushPromises()
-
-    await wrapper.find('#mount-remote-path').setValue('//server/updated-share')
-    await wrapper.find('#mount-project-id').setValue('proj-updated')
-
-    await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
-    await flushPromises()
-
-    await findDialogButton(wrapper, i18n.global.t('common.actions.save')).trigger('click')
-    await flushPromises()
-
-    expect(mocks.validateMount).toHaveBeenCalledWith(42, {
-      type: 'SMB',
-      remote_path: '//server/updated-share',
-      project_id: 'PROJ-UPDATED',
-    })
-    expect(mocks.updateMount).toHaveBeenCalledWith(42, {
-      type: 'SMB',
-      remote_path: '//server/updated-share',
-      project_id: 'PROJ-UPDATED',
-    })
-    expect(mocks.createMount).not.toHaveBeenCalled()
-  })
-
   it('requires a passing in-dialog test before a new share can be created', async () => {
     mocks.getMounts.mockResolvedValue([])
 
@@ -739,195 +677,6 @@ describe('MountsView removal flow', () => {
     expect(mocks.createMount).not.toHaveBeenCalled()
   })
 
-  it('lets the operator explicitly clear stored credentials during edit', async () => {
-    mocks.getMounts.mockResolvedValue([buildMount({ id: 42, remote_path: '//server/original-share', project_id: 'PROJ-OLD' })])
-    mocks.validateMount.mockResolvedValue(buildMount({ id: 42, status: 'MOUNTED' }))
-    mocks.updateMount.mockResolvedValue(buildMount({ id: 42, remote_path: '//server/original-share', project_id: 'PROJ-OLD', status: 'MOUNTED' }))
-
-    const wrapper = mountView()
-    await flushPromises()
-
-    const editButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit'))
-    expect(editButton).toBeTruthy()
-
-    await editButton.trigger('click')
-    await flushPromises()
-
-    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.clearStoredCredentials')).trigger('click')
-    await flushPromises()
-
-    await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
-    await flushPromises()
-
-    await findDialogButton(wrapper, i18n.global.t('common.actions.save')).trigger('click')
-    await flushPromises()
-
-    expect(mocks.updateMount).toHaveBeenCalledWith(42, {
-      type: 'SMB',
-      remote_path: '//server/original-share',
-      project_id: 'PROJ-OLD',
-      username: null,
-      password: null,
-      credentials_file: null,
-    })
-  })
-
-  it('requires a passing in-dialog test before edited values can be saved', async () => {
-    mocks.getMounts.mockResolvedValue([buildMount({ id: 42, remote_path: '//server/original-share', project_id: 'PROJ-OLD' })])
-    mocks.validateMount.mockResolvedValue(buildMount({ id: 42, status: 'MOUNTED' }))
-
-    const wrapper = mountView()
-    await flushPromises()
-
-    const editButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit'))
-    expect(editButton).toBeTruthy()
-
-    await editButton.trigger('click')
-    await flushPromises()
-
-    await wrapper.find('#mount-remote-path').setValue('//server/updated-share')
-    await wrapper.find('#mount-project-id').setValue('proj-updated')
-
-    const saveButton = () => findDialogButton(wrapper, i18n.global.t('common.actions.save'))
-    const testButton = () => findDialogButton(wrapper, i18n.global.t('mounts.test'))
-
-    expect(saveButton().attributes('disabled')).toBeDefined()
-
-    await testButton().trigger('click')
-    await flushPromises()
-
-    expect(saveButton().attributes('disabled')).toBeUndefined()
-    expect(findDialogSuccessBanner(wrapper).text()).toContain(i18n.global.t('mounts.testSuccess'))
-
-    await wrapper.find('#mount-remote-path').setValue('//server/updated-share-2')
-    await flushPromises()
-
-    expect(saveButton().attributes('disabled')).toBeDefined()
-  })
-
-  it('keeps the edit dialog footer reachable by using an internal scroll region after test success', async () => {
-    mocks.getMounts.mockResolvedValue([buildMount({ id: 42, remote_path: '//server/original-share', project_id: 'PROJ-OLD' })])
-    mocks.validateMount.mockResolvedValue(buildMount({ id: 42, status: 'MOUNTED' }))
-
-    const wrapper = mountView()
-    await flushPromises()
-
-    const editButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit'))
-    expect(editButton).toBeTruthy()
-
-    await editButton.trigger('click')
-    await flushPromises()
-
-    await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
-    await flushPromises()
-
-    const dialog = wrapper.find('.mount-dialog-panel')
-    const scrollRegion = wrapper.find('.mount-dialog-scroll-region')
-    const footer = wrapper.find('.dialog-footer')
-
-    expect(dialog.exists()).toBe(true)
-    expect(scrollRegion.exists()).toBe(true)
-    expect(footer.exists()).toBe(true)
-    expect(findDialogSuccessBanner(wrapper).text()).toContain(i18n.global.t('mounts.testSuccess'))
-  })
-
-  it('clears the test success banner when the edit dialog is cancelled', async () => {
-    mocks.getMounts.mockResolvedValue([buildMount({ id: 42, remote_path: '//server/original-share', project_id: 'PROJ-OLD' })])
-    mocks.validateMount.mockResolvedValue(buildMount({ id: 42, status: 'MOUNTED' }))
-
-    const wrapper = mountView()
-    await flushPromises()
-
-    const editButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit'))
-    expect(editButton).toBeTruthy()
-
-    await editButton.trigger('click')
-    await flushPromises()
-
-    await wrapper.find('#mount-remote-path').setValue('//server/updated-share')
-    await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
-    await flushPromises()
-
-    expect(findDialogSuccessBanner(wrapper).text()).toContain(i18n.global.t('mounts.testSuccess'))
-
-    await findDialogButton(wrapper, i18n.global.t('common.actions.cancel')).trigger('click')
-    await flushPromises()
-
-    expect(wrapper.text()).not.toContain(i18n.global.t('mounts.testSuccess'))
-  })
-
-  it('keeps the edit dialog open and shows feedback when the in-dialog test fails', async () => {
-    mocks.getMounts.mockResolvedValue([buildMount({ id: 42, remote_path: '//server/original-share', project_id: 'PROJ-OLD' })])
-    mocks.validateMount.mockRejectedValue({ response: { data: { detail: 'Authentication failed for edited share.' } } })
-
-    const wrapper = mountView()
-    await flushPromises()
-
-    const editButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit'))
-    expect(editButton).toBeTruthy()
-
-    await editButton.trigger('click')
-    await flushPromises()
-
-    await wrapper.find('#mount-remote-path').setValue('//server/updated-share')
-    await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
-    await flushPromises()
-
-    expect(wrapper.find('#mount-type').exists()).toBe(true)
-    expect(wrapper.find('.error-banner').text()).toContain('Authentication failed for edited share.')
-    expect(findDialogButton(wrapper, i18n.global.t('common.actions.save')).attributes('disabled')).toBeDefined()
-    expect(mocks.updateMount).not.toHaveBeenCalled()
-  })
-
-  it('keeps the dialog open and shows actionable backend text when edit fails', async () => {
-    mocks.getMounts.mockResolvedValue([buildMount({ id: 42, remote_path: '//server/original-share', project_id: 'PROJ-OLD' })])
-    mocks.validateMount.mockResolvedValue(buildMount({ id: 42, status: 'MOUNTED' }))
-    mocks.updateMount.mockRejectedValue({ response: { data: { detail: 'A mount for this remote source is already configured.' } } })
-
-    const wrapper = mountView()
-    await flushPromises()
-
-    const editButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit'))
-    expect(editButton).toBeTruthy()
-
-    await editButton.trigger('click')
-    await flushPromises()
-
-    await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
-    await flushPromises()
-
-    await findDialogButton(wrapper, i18n.global.t('common.actions.save')).trigger('click')
-    await flushPromises()
-
-    expect(wrapper.find('#mount-type').exists()).toBe(true)
-    expect(wrapper.find('.error-banner').text()).toContain('already configured')
-  })
-
-  it('keeps the dialog open when the update returns an error-status mount record', async () => {
-    mocks.getMounts.mockResolvedValue([buildMount({ id: 42, remote_path: '//server/original-share', project_id: 'PROJ-OLD' })])
-    mocks.validateMount.mockResolvedValue(buildMount({ id: 42, status: 'MOUNTED' }))
-    mocks.updateMount.mockResolvedValue(buildMount({ id: 42, remote_path: '//server/original-share', project_id: 'PROJ-OLD', status: 'ERROR' }))
-
-    const wrapper = mountView()
-    await flushPromises()
-
-    const editButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit'))
-    expect(editButton).toBeTruthy()
-
-    await editButton.trigger('click')
-    await flushPromises()
-
-    await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
-    await flushPromises()
-
-    await findDialogButton(wrapper, i18n.global.t('common.actions.save')).trigger('click')
-    await flushPromises()
-
-    expect(wrapper.find('#mount-type').exists()).toBe(true)
-    expect(wrapper.find('.error-banner').text()).toContain(i18n.global.t('mounts.updateFailed'))
-    expect(wrapper.text()).not.toContain(i18n.global.t('mounts.updateSuccess'))
-  })
-
   it('does not render manager-only row actions for non-manager roles', async () => {
     authState.roles = ['auditor']
     mocks.getMounts.mockResolvedValue([buildMount()])
@@ -940,6 +689,7 @@ describe('MountsView removal flow', () => {
     expect(buttonTexts).not.toContain(i18n.global.t('mounts.test'))
     expect(buttonTexts).not.toContain(i18n.global.t('common.actions.edit'))
     expect(buttonTexts).not.toContain(i18n.global.t('mounts.remove'))
+    expect(buttonTexts).toContain(i18n.global.t('mounts.details'))
   })
 
   it('clears the test success banner when the add dialog is cancelled', async () => {

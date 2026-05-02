@@ -18,3 +18,20 @@ export function getDirectory(path, subdir = '', page = 1, pageSize = 100) {
   params.set('page_size', String(pageSize))
   return toData(apiClient.get(`${API_BASE}/browse?${params.toString()}`))
 }
+
+/**
+ * Fetch a paginated directory listing for an active network mount by trusted mount id.
+ *
+ * @param {number} mountId    - The active network mount identifier.
+ * @param {string} [subdir]   - Relative subdirectory within the mount root (default: root).
+ * @param {number} [page]     - Page number, 1-based (default: 1).
+ * @param {number} [pageSize] - Entries per page (default: 100, max: 500).
+ * @returns {Promise<BrowseResponse>}
+ */
+export function getDirectoryByMountId(mountId, subdir = '', page = 1, pageSize = 100) {
+  const params = new URLSearchParams({ mount_id: String(mountId) })
+  if (subdir) params.set('subdir', subdir)
+  params.set('page', String(page))
+  params.set('page_size', String(pageSize))
+  return toData(apiClient.get(`${API_BASE}/browse?${params.toString()}`))
+}
