@@ -291,6 +291,7 @@ Each module exports thin wrapper functions around Axios calls. Modules map 1:1 t
 | `auth.js` | `POST /auth/token` | LoginView, auth store |
 | `setup.js` | `GET /setup/status`, `POST /setup/initialize`, `POST /setup/database/test-connection`, `POST /setup/database/provision`, `GET /setup/database/provision-status`, `GET /setup/database/system-info`, `GET /setup/database/status`, `PUT /setup/database/settings` | SetupWizardView |
 | `drives.js` | `GET /drives`, `POST /drives/{drive_id}/initialize`, `POST /drives/{drive_id}/format`, `POST /drives/{drive_id}/prepare-eject` | DrivesView, DriveDetailView, DashboardView, AuditView |
+| `browse.js` | `GET /browse` | DirectoryBrowser, DriveDetailView, MountsView, MountDetailView |
 | `mounts.js` | `GET /mounts`, `POST /mounts`, `PATCH /mounts/{mount_id}`, `DELETE /mounts/{mount_id}` | MountsView |
 | `jobs.js` | `GET /jobs`, `POST /jobs`, `PUT /jobs/{job_id}`, `DELETE /jobs/{job_id}`, `POST /jobs/{job_id}/start`, `POST /jobs/{job_id}/pause`, `POST /jobs/{job_id}/complete`, `POST /jobs/{job_id}/archive`, `GET /jobs/{job_id}`, `GET /jobs/{job_id}/chain-of-custody`, `POST /jobs/{job_id}/chain-of-custody/refresh`, `POST /jobs/{job_id}/chain-of-custody/handoff`, `POST /jobs/{job_id}/verify`, `POST /jobs/{job_id}/manifest` | JobsView, JobDetailView, DashboardView |
 | `audit.js` | `GET /audit` | AuditView |
