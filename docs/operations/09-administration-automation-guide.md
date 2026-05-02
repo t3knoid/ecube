@@ -1597,6 +1597,7 @@ Every audit entry contains:
 |--------|---------|
 | `JOB_CREATED` | New export job registered |
 | `JOB_STARTED` | Copy process launched |
+| `JOB_START_REJECTED_CAPACITY` | Initial start rejected because startup-analysis estimated bytes exceed the assigned drive's last known available space |
 | `JOB_VERIFY_STARTED` | Hash verification started |
 | `JOB_TIMEOUT` | Copy job exceeded time limit |
 | `JOB_STATUS_PERSIST_FAILED` | Failed to save job status to database |

@@ -3,6 +3,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
+import pytest
+
 from app.routers import jobs as jobs_router
 from app.models.audit import AuditLog
 from app.models.hardware import UsbDrive, DriveState, UsbHub, UsbPort
@@ -2298,6 +2300,104 @@ def test_start_job_conflict_while_startup_analysis_running(client, db):
     assert response.status_code == 409
     assert "startup analysis is in progress" in response.json()["message"].lower()
     mock_copy.assert_not_called()
+
+
+def test_start_job_rejects_when_startup_analysis_exceeds_available_drive_space(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-START-CAPACITY-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-START-CAPACITY-001",
+        mount_path="/mnt/ecube/start-capacity-001",
+        available_bytes=1024,
+    )
+    db.add(drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-START-CAPACITY-001",
+        evidence_number="EV-START-CAPACITY-001",
+        source_path="/data/start-capacity",
+        target_mount_path=drive.mount_path,
+        status=JobStatus.PENDING,
+        startup_analysis_status=StartupAnalysisStatus.READY,
+        startup_analysis_cache_present=True,
+        startup_analysis_total_bytes=4096,
+        copied_bytes=0,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.commit()
+
+    with patch("app.services.copy_engine.run_copy_job") as mock_copy:
+        response = client.post(f"/jobs/{job.id}/start", json={})
+
+    assert response.status_code == 409
+    payload = response.json()
+    assert payload["code"] == "DRIVE_CAPACITY_SHORTFALL"
+    assert "Estimated source size: 4096 bytes" in payload["message"]
+    assert "available drive space: 1024 bytes" in payload["message"]
+    assert "shortfall: 3072 bytes" in payload["message"]
+    assert "Choose another drive or use the follow-on overflow workflow." in payload["message"]
+    mock_copy.assert_not_called()
+
+    db.refresh(job)
+    assert job.status == JobStatus.PENDING
+    assert job.started_at is None
+
+    audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_START_REJECTED_CAPACITY", AuditLog.job_id == job.id)
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+    assert audit is not None
+    assert audit.project_id == "PROJ-START-CAPACITY-001"
+    assert audit.drive_id == drive.id
+    assert audit.details["estimated_source_bytes"] == 4096
+    assert audit.details["available_bytes"] == 1024
+    assert audit.details["shortfall_bytes"] == 3072
+
+
+@pytest.mark.parametrize("job_status", [JobStatus.PAUSED, JobStatus.FAILED])
+def test_start_job_rejects_zero_byte_restart_when_startup_analysis_exceeds_available_drive_space(client, db, job_status):
+    drive = UsbDrive(
+        device_identifier=f"USB-RESTART-CAPACITY-{job_status.value}",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-RESTART-CAPACITY-001",
+        mount_path="/mnt/ecube/restart-capacity-001",
+        available_bytes=1024,
+    )
+    db.add(drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-RESTART-CAPACITY-001",
+        evidence_number=f"EV-RESTART-CAPACITY-{job_status.value}",
+        source_path="/data/restart-capacity",
+        target_mount_path=drive.mount_path,
+        status=job_status,
+        startup_analysis_status=StartupAnalysisStatus.READY,
+        startup_analysis_cache_present=True,
+        startup_analysis_total_bytes=4096,
+        copied_bytes=0,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.commit()
+
+    with patch("app.services.copy_engine.run_copy_job") as mock_copy:
+        response = client.post(f"/jobs/{job.id}/start", json={})
+
+    assert response.status_code == 409
+    payload = response.json()
+    assert payload["code"] == "DRIVE_CAPACITY_SHORTFALL"
+    mock_copy.assert_not_called()
+
+    db.refresh(job)
+    assert job.status == job_status
+    assert job.started_at is None
 
 
 def test_retry_failed_files_auditor_forbidden(auditor_client, db):
