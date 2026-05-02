@@ -18,3 +18,11 @@ export function getDirectory(path, subdir = '', page = 1, pageSize = 100) {
   params.set('page_size', String(pageSize))
   return toData(apiClient.get(`${API_BASE}/browse?${params.toString()}`))
 }
+
+export function getDirectoryByMountId(mountId, subdir = '', page = 1, pageSize = 100) {
+  const params = new URLSearchParams({ mount_id: String(mountId) })
+  if (subdir) params.set('subdir', subdir)
+  params.set('page', String(page))
+  params.set('page_size', String(pageSize))
+  return toData(apiClient.get(`${API_BASE}/browse?${params.toString()}`))
+}
