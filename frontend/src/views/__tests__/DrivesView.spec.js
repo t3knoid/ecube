@@ -117,7 +117,7 @@ describe('DrivesView rescan and filter loading', () => {
     expect(mocks.getDrives).toHaveBeenCalledWith({})
     expect(wrapper.findAll('select')[0].text()).not.toContain('Archived')
     expect(wrapper.findAll('select')[0].text()).toContain(i18n.global.t('drives.states.disabled'))
-    expect(wrapper.findAll('select')[0].text()).not.toContain(i18n.global.t('drives.states.unmounted'))
+    expect(wrapper.findAll('select')[0].text()).toContain(i18n.global.t('drives.states.unmounted'))
   })
 
   it('requests disconnected drives when Show Disconnected drives is enabled', async () => {
