@@ -25,6 +25,10 @@ class TestConfigurationSchemaValidation:
         req = ConfigurationUpdateRequest(copy_job_timeout=120)
         assert req.copy_job_timeout == 120
 
+    def test_update_accepts_startup_analysis_batch_size(self):
+        req = ConfigurationUpdateRequest(startup_analysis_batch_size=250)
+        assert req.startup_analysis_batch_size == 250
+
     def test_update_accepts_nfs_client_version(self):
         req = ConfigurationUpdateRequest(nfs_client_version="4.2")
         assert req.nfs_client_version == "4.2"
@@ -102,6 +106,14 @@ class TestConfigurationSchemaValidation:
         with pytest.raises(ValidationError):
             ConfigurationUpdateRequest(job_detail_files_page_size=10)
 
+    def test_update_rejects_startup_analysis_batch_size_below_minimum(self):
+        with pytest.raises(ValidationError):
+            ConfigurationUpdateRequest(startup_analysis_batch_size=0)
+
+    def test_update_rejects_startup_analysis_batch_size_above_maximum(self):
+        with pytest.raises(ValidationError):
+            ConfigurationUpdateRequest(startup_analysis_batch_size=5001)
+
 
 class TestConfigurationEndpoints:
     def test_get_configuration_admin_allowed(self, admin_client):
@@ -112,6 +124,7 @@ class TestConfigurationEndpoints:
         assert "log_level" in keys
         assert "nfs_client_version" in keys
         assert "db_pool_recycle_seconds" in keys
+        assert "startup_analysis_batch_size" in keys
         assert "copy_job_timeout" in keys
         assert "job_detail_files_page_size" in keys
         assert "callback_default_url" in keys
@@ -171,6 +184,13 @@ class TestConfigurationEndpoints:
         resp = client.get("/admin/configuration")
         assert resp.status_code == 403
 
+    def test_update_configuration_rejects_startup_analysis_batch_size_above_maximum(self, admin_client):
+        resp = admin_client.put(
+            "/admin/configuration",
+            json={"startup_analysis_batch_size": 5001},
+        )
+        assert resp.status_code == 422, resp.json()
+
     @patch("app.services.configuration_service.database_service._write_env_settings")
     @patch("app.services.configuration_service.configure_logging")
     def test_update_configuration_restart_required_metadata(
@@ -195,6 +215,29 @@ class TestConfigurationEndpoints:
 
         mock_write_env.assert_called_once()
         mock_configure_logging.assert_called_once()
+
+    @patch("app.services.configuration_service.database_service._write_env_settings")
+    def test_update_configuration_persists_startup_analysis_batch_size(
+        self,
+        mock_write_env,
+        admin_client,
+    ):
+        original_value = settings.startup_analysis_batch_size
+        try:
+            resp = admin_client.put(
+                "/admin/configuration",
+                json={"startup_analysis_batch_size": 128},
+            )
+            assert resp.status_code == 200, resp.json()
+
+            payload = resp.json()
+            assert "startup_analysis_batch_size" in payload["changed_settings"]
+            assert payload["restart_required"] is False
+
+            written = mock_write_env.call_args.args[0]
+            assert written.get("STARTUP_ANALYSIS_BATCH_SIZE") == "128"
+        finally:
+            settings.startup_analysis_batch_size = original_value
 
     @patch("app.services.configuration_service.database_service._write_env_settings")
     def test_update_configuration_persists_callback_default_url(
