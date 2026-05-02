@@ -504,7 +504,7 @@ From Mount Detail, `admin` and `manager` users can remove the mount definition w
 
 Remove a mount only if it is no longer needed. If existing workflows depend on it, removing the definition can interrupt job creation or repeatability.
 
-![Mounts page with Details, Browse, and validation actions (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/mounts-default-chromium-linux.png)
+![Mounts page with Details and Browse actions (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/mounts-default-chromium-linux.png)
 
 ---
 
