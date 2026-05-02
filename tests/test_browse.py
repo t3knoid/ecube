@@ -46,6 +46,20 @@ def _make_network_mount(db, local_mount_point: str, mount_type: MountType = Moun
 
 
 class TestBrowseHappyPath:
+    def test_browse_network_mount_root_by_mount_id(self, auditor_client, db, tmp_path):
+        """GET /browse with mount_id returns entries without requiring the raw mount path."""
+        mount_point = str(tmp_path)
+        (tmp_path / "report.pdf").write_bytes(b"x" * 2048)
+        mount = _make_network_mount(db, mount_point)
+
+        with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]):
+            response = auditor_client.get(f"/browse?mount_id={mount.id}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["path"] == f"mount_id:{mount.id}"
+        assert data["entries"][0]["name"] == "report.pdf"
+
     def test_browse_network_mount_root(self, client, db, tmp_path):
         """GET /browse returns entries for a registered network mount."""
         mount_point = str(tmp_path)
@@ -372,8 +386,13 @@ class TestBrowseSecurity:
 
 class TestBrowseParameterValidation:
     def test_missing_path_returns_422(self, client, db):
-        """Omitting the required 'path' parameter returns 422."""
+        """Omitting both browse root selectors returns 422."""
         response = client.get("/browse")
+        assert response.status_code == 422
+
+    def test_providing_path_and_mount_id_returns_422(self, client, db, tmp_path):
+        mount = _make_network_mount(db, str(tmp_path))
+        response = client.get(f"/browse?path={tmp_path}&mount_id={mount.id}")
         assert response.status_code == 422
 
     def test_page_size_above_max_returns_422(self, client, db, tmp_path):
