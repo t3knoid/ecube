@@ -592,6 +592,10 @@
         "label": "Startup Analysis Batch Size",
         "help": "Maximum number of startup-analysis rows processed per batch while scanning, persisting, and validating source trees. Allowed range: 1 to 5000. Lower values reduce peak memory usage but increase database round trips."
       },
+      "mkfs_exfat_cluster_size": {
+        "label": "exFAT Cluster Size",
+        "help": "Allocation unit used when ECUBE formats a drive as exFAT. 4KB is recommended for most situations. Use larger clusters only for drives that will store very large files only and no small files."
+      },
       "copy_job_timeout": {
         "label": "Per-file Copy Timeout (seconds)",
         "help": "Maximum time allowed for one file copy/checksum attempt. Set to 0 to disable timeout enforcement."
