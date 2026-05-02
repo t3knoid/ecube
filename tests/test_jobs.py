@@ -3,6 +3,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
+import pytest
+
 from app.routers import jobs as jobs_router
 from app.models.audit import AuditLog
 from app.models.hardware import UsbDrive, DriveState, UsbHub, UsbPort
@@ -2355,6 +2357,47 @@ def test_start_job_rejects_when_startup_analysis_exceeds_available_drive_space(c
     assert audit.details["estimated_source_bytes"] == 4096
     assert audit.details["available_bytes"] == 1024
     assert audit.details["shortfall_bytes"] == 3072
+
+
+@pytest.mark.parametrize("job_status", [JobStatus.PAUSED, JobStatus.FAILED])
+def test_start_job_rejects_zero_byte_restart_when_startup_analysis_exceeds_available_drive_space(client, db, job_status):
+    drive = UsbDrive(
+        device_identifier=f"USB-RESTART-CAPACITY-{job_status.value}",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-RESTART-CAPACITY-001",
+        mount_path="/mnt/ecube/restart-capacity-001",
+        available_bytes=1024,
+    )
+    db.add(drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-RESTART-CAPACITY-001",
+        evidence_number=f"EV-RESTART-CAPACITY-{job_status.value}",
+        source_path="/data/restart-capacity",
+        target_mount_path=drive.mount_path,
+        status=job_status,
+        startup_analysis_status=StartupAnalysisStatus.READY,
+        startup_analysis_cache_present=True,
+        startup_analysis_total_bytes=4096,
+        copied_bytes=0,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.commit()
+
+    with patch("app.services.copy_engine.run_copy_job") as mock_copy:
+        response = client.post(f"/jobs/{job.id}/start", json={})
+
+    assert response.status_code == 409
+    payload = response.json()
+    assert payload["code"] == "DRIVE_CAPACITY_SHORTFALL"
+    mock_copy.assert_not_called()
+
+    db.refresh(job)
+    assert job.status == job_status
+    assert job.started_at is None
 
 
 def test_retry_failed_files_auditor_forbidden(auditor_client, db):
