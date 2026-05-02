@@ -876,6 +876,27 @@ def test_prepare_eject(manager_client, db):
     assert data["current_project_id"] == "PROJ-001"
 
 
+def test_prepare_eject_mounted_available_drive(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB005-AVAILABLE",
+        current_state=DriveState.AVAILABLE,
+        current_project_id=None,
+        filesystem_path="/dev/sdb",
+        mount_path="/mnt/ecube/usb005-available",
+    )
+    db.add(drive)
+    db.commit()
+
+    provider = _fake_eject()
+    with patch("app.routers.drives.get_drive_eject", return_value=provider):
+        response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["current_state"] == "AVAILABLE"
+    assert data["mount_path"] is None
+
+
 @pytest.mark.parametrize("status", [
     JobStatus.RUNNING,
     JobStatus.PAUSING,
@@ -1375,8 +1396,8 @@ def test_prepare_eject_invalid_device_path(manager_client, db):
     assert "/tmp/../../etc/passwd" not in str(log.details)
 
 
-def test_prepare_eject_requires_in_use_state(manager_client, db):
-    """Prepare-eject must reject drives not in IN_USE state (409 Conflict).
+def test_prepare_eject_requires_ejectable_state(manager_client, db):
+    """Prepare-eject must reject drives that are not in an ejectable state (409 Conflict).
     
     Verifies that prepare_eject is NOT called (fast-fail optimization).
     """
@@ -1393,7 +1414,7 @@ def test_prepare_eject_requires_in_use_state(manager_client, db):
         response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
 
     assert response.status_code == 409
-    assert "not in IN_USE state" in response.json()["message"]
+    assert "not in an ejectable state" in response.json()["message"]
     # Verify prepare_eject was NOT called (fast-fail before OS operations)
     provider.prepare_eject.assert_not_called()
 
@@ -1404,7 +1425,7 @@ def test_prepare_eject_requires_in_use_state(manager_client, db):
 
 
 def test_prepare_eject_available_state_conflict(manager_client, db):
-    """Prepare-eject on AVAILABLE drive returns 409 Conflict.
+    """Prepare-eject on unmounted AVAILABLE drive returns 409 Conflict.
     
     Verifies that prepare_eject is NOT called (fast-fail optimization).
     """
@@ -1421,7 +1442,7 @@ def test_prepare_eject_available_state_conflict(manager_client, db):
         response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
 
     assert response.status_code == 409
-    assert "not in IN_USE state" in response.json()["message"]
+    assert "not mounted" in response.json()["message"]
     # Verify prepare_eject was NOT called (fast-fail before OS operations)
     provider.prepare_eject.assert_not_called()
 
