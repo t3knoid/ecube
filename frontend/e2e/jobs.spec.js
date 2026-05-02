@@ -5,6 +5,8 @@ import { expectNoCriticalA11yViolations } from './helpers/a11y.js'
 test('jobs create, start, compare, and manifest flow', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
 
+  const manifestCreatedAt = '2026-04-26T12:00:00Z'
+
   let jobState = {
     id: 77,
     project_id: 'P-77',
@@ -87,15 +89,39 @@ test('jobs create, start, compare, and manifest flow', async ({ page }) => {
     })
   })
   await page.route('**/api/jobs/77/start', async (route) => {
-    jobState = { ...jobState, status: 'COMPLETED', copied_bytes: 100, total_bytes: 100, files_succeeded: 1 }
+    jobState = {
+      ...jobState,
+      status: 'COMPLETED',
+      copied_bytes: 100,
+      total_bytes: 100,
+      files_succeeded: 1,
+      completed_at: manifestCreatedAt,
+      latest_manifest_created_at: manifestCreatedAt,
+    }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(jobState) })
   })
   await page.route('**/api/jobs/77/verify', async (route) => {
-    jobState = { ...jobState, status: 'COMPLETED', copied_bytes: 100, total_bytes: 100, files_succeeded: 1 }
+    jobState = {
+      ...jobState,
+      status: 'COMPLETED',
+      copied_bytes: 100,
+      total_bytes: 100,
+      files_succeeded: 1,
+      completed_at: manifestCreatedAt,
+      latest_manifest_created_at: manifestCreatedAt,
+    }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(jobState) })
   })
   await page.route('**/api/jobs/77/manifest', async (route) => {
-    jobState = { ...jobState, status: 'COMPLETED', copied_bytes: 100, total_bytes: 100, files_succeeded: 1 }
+    jobState = {
+      ...jobState,
+      status: 'COMPLETED',
+      copied_bytes: 100,
+      total_bytes: 100,
+      files_succeeded: 1,
+      completed_at: manifestCreatedAt,
+      latest_manifest_created_at: manifestCreatedAt,
+    }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(jobState) })
   })
   await page.route('**/api/jobs/77/manifest/download', async (route) => {

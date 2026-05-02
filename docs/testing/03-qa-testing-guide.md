@@ -685,6 +685,7 @@ Use a pending job with a mounted source and eligible destination drive.
 - Run `Analyze` from Job Detail and verify the job remains `PENDING` while startup-analysis state changes to `ANALYZING`.
 - Verify Job Detail shows `Startup analysis started.` and later replaces it with `Startup analysis completed.` when the persisted summary is ready.
 - Confirm the startup-analysis summary includes the final lifecycle state plus discovered file count and estimated total bytes, and that failed runs show only a sanitized failure reason.
+- With a job whose `startup_analysis_total_bytes` is larger than the assigned drive's last known available space, verify `Start` returns an operator-safe shortfall message instead of entering `RUNNING`, and the message tells the operator to choose another drive or use the follow-on overflow workflow.
 - While the job is `ANALYZING`, verify `Analyze`, `Edit`, `Start`, `Complete`, `Delete`, and `Clear startup analysis cache` are unavailable in the UI according to role and state.
 - During the same window, verify direct API attempts to edit, start, retry failed files, complete, delete, re-analyze, or clear startup-analysis cache return `409 Conflict` when otherwise applicable.
 - After analysis reaches `READY` or `STALE`, verify the blocked actions become available again according to the normal role and job-state rules.

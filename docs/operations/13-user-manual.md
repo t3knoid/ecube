@@ -677,6 +677,8 @@ During startup analysis, Job Detail can show `Preparing copy...` before any tota
 
 Manual Analyze runs use the same startup-analysis engine before copy begins. Job Detail can show `Startup analysis started.` while the scan is running, then replace it with `Startup analysis completed.` when the persisted analysis summary is ready. The summary panel can show the startup-analysis state, discovered files, estimated total bytes, last analyzed time, and a sanitized failure reason when analysis fails.
 
+If startup analysis is already `READY` and the related drive also has a last known available-space reading, ECUBE checks those values again when `Start` is pressed. If the destination cannot hold the estimated source size, copy does not begin and the page shows an operator-safe shortfall message so the operator can select another drive or use the follow-on overflow workflow.
+
 While startup analysis is actively running, Job Detail disables conflicting lifecycle actions so operators cannot edit, start, complete, delete, or clear the startup-analysis cache until the analyze run finishes. Delete and `Clear startup analysis cache` can remain visible for eligible jobs but stay disabled until the startup-analysis state leaves `ANALYZING`.
 
 If the Jobs page remains open while a manual analyze run finishes, ECUBE can show a page-level completion message for that job so operators notice the result without reopening Job Detail.
