@@ -614,8 +614,8 @@ Accessible from the Drive Management screen via a "Manage Ports" button. Visible
 │              │  └────┴────────┴──────────────────────────┴──────┴──────┴───────┴─────────────────┴────────┘│
 │              │                                                                          │
 │              │  ⚠ Changes take effect on the next discovery refresh.                     │
-│              │    Drives on disabled ports remain in UNMOUNTED state.                     │
-│              │    AVAILABLE drives are demoted to UNMOUNTED when port disabled.           │
+│              │    Drives on disabled ports remain in DISABLED state.                      │
+│              │    AVAILABLE drives are demoted to DISABLED when port disabled.            │
 │              │    Drives already IN_USE are not affected.                                │
 │              │                                                                          │
 │              │  [ Refresh Drives ] — run discovery after enabling ports                  │

@@ -45,6 +45,7 @@ ECUBE must:
 Managed drive states must include:
 
 - `DISCONNECTED`
+- `DISABLED`
 - `UNMOUNTED`
 - `AVAILABLE`
 - `IN_USE`
@@ -52,7 +53,8 @@ Managed drive states must include:
 State constraints:
 
 - `DISCONNECTED` means the drive is not physically present.
-- `UNMOUNTED` means the drive is physically present but not yet operator-ready.
+- `DISABLED` means the drive is physically present but blocked by a disabled port.
+- `UNMOUNTED` is retained only as a legacy compatibility value until discovery reconciles older rows.
 - `AVAILABLE` means the drive is eligible for initialization or assignment.
 - `IN_USE` means the drive is actively participating in a write-capable workflow.
 - Illegal lifecycle transitions must be rejected.
