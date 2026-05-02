@@ -279,6 +279,86 @@ def test_update_mount_preserves_existing_credentials_when_not_resubmitted(manage
     assert saved.encrypted_password == original_encrypted_password
 
 
+def test_update_mount_api_remounts_live_nfs_share_with_new_client_version(manager_client, db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="192.168.1.10:/exports/original",
+        project_id="PROJ-OLD",
+        local_mount_point="/nfs/original",
+        status=MountStatus.MOUNTED,
+        nfs_client_version="4.1",
+    )
+    db.add(mount)
+    db.commit()
+
+    class StatefulProvider:
+        def __init__(self):
+            self.mount_calls = []
+            self.unmount_calls = []
+
+        def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None, nfs_client_version=None):
+            self.mount_calls.append(
+                {
+                    "mount_type": mount_type,
+                    "remote_path": remote_path,
+                    "local_mount_point": local_mount_point,
+                    "credentials_file": credentials_file,
+                    "username": username,
+                    "password": password,
+                    "nfs_client_version": nfs_client_version,
+                }
+            )
+            return True, None
+
+        def os_unmount(self, local_mount_point: str):
+            self.unmount_calls.append(local_mount_point)
+            return True, None
+
+    provider = StatefulProvider()
+
+    with patch("app.services.mount_service._default_provider", return_value=provider), \
+         patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
+         patch("app.services.mount_service._validate_mount_directory_owner", return_value=None):
+        response = manager_client.patch(
+            f"/mounts/{mount.id}",
+            json={
+                "type": "NFS",
+                "remote_path": "192.168.1.10:/exports/updated",
+                "project_id": "proj-new",
+                "nfs_client_version": "4.2",
+            },
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == mount.id
+    assert data["type"] == "NFS"
+    assert data["remote_path"] == "192.168.1.10:/exports/updated"
+    assert data["project_id"] == "PROJ-NEW"
+    assert data["nfs_client_version"] == "4.2"
+    assert data["status"] == "MOUNTED"
+
+    db.expire_all()
+    saved = db.query(NetworkMount).filter(NetworkMount.id == mount.id).one()
+    assert saved.remote_path == "192.168.1.10:/exports/updated"
+    assert saved.project_id == "PROJ-NEW"
+    assert saved.nfs_client_version == "4.2"
+    assert saved.status == MountStatus.MOUNTED
+
+    assert provider.unmount_calls == ["/nfs/original"]
+    assert provider.mount_calls == [
+        {
+            "mount_type": MountType.NFS,
+            "remote_path": "192.168.1.10:/exports/updated",
+            "local_mount_point": "/nfs/original",
+            "credentials_file": None,
+            "username": None,
+            "password": None,
+            "nfs_client_version": "4.2",
+        }
+    ]
+
+
 def test_update_mount_uses_stored_credentials_when_not_resubmitted(db):
     from app.schemas.network import MountUpdate
     from app.services import mount_service
@@ -338,6 +418,79 @@ def test_update_mount_uses_stored_credentials_when_not_resubmitted(db):
             "credentials_file": None,
             "username": "svc-reader",
             "password": "super-secret",
+        }
+    ]
+
+
+def test_update_mount_remounts_live_nfs_share_with_new_client_version(db):
+    from app.schemas.network import MountUpdate
+    from app.services import mount_service
+
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="192.168.1.10:/exports/original",
+        project_id="PROJ-ORIGINAL",
+        local_mount_point="/nfs/original",
+        status=MountStatus.MOUNTED,
+        nfs_client_version="4.1",
+    )
+    db.add(mount)
+    db.commit()
+    db.refresh(mount)
+
+    class StatefulProvider:
+        def __init__(self):
+            self.mount_calls = []
+            self.unmount_calls = []
+
+        def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None, nfs_client_version=None):
+            self.mount_calls.append(
+                {
+                    "mount_type": mount_type,
+                    "remote_path": remote_path,
+                    "local_mount_point": local_mount_point,
+                    "credentials_file": credentials_file,
+                    "username": username,
+                    "password": password,
+                    "nfs_client_version": nfs_client_version,
+                }
+            )
+            return True, None
+
+        def os_unmount(self, local_mount_point: str):
+            self.unmount_calls.append(local_mount_point)
+            return True, None
+
+    provider = StatefulProvider()
+
+    with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
+         patch("app.services.mount_service._validate_mount_directory_owner", return_value=None):
+        result = mount_service.update_mount(
+            mount.id,
+            MountUpdate(
+                type=MountType.NFS,
+                remote_path="192.168.1.10:/exports/updated",
+                project_id="PROJ-UPDATED",
+                nfs_client_version="4.2",
+            ),
+            db,
+            provider=provider,
+        )
+
+    assert result.status == MountStatus.MOUNTED
+    assert result.remote_path == "192.168.1.10:/exports/updated"
+    assert result.project_id == "PROJ-UPDATED"
+    assert result.nfs_client_version == "4.2"
+    assert provider.unmount_calls == ["/nfs/original"]
+    assert provider.mount_calls == [
+        {
+            "mount_type": MountType.NFS,
+            "remote_path": "192.168.1.10:/exports/updated",
+            "local_mount_point": "/nfs/original",
+            "credentials_file": None,
+            "username": None,
+            "password": None,
+            "nfs_client_version": "4.2",
         }
     ]
 
@@ -761,7 +914,7 @@ def test_add_mount_logs_useful_info_on_nfs_failure(manager_client, db, caplog):
     )
 
 
-def test_list_mounts(client, db):
+def test_list_mounts(manager_client, db):
     mount = NetworkMount(
         type=MountType.NFS,
         remote_path="192.168.1.1:/data",
@@ -771,11 +924,30 @@ def test_list_mounts(client, db):
     db.add(mount)
     db.commit()
 
-    response = client.get("/mounts")
+    response = manager_client.get("/mounts")
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 1
     assert data[0]["local_mount_point"] == "/mnt/data"
+
+
+def test_list_mounts_redacts_sensitive_paths_for_auditor(auditor_client, db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="192.168.1.1:/data",
+        local_mount_point="/mnt/data",
+        status=MountStatus.MOUNTED,
+    )
+    db.add(mount)
+    db.commit()
+
+    response = auditor_client.get("/mounts")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["remote_path"] == "[REDACTED]"
+    assert data[0]["local_mount_point"] == "[REDACTED]"
 
 
 def test_delete_mount(manager_client, db):
