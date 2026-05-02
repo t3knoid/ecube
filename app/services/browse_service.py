@@ -82,6 +82,23 @@ def _lookup_mount_root(path: str, db: Session) -> Tuple[Optional[str], str, Opti
     return None, "unknown", None
 
 
+def _lookup_network_mount_root_by_id(mount_id: int, db: Session) -> Tuple[Optional[str], Optional[str]]:
+    net_path = (
+        db.query(NetworkMount.local_mount_point, NetworkMount.type)
+        .filter(
+            NetworkMount.id == mount_id,
+            NetworkMount.status == MountStatus.MOUNTED,
+            NetworkMount.local_mount_point.isnot(None),
+            NetworkMount.local_mount_point != "",
+        )
+        .first()
+    )
+    if net_path and net_path[0]:
+        mount_type = net_path[1].value.lower() if net_path[1] is not None else None
+        return net_path[0].rstrip("/"), mount_type
+    return None, None
+
+
 def _browse_surface_label(root_source: str, network_mount_type: Optional[str]) -> str:
     if root_source != "network_mount" or not network_mount_type:
         return root_source
@@ -246,7 +263,8 @@ def _stat_entry(parent: str, name: str) -> Optional[BrowseEntry]:
 
 def list_directory(
     *,
-    path: str,
+    path: Optional[str],
+    mount_id: Optional[int],
     subdir: str,
     page: int,
     page_size: int,
@@ -259,8 +277,11 @@ def list_directory(
     Parameters
     ----------
     path:
-        The mount root to browse.  Must match an active USB drive mount path
+        The mount root to browse. Must match an active USB drive mount path
         or network mount local mount point registered in the database.
+    mount_id:
+        Trusted network mount identifier that resolves to a mounted network
+        share without requiring the client to know its local mount point.
     subdir:
         Relative subdirectory within the mount root.  Empty string for root.
     page:
@@ -287,14 +308,25 @@ def list_directory(
     # 1. Validate mount root against DB — returns the DB-stored (trusted) value
     #    or None.  Using the DB-stored value means all subsequent filesystem
     #    operations are derived from a trusted source, not from user input.
-    db_mount_root, root_source, network_mount_type = _lookup_mount_root(path, db)
+    if mount_id is not None:
+        db_mount_root, network_mount_type = _lookup_network_mount_root_by_id(mount_id, db)
+        root_source = "network_mount"
+        requested_root = f"mount_id:{mount_id}"
+    else:
+        db_mount_root, root_source, network_mount_type = _lookup_mount_root(path or "", db)
+        requested_root = path or ""
+
     real_root: Optional[str] = None
     real_target: Optional[str] = None
     try:
         if db_mount_root is None:
             raise HTTPException(
                 status_code=403,
-                detail="The requested path is not a registered active mount root.",
+                detail=(
+                    "The requested mount is not a registered active mount root."
+                    if mount_id is not None
+                    else "The requested path is not a registered active mount root."
+                ),
             )
 
         if root_source == "usb_drive" and not is_active_mount_point(db_mount_root):
@@ -333,7 +365,7 @@ def list_directory(
                 network_mount_type=network_mount_type,
                 page=page,
                 page_size=page_size,
-                path=path,
+                path=requested_root,
                 subdir=subdir,
                 real_root=real_root,
                 real_target=real_target,
@@ -350,7 +382,7 @@ def list_directory(
                 network_mount_type=network_mount_type,
                 page=page,
                 page_size=page_size,
-                path=path,
+                path=requested_root,
                 subdir=subdir,
                 real_root=real_root,
                 real_target=real_target,
@@ -367,7 +399,7 @@ def list_directory(
                 network_mount_type=network_mount_type,
                 page=page,
                 page_size=page_size,
-                path=path,
+                path=requested_root,
                 subdir=subdir,
                 real_root=real_root,
                 real_target=real_target,
@@ -384,7 +416,7 @@ def list_directory(
                 network_mount_type=network_mount_type,
                 page=page,
                 page_size=page_size,
-                path=path,
+                path=requested_root,
                 subdir=subdir,
                 real_root=real_root,
                 real_target=real_target,
@@ -413,7 +445,8 @@ def list_directory(
             "BROWSE_DIRECTORY",
             actor_id=actor,
             metadata={
-                "path": path,
+                "path": requested_root,
+                "mount_id": mount_id,
                 "subdir": subdir,
                 "real_root": real_root,
                 "resolved_path": real_target,
@@ -426,7 +459,7 @@ def list_directory(
         )
 
         return BrowseResponse(
-            path=db_mount_root,
+            path=requested_root,
             subdir=subdir,
             entries=entries,
             total=total,
@@ -443,7 +476,8 @@ def list_directory(
                 actor_id=actor,
                 level=logging.WARNING,
                 metadata={
-                    "path": path,
+                    "path": requested_root,
+                    "mount_id": mount_id,
                     "subdir": subdir,
                     "real_root": real_root,
                     "resolved_path": real_target,

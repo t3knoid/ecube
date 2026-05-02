@@ -65,7 +65,7 @@ def update_mount(
 @router.get("", response_model=List[NetworkMountSchema], responses={**R_401, **R_403})
 def list_mounts(
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(_ALL_ROLES),
+    current_user: CurrentUser = Depends(_ALL_ROLES),
 ):
     """List all registered network mounts and their connectivity status.
 
@@ -73,7 +73,7 @@ def list_mounts(
 
     **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
     """
-    return mount_service.list_mounts(db)
+    return mount_service.list_mounts(db, user_roles=current_user.roles)
 
 
 @router.post("/validate", response_model=List[NetworkMountSchema], responses={**R_401, **R_403, **R_500})

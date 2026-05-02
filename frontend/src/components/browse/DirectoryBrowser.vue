@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getDirectory } from '@/api/browse.js'
+import { getDirectory, getDirectoryByMountId } from '@/api/browse.js'
 import Pagination from '@/components/common/Pagination.vue'
 import { logger } from '@/utils/logger.js'
 
@@ -9,7 +9,11 @@ const props = defineProps({
   /** The mount root path (USB mount_path or network local_mount_point). */
   mountPath: {
     type: String,
-    required: true,
+    default: '',
+  },
+  mountId: {
+    type: Number,
+    default: null,
   },
   rootLabel: {
     type: String,
@@ -94,7 +98,9 @@ async function loadEntries() {
   loading.value = true
   error.value = ''
   try {
-    const result = await getDirectory(props.mountPath, subdir.value, page.value, pageSize.value)
+    const result = props.mountId != null
+      ? await getDirectoryByMountId(props.mountId, subdir.value, page.value, pageSize.value)
+      : await getDirectory(props.mountPath, subdir.value, page.value, pageSize.value)
     entries.value = result.entries
     total.value = result.total
   } catch (err) {
@@ -106,7 +112,7 @@ async function loadEntries() {
 }
 
 watch(
-  () => props.mountPath,
+  () => [props.mountPath, props.mountId],
   () => {
     subdir.value = ''
     page.value = 1

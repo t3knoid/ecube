@@ -81,8 +81,8 @@ function mountView() {
           `,
         },
         DirectoryBrowser: {
-          props: ['mountPath'],
-          template: '<div class="directory-browser-stub">{{ mountPath }}</div>',
+          props: ['mountPath', 'mountId', 'rootLabel'],
+          template: '<div class="directory-browser-stub">{{ mountId ?? mountPath }}|{{ rootLabel }}</div>',
         },
         StatusBadge: {
           props: ['status'],
@@ -144,7 +144,8 @@ describe('MountDetailView', () => {
     await browseButton.trigger('click')
     await flushPromises()
 
-    expect(wrapper.find('.directory-browser-stub').text()).toContain('/smb/project2')
+    expect(wrapper.find('.directory-browser-stub').text()).toContain('11')
+    expect(wrapper.find('.directory-browser-stub').text()).toContain('PROJ-011')
   })
 
   it('opens the edit dialog prefilled and submits updates through validateMount and updateMount', async () => {
@@ -246,5 +247,12 @@ describe('MountDetailView', () => {
     expect(wrapper.text()).not.toContain('//server/share')
     expect(wrapper.text()).not.toContain('/smb/project2')
     expect(wrapper.text()).toContain(i18n.global.t('mounts.redactedValue'))
+
+    const browseButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.browse'))
+    await browseButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.directory-browser-stub').text()).toContain('11')
+    expect(wrapper.find('.directory-browser-stub').text()).toContain('PROJ-011')
   })
 })
