@@ -42,7 +42,7 @@
   - `current_project_id` (nullable string) — set during initialization to
     bind the drive to a project for isolation enforcement. Remains `NULL`
     until the drive is initialized via `POST /drives/{drive_id}/initialize`.
-  - `current_state` — FSM column (`DISCONNECTED`, `AVAILABLE`, `IN_USE`);
+  - `current_state` — FSM column (`DISCONNECTED`, `UNMOUNTED`, `AVAILABLE`, `IN_USE`);
     transitions to `IN_USE` when `current_project_id` is bound and back to
     `AVAILABLE` after prepare-eject. Custody handoff is recorded in audit and
     snapshot data without introducing a separate drive lifecycle state.
@@ -172,8 +172,8 @@ This section documents the concrete table layout represented by the SQLAlchemy m
 - `available_bytes` (BigInteger, nullable)
 - `encryption_status` (String, nullable)
 - `filesystem_type` (String, nullable)
-- `current_state` (Enum `DriveState: DISCONNECTED | AVAILABLE | IN_USE`, `native_enum=False`, default `AVAILABLE`)
-  - Transitions: `EMPTY ↔ AVAILABLE` (discovery), `AVAILABLE → IN_USE` (init), `IN_USE → AVAILABLE` (prepare-eject)
+- `current_state` (Enum `DriveState: DISCONNECTED | UNMOUNTED | AVAILABLE | IN_USE`, `native_enum=False`, default `AVAILABLE`)
+  - Transitions: `DISCONNECTED ↔ UNMOUNTED ↔ AVAILABLE` (discovery and port enablement), `AVAILABLE → IN_USE` (init), `IN_USE → AVAILABLE` (prepare-eject)
 - `current_project_id` (String, nullable)
 - `last_seen_at` (DateTime with timezone, auto-updated on change)
 

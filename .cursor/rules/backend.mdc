@@ -30,7 +30,7 @@ Apply when touching Python backend code, API endpoints, services, models, reposi
 ## Domain Rules
 
 - Drive lifecycle transitions must be atomic
-- Drive FSM is `DISCONNECTED -> AVAILABLE -> IN_USE`
+- Drive FSM is `DISCONNECTED -> UNMOUNTED -> AVAILABLE -> IN_USE`
 - Background copy tasks must not starve the system
 
 ## Filesystem and Pagination
