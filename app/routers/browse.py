@@ -1,12 +1,12 @@
 """Browse router — ``GET /browse``.
 
 Returns a paginated directory listing for an active USB drive mount path
-or network share mount point.
+or a trusted network-share selector.
 
 Security is enforced by :mod:`app.services.browse_service` before any
 filesystem call:
 
-1. ``path`` must match a registered, ECUBE-managed mount root from the DB.
+1. Exactly one of ``path`` or ``mount_id`` must select a trusted browse root.
 2. ``subdir`` containment is verified via ``realpath``.
 3. The resolved path must start with one of the configured allowed prefixes.
 4. Every call is written to ``audit_logs`` with action ``BROWSE_DIRECTORY``.
@@ -78,9 +78,9 @@ def browse_directory(
 ):
     """List directory contents of an active USB drive or network share mount.
 
-    The ``path`` parameter must be an active ECUBE-registered mount root —
-    either a USB drive ``mount_path`` or a network mount ``local_mount_point``.
-    Arbitrary filesystem paths are rejected with ``403``.
+    Provide exactly one trusted browse root selector. ``path`` can target an
+    active ECUBE-registered mount root, and ``mount_id`` can target a mounted
+    registered network share without exposing its local mount path.
 
     The optional ``subdir`` parameter is a relative path within that root.
     Path-traversal attempts (e.g. ``../../etc``) are detected via ``realpath``
