@@ -174,7 +174,7 @@ describe('DriveDetailView mount workflow', () => {
 
   it('keeps recovery actions consistent when enable reloads a mounted in-use drive', async () => {
     mocks.getDrives
-      .mockResolvedValueOnce([buildDrive({ current_state: 'DISCONNECTED', filesystem_path: '/dev/sdb1', port_id: 1 })])
+      .mockResolvedValueOnce([buildDrive({ current_state: 'UNMOUNTED', filesystem_path: '/dev/sdb1', port_id: 1 })])
       .mockResolvedValueOnce([buildDrive({ current_state: 'IN_USE', mount_path: '/mnt/ecube/7', filesystem_path: '/dev/sdb1', current_project_id: null })])
     mocks.enablePort.mockResolvedValue({ id: 1, enabled: true })
     mocks.refreshDrives.mockResolvedValue({ ok: true })
