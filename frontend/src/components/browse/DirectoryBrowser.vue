@@ -1,15 +1,18 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getDirectory } from '@/api/browse.js'
-import Pagination from '@/components/common/Pagination.vue'
+import { getDirectory, getDirectoryByMountId } from '@/api/browse.js'
 import { logger } from '@/utils/logger.js'
 
 const props = defineProps({
   /** The mount root path (USB mount_path or network local_mount_point). */
   mountPath: {
     type: String,
-    required: true,
+    default: '',
+  },
+  mountId: {
+    type: Number,
+    default: null,
   },
   rootLabel: {
     type: String,
@@ -27,7 +30,7 @@ const page = ref(1)
 const pageSize = ref(100)
 
 const entries = ref([])
-const total = ref(0)
+const hasMore = ref(false)
 const loading = ref(false)
 const error = ref('')
 
@@ -94,9 +97,11 @@ async function loadEntries() {
   loading.value = true
   error.value = ''
   try {
-    const result = await getDirectory(props.mountPath, subdir.value, page.value, pageSize.value)
+    const result = props.mountId != null
+      ? await getDirectoryByMountId(props.mountId, subdir.value, page.value, pageSize.value)
+      : await getDirectory(props.mountPath, subdir.value, page.value, pageSize.value)
     entries.value = result.entries
-    total.value = result.total
+    hasMore.value = Boolean(result.has_more)
   } catch (err) {
     logger.error('[DirectoryBrowser] Failed to load directory listing:', err)
     error.value = t('browse.loadError')
@@ -106,7 +111,7 @@ async function loadEntries() {
 }
 
 watch(
-  () => props.mountPath,
+  () => [props.mountPath, props.mountId],
   () => {
     subdir.value = ''
     page.value = 1
@@ -148,6 +153,18 @@ function onRowArrowKey(event) {
   if (next >= 0 && next < buttons.length) {
     event.preventDefault()
     buttons[next].focus()
+  }
+}
+
+function goToPreviousPage() {
+  if (page.value > 1) {
+    page.value -= 1
+  }
+}
+
+function goToNextPage() {
+  if (hasMore.value) {
+    page.value += 1
   }
 }
 </script>
@@ -267,8 +284,11 @@ function onRowArrowKey(event) {
     </table>
     </div>
 
-    <!-- Pagination -->
-    <Pagination v-if="total > pageSize" v-model:page="page" :page-size="pageSize" :total="total" />
+    <div v-if="page > 1 || hasMore" class="browse-pagination" role="navigation" :aria-label="t('common.labels.pagination')">
+      <span class="page-label">{{ page }}</span>
+      <button type="button" class="btn page-btn" :disabled="page <= 1" @click="goToPreviousPage">{{ t('common.actions.previous') }}</button>
+      <button type="button" class="btn page-btn" :disabled="!hasMore" @click="goToNextPage">{{ t('common.actions.next') }}</button>
+    </div>
   </div>
 </template>
 
@@ -318,6 +338,23 @@ function onRowArrowKey(event) {
 /* Table */
 .dir-table-scroll {
   overflow-x: auto;
+}
+
+.browse-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.page-label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.page-btn {
+  background: var(--color-bg-secondary);
 }
 
 .dir-table {

@@ -225,6 +225,12 @@ function openRelatedJob(jobId) {
   router.push({ name: 'job-detail', params: { id: normalizedJobId } })
 }
 
+function openMountDetails(mountId) {
+  const normalizedMountId = Number(mountId)
+  if (!Number.isInteger(normalizedMountId) || normalizedMountId < 1) return
+  router.push({ name: 'mount-detail', params: { id: normalizedMountId } })
+}
+
 async function loadPublicAuthConfig() {
   try {
     const config = await getPublicAuthConfig()
@@ -340,9 +346,7 @@ function browseLabel(mount) {
 }
 
 function mountRootLabel(mount) {
-  const mountPath = String(mount?.local_mount_point || '').trim()
-  const parts = mountPath.split('/').filter(Boolean)
-  return parts.at(-1) || t('mounts.browse')
+  return formatProjectId(mount?.project_id)
 }
 
 function formValid() {
@@ -592,19 +596,14 @@ function closeRowActionsMenu(event) {
   }
 }
 
-function handleMenuEdit(mount, event) {
+function handleMenuDetails(mount, event) {
   closeRowActionsMenu(event)
-  openEditDialog(mount, event)
+  openMountDetails(mount.id)
 }
 
 function handleMenuBrowse(mount, event) {
   closeRowActionsMenu(event)
   void toggleBrowse(mount.id)
-}
-
-function handleMenuRemove(mount, event) {
-  closeRowActionsMenu(event)
-  requestRemove(mount)
 }
 
 const browsePanelRef = ref(null)
@@ -737,18 +736,17 @@ onBeforeUnmount(() => {
       <template #cell-last_checked_at="{ row }">{{ toIso(row.last_checked_at) }}</template>
       <template #cell-actions="{ row }">
         <div class="row-actions">
-          <button v-if="canManageMounts" class="btn" @click="openEditDialog(row, $event)">{{ t('common.actions.edit') }}</button>
+          <button class="btn" @click="openMountDetails(row.id)">{{ t('mounts.details') }}</button>
           <button
             class="btn"
-            :disabled="row.status !== 'MOUNTED' || !row.local_mount_point"
-            :title="row.status !== 'MOUNTED' || !row.local_mount_point ? t('mounts.browseUnavailable') : ''"
+            :disabled="row.status !== 'MOUNTED'"
+            :title="row.status !== 'MOUNTED' ? t('mounts.browseUnavailable') : ''"
             :aria-expanded="browsingMountId === row.id"
             :aria-label="browseLabel(row)"
             @click="toggleBrowse(row.id)"
           >
             {{ t('mounts.browse') }}
           </button>
-          <button v-if="canManageMounts" class="btn btn-danger" @click="requestRemove(row)">{{ t('mounts.remove') }}</button>
         </div>
         <details class="row-actions-menu">
           <summary class="row-actions-toggle" :aria-label="`${formatProjectId(row.project_id)} mount actions`">
@@ -760,28 +758,20 @@ onBeforeUnmount(() => {
           </summary>
           <div class="row-actions-popover">
             <button
-              v-if="canManageMounts"
-              class="btn row-action-menu-edit"
-              @click="handleMenuEdit(row, $event)"
+              class="btn row-action-menu-details"
+              @click="handleMenuDetails(row, $event)"
             >
-              {{ t('common.actions.edit') }}
+              {{ t('mounts.details') }}
             </button>
             <button
               class="btn row-action-menu-browse"
-              :disabled="row.status !== 'MOUNTED' || !row.local_mount_point"
-              :title="row.status !== 'MOUNTED' || !row.local_mount_point ? t('mounts.browseUnavailable') : ''"
+              :disabled="row.status !== 'MOUNTED'"
+              :title="row.status !== 'MOUNTED' ? t('mounts.browseUnavailable') : ''"
               :aria-expanded="browsingMountId === row.id"
               :aria-label="browseLabel(row)"
               @click="handleMenuBrowse(row, $event)"
             >
               {{ t('mounts.browse') }}
-            </button>
-            <button
-              v-if="canManageMounts"
-              class="btn btn-danger row-action-menu-remove"
-              @click="handleMenuRemove(row, $event)"
-            >
-              {{ t('mounts.remove') }}
             </button>
           </div>
         </details>
@@ -799,7 +789,7 @@ onBeforeUnmount(() => {
         {{ t('browse.browseMountContents') }}: {{ formatProjectId(activeBrowsedMount.project_id) }}
       </h3>
       <DirectoryBrowser
-        :mount-path="activeBrowsedMount.local_mount_point"
+        :mount-id="activeBrowsedMount.id"
         :root-label="mountRootLabel(activeBrowsedMount)"
       />
     </section>
