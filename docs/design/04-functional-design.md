@@ -11,23 +11,24 @@
 
 - Implement a finite-state machine for drive states and legal transitions.
 - Gate all transitions through a single service module to ensure consistency.
-- The recommended persisted drive states are `DISCONNECTED`, `UNMOUNTED`, `AVAILABLE`, and `IN_USE`.
+- The active persisted drive states are `DISCONNECTED`, `DISABLED`, `AVAILABLE`, and `IN_USE`; `UNMOUNTED` remains in the enum only for legacy compatibility during reconciliation.
 
 ### 4.1.0 Recommended Drive State Semantics
 
 - `DISCONNECTED` — drive record exists but the hardware is not presently physically available.
-- `UNMOUNTED` — drive is physically present but not yet operator-ready, typically because its port is disabled.
+- `DISABLED` — drive is physically present but not yet operator-ready because its port is disabled.
 - `AVAILABLE` — drive is present, writable, and eligible for initialization or job assignment.
 - `IN_USE` — drive is actively assigned to a project/job workflow and may receive data writes.
+- `UNMOUNTED` — retained legacy enum value that should reconcile forward to `DISABLED` or `AVAILABLE` on the next discovery pass.
 
 Recommended legal transitions:
 
-- `DISCONNECTED → UNMOUNTED` when hardware is rediscovered on a disabled port.
+- `DISCONNECTED → DISABLED` when hardware is rediscovered on a disabled port.
 - `DISCONNECTED → AVAILABLE` on discovery of a usable drive on an enabled port.
-- `UNMOUNTED → AVAILABLE` when the port becomes enabled and discovery reruns.
+- `DISABLED → AVAILABLE` when the port becomes enabled and discovery reruns.
 - `AVAILABLE → IN_USE` on initialize or job assignment.
 - `IN_USE → AVAILABLE` on prepare-eject.
-- `AVAILABLE → UNMOUNTED` on disabled-port reconciliation.
+- `AVAILABLE → DISABLED` on disabled-port reconciliation.
 - `AVAILABLE → DISCONNECTED` on physical removal.
 
 Note: custody handoff confirmation records legal transfer details for the assigned drive but does not introduce a separate archival drive state. The expected operational flow remains `IN_USE → AVAILABLE` (prepare-eject) followed by custody handoff recording on the related job.
@@ -387,9 +388,9 @@ Reconciliation runs during application startup, before the service begins normal
 ### 4.11.3 Drive Reconciliation
 
 - Delegates to the normal discovery refresh path (see § 4.10) with `actor="system"`.
-- This re-reads the USB topology and applies the standard drive FSM transitions (`DISCONNECTED ↔ UNMOUNTED ↔ AVAILABLE`, with `IN_USE` preserved).
+- This re-reads the USB topology and applies the standard drive FSM transitions (`DISCONNECTED ↔ DISABLED ↔ AVAILABLE`, with `IN_USE` preserved, and legacy `UNMOUNTED` rows reconciled forward).
 - Startup mount reconciliation runs before this discovery pass so previously mounted managed USB drives can be returned to their expected ECUBE mount slots before steady-state discovery refreshes drive state.
-- Drives that are no longer physically present and were `AVAILABLE` or `UNMOUNTED` are transitioned to `DISCONNECTED`.
+- Drives that are no longer physically present and were `AVAILABLE`, `DISABLED`, or legacy `UNMOUNTED` are transitioned to `DISCONNECTED`.
 
 ### Failure Isolation
 
