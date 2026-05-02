@@ -110,20 +110,20 @@ describe('DrivesView rescan and filter loading', () => {
     mocks.refreshDrives.mockResolvedValue({ ok: true })
   })
 
-  it('loads all drives by default including disconnected drives', async () => {
+  it('loads drives by default without disconnected rows', async () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(mocks.getDrives).toHaveBeenCalledWith({ include_disconnected: true })
+    expect(mocks.getDrives).toHaveBeenCalledWith({})
     expect(wrapper.findAll('select')[0].text()).not.toContain('Archived')
   })
 
-  it('requests disconnected drives when switching the filter to All', async () => {
+  it('requests disconnected drives when Show Disconnected drives is enabled', async () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const selects = wrapper.findAll('select')
-    await selects[0].setValue('ALL')
+    const checkbox = wrapper.find('input[type="checkbox"]')
+    await checkbox.setValue(true)
     await flushPromises()
 
     expect(mocks.getDrives).toHaveBeenLastCalledWith({ include_disconnected: true })
@@ -140,7 +140,7 @@ describe('DrivesView rescan and filter loading', () => {
     await flushPromises()
 
     expect(mocks.refreshDrives).toHaveBeenCalledTimes(1)
-    expect(mocks.getDrives).toHaveBeenLastCalledWith({ include_disconnected: true })
+    expect(mocks.getDrives).toHaveBeenLastCalledWith({})
     expect(wrapper.find('select').element.value).toBe('ALL')
   })
 
@@ -159,7 +159,7 @@ describe('DrivesView rescan and filter loading', () => {
     await flushPromises()
 
     expect(wrapper.find('select').element.value).toBe('ALL')
-    expect(mocks.getDrives).toHaveBeenLastCalledWith({ include_disconnected: true })
+    expect(mocks.getDrives).toHaveBeenLastCalledWith({})
   })
 
   it('shows the readable device label, project, and related job ID in the list', async () => {

@@ -98,7 +98,7 @@ const { driveStateLabel } = useStatusLabels()
 const driveId = computed(() => Number(route.params.id))
 const canManage = computed(() => authStore.hasAnyRole(['admin', 'manager']))
 const canEnable = computed(
-  () => drive.value?.current_state === 'DISCONNECTED'
+  () => drive.value?.current_state === 'UNMOUNTED'
     && drive.value?.port_id != null
     && !!drive.value?.filesystem_path
     && canManage.value,
