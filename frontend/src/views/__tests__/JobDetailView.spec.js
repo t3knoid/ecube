@@ -287,6 +287,31 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).not.toContain(i18n.global.t('common.errors.requestConflict'))
   })
 
+  it('shows the drive-capacity shortfall guidance returned by start', async () => {
+    mocks.startJob.mockRejectedValue({
+      response: {
+        status: 409,
+        data: {
+          code: 'DRIVE_CAPACITY_SHORTFALL',
+          message: 'Selected drive does not have enough available space to start this copy. Estimated source size: 4096 bytes; available drive space: 1024 bytes; shortfall: 3072 bytes. Choose another drive or use the follow-on overflow workflow.',
+        },
+      },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const startButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.start'))
+    await startButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.startJob).toHaveBeenCalledWith(6, { thread_count: 4 })
+    expect(wrapper.text()).toContain('Selected drive does not have enough available space to start this copy.')
+    expect(wrapper.text()).toContain('shortfall: 3072 bytes')
+    expect(wrapper.text()).toContain('Choose another drive or use the follow-on overflow workflow.')
+    expect(wrapper.text()).not.toContain(i18n.global.t('common.errors.requestConflict'))
+  })
+
   it('opens the job-scoped CoC dialog on initial load when requested by route query', async () => {
     routeState.query = { coc: '1' }
     mocks.getJobChainOfCustody.mockResolvedValue({
