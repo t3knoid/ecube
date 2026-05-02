@@ -1268,20 +1268,22 @@ curl -k -X POST https://localhost:8443/jobs/1/verify \
 > On success the job transitions to `COMPLETED`; on failure it transitions
 > to `FAILED`. Poll `GET /jobs/{job_id}` for the final result.
 
-### Generate Manifest
+### Download Manifest
 
-Creates a JSON manifest file on the USB drive listing all copied files with
-their checksums, sizes, and job metadata. Used for chain-of-custody
-documentation and compliance audits.
+ECUBE automatically creates a JSON manifest file on the assigned USB drive when
+a job reaches a clean `COMPLETED` state with no failed or timed-out files. The
+manifest lists copied files with their checksums, sizes, and job metadata for
+chain-of-custody documentation and compliance audits.
 
 ```bash
 # Requires admin, manager, or processor role
-curl -k -X POST https://localhost:8443/jobs/1/manifest \
+curl -k https://localhost:8443/jobs/1/manifest/download \
   -H "Authorization: Bearer $JWT_TOKEN"
 ```
 
 > **Note:** The manifest is written to the target USB drive as a plain JSON
-> file. It can be generated at any point after the job has started.
+> file when the job completes cleanly. The download endpoint returns that
+> generated `manifest.json` file for operator retrieval.
 
 ### Get File Hashes
 
@@ -1354,7 +1356,7 @@ A complete evidence export follows this sequence:
 6. **Start copy** — `POST /jobs/{job_id}/start`
 7. **Monitor progress** — poll `GET /jobs/{job_id}` until `status` is `COMPLETED` or `FAILED`, and derive cumulative active duration or copy rate from `active_duration_seconds`, `started_at`, and `copied_bytes` when needed
 8. **Verify** — `POST /jobs/{job_id}/verify` to confirm data integrity
-9. **Generate manifest** — `POST /jobs/{job_id}/manifest` for chain-of-custody records
+9. **Download manifest** — `GET /jobs/{job_id}/manifest/download` after clean completion auto-generates it for chain-of-custody records
 10. **Eject drive** — `POST /drives/{drive_id}/prepare-eject` for safe removal
 
 ---
