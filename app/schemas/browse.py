@@ -34,13 +34,13 @@ class BrowseEntry(BaseModel):
 class BrowseResponse(BaseModel):
     """Paginated directory listing returned by ``GET /browse``."""
 
-    path: str = Field(..., description="The validated mount root that was browsed")
+    path: str = Field(..., description="The validated browse root selector that was used for the request")
     subdir: str = Field(
         ..., description="Relative subdirectory within the mount root (empty string for root)"
     )
     entries: List[BrowseEntry] = Field(
         ..., description="Paginated list of directory entries"
     )
-    total: int = Field(..., description="Total number of entries in the directory (before pagination)")
     page: int = Field(..., description="Current page number (1-based)")
     page_size: int = Field(..., description="Number of entries per page")
+    has_more: bool = Field(..., description="Whether another page of entries exists after the current page")

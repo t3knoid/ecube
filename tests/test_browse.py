@@ -78,7 +78,7 @@ class TestBrowseHappyPath:
         assert data["subdir"] == ""
         assert data["page"] == 1
         assert data["page_size"] == 100
-        assert data["total"] == 2
+        assert data["has_more"] is False
 
         names = {e["name"] for e in data["entries"]}
         assert "report.pdf" in names
@@ -123,11 +123,11 @@ class TestBrowseHappyPath:
         assert response.status_code == 200
         data = response.json()
         assert data["subdir"] == "docs"
-        assert data["total"] == 1
+        assert data["has_more"] is False
         assert data["entries"][0]["name"] == "contract.pdf"
 
     def test_browse_pagination(self, client, db, tmp_path):
-        """Pagination correctly slices entries and reports total."""
+        """Pagination correctly slices entries and reports whether another page exists."""
         mount_point = str(tmp_path)
         for i in range(15):
             (tmp_path / f"file_{i:02d}.txt").write_bytes(b"x")
@@ -140,15 +140,15 @@ class TestBrowseHappyPath:
 
         assert resp_p1.status_code == 200
         d1 = resp_p1.json()
-        assert d1["total"] == 15
         assert len(d1["entries"]) == 10
         assert d1["page"] == 1
+        assert d1["has_more"] is True
 
         assert resp_p2.status_code == 200
         d2 = resp_p2.json()
-        assert d2["total"] == 15
         assert len(d2["entries"]) == 5
         assert d2["page"] == 2
+        assert d2["has_more"] is False
 
     def test_browse_empty_directory(self, client, db, tmp_path):
         """Browsing an empty directory returns entries=[] and total=0."""
@@ -161,7 +161,7 @@ class TestBrowseHappyPath:
         assert response.status_code == 200
         data = response.json()
         assert data["entries"] == []
-        assert data["total"] == 0
+        assert data["has_more"] is False
 
     def test_browse_symlink_reported_not_followed(self, client, db, tmp_path):
         """Symlinks are listed as type 'symlink' and not dereferenced."""
