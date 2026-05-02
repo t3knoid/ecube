@@ -618,8 +618,8 @@ curl -sk https://localhost:8443/jobs/{job_id}/files \
 curl -sk -X POST https://localhost:8443/jobs/{job_id}/verify \
   -H "Authorization: Bearer $TOKEN" | jq
 
-# Generate manifest
-curl -sk -X POST https://localhost:8443/jobs/{job_id}/manifest \
+# Download manifest
+curl -sk https://localhost:8443/jobs/{job_id}/manifest/download \
   -H "Authorization: Bearer $TOKEN" | jq
 
 # Clear persisted startup-analysis cache after explicit confirmation
@@ -676,7 +676,7 @@ For the current Jobs page UI, verify the grouped `Create Job` dialog behaves as 
 - For a `COMPLETED` job with partial-success results, `admin`, `manager`, and `processor` see `Retry Failed Files` only when `files_failed` or `files_timed_out` is non-zero; `auditor` does not.
 - For that same partial-success `COMPLETED` job, the completion summary panel switches to the red failure styling instead of the normal success styling so the operator can visually distinguish the failed-copy result state.
 - Clicking `Retry Failed Files` moves the job back to `RUNNING`, preserves `DONE` file rows, and re-queues only the failed or timed-out file rows.
-- Verify `Verify` and `Generate Manifest` remain unavailable on that partial-success completion until the retried files finish cleanly and no failed or timed-out files remain.
+- Verify `Verify` and `Download Manifest` remain unavailable on that partial-success completion until the retried files finish cleanly and no failed or timed-out files remain.
 
 #### 11.4c Manual Startup Analysis Checks
 
@@ -1227,11 +1227,11 @@ These tests exercise real hardware paths that must be validated during manual QA
 | 1 | Edit a non-active job | Open a `PENDING`, `PAUSED`, or `FAILED` job, click `Edit`, change evidence number and source path, then save | Updated values persist on the detail page and the job remains bound to the same project |
 | 2 | Complete action is status-aware | Open one `PENDING` or `PAUSED` job and one `RUNNING` job | `Complete` is available only for the non-active job; the running job does not allow manual completion |
 | 3 | Delete pending job requires confirmation | Open a `PENDING` job, click `Delete`, confirm the dialog | The job is removed, the UI returns to the Jobs list, and the drive assignment is released |
-| 4 | Verify and Manifest are gated by real completion | Open a job that is still copying and watch the action bar, then open the same job after it reaches `COMPLETED` with 100% progress and no failed or timed-out files | `Verify` and `Generate Manifest` stay disabled until the job is truly complete, then become available |
-| 4a | Verify and Manifest stay blocked for partial-success completion | Open a `COMPLETED` job that still has one or more failed or timed-out files | `Verify` and `Generate Manifest` remain disabled, and direct API calls to `/jobs/{job_id}/verify` or `/jobs/{job_id}/manifest` return `409 Conflict` |
+| 4 | Verify and Manifest are gated by real completion | Open a job that is still copying and watch the action bar, then open the same job after it reaches `COMPLETED` with 100% progress and no failed or timed-out files | `Verify` and `Download Manifest` stay disabled until the job is truly complete, then become available |
+| 4a | Verify and Manifest stay blocked for partial-success completion | Open a `COMPLETED` job that still has one or more failed or timed-out files | `Verify` and `Download Manifest` remain disabled, and direct API calls to `/jobs/{job_id}/verify` or `/jobs/{job_id}/manifest` return `409 Conflict` |
 | 5 | Pause-in-progress feedback appears on Job Detail | Pause a running job from the detail page | A `Pause in progress` dialog appears until the job transitions to `PAUSED`, and `Start` stays unavailable during `PAUSING` |
 | 6 | Source versus destination compare is clear | Click `View Hashes` for a file, then run the compare action from Job Detail | Results show `Source`, `Destination`, and match details for path, size, and checksum; missing sides produce a sanitized conflict message |
-| 7 | Manifest success feedback shows a stable path | Generate the manifest twice for the same completed job | The UI shows a success banner with the destination path and the same `manifest.json` file is refreshed rather than multiplied |
+| 7 | Manifest download uses the stable file path | Let a job finish cleanly, then click `Download Manifest` from Job Detail | The browser starts a `manifest.json` download and the UI shows the stable destination path on the assigned drive |
 | 8 | Persisted failure reason outranks file summary | Open a failed job that has both a persisted job-level failure reason and file error rows | Job Detail shows the persisted failure reason first and does not replace it with the derived `error_summary` |
 | 9 | Unexpected copy failures redact absolute paths | Trigger a failed copy tied to a known file, then open Job Detail | The failure summary uses `Unexpected copy failure` with optional `source:` and `destination:` relative hints, and no absolute `/mnt/...` or `/nfs/...` path appears in the UI |
 | 10 | Startup-analysis cleanup control is role-gated | Open the same failed cached job as `manager` and as processor-only | `manager` sees `Clear startup analysis cache`; processor-only does not |
@@ -1300,7 +1300,7 @@ Walk through the complete data export lifecycle:
 
 9. **Verify checksums** — `POST /jobs/{job_id}/verify` — confirm all files pass.
 
-10. **Generate manifest** — `POST /jobs/{job_id}/manifest`.
+10. **Download manifest** — `GET /jobs/{job_id}/manifest/download` after the clean completion auto-generates `manifest.json`.
 
 11. **Prepare eject** — `POST /drives/{drive_id}/prepare-eject` — drive returns to `AVAILABLE`.
 
@@ -2131,7 +2131,7 @@ find . -type f | wc -l
 3. Create one ECUBE job per target drive using the same `source_path`.
 4. Start jobs and poll until terminal status.
 5. Run `POST /jobs/{job_id}/verify` for each completed job.
-6. Generate manifest for each completed job.
+6. Download the generated manifest for each cleanly completed job.
 7. Prepare-eject each drive and mount read-only on a verifier host.
 8. Recompute destination SHA-256 and compare with `source.sha256`.
 

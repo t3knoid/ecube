@@ -75,7 +75,6 @@ vi.mock('@/api/jobs.js', () => ({
   retryFailedJob: (...args) => mocks.retryFailedJob(...args),
   verifyJob: (...args) => mocks.verifyJob(...args),
   pauseJob: (...args) => mocks.pauseJob(...args),
-  generateManifest: (...args) => mocks.generateManifest(...args),
   downloadManifest: (...args) => mocks.downloadManifest(...args),
   updateJob: (...args) => mocks.updateJob(...args),
   completeJob: (...args) => mocks.completeJob(...args),
@@ -2131,12 +2130,11 @@ describe('JobDetailView start action', () => {
       await manifestButton.trigger('click')
       await flushPromises()
 
-      expect(mocks.generateManifest).toHaveBeenCalledWith(6)
       expect(mocks.downloadManifest).toHaveBeenCalledWith(6)
       expect(createObjectUrl).toHaveBeenCalledTimes(1)
       expect(clickSpy).toHaveBeenCalledTimes(1)
       expect(revokeObjectUrl).toHaveBeenCalledWith('blob:manifest')
-      expect(wrapper.text()).toContain('Manifest generated successfully.')
+      expect(wrapper.text()).toContain('Manifest download started.')
       expect(wrapper.text()).toContain('/mnt/ecube/1/manifest.json')
     } finally {
       URL.createObjectURL = originalCreateObjectUrl

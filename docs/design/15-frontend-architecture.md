@@ -293,7 +293,7 @@ Each module exports thin wrapper functions around Axios calls. Modules map 1:1 t
 | `drives.js` | `GET /drives`, `POST /drives/{drive_id}/initialize`, `POST /drives/{drive_id}/format`, `POST /drives/{drive_id}/prepare-eject` | DrivesView, DriveDetailView, DashboardView, AuditView |
 | `browse.js` | `GET /browse` | DirectoryBrowser, DriveDetailView, MountsView, MountDetailView |
 | `mounts.js` | `GET /mounts`, `POST /mounts`, `PATCH /mounts/{mount_id}`, `DELETE /mounts/{mount_id}` | MountsView |
-| `jobs.js` | `GET /jobs`, `POST /jobs`, `PUT /jobs/{job_id}`, `DELETE /jobs/{job_id}`, `POST /jobs/{job_id}/start`, `POST /jobs/{job_id}/pause`, `POST /jobs/{job_id}/complete`, `POST /jobs/{job_id}/archive`, `GET /jobs/{job_id}`, `GET /jobs/{job_id}/chain-of-custody`, `POST /jobs/{job_id}/chain-of-custody/refresh`, `POST /jobs/{job_id}/chain-of-custody/handoff`, `POST /jobs/{job_id}/verify`, `POST /jobs/{job_id}/manifest` | JobsView, JobDetailView, DashboardView |
+| `jobs.js` | `GET /jobs`, `POST /jobs`, `PUT /jobs/{job_id}`, `DELETE /jobs/{job_id}`, `POST /jobs/{job_id}/start`, `POST /jobs/{job_id}/pause`, `POST /jobs/{job_id}/complete`, `POST /jobs/{job_id}/archive`, `GET /jobs/{job_id}`, `GET /jobs/{job_id}/chain-of-custody`, `POST /jobs/{job_id}/chain-of-custody/refresh`, `POST /jobs/{job_id}/chain-of-custody/handoff`, `POST /jobs/{job_id}/verify`, `POST /jobs/{job_id}/manifest`, `GET /jobs/{job_id}/manifest/download` | JobsView, JobDetailView, DashboardView |
 | `audit.js` | `GET /audit` | AuditView |
 | `files.js` | `GET /files/{file_id}/hashes`, `POST /files/compare` | JobDetailView (hash viewer, file compare) |
 | `users.js` | `GET /users`, `GET /users/{username}/roles`, `PUT /users/{username}/roles`, `DELETE /users/{username}/roles` | UsersView |
