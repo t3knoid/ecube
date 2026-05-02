@@ -30,7 +30,8 @@ Apply when touching Python backend code, API endpoints, services, models, reposi
 ## Domain Rules
 
 - Drive lifecycle transitions must be atomic
-- Drive FSM is `DISCONNECTED -> UNMOUNTED -> AVAILABLE -> IN_USE`
+- Drive FSM is `DISCONNECTED -> DISABLED -> AVAILABLE -> IN_USE`
+- `UNMOUNTED` is retained only as a legacy compatibility enum value until discovery reconciles older rows
 - Background copy tasks must not starve the system
 
 ## Filesystem and Pagination
