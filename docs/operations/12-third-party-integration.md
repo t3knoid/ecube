@@ -110,7 +110,7 @@ GET /drives
 
 Find a drive where `current_state` is `AVAILABLE`. Note its `id`.
 
-By default, `GET /drives` excludes disconnected (`DISCONNECTED`) drives. To include them, add `include_disconnected=true`:
+By default, `GET /drives` returns `UNMOUNTED`, `AVAILABLE`, and `IN_USE` drives, and excludes disconnected (`DISCONNECTED`) rows. To include `DISCONNECTED` drives, add `include_disconnected=true`:
 
 ```
 GET /drives?include_disconnected=true

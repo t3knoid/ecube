@@ -361,7 +361,7 @@ Database status
 </li><li>
 Number of active jobs
 </li><li>
-Drive state summary (<code>DISCONNECTED</code>, <code>AVAILABLE</code>, <code>IN_USE</code>)
+Drive state summary (<code>DISCONNECTED</code>, <code>UNMOUNTED</code>, <code>AVAILABLE</code>, <code>IN_USE</code>)
 </li><li>
 Table of active jobs
 </li></ul>
@@ -404,8 +404,13 @@ Current state
 <tbody>
 <tr>
 <td><code>DISCONNECTED</code></td>
-<td>Drive is known to the system but not currently accessible — either not physically present, or present on a disabled port.</td>
-<td>Enable port when the drive is still physically detected on a known port</td>
+<td>Drive is known to the system but is not currently physically present.</td>
+<td>None from Drive Detail until the hardware reappears</td>
+</tr>
+<tr>
+<td><code>UNMOUNTED</code></td>
+<td>Drive is physically present but not yet operator-ready, typically because the port is disabled.</td>
+<td>Enable port when the drive is still detected on a known port</td>
 </tr>
 <tr>
 <td><code>AVAILABLE</code></td>
@@ -420,10 +425,12 @@ Current state
 </tbody>
 </table>
 <p>State transitions follow this order:</p>
-<pre><code>DISCONNECTED → AVAILABLE → IN_USE → AVAILABLE
-                                  ↑____________|
-                               (re-insert same project)</code></pre>
+<pre><code>DISCONNECTED → UNMOUNTED → AVAILABLE → IN_USE → AVAILABLE
+                ↑                                   ↑____________|
+                |                                (re-insert same project)
+         (re-detect on disabled port)</code></pre>
 <p>A drive assigned to one project cannot be re-assigned to a different project without first being formatted. Formatting wipes the drive and clears the project binding.</p>
+<p>The Drives page shows <code>UNMOUNTED</code>, <code>AVAILABLE</code>, and <code>IN_USE</code> by default. Use <code>Show Disconnected drives</code> when you need to include historically known but currently absent hardware in the list.</p>
 <p>After a service restart, ECUBE may automatically restore a previously mounted managed USB drive to its expected ECUBE mount slot. If a drive or mount appears to have changed state during startup, review the <code>Audit Logs</code> page for reconciliation events recorded by the system.</p>
 <h2 id="4-2-viewing-drives">4.2 Viewing Drives</h2>
 <p>Use the page controls to:</p>
@@ -516,16 +523,11 @@ The drive can be physically removed once the operation completes.
 <ul><li>
 Refresh the mount list
 </li><li>
-Validate all mounts
-</li><li>
-Validate an individual mount
-</li><li>
 Add a new mount definition
 </li><li>
-Edit an existing mount definition
-</li><li>
-Remove an existing mount definition
+Open Mount Detail for an existing mount definition
 </li></ul>
+<p><code>admin</code> and <code>manager</code> users can also edit or remove a mount from Mount Detail. <code>processor</code> and <code>auditor</code> users can open Mount Detail and browse mounted shares, but they do not see <code>Edit</code> or <code>Remove</code> actions and sensitive path fields remain redacted.</p>
 <h2 id="5-1-adding-a-mount">5.1 Adding a Mount</h2>
 <p>The add-mount dialog supports common fields such as:</p>
 <ul><li>
@@ -550,9 +552,11 @@ Credentials file
 <p>The exact credential fields required depend on the mount type and your environment.</p>
 <p>If share browsing is unavailable because the ECUBE host is missing a required discovery tool, the dialog now shows an actionable message telling the operator which host package to install before retrying. The browse control is hidden entirely when ECUBE is running in demo mode.</p>
 <h3 id="5-1-1-editing-a-mount">5.1.1 Editing a Mount</h3>
-<p>Use <code>Edit</code> on an existing mount row to reopen the same dialog in edit mode.</p>
+<p>Use <code>Details</code> on an existing mount row to open Mount Detail, then use <code>Edit</code> from the detail action row to reopen the edit dialog in place.</p>
 <ul><li>
 The dialog pre-fills the current type, remote path, and project ID.
+</li><li>
+Mount Detail shows Type, Project, NFS Client version, Last Checked, Job ID, and Status before you open the dialog. <code>admin</code> and <code>manager</code> users also see the raw Remote Path and Local Mount Point values there; read-only roles see those path fields redacted.
 </li><li>
 The local mount point is shown as read-only informational context and is not directly editable.
 </li><li>
@@ -560,10 +564,12 @@ Stored credentials are not returned to the UI. Leaving the credential fields bla
 </li><li>
 Use <code>Clear saved credentials</code> if you need to remove previously stored SMB credentials without replacing them in the same edit.
 </li></ul>
-<p>When you save, ECUBE updates the existing mount record instead of creating a new one, then refreshes the row status in the list. If the backend rejects the change, or if the returned mount status is <code>ERROR</code>, the dialog stays open so you can review the returned error state before closing it.</p>
+<p>When you save, ECUBE updates the existing mount record instead of creating a new one. If the share is currently mounted, ECUBE attempts to remount it immediately with the edited options, including any explicit NFS client-version override. If the backend rejects the change, or if the returned mount status is <code>ERROR</code>, the dialog stays open so you can review the returned error state before closing it.</p>
 <h2 id="5-2-testing-mount-connectivity">5.2 Testing Mount Connectivity</h2>
-<p>Use <code>Test</code> or <code>Test All</code> to verify that configured source mounts are reachable and valid before creating jobs that depend on them.</p>
+<p>Use <code>Test</code> inside the <code>Add Share</code> dialog before creating a new mount, or inside the <code>Edit Share</code> dialog before saving changes to an existing mount.</p>
+<p>The dialog must show a successful test result before <code>Create</code> or <code>Save</code> becomes available. This keeps mount validation tied to the exact configuration you are about to persist rather than to a separate list-level action.</p>
 <h2 id="5-3-removing-a-mount">5.3 Removing a Mount</h2>
+<p>From Mount Detail, <code>admin</code> and <code>manager</code> users can remove the mount definition when it is no longer needed.</p>
 <p>Remove a mount only if it is no longer needed. If existing workflows depend on it, removing the definition can interrupt job creation or repeatability.</p>
 <p class="help-back-to-top"><a href="#help-toc-title">Back to top</a></p>
 <hr />
@@ -573,7 +579,7 @@ Use <code>Clear saved credentials</code> if you need to remove previously stored
 <ul><li>
 <strong>From Drive Detail:</strong> Click the <code>Browse</code> button on any mounted drive to open the directory browser rooted at that drive's mount point.
 </li><li>
-<strong>From Mounts:</strong> Click the <code>Browse</code> button on any mounted network share. The button is disabled for shares that are not currently mounted.
+<strong>From Mounts:</strong> Click the <code>Browse</code> button on any mounted network share from the list, or open Mount Detail and browse from there. The button is disabled for shares that are not currently mounted.
 </li></ul>
 <p><strong>Navigating:</strong></p>
 <ul><li>
@@ -1069,6 +1075,8 @@ Adjusting logging behavior (level, format, and file logging options)
 </li><li>
 Adjusting selected database pool settings exposed by the UI
 </li><li>
+Tuning startup-analysis batch size to balance peak memory use against database round trips during large source-tree scans
+</li><li>
 Setting or clearing the system-wide <code>Default Callback URL</code> used for job webhooks when a job does not supply its own callback URL
 </li><li>
 Setting or clearing the write-only webhook signing secret used for the <code>X-ECUBE-Signature</code> header
@@ -1108,6 +1116,8 @@ If you select cancel, no restart is triggered and the service keeps running.
 Restart actions are never automatic from this page and always require explicit confirmation.
 </li><li>
 Restarting the application service can interrupt active operations. Prefer using a maintenance window or an idle period.
+</li><li>
+<code>Startup Analysis Batch Size</code> accepts values from <code>1</code> to <code>5000</code>. Lower values reduce peak memory use during startup analysis; higher values reduce database round trips.
 </li><li>
 The <code>Default Callback URL</code> must be a valid <code>https://</code> URL and is overridden by any job-specific <code>Webhook callback URL</code> entered on the Jobs page or Job Detail edit dialog.
 </li><li>
