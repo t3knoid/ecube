@@ -11,7 +11,7 @@ import pytest
 
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
-from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, StartupAnalysisEntry, StartupAnalysisStatus
+from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, Manifest, StartupAnalysisEntry, StartupAnalysisStatus
 from app.services import copy_engine
 
 
@@ -490,6 +490,10 @@ def test_run_copy_job_fresh_run(db, tmp_path):
     target_dir.mkdir()
 
     job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    assignment = _assign_drive(db, job)
+    drive = db.query(UsbDrive).filter(UsbDrive.id == assignment.drive_id).one()
+    drive.mount_path = str(target_dir)
+    db.commit()
 
     with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
         copy_engine.run_copy_job(job.id)
@@ -501,6 +505,45 @@ def test_run_copy_job_fresh_run(db, tmp_path):
     assert job.file_count == 2
     files = db.query(ExportFile).filter(ExportFile.job_id == job.id).all()
     assert all(f.status == FileStatus.DONE for f in files)
+
+
+def test_run_copy_job_generates_manifest_for_clean_completion(db, tmp_path):
+    """A clean completed copy job generates a manifest during closeout."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "file.txt").write_bytes(b"data")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    assignment = _assign_drive(db, job)
+    drive = db.query(UsbDrive).filter(UsbDrive.id == assignment.drive_id).one()
+    drive.mount_path = str(target_dir)
+    db.commit()
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    manifest = (
+        db.query(Manifest)
+        .filter(Manifest.job_id == job.id)
+        .order_by(Manifest.id.desc())
+        .first()
+    )
+    assert manifest is not None
+    assert manifest.manifest_path == str(target_dir / "manifest.json")
+    assert (target_dir / "manifest.json").exists()
+
+    audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "MANIFEST_CREATED", AuditLog.job_id == job.id)
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+    assert audit is not None
+    assert audit.details["manifest_file"] == "manifest.json"
 
 
 def test_run_copy_job_resume_skips_done_files(db, tmp_path):

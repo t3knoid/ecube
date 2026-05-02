@@ -91,12 +91,12 @@ def test_job_service_emits_create_start_and_pause_callbacks(db):
     assert mock_callback.call_args_list[2].kwargs["event_at"] is not None
 
 
-def test_job_service_emits_manual_complete_and_archive_callbacks(db):
+def test_job_service_emits_manual_complete_and_archive_callbacks(db, tmp_path):
     drive = _make_drive(
         db,
         device_identifier="USB-CALLBACK-LIFECYCLE-002",
         project_id="PROJ-CALLBACK-LIFECYCLE-002",
-        mount_path=None,
+        mount_path=str(tmp_path),
     )
     job = _make_job(
         db,
@@ -109,13 +109,17 @@ def test_job_service_emits_manual_complete_and_archive_callbacks(db):
 
     with patch("app.services.job_service.deliver_callback") as mock_callback:
         job_service.complete_job(job.id, db, actor="processor")
+        drive.current_state = DriveState.AVAILABLE
+        drive.mount_path = None
+        db.commit()
         job_service.archive_job(job.id, confirm=True, db=db, actor="processor")
 
     events = [call.kwargs["event"] for call in mock_callback.call_args_list]
-    assert events == ["JOB_COMPLETED_MANUALLY", "JOB_ARCHIVED"]
+    assert events == ["JOB_COMPLETED_MANUALLY", "MANIFEST_CREATED", "JOB_ARCHIVED"]
     assert mock_callback.call_args_list[0].kwargs["event_details"] == {"previous_status": "PAUSED"}
-    assert mock_callback.call_args_list[1].kwargs["event_details"] == {"previous_status": "COMPLETED"}
-    assert mock_callback.call_args_list[1].kwargs["event_at"] is not None
+    assert mock_callback.call_args_list[1].kwargs["event_details"]["manifest_file"] == "manifest.json"
+    assert mock_callback.call_args_list[2].kwargs["event_details"] == {"previous_status": "COMPLETED"}
+    assert mock_callback.call_args_list[2].kwargs["event_at"] is not None
 
 
 def test_job_service_emits_retry_and_manifest_callbacks(db, tmp_path):
