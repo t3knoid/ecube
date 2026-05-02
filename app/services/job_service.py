@@ -455,7 +455,7 @@ def _reject_start_when_drive_capacity_is_insufficient(
     assignment: Optional[DriveAssignment],
 ) -> None:
     job_row = _row(job)
-    if cast(JobStatus, job_row.status) != JobStatus.PENDING:
+    if cast(JobStatus, job_row.status) not in (JobStatus.PENDING, JobStatus.FAILED, JobStatus.PAUSED):
         return
     if int(cast(Optional[int], job_row.copied_bytes) or 0) > 0:
         return
