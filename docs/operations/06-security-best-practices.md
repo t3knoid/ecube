@@ -256,7 +256,7 @@ Topology-specific notes:
 
 The `GET /browse` endpoint allows authenticated users to list directory contents of active mount points (USB drives and network shares). Four layers protect against unauthorized filesystem access:
 
-1. **Database validation:** The `path` parameter must match a registered, active mount root in the database. Arbitrary paths are rejected with `403`.
+1. **Trusted root selection:** Callers must provide exactly one browse root selector. The `path` parameter must match a registered, active mount root in the database, and the `mount_id` parameter must resolve to a mounted registered network share. Arbitrary paths are rejected with `403`.
 2. **Active USB mount validation:** USB browse requests are checked against the authoritative mount table before any directory listing occurs. If the database still contains a stale `mount_path` but the drive is no longer actively mounted, the request is rejected with `403`.
 3. **Realpath containment:** The `subdir` parameter is resolved via `os.path.realpath` and checked to be within the mount root. Path-traversal attempts (`../../etc`) are rejected with `400`.
 4. **Prefix allowlist:** The resolved path must start with one of the `BROWSE_ALLOWED_PREFIXES` values. This provides defence-in-depth against mount-root misconfiguration.
