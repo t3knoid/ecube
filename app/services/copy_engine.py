@@ -1832,6 +1832,10 @@ def run_copy_job(job_id: int) -> None:
                             deliver_callback(job)
                         except Exception:
                             logger.error("Callback delivery failed for job %s (copy)", job_id)
+                        if job.status == JobStatus.COMPLETED:
+                            from app.services import job_service
+
+                            job_service.auto_generate_manifest_for_completed_job(job.id, db)
         except Exception as exc:
             db.rollback()
             safe_reason = _sanitize_job_failure_reason(
@@ -2011,5 +2015,9 @@ def run_verify_job(job_id: int) -> None:
                     deliver_callback(job)
                 except Exception:
                     logger.error("Callback delivery failed for job %s (verify)", job_id)
+                if job.status == JobStatus.COMPLETED:
+                    from app.services import job_service
+
+                    job_service.auto_generate_manifest_for_completed_job(job.id, db)
     finally:
         db.close()

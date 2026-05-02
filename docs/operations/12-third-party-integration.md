@@ -301,13 +301,13 @@ POST /jobs/{job_id}/verify
 
 Compares SHA-256 hashes of source and destination files. This endpoint is available only for clean completed jobs with no failed or timed-out files; partial-success `COMPLETED` jobs return `409 Conflict` until the copy outcome is clean. Status transitions: `COMPLETED` → `VERIFYING` → `COMPLETED` (pass) or `FAILED`.
 
-### Step 8 — Generate Manifest
+### Step 8 — Download Manifest
 
 ```
-POST /jobs/{job_id}/manifest
+GET /jobs/{job_id}/manifest/download
 ```
 
-Writes a JSON manifest to the USB drive containing file paths, sizes, hashes, and copy metadata for chain-of-custody. This endpoint is available only for clean completed jobs with no failed or timed-out files; partial-success `COMPLETED` jobs return `409 Conflict`.
+Clean completion automatically writes a JSON manifest to the USB drive containing file paths, sizes, hashes, and copy metadata for chain-of-custody. This download endpoint returns that generated attachment for clean completed jobs; partial-success `COMPLETED` jobs still return `409 Conflict` until the copy outcome is clean.
 
 ---
 
@@ -466,10 +466,10 @@ while true; do
   sleep "$POLL_INTERVAL"
 done
 
-# ── Step 9: Generate manifest ─────────────────────────────────
-echo "Generating manifest..."
-curl -sf -X POST "$ECUBE_URL/jobs/$JOB_ID/manifest" -H "$AUTH" > /dev/null
-echo "  Manifest written to USB drive."
+# ── Step 9: Download manifest ─────────────────────────────────
+echo "Downloading manifest..."
+curl -sf "$ECUBE_URL/jobs/$JOB_ID/manifest/download" -H "$AUTH" -o manifest.json
+echo "  Manifest downloaded to ./manifest.json"
 
 echo ""
 echo "Done. Job $JOB_ID completed successfully."
@@ -625,10 +625,13 @@ def main():
             sys.exit(1)
         time.sleep(POLL_INTERVAL)
 
-    # ── Step 9: Generate manifest ─────────────────────────────
-    print("Generating manifest...")
-    session.post(f"{ECUBE_URL}/jobs/{job_id}/manifest").raise_for_status()
-    print("  Manifest written to USB drive.")
+    # ── Step 9: Download manifest ─────────────────────────────
+    print("Downloading manifest...")
+    response = session.get(f"{ECUBE_URL}/jobs/{job_id}/manifest/download")
+    response.raise_for_status()
+    with open("manifest.json", "wb") as manifest_file:
+      manifest_file.write(response.content)
+    print("  Manifest downloaded to ./manifest.json")
 
     print()
     print(f"Done. Job {job_id} completed successfully.")
@@ -763,10 +766,10 @@ if ($s -eq "FAILED") {
     exit 1
 }
 
-# ── Step 9: Generate manifest ─────────────────────────────────
-Write-Host "Generating manifest..."
-Invoke-RestMethod -Uri "$EcubeUrl/jobs/$jobId/manifest" -Method Post -Headers $headers | Out-Null
-Write-Host "  Manifest written to USB drive."
+# ── Step 9: Download manifest ─────────────────────────────────
+Write-Host "Downloading manifest..."
+Invoke-RestMethod -Uri "$EcubeUrl/jobs/$jobId/manifest/download" -Method Get -Headers $headers -OutFile "manifest.json"
+Write-Host "  Manifest downloaded to ./manifest.json"
 
 Write-Host ""
 Write-Host "Done. Job $jobId completed successfully."

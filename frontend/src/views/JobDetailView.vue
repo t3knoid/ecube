@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
-import { analyzeJob, archiveJob, getJob, getJobChainOfCustody, refreshJobChainOfCustody, getJobFiles, startJob, retryFailedJob, pauseJob, verifyJob, generateManifest, downloadManifest, updateJob, completeJob, deleteJob, clearJobStartupAnalysisCache, confirmJobChainOfCustodyHandoff } from '@/api/jobs.js'
+import { analyzeJob, archiveJob, getJob, getJobChainOfCustody, refreshJobChainOfCustody, getJobFiles, startJob, retryFailedJob, pauseJob, verifyJob, downloadManifest, updateJob, completeJob, deleteJob, clearJobStartupAnalysisCache, confirmJobChainOfCustodyHandoff } from '@/api/jobs.js'
 import { normalizeErrorMessage } from '@/api/client.js'
 import { getFileHashes, compareFiles } from '@/api/files.js'
 import { getDrives } from '@/api/drives.js'
@@ -337,7 +337,7 @@ const isJobFullyComplete = computed(() => {
   return Number(job.value?.files_failed || 0) === 0 && Number(job.value?.files_timed_out || 0) === 0
 })
 const canVerify = computed(() => canOperate.value && isJobFullyComplete.value)
-const canGenerateManifest = computed(() => canOperate.value && isJobFullyComplete.value)
+const canDownloadManifest = computed(() => canOperate.value && isJobFullyComplete.value)
 
 const primaryActionKeys = computed(() => {
   const status = currentStatus.value
@@ -413,7 +413,7 @@ const actionItems = computed(() => {
     {
       key: 'manifest',
       label: t('jobs.manifest'),
-      disabled: !canGenerateManifest.value || acting.value,
+      disabled: !canDownloadManifest.value || acting.value,
       run: () => runAction('manifest'),
       visible: true,
     },
@@ -1348,22 +1348,19 @@ async function runAction(action) {
       }
     } else if (action === 'verify') {
       job.value = await verifyJob(job.value.id)
+    } else if (action === 'manifest') {
+      await downloadGeneratedManifest(job.value.id)
     } else {
-      job.value = await generateManifest(job.value.id)
+      throw new Error(`Unsupported action: ${action}`)
     }
-    await refreshAll()
 
     if (action === 'manifest') {
       const manifestPath = buildManifestPath(job.value || manifestContext)
       infoMessage.value = manifestPath
         ? t('jobs.manifestSuccessWithPath', { path: manifestPath })
         : t('jobs.manifestSuccess')
-
-      try {
-        await downloadGeneratedManifest(job.value.id)
-      } catch {
-        error.value = t('jobs.manifestDownloadFailed')
-      }
+    } else {
+      await refreshAll()
     }
 
     if (isTerminalStatus(job.value?.status)) {
