@@ -337,12 +337,12 @@ The callback body is a JSON object containing:
 - Hub and port records are upserted using stable hardware identity keys.
 - **Hardware enrichment:** Discovery should capture vendor, product, and negotiated-speed metadata when available, without erasing previously known values with empty readings.
 - **Label preservation:** Admin-assigned hub and port labels are never overwritten by discovery.
-- Drive state transitions follow FSM rules: `DISCONNECTED → UNMOUNTED` when a drive is rediscovered on a disabled port, `UNMOUNTED → AVAILABLE` when that port becomes enabled, `AVAILABLE → DISCONNECTED` on removal, and `AVAILABLE → UNMOUNTED` when a still-present drive is blocked by a disabled port (unless `IN_USE` — project isolation takes priority).
+- Drive state transitions follow FSM rules: `DISCONNECTED → DISABLED` when a drive is rediscovered on a disabled port, `DISABLED → AVAILABLE` when that port becomes enabled, `AVAILABLE → DISCONNECTED` on removal, and `AVAILABLE → DISABLED` when a still-present drive is blocked by a disabled port (unless `IN_USE` — project isolation takes priority).
 - **Port enablement filtering:** Each USB port has an `enabled` flag (default `false`). Discovery uses this flag to gate drive availability:
-  - A newly discovered drive on a **disabled** port is inserted in `UNMOUNTED` state (not `AVAILABLE`).
-  - A reconnecting drive on a **disabled** port remains `UNMOUNTED` while it is still physically present.
-  - An `AVAILABLE` drive whose port is subsequently **disabled** is demoted to `UNMOUNTED` on the next discovery sync.
-  - Drives with no associated port (`port_id = NULL`) are treated as **disabled** while present — they remain in `UNMOUNTED` state.
+  - A newly discovered drive on a **disabled** port is inserted in `DISABLED` state (not `AVAILABLE`).
+  - A reconnecting drive on a **disabled** port remains `DISABLED` while it is still physically present.
+  - An `AVAILABLE` drive whose port is subsequently **disabled** is demoted to `DISABLED` on the next discovery sync.
+  - Drives with no associated port (`port_id = NULL`) are treated as **disabled** while present — they remain in `DISABLED` state.
   - Drives already in `IN_USE` state are **never** changed by the enablement filter — project isolation takes priority.
   - Port enablement changes take effect on the next discovery sync.
 - Refresh operation is fully idempotent: running multiple times without hardware changes produces no mutations.

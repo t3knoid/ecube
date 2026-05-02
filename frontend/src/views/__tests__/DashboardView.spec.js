@@ -156,11 +156,11 @@ describe('DashboardView active jobs', () => {
     expect(wrapper.find('.progress-stub').text()).toBe('40/100 40%')
   })
 
-  it('includes unmounted drives in the dashboard drive summary', async () => {
+  it('includes disabled drives in the dashboard drive summary', async () => {
     mocks.listJobs.mockResolvedValue([])
     mocks.getDrives.mockResolvedValue([
       { id: 1, current_state: 'DISCONNECTED' },
-      { id: 2, current_state: 'UNMOUNTED' },
+      { id: 2, current_state: 'DISABLED' },
       { id: 3, current_state: 'AVAILABLE' },
       { id: 4, current_state: 'IN_USE' },
     ])
@@ -170,7 +170,7 @@ describe('DashboardView active jobs', () => {
 
     const summaryRows = wrapper.findAll('.summary-row').map((row) => row.text())
     expect(summaryRows).toContain(`${i18n.global.t('drives.states.disconnected')}1`)
-    expect(summaryRows).toContain(`${i18n.global.t('drives.states.unmounted')}1`)
+    expect(summaryRows).toContain(`${i18n.global.t('drives.states.disabled')}1`)
     expect(summaryRows).toContain(`${i18n.global.t('drives.states.available')}1`)
     expect(summaryRows).toContain(`${i18n.global.t('drives.states.inUse')}1`)
   })

@@ -136,7 +136,7 @@ def get_all_drives(
         for drive in drives:
             request_available_space_refresh_for_drive(drive)
         return drives
-    drives = repo.list_by_states([DriveState.UNMOUNTED, DriveState.AVAILABLE, DriveState.IN_USE])  # DISCONNECTED excluded by default
+    drives = repo.list_by_states([DriveState.DISABLED, DriveState.UNMOUNTED, DriveState.AVAILABLE, DriveState.IN_USE])  # DISCONNECTED excluded by default
     for drive in drives:
         request_available_space_refresh_for_drive(drive)
     return drives
@@ -160,11 +160,10 @@ def initialize_drive(
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
 
-    # DISCONNECTED drives are physically absent. UNMOUNTED drives are still
-    # present but not operator-ready. Initialization requires AVAILABLE so the
-    # drive is reachable and ready. Attempting to initialize from these states is
-    # always a precondition failure.
-    if drive.current_state in (DriveState.DISCONNECTED, DriveState.UNMOUNTED):
+    # DISCONNECTED drives are physically absent. DISABLED drives are present
+    # on a blocked port, and UNMOUNTED drives are enabled but not yet mounted.
+    # Initialization requires AVAILABLE so the drive is reachable and ready.
+    if drive.current_state in (DriveState.DISCONNECTED, DriveState.DISABLED, DriveState.UNMOUNTED):
         try:
             audit_repo.add(
                 action="INIT_REJECTED_NOT_AVAILABLE",
@@ -186,6 +185,8 @@ def initialize_drive(
             detail=(
                 "Drive is DISCONNECTED (not physically present) and cannot be initialized."
                 if drive.current_state == DriveState.DISCONNECTED
+                else "Drive is DISABLED (physically present on a disabled port) and cannot be initialized."
+                if drive.current_state == DriveState.DISABLED
                 else "Drive is UNMOUNTED (physically present but not operator-ready) and cannot be initialized."
             ),
         )
