@@ -164,7 +164,7 @@ Content-Type: application/json
 }
 ```
 
-ECUBE preserves the existing mount record and local mount point, attempts to apply the updated configuration immediately, and returns the refreshed mount object. As with creation, credential values are write-only and are never returned in list responses.
+ECUBE preserves the existing mount record and local mount point, attempts to apply the updated configuration immediately, and returns the refreshed mount object. If the share is currently mounted, ECUBE unmounts it first and remounts it with the edited options, including any explicit per-share `nfs_client_version` override. As with creation, credential values are write-only and are never returned in list responses.
 
 For credentialed SMB mounts, omitted `username`, `password`, and `credentials_file` fields preserve the currently stored values. Send those fields explicitly as `null` when you need to clear previously stored credentials.
 

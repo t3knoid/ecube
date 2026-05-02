@@ -39,14 +39,15 @@ test('keyboard navigation: ConfirmDialog closes with Escape', async ({ page }) =
   await page.route('**/api/mounts', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mounts) })
   })
+  await routeJson(page, '**/api/jobs**', [])
   await page.route('**/api/mounts/*', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
   })
 
-  await page.goto('/mounts')
+  await page.goto('/mounts/10')
 
   // Open ConfirmDialog via the Remove button
-  await page.getByRole('button', { name: 'Remove' }).first().click()
+  await page.getByRole('button', { name: 'Remove' }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible()
 
@@ -65,13 +66,14 @@ test('keyboard navigation: ConfirmDialog confirm button reachable by Tab', async
   await page.route('**/api/mounts', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mounts) })
   })
+  await routeJson(page, '**/api/jobs**', [])
   await page.route('**/api/mounts/*', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
   })
 
-  await page.goto('/mounts')
+  await page.goto('/mounts/10')
 
-  await page.getByRole('button', { name: 'Remove' }).first().click()
+  await page.getByRole('button', { name: 'Remove' }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible()
 
