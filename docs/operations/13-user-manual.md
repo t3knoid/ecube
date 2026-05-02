@@ -296,7 +296,7 @@ Typical information shown:
 - Overall system health
 - Database status
 - Number of active jobs
-- Drive state summary (`DISCONNECTED`, `AVAILABLE`, `IN_USE`)
+- Drive state summary (`DISCONNECTED`, `UNMOUNTED`, `AVAILABLE`, `IN_USE`)
 - Table of active jobs
 
 Use the dashboard when you need a quick answer to questions such as:
@@ -335,19 +335,23 @@ Every drive moves through a defined set of states. Actions available in the UI d
 
 | State | Meaning | Actions available |
 |-----------|-------------------------------------------------------------------------|-----------------------------------|
-| `DISCONNECTED` | Drive is known to the system but not currently accessible — either not physically present, or present on a disabled port. | Enable port when the drive is still physically detected on a known port |
+| `DISCONNECTED` | Drive is known to the system but is not currently physically present. | None from Drive Detail until the hardware reappears |
+| `UNMOUNTED` | Drive is physically present but not yet operator-ready, typically because the port is disabled. | Enable port when the drive is still detected on a known port |
 | `AVAILABLE` | Drive is present on an enabled port and ready to be formatted or assigned to a project. | Format, Initialize |
 | `IN_USE` | Drive is assigned to a project. Jobs can target this drive. | Prepare Eject |
 
 State transitions follow this order:
 
 ```
-DISCONNECTED → AVAILABLE → IN_USE → AVAILABLE
-                                  ↑____________|
-                               (re-insert same project)
+DISCONNECTED → UNMOUNTED → AVAILABLE → IN_USE → AVAILABLE
+                ↑                                   ↑____________|
+                |                                (re-insert same project)
+         (re-detect on disabled port)
 ```
 
 A drive assigned to one project cannot be re-assigned to a different project without first being formatted. Formatting wipes the drive and clears the project binding.
+
+The Drives page shows `UNMOUNTED`, `AVAILABLE`, and `IN_USE` by default. Use `Show Disconnected drives` when you need to include historically known but currently absent hardware in the list.
 
 After a service restart, ECUBE may automatically restore a previously mounted managed USB drive to its expected ECUBE mount slot. If a drive or mount appears to have changed state during startup, review the `Audit Logs` page for reconciliation events recorded by the system.
 
