@@ -7,6 +7,10 @@ name: Update E2E Snapshots
 on:
   workflow_dispatch:
 
+env:
+  COMMIT_USER_NAME: Frank Refol
+  COMMIT_USER_EMAIL: t3knoid@users.noreply.github.com
+
 jobs:
   update-snapshots:
     runs-on: ubuntu-latest
@@ -49,8 +53,8 @@ jobs:
       - name: Commit updated snapshots
         working-directory: ${{ github.workspace }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "${COMMIT_USER_NAME}"
+          git config user.email "${COMMIT_USER_EMAIL}"
           git add frontend/e2e/*.spec.js-snapshots/ 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "No snapshot changes to commit."

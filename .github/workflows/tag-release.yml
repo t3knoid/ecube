@@ -8,6 +8,10 @@ on:
     paths:
       - pyproject.toml
 
+env:
+  COMMIT_USER_NAME: Frank Refol
+  COMMIT_USER_EMAIL: t3knoid@users.noreply.github.com
+
 permissions:
   contents: write
 
@@ -47,8 +51,8 @@ jobs:
       - name: Create and push tag
         if: steps.check_tag.outputs.exists == 'false'
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "${COMMIT_USER_NAME}"
+          git config user.email "${COMMIT_USER_EMAIL}"
           git tag -a "${{ steps.meta.outputs.tag }}" -m "Release ${{ steps.meta.outputs.tag }}"
           git push origin "${{ steps.meta.outputs.tag }}"
 
