@@ -10,6 +10,7 @@ from app.models.audit import AuditLog
 from app.models.hardware import UsbDrive, DriveState, UsbHub, UsbPort
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobChainOfCustodySnapshot, JobStatus, Manifest, StartupAnalysisStatus
 from app.models.network import MountStatus, MountType, NetworkMount
+from app.services.reconciliation_service import reconcile_jobs
 
 
 def _create_assigned_job(db, *, drive, project_id, evidence_number, source_path, status):
@@ -2245,6 +2246,27 @@ def test_analyze_job_conflict_while_startup_analysis_running(client, db):
     mock_analyze.assert_not_called()
 
 
+def test_analyze_job_allowed_after_startup_reconciliation_clears_stale_analysis(client, db):
+    job = ExportJob(
+        project_id="PROJ-ANALYZE-RECOVER-001",
+        evidence_number="EV-ANALYZE-RECOVER-001",
+        source_path="/data/evidence",
+        status=JobStatus.PENDING,
+        startup_analysis_status=StartupAnalysisStatus.ANALYZING,
+    )
+    db.add(job)
+    db.commit()
+
+    reconcile_jobs(db)
+
+    with patch("app.services.copy_engine.run_startup_analysis") as mock_analyze:
+        response = client.post(f"/jobs/{job.id}/analyze", json={})
+
+    assert response.status_code == 200
+    assert response.json()["startup_analysis_status"] == "ANALYZING"
+    mock_analyze.assert_called_once_with(job.id, actor="test-user", client_ip="unknown")
+
+
 def test_analyze_job_auditor_forbidden(auditor_client, db):
     job = ExportJob(
         project_id="PROJ-ANALYZE-003",
@@ -2430,6 +2452,39 @@ def test_start_job_conflict_while_startup_analysis_running(client, db):
     assert response.status_code == 409
     assert "startup analysis is in progress" in response.json()["message"].lower()
     mock_copy.assert_not_called()
+
+
+def test_start_job_allowed_after_startup_reconciliation_clears_stale_analysis(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-START-RECOVER-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-START-RECOVER-001",
+        mount_path="/mnt/ecube/start-recover-001",
+    )
+    db.add(drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-START-RECOVER-001",
+        evidence_number="EV-START-RECOVER-001",
+        source_path="/data/start-recover",
+        target_mount_path=drive.mount_path,
+        status=JobStatus.PENDING,
+        startup_analysis_status=StartupAnalysisStatus.ANALYZING,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.commit()
+
+    reconcile_jobs(db)
+
+    with patch("app.services.copy_engine.run_copy_job") as mock_copy:
+        response = client.post(f"/jobs/{job.id}/start", json={})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "RUNNING"
+    mock_copy.assert_called_once_with(job.id)
 
 
 def test_start_job_rejects_when_startup_analysis_exceeds_available_drive_space(client, db):

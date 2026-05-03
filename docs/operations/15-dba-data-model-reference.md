@@ -150,6 +150,7 @@ This section captures the primary physical schema details used by DBAs.
 - Enum-backed status columns constrain legal state values.
 - Manual startup analysis can persist summary values while a job remains `PENDING`, so consumers should not infer copy execution from startup-analysis fields alone.
 - `startup_analysis_entries` is the reusable per-file snapshot; summary columns such as file count, total bytes, last analyzed time, and sanitized failure reason can remain populated after those entries are cleared.
+- Startup reconciliation treats rows left in `startup_analysis_status=ANALYZING` as crash-recovery state: valid cached analysis is restored to `READY`; otherwise the per-file snapshot is cleared and the job returns to `NOT_ANALYZED`.
 - Single-row guard constraints serialize global operations (`initialize`, `reconciliation`).
 - Audit rows may exist without job linkage for non-job security or admin events.
 
@@ -199,7 +200,7 @@ stateDiagram-v2
 flowchart TD
   A[Service Startup] --> B[Acquire reconciliation_lock]
   B --> C[Reconcile mounts]
-  C --> D[Reconcile interrupted jobs]
+  C --> D[Reconcile interrupted jobs and stale startup analysis]
   D --> E[Run discovery sync for drives]
   E --> F[Release reconciliation_lock]
 ```
