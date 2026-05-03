@@ -369,6 +369,35 @@ async def lifespan(application: FastAPI):
     # ------------------------------------------------------------------
     # Startup: purge expired audit logs
     # ------------------------------------------------------------------
+    if db_runtime_ready:
+        try:
+            from app.database import SessionLocal
+            from app.services.drive_service import normalize_unreleased_drive_states
+
+            db = SessionLocal()
+            try:
+                normalized_rows = normalize_unreleased_drive_states(db)
+                if normalized_rows:
+                    logger.info(
+                        "Startup drive-state normalization applied",
+                        extra={"normalized_rows": normalized_rows},
+                    )
+            finally:
+                db.close()
+        except Exception as exc:
+            failure = _classify_unhandled_exception(exc)
+            logger.info(
+                "Startup drive-state normalization failed",
+                extra={
+                    "category": failure["category"],
+                    "recommended_action": failure["recommended_action"],
+                },
+            )
+            logger.debug(
+                "Startup drive-state normalization raw failure",
+                extra={"category": failure["category"], "raw_error": str(exc)},
+            )
+
     if db_runtime_ready and settings.audit_log_retention_days > 0:
         try:
             from app.database import SessionLocal

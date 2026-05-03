@@ -3,6 +3,7 @@ import os
 from typing import List, Optional
 
 from fastapi import HTTPException
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -30,6 +31,22 @@ PREPARE_EJECT_BLOCKING_JOB_STATUSES = (
     JobStatus.PAUSED,
     JobStatus.VERIFYING,
 )
+
+
+def normalize_unreleased_drive_states(db: Session) -> int:
+    result = db.execute(
+        text(
+            "UPDATE usb_drives "
+            "SET current_state = :disabled "
+            "WHERE current_state = :unmounted"
+        ),
+        {
+            "disabled": DriveState.DISABLED.value,
+            "unmounted": "UNMOUNTED",
+        },
+    )
+    db.commit()
+    return int(result.rowcount or 0)
 
 
 def _safe_drive_log_context(drive: UsbDrive, *, reason: Optional[str] = None) -> dict:
@@ -136,7 +153,7 @@ def get_all_drives(
         for drive in drives:
             request_available_space_refresh_for_drive(drive)
         return drives
-    drives = repo.list_by_states([DriveState.UNMOUNTED, DriveState.AVAILABLE, DriveState.IN_USE])  # DISCONNECTED excluded by default
+    drives = repo.list_by_states([DriveState.DISABLED, DriveState.AVAILABLE, DriveState.IN_USE])  # DISCONNECTED excluded by default
     for drive in drives:
         request_available_space_refresh_for_drive(drive)
     return drives
@@ -160,11 +177,10 @@ def initialize_drive(
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
 
-    # DISCONNECTED drives are physically absent. UNMOUNTED drives are still
-    # present but not operator-ready. Initialization requires AVAILABLE so the
-    # drive is reachable and ready. Attempting to initialize from these states is
-    # always a precondition failure.
-    if drive.current_state in (DriveState.DISCONNECTED, DriveState.UNMOUNTED):
+    # DISCONNECTED drives are physically absent, and DISABLED drives are
+    # present on a blocked port. Initialization requires AVAILABLE so the
+    # drive is reachable and ready.
+    if drive.current_state in (DriveState.DISCONNECTED, DriveState.DISABLED):
         try:
             audit_repo.add(
                 action="INIT_REJECTED_NOT_AVAILABLE",
@@ -186,7 +202,9 @@ def initialize_drive(
             detail=(
                 "Drive is DISCONNECTED (not physically present) and cannot be initialized."
                 if drive.current_state == DriveState.DISCONNECTED
-                else "Drive is UNMOUNTED (physically present but not operator-ready) and cannot be initialized."
+                else "Drive is DISABLED (physically present on a disabled port) and cannot be initialized."
+                if drive.current_state == DriveState.DISABLED
+                else "Drive is not ready and cannot be initialized."
             ),
         )
 
@@ -656,9 +674,15 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
     initial_state = drive.current_state
     initial_device_path = drive.filesystem_path
 
-    # Fail fast if the drive is not in the required IN_USE state.
+    # Fail fast if the drive is not in an ejectable state.
     # Don't waste time on expensive OS operations for invalid preconditions.
-    if initial_state != DriveState.IN_USE:
+    if initial_state == DriveState.AVAILABLE:
+        if not drive.mount_path:
+            raise HTTPException(
+                status_code=409,
+                detail="Drive is not mounted; refresh drive status and retry prepare-eject",
+            )
+    elif initial_state != DriveState.IN_USE:
         if drive.mount_path:
             raise HTTPException(
                 status_code=409,
@@ -666,7 +690,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
             )
         raise HTTPException(
             status_code=409,
-            detail=f"Drive is not in IN_USE state; cannot prepare eject (current state: {initial_state.value})",
+            detail=f"Drive is not in an ejectable state; cannot prepare eject (current state: {initial_state.value})",
         )
 
     blocking_job = db.query(ExportJob).join(
@@ -805,7 +829,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
         # Drive was deleted between reads (unlikely but possible).
         raise HTTPException(status_code=404, detail="Drive not found")
 
-    # Verify the drive state is still IN_USE (required precondition for prepare-eject).
+    # Verify the drive state is still the same ejectable state we validated earlier.
     # If another request changed the state, reject with 409 Conflict.
     if drive.current_state != initial_state:
         raise HTTPException(

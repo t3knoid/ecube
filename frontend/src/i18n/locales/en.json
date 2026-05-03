@@ -46,7 +46,7 @@
     "placeholder": "Drives view will be implemented in a future phase.",
     "states": {
       "disconnected": "Disconnected",
-      "unmounted": "Unmounted",
+      "disabled": "Disabled",
       "available": "Available",
       "inUse": "In Use"
     },
