@@ -311,7 +311,7 @@ const eligibleDrives = computed(() => {
   return drives.value.filter((drive) => {
     const state = String(drive?.current_state || '').toUpperCase()
     const boundProject = normalizeProjectId(drive?.current_project_id)
-    return ['AVAILABLE', 'IN_USE'].includes(state)
+    return state === 'AVAILABLE'
       && !!drive?.mount_path
       && (!boundProject || boundProject === selectedProject.value)
   })
