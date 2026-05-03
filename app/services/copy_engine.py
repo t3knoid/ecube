@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
+from app.infrastructure import DriveSpaceProbe, get_drive_space_probe
 from app.models.hardware import DriveState, UsbDrive
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, StartupAnalysisEntry, StartupAnalysisStatus
 from app.repositories.audit_repository import AuditRepository
@@ -315,61 +316,179 @@ def _is_overflow_retryable_file(export_file: ExportFile) -> bool:
     return export_file.status == FileStatus.ERROR and export_file.error_message == "Target storage is full"
 
 
+def _remaining_estimated_bytes(job: ExportJob) -> int:
+    return max(0, int(job.startup_analysis_total_bytes or 0) - int(job.copied_bytes or 0))
+
+
+def _probe_drive_available_bytes(
+    drive: UsbDrive,
+    *,
+    probe: DriveSpaceProbe,
+) -> Optional[int]:
+    mount_path = getattr(drive, "mount_path", None)
+    drive_id = getattr(drive, "id", None)
+    if not mount_path:
+        return None
+
+    try:
+        return probe.probe_available_bytes(mount_path)
+    except Exception as exc:
+        logger.info(
+            "Assigned drive capacity probe failed",
+            extra={
+                "drive_id": int(drive_id) if isinstance(drive_id, int) else None,
+                "failure_class": "assigned_drive_space_probe_failed",
+            },
+        )
+        logger.debug(
+            "Assigned drive capacity probe diagnostics",
+            extra={
+                "drive_id": int(drive_id) if isinstance(drive_id, int) else None,
+                "raw_error": str(exc),
+            },
+        )
+        return None
+
+
 def _select_automatic_overflow_assignment(
     *,
     db: Session,
     job: ExportJob,
-) -> Optional[DriveAssignment]:
-    assignment_repo = DriveAssignmentRepository(db)
-    reserved_assignment = assignment_repo.get_next_reserved_for_job(job.id)
-    if reserved_assignment is None:
-        return None
+    probe: Optional[DriveSpaceProbe] = None,
+) -> tuple[Optional[DriveAssignment], dict[str, Any]]:
+    remaining_bytes = _remaining_estimated_bytes(job)
+    candidate_drive_count = 0
+    validated_candidate_count = 0
+    space_probe = probe or get_drive_space_probe()
 
-    drive = getattr(reserved_assignment, "drive", None)
-    if drive is None:
-        return None
-    if getattr(drive, "current_state", None) != DriveState.IN_USE:
-        return None
-    if not getattr(drive, "mount_path", None):
-        return None
+    reserved_assignments = (
+        db.query(DriveAssignment)
+        .filter(
+            DriveAssignment.job_id == job.id,
+            DriveAssignment.activated_at.is_(None),
+            DriveAssignment.released_at.is_(None),
+        )
+        .order_by(DriveAssignment.assigned_at.asc(), DriveAssignment.id.asc())
+        .all()
+    )
 
-    remaining_bytes = int(job.startup_analysis_total_bytes or 0) - int(job.copied_bytes or 0)
-    available_bytes = getattr(drive, "available_bytes", None)
-    if available_bytes is not None and remaining_bytes > int(available_bytes):
-        return None
-    return reserved_assignment
+    for reserved_assignment in reserved_assignments:
+        candidate_drive_count += 1
+        drive = getattr(reserved_assignment, "drive", None)
+        if drive is None:
+            continue
+        if getattr(drive, "current_state", None) != DriveState.IN_USE:
+            continue
+        if not getattr(drive, "mount_path", None):
+            continue
+        if job.project_id and getattr(drive, "current_project_id", None) not in (None, job.project_id):
+            continue
+
+        available_bytes = _probe_drive_available_bytes(drive, probe=space_probe)
+        if available_bytes is None:
+            continue
+
+        validated_candidate_count += 1
+        drive.available_bytes = available_bytes
+        if remaining_bytes > int(available_bytes):
+            continue
+
+        return reserved_assignment, {
+            "decision": "continued",
+            "decision_reason": "assigned_drive_has_capacity",
+            "remaining_bytes": remaining_bytes,
+            "candidate_drive_count": candidate_drive_count,
+            "validated_candidate_count": validated_candidate_count,
+            "selected_drive_id": int(reserved_assignment.drive_id),
+        }
+
+    decision_reason = "no_other_assigned_drive"
+    if candidate_drive_count > 0 and validated_candidate_count == 0:
+        decision_reason = "no_assigned_drive_validated"
+    elif candidate_drive_count > 0:
+        decision_reason = "no_assigned_drive_with_capacity"
+
+    return None, {
+        "decision": "failed",
+        "decision_reason": decision_reason,
+        "remaining_bytes": remaining_bytes,
+        "candidate_drive_count": candidate_drive_count,
+        "validated_candidate_count": validated_candidate_count,
+    }
 
 
-def _try_automatic_overflow_handoff(db: Session, job_id: int) -> bool:
+def _add_target_full_decision_audit(
+    audit_repo: AuditRepository,
+    *,
+    job: ExportJob,
+    details: dict[str, Any],
+) -> None:
+    try:
+        audit_repo.add(
+            action="JOB_TARGET_FULL_DECISION",
+            job_id=job.id,
+            project_id=job.project_id,
+            drive_id=details.get("selected_drive_id"),
+            details={
+                "project_id": job.project_id,
+                **details,
+            },
+        )
+    except Exception:
+        logger.error("Failed to write audit log for JOB_TARGET_FULL_DECISION")
+
+
+def _resolve_target_full_outcome(
+    db: Session,
+    job_id: int,
+    *,
+    probe: Optional[DriveSpaceProbe] = None,
+) -> tuple[str, dict[str, Any]]:
     job_repo = JobRepository(db)
     file_repo = FileRepository(db)
     assignment_repo = DriveAssignmentRepository(db)
     drive_repo = DriveRepository(db)
+    audit_repo = AuditRepository(db)
 
     job = job_repo.get_for_update(job_id)
     if job is None:
-        return False
+        return "not_applicable", {}
 
     incomplete_files = file_repo.list_incomplete_by_job(job_id)
     if not incomplete_files:
-        return False
+        return "not_applicable", {}
     if not all(_is_overflow_retryable_file(export_file) for export_file in incomplete_files):
-        return False
+        return "not_applicable", {}
 
     active_assignment = assignment_repo.get_active_for_job(job_id)
     if active_assignment is None:
-        return False
+        return "not_applicable", {}
 
-    next_assignment = _select_automatic_overflow_assignment(
+    next_assignment, decision_details = _select_automatic_overflow_assignment(
         db=db,
         job=job,
+        probe=probe,
     )
     if next_assignment is None:
-        return False
+        decision_details.update(
+            {
+                "previous_drive_id": int(active_assignment.drive_id),
+                "retry_file_count": len(incomplete_files),
+                "failure_reason": "Destination capacity exhausted and no assigned drive can continue this copy",
+            }
+        )
+        return "failed", decision_details
 
     next_drive = getattr(next_assignment, "drive", None)
     if next_drive is None:
-        return False
+        decision_details.update(
+            {
+                "previous_drive_id": int(active_assignment.drive_id),
+                "retry_file_count": len(incomplete_files),
+                "failure_reason": "Destination capacity exhausted and no assigned drive can continue this copy",
+            }
+        )
+        return "failed", decision_details
 
     active_assignment.released_at = datetime.now(timezone.utc)
     next_assignment.activated_at = datetime.now(timezone.utc)
@@ -386,25 +505,50 @@ def _try_automatic_overflow_handoff(db: Session, job_id: int) -> bool:
 
     try:
         job_repo.save(job)
-    except Exception:
-        logger.exception(
-            "Database error while auto-continuing overflow",
-            extra={"job_id": job_id},
+    except Exception as exc:
+        logger.info(
+            "Automatic target-full continuation could not be persisted",
+            extra={
+                "job_id": job_id,
+                "project_id": job.project_id,
+                "failure_class": "target_full_continuation_persist_failed",
+            },
         )
-        return False
+        logger.debug(
+            "Automatic target-full continuation persistence diagnostics",
+            extra={
+                "job_id": job_id,
+                "project_id": job.project_id,
+                "raw_error": str(exc),
+            },
+        )
+        raise
+
+    decision_details.update(
+        {
+            "previous_drive_id": int(active_assignment.drive_id),
+            "selected_drive_id": int(next_drive.id),
+            "drive_assignment_id": int(next_assignment.id),
+            "retry_file_count": len(incomplete_files),
+        }
+    )
 
     logger.info(
-        "Automatic overflow continuation started",
+        "Automatic target-full continuation started",
         extra={
             "job_id": job_id,
             "project_id": job.project_id,
             "previous_drive_id": int(active_assignment.drive_id),
             "drive_id": int(next_drive.id),
-            "reason": "automatic_overflow_handoff",
+            "reason": "target_full_continuation",
+            "remaining_bytes": decision_details.get("remaining_bytes"),
+            "candidate_drive_count": decision_details.get("candidate_drive_count"),
+            "validated_candidate_count": decision_details.get("validated_candidate_count"),
         },
     )
+    _add_target_full_decision_audit(audit_repo, job=job, details=decision_details)
     try:
-        AuditRepository(db).add(
+        audit_repo.add(
             action="JOB_OVERFLOW_CONTINUATION_STARTED",
             job_id=job_id,
             project_id=job.project_id,
@@ -421,7 +565,7 @@ def _try_automatic_overflow_handoff(db: Session, job_id: int) -> bool:
     except Exception:
         logger.exception("Failed to write audit log for JOB_OVERFLOW_CONTINUATION_STARTED")
 
-    return True
+    return "continued", decision_details
 
 
 def _clear_startup_analysis_cache(job: Any) -> None:
@@ -1811,9 +1955,12 @@ def run_copy_job(job_id: int) -> None:
                     ExportFile.status == FileStatus.TIMEOUT,
                 ).count()
 
-                if error_count > 0 and timeout_count == 0 and _try_automatic_overflow_handoff(db, job_id):
-                    db.expire_all()
-                    continue
+                target_full_decision: dict[str, Any] | None = None
+                if error_count > 0 and timeout_count == 0:
+                    target_full_outcome, target_full_decision = _resolve_target_full_outcome(db, job_id)
+                    if target_full_outcome == "continued":
+                        db.expire_all()
+                        continue
 
                 job = job_repo.get(job_id)
                 if job:
@@ -1839,10 +1986,17 @@ def run_copy_job(job_id: int) -> None:
                         except Exception:
                             logger.error("DB commit failed setting job %s to PAUSED", job_id)
                     else:
-                        # File-level ERROR/TIMEOUT outcomes are preserved for recall/retry,
-                        # but they do not make the whole job FAILED once all files finish.
-                        job.status = JobStatus.COMPLETED if all_files_finished else JobStatus.FAILED
+                        # File-level ERROR/TIMEOUT outcomes remain available for recall/retry.
+                        # Target-full failures are the explicit exception when no assigned
+                        # drive can safely continue the remaining work.
+                        target_full_failure = (
+                            target_full_decision
+                            if target_full_decision and target_full_decision.get("decision") == "failed"
+                            else None
+                        )
+                        job.status = JobStatus.FAILED if target_full_failure else (JobStatus.COMPLETED if all_files_finished else JobStatus.FAILED)
                         job.completed_at = datetime.now(timezone.utc)
+                        job.failure_reason = target_full_failure.get("failure_reason") if target_full_failure else None
                         cache_cleared = False
                         cache_clear_details: dict[str, int] = {}
                         if (
@@ -1880,11 +2034,25 @@ def run_copy_job(job_id: int) -> None:
                             elapsed_seconds = round(total_active_seconds, 2)
                             copy_rate_mb_s = _calculate_copy_rate_mb_s(job.copied_bytes or 0, elapsed_seconds)
                             _log_job_path_context(job_id, job.source_path, job.target_mount_path, "copy-finished")
+                            if target_full_failure:
+                                logger.info(
+                                    "Target-full copy decision failed job",
+                                    extra={
+                                        "job_id": job_id,
+                                        "project_id": job.project_id,
+                                        "reason": target_full_failure.get("decision_reason"),
+                                        "previous_drive_id": target_full_failure.get("previous_drive_id"),
+                                        "remaining_bytes": target_full_failure.get("remaining_bytes"),
+                                        "candidate_drive_count": target_full_failure.get("candidate_drive_count"),
+                                        "validated_candidate_count": target_full_failure.get("validated_candidate_count"),
+                                    },
+                                )
+                                _add_target_full_decision_audit(AuditRepository(db), job=job, details=target_full_failure)
                             if job.status == JobStatus.FAILED:
                                 logger.error(
                                     f"JOB_FAILED job_id={job_id} project_id={job.project_id} "
                                     f"status={job.status.value} started_at={job.started_at.isoformat() if job.started_at else None} failed_at={job.completed_at.isoformat() if job.completed_at else None} "
-                                    f"thread_count={job.thread_count} files_copied={done_count} file_count={job.file_count} error_count={error_count} timeout_count={timeout_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} elapsed_seconds={elapsed_seconds} copy_rate_mb_s={copy_rate_mb_s}",
+                                    f"thread_count={job.thread_count} files_copied={done_count} file_count={job.file_count} error_count={error_count} timeout_count={timeout_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} reason={job.failure_reason or 'Job failed'} elapsed_seconds={elapsed_seconds} copy_rate_mb_s={copy_rate_mb_s}",
                                     extra={
                                         "job_id": job_id,
                                         "project_id": job.project_id,
@@ -1897,6 +2065,7 @@ def run_copy_job(job_id: int) -> None:
                                         "timeout_count": timeout_count,
                                         "copied_bytes": job.copied_bytes or 0,
                                         "total_bytes": job.total_bytes or 0,
+                                        "reason": job.failure_reason or "Job failed",
                                         "elapsed_seconds": elapsed_seconds,
                                         "copy_rate_mb_s": copy_rate_mb_s,
                                     },
@@ -1936,6 +2105,7 @@ def run_copy_job(job_id: int) -> None:
                                     "timeout_count": timeout_count,
                                     "copied_bytes": job.copied_bytes or 0,
                                     "total_bytes": job.total_bytes or 0,
+                                    **({"reason": job.failure_reason} if job.failure_reason else {}),
                                     "elapsed_seconds": elapsed_seconds,
                                     "copy_rate_mb_s": copy_rate_mb_s,
                                 },
