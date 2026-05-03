@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from itertools import chain
 
 from sqlalchemy import Boolean, Column, Integer, String, BigInteger, Enum, ForeignKey, DateTime, Text, JSON, Float, Index, event
@@ -114,6 +115,7 @@ class ExportFile(Base):
 
     id = Column(Integer, primary_key=True)
     job_id = Column(Integer, ForeignKey("export_jobs.id"), nullable=False)
+    drive_assignment_id = Column(Integer, ForeignKey("drive_assignments.id"), nullable=True, index=True)
     project_id = Column(String, ForeignKey("projects.normalized_project_id"), nullable=False, index=True)
     relative_path = Column(String, nullable=False)
     size_bytes = Column(BigInteger)
@@ -124,6 +126,7 @@ class ExportFile(Base):
     startup_analysis_revision = Column(Integer, default=0, nullable=False, server_default="0")
     job = relationship("ExportJob", back_populates="files")
     project = relationship(Project, back_populates="files")
+    drive_assignment = relationship("DriveAssignment")
 
 
 class StartupAnalysisEntry(Base):
@@ -151,10 +154,12 @@ class Manifest(Base):
 
     id = Column(Integer, primary_key=True)
     job_id = Column(Integer, ForeignKey("export_jobs.id"), nullable=False)
+    drive_assignment_id = Column(Integer, ForeignKey("drive_assignments.id"), nullable=True, index=True)
     manifest_path = Column(String)
     format = Column(String, default="JSON")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     job = relationship("ExportJob", back_populates="manifests")
+    drive_assignment = relationship("DriveAssignment")
 
 
 class DriveAssignment(Base):
@@ -170,6 +175,7 @@ class DriveAssignment(Base):
     file_count = Column(Integer, default=0, nullable=False)
     copied_bytes = Column(BigInteger, default=0, nullable=False)
     assigned_at = Column(DateTime(timezone=True), server_default=func.now())
+    activated_at = Column(DateTime(timezone=True), nullable=True, default=lambda: datetime.now(timezone.utc))
     released_at = Column(DateTime(timezone=True))
     drive = relationship("UsbDrive", back_populates="assignments")
     job = relationship("ExportJob", back_populates="assignments")
