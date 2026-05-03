@@ -10,7 +10,7 @@ def _write_executable(path: Path, content: str) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
-def test_package_local_generates_help_before_frontend_build(tmp_path):
+def test_package_local_verifies_help_before_frontend_build(tmp_path):
     source_repo_root = Path(__file__).resolve().parent.parent
     repo_root = tmp_path / "repo"
     package_script = repo_root / "scripts" / "package-local.sh"
@@ -29,6 +29,12 @@ def test_package_local_generates_help_before_frontend_build(tmp_path):
     for relative_path in ["install.sh", "pyproject.toml", "alembic.ini", "README.md", "LICENSE"]:
         (repo_root / relative_path).write_text("placeholder\n", encoding="utf-8")
 
+    (repo_root / "frontend" / "public" / "help").mkdir(parents=True)
+    (repo_root / "frontend" / "public" / "help" / "manual.html").write_text(
+        "<html>generated help</html>\n",
+        encoding="utf-8",
+    )
+
     npm_log = tmp_path / "npm.log"
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
@@ -40,9 +46,8 @@ def test_package_local_generates_help_before_frontend_build(tmp_path):
             set -Eeuo pipefail
             printf '%s\n' "$*" >> {npm_log}
 
-            if [[ "$*" == "run build:help" ]]; then
-              mkdir -p public/help
-              printf '%s\n' '<html>generated help</html>' > public/help/manual.html
+                        if [[ "$*" == "run build:help:check" ]]; then
+                            test -f public/help/manual.html
               exit 0
             fi
 
@@ -74,7 +79,7 @@ def test_package_local_generates_help_before_frontend_build(tmp_path):
     assert result.returncode == 0, (
         f"package-local.sh failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
     )
-    assert npm_log.read_text(encoding="utf-8").splitlines() == ["ci", "run build:help", "run build"]
+    assert npm_log.read_text(encoding="utf-8").splitlines() == ["ci", "run build:help:check", "run build"]
     assert (repo_root / "frontend" / "public" / "help" / "manual.html").read_text(encoding="utf-8") == (
         "<html>generated help</html>\n"
     )
