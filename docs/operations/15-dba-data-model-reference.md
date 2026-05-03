@@ -210,6 +210,8 @@ A concise DBML representation for schema communication and diagram tooling is pr
 
 - `docs/database/ecube-schema.dbml`
 
+When SQLAlchemy models or release-scoped schema migration details change, regenerate this file with `python3 scripts/generate_dbml_schema.py` before committing so the DBML reference stays aligned with the latest schema.
+
 ## Rendered Schema Workflow (DBML Import/Export)
 
 Use this workflow to generate a rendered ER diagram from DBML in one pass.

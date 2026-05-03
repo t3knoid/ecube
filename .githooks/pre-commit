@@ -16,9 +16,7 @@ HELP_HTML_FILE="frontend/public/help/manual.html"
 HELP_BUILD_SCRIPT="scripts/build-help.mjs"
 HELP_PACKAGE_FILE="frontend/package.json"
 DBML_FILE="docs/database/ecube-schema.dbml"
-DBML_SCRIPT="scripts/generate_dbml_schema.py"
 SCHEMA_MODEL_GLOB='^app/models/'
-SCHEMA_MIGRATION_FILE="alembic/versions/v0_2_0.py"
 
 # Only run when either file is staged
 if git diff --cached --name-only | grep -qE "(${MD_FILE}|${XLSX_FILE})"; then
@@ -44,8 +42,8 @@ if git diff --cached --name-only | grep -qE "(${HELP_MD_FILE}|${HELP_HTML_FILE}|
     fi
 fi
 
-# Only run when schema sources, the DBML generator, or the generated DBML are staged
-if git diff --cached --name-only | grep -qE "(${DBML_FILE}|${DBML_SCRIPT}|${SCHEMA_MIGRATION_FILE})|${SCHEMA_MODEL_GLOB}"; then
+# Only run when SQLAlchemy model metadata or the generated DBML are staged
+if git diff --cached --name-only | grep -qE "(${DBML_FILE})|${SCHEMA_MODEL_GLOB}"; then
     echo "pre-commit: checking DBML schema sync..."
     if ! python3 scripts/generate_dbml_schema.py --check; then
         echo ""
