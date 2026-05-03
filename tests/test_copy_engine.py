@@ -55,6 +55,14 @@ def _assign_drive(db, job: ExportJob) -> DriveAssignment:
     return assignment
 
 
+def _reserve_assignment(db, *, drive_id: int, job_id: int) -> DriveAssignment:
+    assignment = DriveAssignment(drive_id=drive_id, job_id=job_id, activated_at=None)
+    db.add(assignment)
+    db.flush()
+    assignment.activated_at = None
+    return assignment
+
+
 def _session_factory(db):
     """Return a non-closing wrapper around *db* for use as SessionLocal mock."""
 
@@ -799,24 +807,28 @@ def test_run_copy_job_automatically_continues_overflow_on_next_project_drive(db,
     db.add(job)
     db.flush()
     db.add(DriveAssignment(drive_id=first_drive.id, job_id=job.id))
-    second_assignment = DriveAssignment(drive_id=second_drive.id, job_id=job.id, activated_at=None)
-    db.add(second_assignment)
-    db.flush()
-    second_assignment.activated_at = None
+    _reserve_assignment(db, drive_id=second_drive.id, job_id=job.id)
     db.commit()
 
     copy_attempts = {"count": 0}
     original_copy_file = copy_engine.copy_file
 
+    class _Probe:
+        def probe_available_bytes(self, mount_path: str) -> int | None:
+            if mount_path == str(second_target):
+                return 10_000
+            return 1
+
     def _copy_with_single_overflow(src, dst, **kwargs):
         copy_attempts["count"] += 1
         if copy_attempts["count"] == 1:
-            return False, None, "disk full"
+            return False, None, f"disk full on {first_target}"
         return original_copy_file(src, dst, **kwargs)
 
     with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
         with patch("app.services.copy_engine.copy_file", side_effect=_copy_with_single_overflow):
-            copy_engine.run_copy_job(job.id)
+            with patch("app.services.copy_engine.get_drive_space_probe", return_value=_Probe()):
+                copy_engine.run_copy_job(job.id)
 
     db.expire_all()
     db.refresh(job)
@@ -838,6 +850,12 @@ def test_run_copy_job_automatically_continues_overflow_on_next_project_drive(db,
         .order_by(AuditLog.id.desc())
         .first()
     )
+    target_full_audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_TARGET_FULL_DECISION", AuditLog.job_id == job.id)
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
 
     assert job.status == JobStatus.COMPLETED
     assert job.target_mount_path == str(second_target)
@@ -849,9 +867,12 @@ def test_run_copy_job_automatically_continues_overflow_on_next_project_drive(db,
     assert {file.drive_assignment_id for file in files} == {assignments[0].id, assignments[1].id}
     assert overflow_audit is not None
     assert overflow_audit.details["automatic"] is True
+    assert target_full_audit is not None
+    assert target_full_audit.details["decision"] == "continued"
+    assert target_full_audit.details["selected_drive_id"] == second_drive.id
 
 
-def test_run_copy_job_keeps_manual_overflow_when_no_project_drive_is_available(db, tmp_path):
+def test_run_copy_job_fails_when_target_full_has_no_other_assigned_drive(db, tmp_path, caplog):
     source_dir = tmp_path / "source"
     source_dir.mkdir()
     (source_dir / "bad.txt").write_bytes(b"data")
@@ -887,25 +908,277 @@ def test_run_copy_job_keeps_manual_overflow_when_no_project_drive_is_available(d
     db.add(DriveAssignment(drive_id=first_drive.id, job_id=job.id))
     db.commit()
 
+    raw_error = f"disk full on {first_target}/bad.txt"
+
     with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
         with patch(
             "app.services.copy_engine.copy_file",
-            return_value=(False, None, "disk full"),
+            return_value=(False, None, raw_error),
         ):
-            copy_engine.run_copy_job(job.id)
+            with caplog.at_level(logging.INFO):
+                copy_engine.run_copy_job(job.id)
 
     db.expire_all()
     db.refresh(job)
     assignments = db.query(DriveAssignment).filter(DriveAssignment.job_id == job.id).all()
-    overflow_audit = (
+    decision_audit = (
         db.query(AuditLog)
-        .filter(AuditLog.action == "JOB_OVERFLOW_CONTINUATION_STARTED", AuditLog.job_id == job.id)
+        .filter(AuditLog.action == "JOB_TARGET_FULL_DECISION", AuditLog.job_id == job.id)
+        .first()
+    )
+    failed_audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_FAILED", AuditLog.job_id == job.id)
+        .first()
+    )
+    messages = [record.getMessage() for record in caplog.records]
+    decision_payload = json.dumps(decision_audit.details)
+
+    assert job.status == JobStatus.FAILED
+    assert job.failure_reason == "Destination capacity exhausted and no assigned drive can continue this copy"
+    assert len(assignments) == 1
+    assert decision_audit is not None
+    assert decision_audit.details["decision"] == "failed"
+    assert decision_audit.details["decision_reason"] == "no_other_assigned_drive"
+    assert failed_audit is not None
+    assert failed_audit.details["reason"] == job.failure_reason
+    assert raw_error not in decision_payload
+    assert str(first_target) not in decision_payload
+    assert all(raw_error not in message for message in messages)
+    assert all(str(first_target) not in message for message in messages)
+
+
+def test_run_copy_job_fails_when_assigned_drives_lack_capacity(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "bad.txt").write_bytes(b"data")
+
+    first_target = tmp_path / "target-1"
+    second_target = tmp_path / "target-2"
+    first_target.mkdir()
+    second_target.mkdir()
+
+    first_drive = UsbDrive(
+        device_identifier="USB-NO-CAP-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        mount_path=str(first_target),
+    )
+    second_drive = UsbDrive(
+        device_identifier="USB-NO-CAP-002",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        mount_path=str(second_target),
+    )
+    db.add_all([first_drive, second_drive])
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-001",
+        evidence_number="EV-NO-CAP-001",
+        source_path=str(source_dir),
+        target_mount_path=str(first_target),
+        status=JobStatus.PENDING,
+        thread_count=1,
+        max_file_retries=0,
+        retry_delay_seconds=0,
+        startup_analysis_total_bytes=len(b"data"),
+        startup_analysis_file_count=1,
+        startup_analysis_status=StartupAnalysisStatus.READY,
+        startup_analysis_cache_present=True,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=first_drive.id, job_id=job.id))
+    _reserve_assignment(db, drive_id=second_drive.id, job_id=job.id)
+    db.commit()
+
+    class _Probe:
+        def probe_available_bytes(self, mount_path: str) -> int | None:
+            if mount_path == str(second_target):
+                return 1
+            return 0
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine.copy_file", return_value=(False, None, "disk full")):
+            with patch("app.services.copy_engine.get_drive_space_probe", return_value=_Probe()):
+                copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+    decision_audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_TARGET_FULL_DECISION", AuditLog.job_id == job.id)
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+
+    assert job.status == JobStatus.FAILED
+    assert decision_audit is not None
+    assert decision_audit.details["decision_reason"] == "no_assigned_drive_with_capacity"
+
+
+def test_run_copy_job_skips_other_project_assignment_during_target_full_selection(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "first.txt").write_bytes(b"alpha")
+    (source_dir / "second.txt").write_bytes(b"bravo")
+
+    first_target = tmp_path / "target-1"
+    wrong_project_target = tmp_path / "target-2"
+    third_target = tmp_path / "target-3"
+    first_target.mkdir()
+    wrong_project_target.mkdir()
+    third_target.mkdir()
+
+    first_drive = UsbDrive(
+        device_identifier="USB-ISO-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        mount_path=str(first_target),
+    )
+    wrong_project_drive = UsbDrive(
+        device_identifier="USB-ISO-002",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-OTHER",
+        mount_path=str(wrong_project_target),
+    )
+    third_drive = UsbDrive(
+        device_identifier="USB-ISO-003",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        mount_path=str(third_target),
+    )
+    db.add_all([first_drive, wrong_project_drive, third_drive])
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-001",
+        evidence_number="EV-ISO-001",
+        source_path=str(source_dir),
+        target_mount_path=str(first_target),
+        status=JobStatus.PENDING,
+        thread_count=1,
+        max_file_retries=0,
+        retry_delay_seconds=0,
+        startup_analysis_total_bytes=len(b"alpha") + len(b"bravo"),
+        startup_analysis_file_count=2,
+        startup_analysis_status=StartupAnalysisStatus.READY,
+        startup_analysis_cache_present=True,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=first_drive.id, job_id=job.id))
+    _reserve_assignment(db, drive_id=wrong_project_drive.id, job_id=job.id)
+    _reserve_assignment(db, drive_id=third_drive.id, job_id=job.id)
+    db.commit()
+
+    copy_attempts = {"count": 0}
+    original_copy_file = copy_engine.copy_file
+
+    class _Probe:
+        def probe_available_bytes(self, mount_path: str) -> int | None:
+            if mount_path == str(third_target):
+                return 10_000
+            if mount_path == str(wrong_project_target):
+                return 10_000
+            return 1
+
+    def _copy_with_single_overflow(src, dst, **kwargs):
+        copy_attempts["count"] += 1
+        if copy_attempts["count"] == 1:
+            return False, None, "disk full"
+        return original_copy_file(src, dst, **kwargs)
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine.copy_file", side_effect=_copy_with_single_overflow):
+            with patch("app.services.copy_engine.get_drive_space_probe", return_value=_Probe()):
+                copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+    decision_audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_TARGET_FULL_DECISION", AuditLog.job_id == job.id)
+        .order_by(AuditLog.id.desc())
         .first()
     )
 
     assert job.status == JobStatus.COMPLETED
-    assert len(assignments) == 1
-    assert overflow_audit is None
+    assert job.target_mount_path == str(third_target)
+    assert decision_audit is not None
+    assert decision_audit.details["selected_drive_id"] == third_drive.id
+
+
+@pytest.mark.parametrize("probe_mode", ["none", "error"])
+def test_run_copy_job_fails_when_target_full_probe_is_unavailable(db, tmp_path, probe_mode):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "bad.txt").write_bytes(b"data")
+
+    first_target = tmp_path / "target-1"
+    second_target = tmp_path / "target-2"
+    first_target.mkdir()
+    second_target.mkdir()
+
+    first_drive = UsbDrive(
+        device_identifier="USB-PROBE-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        mount_path=str(first_target),
+    )
+    second_drive = UsbDrive(
+        device_identifier="USB-PROBE-002",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        mount_path=str(second_target),
+    )
+    db.add_all([first_drive, second_drive])
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-001",
+        evidence_number="EV-PROBE-001",
+        source_path=str(source_dir),
+        target_mount_path=str(first_target),
+        status=JobStatus.PENDING,
+        thread_count=1,
+        max_file_retries=0,
+        retry_delay_seconds=0,
+        startup_analysis_total_bytes=len(b"data"),
+        startup_analysis_file_count=1,
+        startup_analysis_status=StartupAnalysisStatus.READY,
+        startup_analysis_cache_present=True,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=first_drive.id, job_id=job.id))
+    _reserve_assignment(db, drive_id=second_drive.id, job_id=job.id)
+    db.commit()
+
+    class _Probe:
+        def probe_available_bytes(self, mount_path: str) -> int | None:
+            if probe_mode == "none":
+                return None
+            raise RuntimeError("backend probe failed")
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine.copy_file", return_value=(False, None, "disk full")):
+            with patch("app.services.copy_engine.get_drive_space_probe", return_value=_Probe()):
+                copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+    decision_audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_TARGET_FULL_DECISION", AuditLog.job_id == job.id)
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+
+    assert job.status == JobStatus.FAILED
+    assert decision_audit is not None
+    assert decision_audit.details["decision_reason"] == "no_assigned_drive_validated"
 
 
 def test_run_copy_job_marks_job_failed_when_source_scan_disappears(db, tmp_path):
