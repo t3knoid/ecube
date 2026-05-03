@@ -221,11 +221,15 @@ See [02 — Configuration Reference](../operations/04-configuration-reference.md
 
 ### Pre-Commit Hook (Optional)
 
-A pre-commit hook ensures the QA test-case spreadsheet stays in sync with the markdown guide:
+The versioned pre-commit hook blocks commits when generated documentation assets are stale. Today it enforces both QA test-case spreadsheet sync and in-app help sync.
 
 ```bash
 git config core.hooksPath .githooks
 ```
+
+When staged changes touch [docs/testing/03-qa-testing-guide.md](../testing/03-qa-testing-guide.md) or [docs/testing/ecube-qa-test-cases.xlsx](../testing/ecube-qa-test-cases.xlsx), the hook runs `python3 scripts/sync_qa_test_cases.py --check`.
+
+When staged changes touch [docs/operations/13-user-manual.md](../operations/13-user-manual.md), [frontend/public/help/manual.html](../../frontend/public/help/manual.html), [scripts/build-help.mjs](../../scripts/build-help.mjs), or [frontend/package.json](../../frontend/package.json), the hook runs `npm --prefix frontend run build:help:check` and blocks the commit until the generated help file is refreshed and staged.
 
 ---
 
@@ -378,7 +382,9 @@ npm --prefix frontend run test:unit -- --run src/build/__tests__/helpAsset.spec.
 Important workflow notes:
 
 - `npm run dev` serves the generated file from `frontend/public/`, but it does not regenerate help automatically when the manual changes.
-- `npm --prefix frontend run build` runs `build:help` before `vite build`, so packaged frontend artifacts include the current generated help.
+- `npm --prefix frontend run build` runs `build:help:check` before `vite build`, so local builds fail fast if the checked-in help file is stale instead of regenerating it implicitly.
+- `scripts/package-local.sh` also runs `npm run build:help:check`, keeping local packaging and CI packaging on the same verification-only behavior.
+- `.githooks/pre-commit` and `.github/workflows/help-sync-check.yml` enforce the same help-sync rule before commits and in CI.
 - The in-app help is curated from the user manual rather than mirroring it verbatim; generator logic controls which sections are excluded, renumbered, or restyled for the modal experience.
 
 ### Access URLs

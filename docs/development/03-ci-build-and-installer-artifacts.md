@@ -153,10 +153,13 @@ This script performs the package-generation sequence:
 
 1. Set up Node.js (`actions/setup-node@v4`) with npm cache enabled.
 2. Build frontend bundle:
-   - `npm ci`
-   - `npm run build`
+  - `npm ci`
+  - `npm run build:help:check`
+  - `npm run build`
 3. Create `tar.gz` package with a top-level folder transform.
 4. Generate SHA-256 checksum file for the tarball.
+
+Generated help is intentionally not rebuilt during packaging. Contributors must regenerate [frontend/public/help/manual.html](../../frontend/public/help/manual.html) before packaging, and the shared packaging path fails if the checked-in help asset is stale.
 
 Local parity command examples:
 
@@ -233,6 +236,7 @@ When editing packaging workflows or installer copy logic, verify all items below
 3. `frontend/dist` is present in the package.
 4. Checksum file format remains compatible with `sha256sum -c`.
 5. `docs/operations/01-installation.md` remains accurate for operator-facing install steps.
+6. Help-sync verification still runs before frontend packaging, and packaging does not silently rewrite generated help assets in CI.
 
 ---
 
