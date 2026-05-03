@@ -457,7 +457,7 @@ Vue I18n 9.x provides the localization infrastructure. All user-visible strings 
 
 | Component | Purpose | Used By |
 |-----------|---------|--------|
-| `StatusBadge.vue` | Colored pill showing state (DISCONNECTED, UNMOUNTED, AVAILABLE, IN_USE, RUNNING, etc.) | DrivesView, JobsView, MountsView |
+| `StatusBadge.vue` | Colored pill showing state (DISCONNECTED, DISABLED, AVAILABLE, IN_USE, RUNNING, etc.) | DrivesView, JobsView, MountsView |
 | `ProgressBar.vue` | Determinate bar with percentage and bytes label | JobDetailView, DashboardView |
 | `ConfirmDialog.vue` | Modal with title, message, confirm/cancel buttons | Format drive, delete mount, eject drive, remove user |
 | `DataTable.vue` | Sortable, paginated table with slot-based column rendering | All list views |

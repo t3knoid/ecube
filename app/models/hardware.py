@@ -9,7 +9,7 @@ import enum
 
 class DriveState(str, enum.Enum):
     DISCONNECTED = "DISCONNECTED"
-    UNMOUNTED = "UNMOUNTED"
+    DISABLED = "DISABLED"
     AVAILABLE = "AVAILABLE"
     IN_USE = "IN_USE"
 
