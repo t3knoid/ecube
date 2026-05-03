@@ -256,7 +256,7 @@ Backend coverage is enforced through breadth and critical path assertions across
 
 - help-generation script output must be testable locally and in CI
 - add deterministic-output checks (or equivalent guard) so identical source input yields stable generated HTML
-- ensure CI validates generated help artifact existence before packaging artifacts are uploaded
+- ensure CI validates generated help artifact sync before packaging artifacts are uploaded, and keep the local pre-commit/build checks aligned with the same rule
 
 ## References
 
