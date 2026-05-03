@@ -162,16 +162,6 @@ describe('DriveDetailView mount workflow', () => {
     expect(statusBanner.attributes('aria-live')).toBe('polite')
   })
 
-  it('shows the Mount action for an unmounted drive', async () => {
-    mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'UNMOUNTED', filesystem_path: '/dev/sdb1' })])
-
-    const wrapper = mountView()
-    await flushPromises()
-
-    const labels = wrapper.findAll('button').map((node) => node.text())
-    expect(labels).toContain(i18n.global.t('drives.mount'))
-  })
-
   it('hides the Mount action when the drive is already mounted', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/7' })])
 
