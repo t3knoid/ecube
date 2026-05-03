@@ -1350,7 +1350,10 @@ def continue_job_overflow(
     try:
         job_repo.save(job)
     except Exception:
-        logger.exception("DB commit failed while continuing overflow for job %s", job_id)
+        logger.exception(
+            "DB commit failed while continuing overflow",
+            extra={"job_id": job_id},
+        )
         raise HTTPException(
             status_code=500,
             detail="Database error while continuing overflow",
