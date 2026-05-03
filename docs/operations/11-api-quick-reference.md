@@ -85,7 +85,7 @@ Setup initialize behavior:
 
 | Method | Endpoint | Role | Description |
 | ------ | -------- | ---- | ----------- |
-| GET | `/drives` | admin/manager/processor/auditor | List drives (defaults to `DISABLED`, legacy `UNMOUNTED`, `AVAILABLE`, and `IN_USE`; excludes `DISCONNECTED` unless `?include_disconnected=true` is set). Optional `?project_id=` and repeatable `?state=` filters |
+| GET | `/drives` | admin/manager/processor/auditor | List drives (defaults to `DISABLED`, `AVAILABLE`, and `IN_USE`; excludes `DISCONNECTED` unless `?include_disconnected=true` is set). Optional `?project_id=` and repeatable `?state=` filters |
 | POST | `/drives/refresh` | admin/manager | Force rescan of attached drives |
 | POST | `/drives/{drive_id}/initialize` | admin/manager | Initialize drive for project (requires a recognized filesystem, a mounted destination drive, and a mounted share assigned to that project; returns `409` if the drive or source is not ready or is temporarily busy) |
 | POST | `/drives/{drive_id}/format` | admin/manager | Format drive with `ext4` or `exfat`; drive must be AVAILABLE and unmounted |

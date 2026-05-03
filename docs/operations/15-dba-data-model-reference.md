@@ -126,7 +126,7 @@ This section captures the primary physical schema details used by DBAs.
 
 ### Core Enumerations
 
-- `drive_state`: `DISCONNECTED`, `DISABLED`, `UNMOUNTED`, `AVAILABLE`, `IN_USE`
+- `drive_state`: `DISCONNECTED`, `DISABLED`, `AVAILABLE`, `IN_USE`
 - `mount_type`: `NFS`, `SMB`
 - `mount_status`: `MOUNTED`, `UNMOUNTED`, `ERROR`
 - `job_status`: `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `VERIFYING`

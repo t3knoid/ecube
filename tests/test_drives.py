@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy import text
 
 from app.exceptions import ConflictError
 from app.infrastructure.drive_eject import EjectResult
@@ -176,9 +177,8 @@ def test_list_drives_default_excludes_disconnected(client, db):
     d1 = UsbDrive(device_identifier="USB-1", current_state=DriveState.IN_USE, current_project_id="PROJ-001")
     d2 = UsbDrive(device_identifier="USB-2", current_state=DriveState.AVAILABLE)
     d5 = UsbDrive(device_identifier="USB-5", current_state=DriveState.DISABLED)
-    d4 = UsbDrive(device_identifier="USB-4", current_state=DriveState.UNMOUNTED)
     d3 = UsbDrive(device_identifier="USB-3", current_state=DriveState.DISCONNECTED)
-    db.add_all([d1, d2, d3, d4, d5])
+    db.add_all([d1, d2, d3, d5])
     db.commit()
 
     response = client.get("/drives")
@@ -187,7 +187,6 @@ def test_list_drives_default_excludes_disconnected(client, db):
     ids = [d["device_identifier"] for d in data]
     assert "USB-1" in ids
     assert "USB-2" in ids
-    assert "USB-4" in ids
     assert "USB-5" in ids
     assert "USB-3" not in ids
 
@@ -421,28 +420,28 @@ def test_mount_drive_success(manager_client, db):
     assert "mount_path" not in audit.details
 
 
-def test_mount_unmounted_drive_normalizes_to_available(manager_client, db):
-    from app.config import settings
+def test_normalize_unreleased_drive_states_promotes_unmounted_to_disabled(db):
+    from app.services.drive_service import normalize_unreleased_drive_states
 
     drive = UsbDrive(
-        device_identifier="USB-MOUNT-UNMOUNTED",
-        current_state=DriveState.UNMOUNTED,
+        device_identifier="USB-MOUNT-UNRELEASED",
+        current_state=DriveState.DISABLED,
         filesystem_type="ext4",
         filesystem_path="/dev/sdz",
     )
     db.add(drive)
     db.commit()
 
-    provider = MagicMock()
-    provider.mount_drive.return_value = (True, None)
+    db.execute(
+        text("UPDATE usb_drives SET current_state = :state WHERE id = :drive_id"),
+        {"state": "UNMOUNTED", "drive_id": drive.id},
+    )
+    db.commit()
 
-    with patch("app.routers.drives.get_drive_mount", return_value=provider):
-        response = manager_client.post(f"/drives/{drive.id}/mount")
+    assert normalize_unreleased_drive_states(db) == 1
 
-    assert response.status_code == 200
-    data = response.json()
-    assert data["current_state"] == "AVAILABLE"
-    assert data["mount_path"] == f"{settings.usb_mount_base_path}/{drive.id}"
+    db.refresh(drive)
+    assert drive.current_state == DriveState.DISABLED
 
 
 def test_mount_drive_requires_recognized_filesystem(manager_client, db):
@@ -765,33 +764,6 @@ def test_initialize_empty_drive_is_rejected(manager_client, db):
     assert log.details["drive_id"] == drive.id
     assert log.details["current_state"] == "DISCONNECTED"
     assert log.details["requested_project_id"] == "PROJ-NEW"
-
-
-def test_initialize_unmounted_drive_is_rejected(manager_client, db):
-    """UNMOUNTED drives are physically present but not ready; initialization must be rejected with 409."""
-    from app.models.audit import AuditLog
-
-    drive = UsbDrive(
-        device_identifier="USB003U",
-        current_state=DriveState.UNMOUNTED,
-        filesystem_type="ext4",
-    )
-    db.add(drive)
-    db.commit()
-
-    response = manager_client.post(f"/drives/{drive.id}/initialize", json={"project_id": "PROJ-NEW"})
-    assert response.status_code == 409
-    assert "unmounted" in response.json()["message"].lower()
-
-    db.refresh(drive)
-    assert drive.current_state == DriveState.UNMOUNTED
-
-    log = db.query(AuditLog).filter(AuditLog.action == "INIT_REJECTED_NOT_AVAILABLE").order_by(AuditLog.id.desc()).first()
-    assert log is not None
-    assert log.details["drive_id"] == drive.id
-    assert log.details["current_state"] == "UNMOUNTED"
-    assert log.details["requested_project_id"] == "PROJ-NEW"
-
 
 def test_initialize_disabled_drive_is_rejected(manager_client, db):
     """DISABLED drives are physically present on blocked ports; initialization must be rejected with 409."""
