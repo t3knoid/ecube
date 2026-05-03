@@ -675,11 +675,11 @@ Verify and Manifest stay disabled until the job reaches a truly complete 100% st
 
 For a partial-success `COMPLETED` job, Job Detail can show `Retry Failed Files` instead of exposing Verify or Manifest too early. This action is available only to `admin`, `manager`, and `processor`, moves the job back into `RUNNING`, re-queues only failed or timed-out files, and preserves already successful copies.
 
-If the original destination drive fills or the remaining copy work must move to new media, ECUBE first checks for the next reserved overflow drive that was preassigned to the job during creation. When that reserved drive is still mounted and can hold the remaining estimated bytes, ECUBE keeps the same job ID, activates that reserved drive assignment for chain-of-custody purposes, and automatically resumes only the remaining work on that next drive. If no reserved drive is available or suitable, Job Detail can show `Continue on Another Drive` so the operator can choose another mounted project-compatible drive and optionally adjust thread count. Automatic manifest generation still waits for a later clean completion, but it refreshes manifests per drive assignment instead of only on the final drive.
+If the original destination drive fills or the remaining copy work must move to new media, ECUBE first checks for the next reserved overflow drive that was preassigned to the job during creation. When that reserved drive is still mounted, still belongs to the same project, and passes the trusted backend free-space check for the remaining estimated bytes, ECUBE keeps the same job ID, activates that reserved drive assignment for chain-of-custody purposes, and automatically resumes only the remaining work on that next drive. If no assigned drive is available or can be validated for continuation, ECUBE marks the job `FAILED` with a safe destination-capacity reason. Job Detail can then show `Continue on Another Drive` so the operator can choose another mounted project-compatible drive and optionally adjust thread count. Automatic manifest generation still waits for a later clean completion, but it refreshes manifests per drive assignment instead of only on the final drive.
 
 This is not limited to only two drives. If the second drive also fills, the same job can be continued again onto a third drive, and later onto additional drives if needed, as long as each new drive is mounted and project-compatible.
 
-This continuation happens automatically only when another reserved overflow drive for the same job is still mounted and passes the remaining-capacity check. If there is no eligible prepared drive, ECUBE leaves the job available for the existing manual workflow so an operator can open `Job Detail`, choose `Continue on Another Drive`, and explicitly select the next destination drive.
+This continuation happens automatically only when another reserved overflow drive for the same job is still mounted, still project-compatible, and passes the remaining-capacity probe. If there is no eligible prepared drive, the copy run stops with a failed destination-capacity result so an operator can open `Job Detail`, review the safe failure reason, and explicitly choose `Continue on Another Drive` for the next destination.
 
 #### 9.4.1a Overflow Continuation Workflow
 
@@ -700,7 +700,7 @@ What this action does:
 - Re-runs only the remaining work on the newly selected drive
 - Refreshes per-drive manifests after a later clean completion so each drive records only the files copied to that media
 - Can be repeated again later if that newly selected drive also overflows
-- Becomes the manual fallback when no eligible automatic handoff drive is available
+- Becomes the manual follow-up when no eligible automatic handoff drive is available and the job stops in `FAILED`
 
 What to do before you start:
 
