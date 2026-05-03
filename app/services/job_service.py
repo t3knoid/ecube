@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.exceptions import ConflictError, ECUBEException, EncodingError
 from app.models.hardware import DriveState, UsbDrive
-from app.models.jobs import DriveAssignment, ExportFile, ExportJob, JobStatus, Manifest, StartupAnalysisEntry, StartupAnalysisStatus
+from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, Manifest, StartupAnalysisEntry, StartupAnalysisStatus
 from app.models.network import MountStatus
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
@@ -22,7 +22,7 @@ from app.repositories.job_repository import (
     ManifestRepository,
 )
 from app.repositories.mount_repository import MountRepository
-from app.schemas.jobs import JobCreate, JobStart, JobUpdate
+from app.schemas.jobs import JobCreate, JobOverflowContinueRequest, JobStart, JobUpdate
 from app.services import copy_engine
 from app.services.callback_service import deliver_callback
 from app.utils.sanitize import is_encoding_error, resolve_source_path, sanitize_error_message, validate_source_path
@@ -103,6 +103,77 @@ def _latest_manifest_is_current(job: ExportJob, manifest: Optional[Manifest]) ->
     return created_at >= completed_at
 
 
+def _is_drive_assigned_to_another_job(
+    db: Session,
+    *,
+    drive_id: int,
+    exclude_job_id: Optional[int] = None,
+) -> bool:
+    query = db.query(DriveAssignment).filter(
+        DriveAssignment.drive_id == drive_id,
+        DriveAssignment.released_at.is_(None),
+    )
+    if exclude_job_id is not None:
+        query = query.filter(DriveAssignment.job_id != exclude_job_id)
+    return query.count() > 0
+
+
+def _manifest_targets_for_job(job: ExportJob, db: Session) -> list[tuple[DriveAssignment, list[ExportFile]]]:
+    assignments_by_id = {assignment.id: assignment for assignment in job.assignments}
+    grouped_files: dict[int, list[ExportFile]] = {}
+    for export_file in job.files:
+        assignment_id = cast(Optional[int], getattr(export_file, "drive_assignment_id", None))
+        if assignment_id is None or export_file.status != FileStatus.DONE:
+            continue
+        grouped_files.setdefault(int(assignment_id), []).append(export_file)
+
+    targets: list[tuple[DriveAssignment, list[ExportFile]]] = []
+    for assignment_id, files in grouped_files.items():
+        assignment = assignments_by_id.get(assignment_id)
+        if assignment is None:
+            assignment = db.get(DriveAssignment, assignment_id)
+        if assignment is None:
+            continue
+        targets.append((assignment, files))
+    if not targets:
+        active_assignment = DriveAssignmentRepository(db).get_active_for_job(job.id)
+        if active_assignment is not None:
+            targets.append((active_assignment, []))
+    targets.sort(key=lambda item: (cast(Optional[datetime], getattr(item[0], "assigned_at", None)) or datetime.min.replace(tzinfo=timezone.utc), item[0].id))
+    return targets
+
+
+def _next_manifest_targets_needing_refresh(job: ExportJob, db: Session) -> list[tuple[DriveAssignment, list[ExportFile]]]:
+    manifest_repo = ManifestRepository(db)
+    pending: list[tuple[DriveAssignment, list[ExportFile]]] = []
+    for assignment, files in _manifest_targets_for_job(job, db):
+        latest_manifest = manifest_repo.get_latest_for_assignment(job.id, assignment.id)
+        if not _latest_manifest_is_current(job, latest_manifest):
+            pending.append((assignment, files))
+    return pending
+
+
+def _activate_reserved_or_new_assignment(
+    *,
+    db: Session,
+    assignment_repo: DriveAssignmentRepository,
+    job_id: int,
+    drive_id: int,
+) -> DriveAssignment:
+    reserved_assignment = assignment_repo.get_reserved_for_job_and_drive(job_id, drive_id)
+    if reserved_assignment is not None:
+        reserved_assignment.activated_at = datetime.now(timezone.utc)
+        return reserved_assignment
+
+    assignment = DriveAssignment(
+        drive_id=drive_id,
+        job_id=job_id,
+        activated_at=datetime.now(timezone.utc),
+    )
+    db.add(assignment)
+    return assignment
+
+
 def _generate_manifest_for_job(
     job_id: int,
     db: Session,
@@ -137,49 +208,27 @@ def _generate_manifest_for_job(
             )
         return job, False
 
-    latest_manifest = manifest_repo.get_latest_for_job(job_id)
-    if _latest_manifest_is_current(job, latest_manifest):
+    manifest_targets = _next_manifest_targets_needing_refresh(job, db)
+    if not manifest_targets:
         return job, False
 
     job_project_id = cast(Optional[str], job_row.project_id)
-    assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
-    assignment_row = _row(assignment) if assignment is not None else None
-    active_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
-    target_mount_path = (
-        cast(Optional[str], getattr(assignment_row.drive, "mount_path", None))
-        if assignment_row is not None and getattr(assignment_row, "drive", None) is not None
-        else None
-    )
     generated_at_dt = datetime.now(timezone.utc)
     generated_at = generated_at_dt.isoformat()
     generated_by = actor or "system"
-    manifest_data = {
-        "job_id": cast(int, job_row.id),
-        "project_id": job_project_id,
-        "evidence_number": cast(Optional[str], job_row.evidence_number),
-        "generated_at": generated_at,
-        "generated_by": generated_by,
-        "files": [
-            {
-                "path": f.relative_path,
-                "checksum": f.checksum,
-                "size_bytes": f.size_bytes,
-            }
-            for f in job.files
-        ],
-    }
+    created_any = False
 
-    def audit_manifest_failure(error_message: str, manifest_file: Optional[str] = None) -> None:
+    def audit_manifest_failure(error_message: str, drive_id: Optional[int], manifest_file: Optional[str] = None) -> None:
         try:
             audit_repo.add(
                 action="MANIFEST_CREATE_FAILED",
                 user=actor,
                 project_id=job_project_id,
-                drive_id=active_drive_id,
+                drive_id=drive_id,
                 job_id=job_id,
                 details={
                     "project_id": job_project_id,
-                    "drive_id": active_drive_id,
+                    "drive_id": drive_id,
                     "manifest_file": manifest_file,
                     "generated_at": generated_at,
                     "generated_by": generated_by,
@@ -190,103 +239,140 @@ def _generate_manifest_for_job(
         except Exception:
             logger.error("Failed to write audit log for MANIFEST_CREATE_FAILED")
 
-    if not target_mount_path:
-        manifest_error = "Assigned drive is not mounted"
-        if strict:
-            logger.warning(
-                "Manifest generation rejected",
-                extra={"job_id": job_id, "project_id": job_project_id, "reason": "drive_not_mounted"},
+    for assignment, files in manifest_targets:
+        assignment_row = _row(assignment)
+        drive_id = cast(Optional[int], assignment_row.drive_id)
+        target_mount_path = (
+            cast(Optional[str], getattr(assignment_row.drive, "mount_path", None))
+            if getattr(assignment_row, "drive", None) is not None
+            else None
+        )
+
+        if not target_mount_path:
+            manifest_error = "Assigned drive is not mounted"
+            if strict:
+                logger.warning(
+                    "Manifest generation rejected",
+                    extra={"job_id": job_id, "project_id": job_project_id, "reason": "drive_not_mounted", "drive_id": drive_id},
+                )
+                audit_manifest_failure(manifest_error, drive_id)
+                raise HTTPException(status_code=409, detail=manifest_error)
+            logger.info(
+                "Skipping automatic manifest generation",
+                extra={"job_id": job_id, "project_id": job_project_id, "reason": "drive_not_mounted", "drive_id": drive_id},
             )
-            audit_manifest_failure(manifest_error)
-            raise HTTPException(status_code=409, detail=manifest_error)
-        logger.info(
-            "Skipping automatic manifest generation",
-            extra={"job_id": job_id, "project_id": job_project_id, "reason": "drive_not_mounted"},
-        )
-        return job, False
+            return job, created_any
 
-    candidate_path = os.path.join(target_mount_path, "manifest.json")
-    manifest_name = os.path.basename(candidate_path)
-    try:
-        os.makedirs(target_mount_path, exist_ok=True)
-        with open(candidate_path, "w", encoding="utf-8") as fp:
-            json.dump(manifest_data, fp, indent=2)
-    except Exception as exc:
-        manifest_error = "Manifest file could not be written"
-        logger.info(
-            "Manifest file write failed",
-            extra={"job_id": job_id, "project_id": job_project_id, "reason": "write_failed"},
-        )
-        logger.debug(
-            "Manifest file write failure details",
-            extra={"job_id": job_id, "project_id": job_project_id, "path": candidate_path, "raw_error": str(exc)},
-        )
-        audit_manifest_failure(manifest_error, manifest_name)
-        if strict:
-            raise HTTPException(status_code=500, detail=manifest_error) from exc
-        return job, False
-
-    try:
-        manifest_repo.add(Manifest(job_id=job_id, manifest_path=candidate_path, format="JSON"))
-    except Exception as exc:
-        logger.info(
-            "Manifest persistence failed",
-            extra={"job_id": job_id, "project_id": job_project_id, "reason": "db_write_failed"},
-        )
-        logger.debug(
-            "Manifest persistence failure details",
-            extra={"job_id": job_id, "project_id": job_project_id, "raw_error": str(exc)},
-        )
-        if strict:
-            raise HTTPException(
-                status_code=500,
-                detail="Database error while creating manifest",
-            ) from exc
-        return job, False
-
-    logger.info(
-        "MANIFEST_CREATED",
-        extra={
-            "job_id": job_id,
+        manifest_data = {
+            "job_id": cast(int, job_row.id),
             "project_id": job_project_id,
-            "drive_id": active_drive_id,
-            "actor": actor or "system",
-            "manifest_file": manifest_name,
-            "result": "written",
-        },
-    )
-    try:
-        audit_repo.add(
-            action="MANIFEST_CREATED",
-            user=actor,
-            project_id=job_project_id,
-            drive_id=active_drive_id,
-            job_id=job_id,
-            details={
+            "evidence_number": cast(Optional[str], job_row.evidence_number),
+            "drive_assignment_id": cast(int, assignment_row.id),
+            "drive_id": drive_id,
+            "generated_at": generated_at,
+            "generated_by": generated_by,
+            "files": [
+                {
+                    "path": export_file.relative_path,
+                    "checksum": export_file.checksum,
+                    "size_bytes": export_file.size_bytes,
+                }
+                for export_file in files
+            ],
+        }
+
+        candidate_path = os.path.join(target_mount_path, "manifest.json")
+        manifest_name = os.path.basename(candidate_path)
+        try:
+            os.makedirs(target_mount_path, exist_ok=True)
+            with open(candidate_path, "w", encoding="utf-8") as fp:
+                json.dump(manifest_data, fp, indent=2)
+        except Exception as exc:
+            manifest_error = "Manifest file could not be written"
+            logger.info(
+                "Manifest file write failed",
+                extra={"job_id": job_id, "project_id": job_project_id, "reason": "write_failed", "drive_id": drive_id},
+            )
+            logger.debug(
+                "Manifest file write failure details",
+                extra={"job_id": job_id, "project_id": job_project_id, "path": candidate_path, "raw_error": str(exc), "drive_id": drive_id},
+            )
+            audit_manifest_failure(manifest_error, drive_id, manifest_name)
+            if strict:
+                raise HTTPException(status_code=500, detail=manifest_error) from exc
+            return job, created_any
+
+        try:
+            manifest_repo.add(
+                Manifest(
+                    job_id=job_id,
+                    drive_assignment_id=cast(int, assignment_row.id),
+                    manifest_path=candidate_path,
+                    format="JSON",
+                )
+            )
+        except Exception as exc:
+            logger.info(
+                "Manifest persistence failed",
+                extra={"job_id": job_id, "project_id": job_project_id, "reason": "db_write_failed", "drive_id": drive_id},
+            )
+            logger.debug(
+                "Manifest persistence failure details",
+                extra={"job_id": job_id, "project_id": job_project_id, "raw_error": str(exc), "drive_id": drive_id},
+            )
+            if strict:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Database error while creating manifest",
+                ) from exc
+            return job, created_any
+
+        created_any = True
+        logger.info(
+            "MANIFEST_CREATED",
+            extra={
+                "job_id": job_id,
                 "project_id": job_project_id,
-                "drive_id": active_drive_id,
+                "drive_id": drive_id,
+                "actor": actor or "system",
+                "manifest_file": manifest_name,
+                "result": "written",
+            },
+        )
+        try:
+            audit_repo.add(
+                action="MANIFEST_CREATED",
+                user=actor,
+                project_id=job_project_id,
+                drive_id=drive_id,
+                job_id=job_id,
+                details={
+                    "project_id": job_project_id,
+                    "drive_id": drive_id,
+                    "manifest_file": manifest_name,
+                    "generated_at": generated_at,
+                    "generated_by": generated_by,
+                    "error": None,
+                },
+                client_ip=client_ip,
+            )
+        except Exception:
+            logger.error("Failed to write audit log for MANIFEST_CREATED")
+        _emit_job_lifecycle_callback(
+            job,
+            event="MANIFEST_CREATED",
+            actor=actor,
+            event_at=generated_at_dt,
+            event_details={
                 "manifest_file": manifest_name,
                 "generated_at": generated_at,
                 "generated_by": generated_by,
-                "error": None,
+                "drive_id": drive_id,
             },
-            client_ip=client_ip,
         )
-    except Exception:
-        logger.error("Failed to write audit log for MANIFEST_CREATED")
+
     db.refresh(job)
-    _emit_job_lifecycle_callback(
-        job,
-        event="MANIFEST_CREATED",
-        actor=actor,
-        event_at=generated_at_dt,
-        event_details={
-            "manifest_file": manifest_name,
-            "generated_at": generated_at,
-            "generated_by": generated_by,
-        },
-    )
-    return job, True
+    return job, created_any
 
 
 def auto_generate_manifest_for_completed_job(
@@ -639,11 +725,25 @@ def create_job(
         db.flush()  # obtain job.id for the assignment FK
 
         explicit_bound = False
+        selected_drive_ids: set[int] = set()
 
-        if body.drive_id is not None:
-            drive = drive_repo.get_for_update(body.drive_id)
+        if body.drive_id is not None and int(body.drive_id) in {int(value) for value in body.overflow_drive_ids}:
+            db.rollback()
+            raise HTTPException(status_code=422, detail="Overflow drive list must not include the primary destination drive")
+
+        def _reserve_selected_drive(
+            drive_id: int,
+            *,
+            activate_now: bool,
+            require_primary_overlap_check: bool,
+        ) -> UsbDrive:
+            nonlocal explicit_bound
+
+            if drive_id in selected_drive_ids:
+                raise HTTPException(status_code=422, detail="Drive selections must be unique")
+
+            drive = drive_repo.get_for_update(drive_id)
             if not drive:
-                db.rollback()
                 raise HTTPException(status_code=404, detail="Drive not found")
 
             drive_row = _row(drive)
@@ -651,74 +751,61 @@ def create_job(
             current_state = cast(DriveState, drive_row.current_state)
             mount_path = cast(Optional[str], drive_row.mount_path)
 
-            # Enforce project isolation
             if current_project_id not in (None, body.project_id):
-                db.rollback()
-                try:
-                    audit_repo.add(
-                        action="PROJECT_ISOLATION_VIOLATION",
-                        user=actor,
-                        project_id=body.project_id,
-                        drive_id=body.drive_id,
-                        # job_id intentionally omitted: the job row was rolled back above
-                        # and audit_logs.job_id is an FK — referencing it would fail on
-                        # PostgreSQL. The attempted job context is preserved in details.
-                        details={
-                            "actor": actor,
-                            "drive_id": body.drive_id,
-                            "existing_project_id": current_project_id,
-                            "requested_project_id": body.project_id,
-                            "attempted_project_id": body.project_id,
-                        },
-                        client_ip=client_ip,
-                    )
-                except Exception:
-                    logger.error("Failed to write audit log for PROJECT_ISOLATION_VIOLATION")
-                raise HTTPException(
-                    status_code=403,
-                    detail="Drive belongs to a different project",
-                )
-
+                raise HTTPException(status_code=403, detail="Drive belongs to a different project")
             if current_state not in (DriveState.AVAILABLE, DriveState.IN_USE):
-                db.rollback()
-                raise HTTPException(
-                    status_code=409,
-                    detail="Drive is not available",
-                )
+                raise HTTPException(status_code=409, detail="Drive is not available")
+            if not mount_path:
+                raise HTTPException(status_code=409, detail="Assigned drive is not mounted")
+            if _is_drive_assigned_to_another_job(db, drive_id=drive_id):
+                raise HTTPException(status_code=409, detail="Drive is already assigned to another job")
 
-            # Bind the drive to this project if currently unbound.
             if current_project_id is None:
                 drive_row.current_project_id = body.project_id
                 explicit_bound = True
 
-            if not mount_path:
-                db.rollback()
-                raise HTTPException(
-                    status_code=409,
-                    detail="Assigned drive is not mounted",
-                )
-
-            job_row.target_mount_path = mount_path
             try:
-                job_row.source_path = validate_source_path(
+                validated_source_path = validate_source_path(
                     cast(str, job_row.source_path),
                     usb_mount_base_path=settings.usb_mount_base_path,
                     target_mount_path=mount_path,
                 )
             except ValueError as exc:
-                db.rollback()
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
-            _reject_source_path_overlap(
-                db=db,
-                audit_repo=audit_repo,
-                actor=actor,
-                client_ip=client_ip,
-                project_id=body.project_id,
-                drive_id=body.drive_id,
-                new_source_path=cast(str, job_row.source_path),
+
+            if require_primary_overlap_check:
+                job_row.source_path = validated_source_path
+                _reject_source_path_overlap(
+                    db=db,
+                    audit_repo=audit_repo,
+                    actor=actor,
+                    client_ip=client_ip,
+                    project_id=body.project_id,
+                    drive_id=drive_id,
+                    new_source_path=cast(str, job_row.source_path),
+                )
+
+            selected_drive_ids.add(drive_id)
+            assignment = DriveAssignment(
+                drive_id=drive_id,
+                job_id=cast(int, job_row.id),
+                activated_at=datetime.now(timezone.utc) if activate_now else None,
             )
-            db.add(DriveAssignment(drive_id=body.drive_id, job_id=cast(int, job_row.id)))
+            db.add(assignment)
+            if not activate_now:
+                db.flush()
+                assignment.activated_at = None
             drive_row.current_state = DriveState.IN_USE
+            return drive
+
+        if body.drive_id is not None:
+            drive = _reserve_selected_drive(
+                int(body.drive_id),
+                activate_now=True,
+                require_primary_overlap_check=True,
+            )
+            drive_row = _row(drive)
+            job_row.target_mount_path = cast(Optional[str], drive_row.mount_path)
             db.flush()  # validate assignment + drive state change
         else:
             # Auto-assign a drive when drive_id is omitted
@@ -754,8 +841,23 @@ def create_job(
                 drive_id=cast(int, drive_row.id),
                 new_source_path=cast(str, job_row.source_path),
             )
-            db.add(DriveAssignment(drive_id=cast(int, drive_row.id), job_id=cast(int, job_row.id)))
+            db.add(
+                DriveAssignment(
+                    drive_id=cast(int, drive_row.id),
+                    job_id=cast(int, job_row.id),
+                    activated_at=datetime.now(timezone.utc),
+                )
+            )
             drive_row.current_state = DriveState.IN_USE
+            selected_drive_ids.add(cast(int, drive_row.id))
+            db.flush()
+
+        for overflow_drive_id in body.overflow_drive_ids:
+            _reserve_selected_drive(
+                int(overflow_drive_id),
+                activate_now=False,
+                require_primary_overlap_check=False,
+            )
             db.flush()
 
         bind = db.get_bind()
@@ -993,11 +1095,253 @@ def _reject_when_startup_analysis_running(job: ExportJob, *, action: str) -> Non
 def _other_active_assignments_for_drive(db: Session, drive_id: int, *, exclude_job_id: Optional[int] = None) -> int:
     query = db.query(DriveAssignment).filter(
         DriveAssignment.drive_id == drive_id,
+        DriveAssignment.activated_at.isnot(None),
         DriveAssignment.released_at.is_(None),
     )
     if exclude_job_id is not None:
         query = query.filter(DriveAssignment.job_id != exclude_job_id)
     return query.count()
+
+
+def _remaining_estimated_bytes(job: ExportJob) -> Optional[int]:
+    job_row = _row(job)
+    if not bool(getattr(job, "startup_analysis_ready", False)):
+        return None
+
+    estimated_source_bytes = cast(Optional[int], job_row.startup_analysis_total_bytes)
+    if estimated_source_bytes is None:
+        return None
+
+    copied_bytes = int(cast(Optional[int], job_row.copied_bytes) or 0)
+    return max(0, int(estimated_source_bytes) - copied_bytes)
+
+
+def _reject_overflow_when_drive_capacity_is_insufficient(
+    *,
+    job: ExportJob,
+    audit_repo: AuditRepository,
+    actor: Optional[str],
+    client_ip: Optional[str],
+    drive: UsbDrive,
+) -> None:
+    remaining_bytes = _remaining_estimated_bytes(job)
+    if remaining_bytes is None:
+        return
+
+    drive_row = _row(drive)
+    available_bytes = cast(Optional[int], drive_row.available_bytes)
+    if available_bytes is None:
+        return
+
+    shortfall_bytes = int(remaining_bytes) - int(available_bytes)
+    if shortfall_bytes <= 0:
+        return
+
+    job_row = _row(job)
+    job_id = cast(int, job_row.id)
+    project_id = cast(Optional[str], job_row.project_id)
+    drive_id = cast(int, drive_row.id)
+    logger.info(
+        "Overflow continuation rejected because destination space is insufficient",
+        extra={
+            "job_id": job_id,
+            "project_id": project_id,
+            "drive_id": drive_id,
+            "reason": "overflow_drive_capacity_shortfall",
+            "remaining_bytes": int(remaining_bytes),
+            "available_bytes": int(available_bytes),
+            "shortfall_bytes": shortfall_bytes,
+        },
+    )
+
+    try:
+        audit_repo.add(
+            action="JOB_OVERFLOW_REJECTED_CAPACITY",
+            user=actor,
+            project_id=project_id,
+            drive_id=drive_id,
+            job_id=job_id,
+            details={
+                "project_id": project_id,
+                "drive_id": drive_id,
+                "remaining_bytes": int(remaining_bytes),
+                "available_bytes": int(available_bytes),
+                "shortfall_bytes": shortfall_bytes,
+            },
+            client_ip=client_ip,
+        )
+    except Exception:
+        logger.error("Failed to write audit log for JOB_OVERFLOW_REJECTED_CAPACITY")
+
+    raise ConflictError(
+        (
+            "Selected overflow drive does not have enough available space to continue this copy. "
+            f"Estimated remaining size: {int(remaining_bytes)} bytes; "
+            f"available drive space: {int(available_bytes)} bytes; "
+            f"shortfall: {shortfall_bytes} bytes. "
+            "Select another prepared drive and retry overflow continuation."
+        ),
+        code="OVERFLOW_DRIVE_CAPACITY_SHORTFALL",
+    )
+
+
+def continue_job_overflow(
+    job_id: int,
+    body: JobOverflowContinueRequest,
+    background_tasks: BackgroundTasks,
+    db: Session,
+    actor: Optional[str] = None,
+    client_ip: Optional[str] = None,
+) -> ExportJob:
+    job_repo = JobRepository(db)
+    drive_repo = DriveRepository(db)
+    assignment_repo = DriveAssignmentRepository(db)
+    file_repo = FileRepository(db)
+    audit_repo = AuditRepository(db)
+
+    job = job_repo.get_for_update(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    job_row = _row(job)
+    _reject_when_startup_analysis_running(job, action="continue overflow for this job")
+    current_status = cast(JobStatus, job_row.status)
+    if current_status not in (JobStatus.PENDING, JobStatus.PAUSED, JobStatus.FAILED, JobStatus.COMPLETED):
+        raise HTTPException(
+            status_code=409,
+            detail="Only pending, paused, failed, or partially successful completed jobs can continue overflow",
+        )
+
+    active_assignment = assignment_repo.get_active_for_job(job_id)
+    assignment_row = _row(active_assignment) if active_assignment is not None else None
+    current_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
+    if current_drive_id is None:
+        raise HTTPException(status_code=409, detail="Job has no assigned drive")
+    if int(body.drive_id) == int(current_drive_id):
+        raise HTTPException(status_code=409, detail="Overflow continuation requires a different destination drive")
+    if _is_drive_assigned_to_another_job(db, drive_id=int(body.drive_id), exclude_job_id=job_id):
+        raise HTTPException(status_code=409, detail="Drive is already assigned to another job")
+
+    drive = drive_repo.get_for_update(int(body.drive_id))
+    if not drive:
+        raise HTTPException(status_code=404, detail="Drive not found")
+
+    drive_row = _row(drive)
+    drive_project_id = cast(Optional[str], drive_row.current_project_id)
+    drive_state = cast(DriveState, drive_row.current_state)
+    drive_mount_path = cast(Optional[str], drive_row.mount_path)
+    if drive_project_id not in (None, cast(Optional[str], job_row.project_id)):
+        raise HTTPException(status_code=403, detail="Drive belongs to a different project")
+    if drive_state not in (DriveState.AVAILABLE, DriveState.IN_USE):
+        raise HTTPException(status_code=409, detail="Drive is not available")
+    if not drive_mount_path:
+        raise HTTPException(status_code=409, detail="Assigned drive is not mounted")
+
+    try:
+        job_row.source_path = validate_source_path(
+            cast(str, job_row.source_path),
+            usb_mount_base_path=settings.usb_mount_base_path,
+            target_mount_path=drive_mount_path,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    _reject_source_path_overlap(
+        db=db,
+        audit_repo=audit_repo,
+        actor=actor,
+        client_ip=client_ip,
+        project_id=cast(str, job_row.project_id),
+        drive_id=int(body.drive_id),
+        new_source_path=cast(str, job_row.source_path),
+        exclude_job_id=job_id,
+    )
+
+    retryable_count = sum(file_repo.count_done_errors_and_timeouts(job_id)[1:])
+    if current_status == JobStatus.COMPLETED and retryable_count <= 0:
+        raise HTTPException(
+            status_code=409,
+            detail="Only completed jobs with failed or timed-out files can continue overflow",
+        )
+
+    _reject_overflow_when_drive_capacity_is_insufficient(
+        job=job,
+        audit_repo=audit_repo,
+        actor=actor,
+        client_ip=client_ip,
+        drive=drive,
+    )
+
+    if drive_project_id is None:
+        drive_row.current_project_id = cast(Optional[str], job_row.project_id)
+
+    if assignment_row is not None:
+        assignment_row.released_at = datetime.now(timezone.utc)
+        previous_drive = drive_repo.get_for_update(int(current_drive_id))
+        if previous_drive and _other_active_assignments_for_drive(db, int(current_drive_id), exclude_job_id=job_id) == 0:
+            _row(previous_drive).current_state = DriveState.AVAILABLE
+
+    next_assignment = _activate_reserved_or_new_assignment(
+        db=db,
+        assignment_repo=assignment_repo,
+        job_id=job_id,
+        drive_id=int(body.drive_id),
+    )
+    drive_row.current_state = DriveState.IN_USE
+    job_row.target_mount_path = drive_mount_path
+    job_row.status = JobStatus.RUNNING
+    job_row.started_by = actor
+    job_row.started_at = datetime.now(timezone.utc)
+    job_row.completed_at = None
+    job_row.failure_reason = None
+    job_row.active_duration_seconds = int(cast(Optional[int], job_row.active_duration_seconds) or 0)
+    if body.thread_count:
+        job_row.thread_count = int(body.thread_count)
+    if retryable_count > 0:
+        file_repo.reset_failed_for_retry(job_id)
+
+    try:
+        job_repo.save(job)
+    except Exception:
+        logger.exception("DB commit failed while continuing overflow for job %s", job_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Database error while continuing overflow",
+        )
+
+    try:
+        audit_repo.add(
+            action="JOB_OVERFLOW_CONTINUATION_STARTED",
+            user=actor,
+            project_id=cast(Optional[str], job_row.project_id),
+            drive_id=int(body.drive_id),
+            job_id=job_id,
+            details={
+                "project_id": cast(Optional[str], job_row.project_id),
+                "previous_drive_id": current_drive_id,
+                "drive_id": int(body.drive_id),
+                "drive_assignment_id": cast(Optional[int], getattr(next_assignment, "id", None)),
+                "retry_file_count": retryable_count,
+            },
+            client_ip=client_ip,
+        )
+    except Exception:
+        logger.exception("Failed to write audit log for JOB_OVERFLOW_CONTINUATION_STARTED")
+
+    _emit_job_lifecycle_callback(
+        job,
+        event="JOB_OVERFLOW_CONTINUATION_STARTED",
+        actor=actor,
+        event_at=cast(Optional[datetime], job_row.started_at),
+        event_details={
+            "previous_drive_id": current_drive_id,
+            "drive_id": int(body.drive_id),
+            "retry_file_count": retryable_count,
+        },
+    )
+    background_tasks.add_task(copy_engine.run_copy_job, job_id)
+    db.refresh(job)
+    return job
 
 
 def update_job(
