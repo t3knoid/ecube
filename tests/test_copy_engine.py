@@ -171,6 +171,7 @@ def test_process_file_succeeds_after_transient_failure(db, tmp_path):
 
     target_dir = tmp_path / "target"
     target_dir.mkdir()
+    assignment = _assign_drive(db, job)
 
     with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
         with patch("app.services.copy_engine.copy_file", side_effect=_flaky_copy):
@@ -182,6 +183,7 @@ def test_process_file_succeeds_after_transient_failure(db, tmp_path):
     assert ef.status == FileStatus.DONE
     assert ef.retry_attempts == 2
     assert ef.checksum is not None
+    assert ef.drive_assignment_id == assignment.id
 
 
 def test_process_file_exhausts_retries_marks_error(db, tmp_path):
@@ -751,6 +753,159 @@ def test_run_copy_job_with_file_errors_still_completes(db, tmp_path):
     db.refresh(job)
 
     assert job.status == JobStatus.COMPLETED
+
+
+def test_run_copy_job_automatically_continues_overflow_on_next_project_drive(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "first.txt").write_bytes(b"alpha")
+    (source_dir / "second.txt").write_bytes(b"bravo")
+
+    first_target = tmp_path / "target-1"
+    second_target = tmp_path / "target-2"
+    first_target.mkdir()
+    second_target.mkdir()
+
+    first_drive = UsbDrive(
+        device_identifier="USB-AUTO-OVERFLOW-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        mount_path=str(first_target),
+    )
+    second_drive = UsbDrive(
+        device_identifier="USB-AUTO-OVERFLOW-002",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        mount_path=str(second_target),
+        available_bytes=10_000,
+    )
+    db.add_all([first_drive, second_drive])
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-001",
+        evidence_number="EV-AUTO-OVERFLOW-001",
+        source_path=str(source_dir),
+        target_mount_path=str(first_target),
+        status=JobStatus.PENDING,
+        thread_count=1,
+        max_file_retries=0,
+        retry_delay_seconds=0,
+        startup_analysis_total_bytes=len(b"alpha") + len(b"bravo"),
+        startup_analysis_file_count=2,
+        startup_analysis_status=StartupAnalysisStatus.READY,
+        startup_analysis_cache_present=True,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=first_drive.id, job_id=job.id))
+    second_assignment = DriveAssignment(drive_id=second_drive.id, job_id=job.id, activated_at=None)
+    db.add(second_assignment)
+    db.flush()
+    second_assignment.activated_at = None
+    db.commit()
+
+    copy_attempts = {"count": 0}
+    original_copy_file = copy_engine.copy_file
+
+    def _copy_with_single_overflow(src, dst, **kwargs):
+        copy_attempts["count"] += 1
+        if copy_attempts["count"] == 1:
+            return False, None, "disk full"
+        return original_copy_file(src, dst, **kwargs)
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine.copy_file", side_effect=_copy_with_single_overflow):
+            copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+    assignments = (
+        db.query(DriveAssignment)
+        .filter(DriveAssignment.job_id == job.id)
+        .order_by(DriveAssignment.id)
+        .all()
+    )
+    files = (
+        db.query(ExportFile)
+        .filter(ExportFile.job_id == job.id)
+        .order_by(ExportFile.id)
+        .all()
+    )
+    overflow_audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_OVERFLOW_CONTINUATION_STARTED", AuditLog.job_id == job.id)
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+
+    assert job.status == JobStatus.COMPLETED
+    assert job.target_mount_path == str(second_target)
+    assert len(assignments) == 2
+    assert assignments[0].released_at is not None
+    assert assignments[1].drive_id == second_drive.id
+    assert all(file.status == FileStatus.DONE for file in files)
+    assert files[0].drive_assignment_id == assignments[1].id
+    assert {file.drive_assignment_id for file in files} == {assignments[0].id, assignments[1].id}
+    assert overflow_audit is not None
+    assert overflow_audit.details["automatic"] is True
+
+
+def test_run_copy_job_keeps_manual_overflow_when_no_project_drive_is_available(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "bad.txt").write_bytes(b"data")
+
+    first_target = tmp_path / "target-1"
+    first_target.mkdir()
+
+    first_drive = UsbDrive(
+        device_identifier="USB-MANUAL-OVERFLOW-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        mount_path=str(first_target),
+    )
+    db.add(first_drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-001",
+        evidence_number="EV-MANUAL-OVERFLOW-001",
+        source_path=str(source_dir),
+        target_mount_path=str(first_target),
+        status=JobStatus.PENDING,
+        thread_count=1,
+        max_file_retries=0,
+        retry_delay_seconds=0,
+        startup_analysis_total_bytes=len(b"data"),
+        startup_analysis_file_count=1,
+        startup_analysis_status=StartupAnalysisStatus.READY,
+        startup_analysis_cache_present=True,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=first_drive.id, job_id=job.id))
+    db.commit()
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch(
+            "app.services.copy_engine.copy_file",
+            return_value=(False, None, "disk full"),
+        ):
+            copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+    assignments = db.query(DriveAssignment).filter(DriveAssignment.job_id == job.id).all()
+    overflow_audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_OVERFLOW_CONTINUATION_STARTED", AuditLog.job_id == job.id)
+        .first()
+    )
+
+    assert job.status == JobStatus.COMPLETED
+    assert len(assignments) == 1
+    assert overflow_audit is None
 
 
 def test_run_copy_job_marks_job_failed_when_source_scan_disappears(db, tmp_path):
