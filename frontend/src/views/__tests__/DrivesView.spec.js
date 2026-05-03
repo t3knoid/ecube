@@ -60,11 +60,9 @@ function mountView() {
               <div class="column-labels">{{ (columns || []).map((column) => column.label).join(' ') }}</div>
               <div v-for="row in rows" :key="row.id" class="row-stub">
                 <span class="row-device">{{ row.display_device_label || row.port_system_path || '-' }}</span>
-                <span class="row-project">{{ row.current_project_job_id ? row.current_project_id || '-' : '-' }}</span>
-                <span class="row-job-id">{{ row.current_project_job_id || '-' }}</span>
+                <span class="row-project"><slot name="cell-current_project_id" :row="row" /></span>
+                <span class="row-job-id"><slot name="cell-current_project_job_id" :row="row" /></span>
                 <slot name="cell-current_state" :row="row" />
-                <slot name="cell-current_project_id" :row="row" />
-                <slot name="cell-current_project_job_id" :row="row" />
                 <slot name="cell-actions" :row="row" />
               </div>
               <div class="rows-count">{{ rows.length }}</div>
@@ -281,6 +279,17 @@ describe('DrivesView rescan and filter loading', () => {
     expect(labels).toContain(i18n.global.t('jobs.jobId'))
     expect(wrapper.find('.row-project').text()).toBe('PROJ-123')
     expect(wrapper.find('.row-job-id').text()).toBe('12')
+  })
+
+  it('shows the bound project even when no related job is available', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-777' })])
+    mocks.listAllJobs.mockResolvedValue([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('.row-project').text()).toBe('PROJ-777')
+    expect(wrapper.find('.row-job-id').text()).toBe('-')
   })
 
   it('links the job ID value to the related job detail', async () => {
