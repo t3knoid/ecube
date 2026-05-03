@@ -4,8 +4,8 @@ import { expectNoCriticalA11yViolations } from './helpers/a11y.js'
 
 // ---------------------------------------------------------------------------
 // Shared fixture for a historically known drive row.
-// Override to UNMOUNTED plus filesystem_path when discovery has physically
-// detected the device on a known port.
+// Override to DISABLED plus filesystem_path when discovery has physically
+// detected the device on a known port but the port is blocked.
 // ---------------------------------------------------------------------------
 function makeEmptyDrive(overrides = {}) {
   return {
@@ -41,18 +41,18 @@ async function gotoDriveDetail(page, driveId) {
 // Enable Drive — button visibility
 // ---------------------------------------------------------------------------
 
-test('Enable Drive button is visible for admin on a physically detected UNMOUNTED drive', async ({ page }) => {
+test('Enable Drive button is visible for admin on a physically detected DISABLED drive', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
-  const drive = makeEmptyDrive({ current_state: 'UNMOUNTED', filesystem_path: '/dev/sdc' })
+  const drive = makeEmptyDrive({ current_state: 'DISABLED', filesystem_path: '/dev/sdc' })
   await stubDriveDetailApis(page, drive)
 
   await gotoDriveDetail(page, 2)
   await expect(page.getByRole('button', { name: 'Enable Drive' })).toBeVisible({ timeout: 10000 })
 })
 
-test('Enable Drive button is visible for manager on a physically detected UNMOUNTED drive', async ({ page }) => {
+test('Enable Drive button is visible for manager on a physically detected DISABLED drive', async ({ page }) => {
   await setupAuthenticatedPage(page, ['manager'])
-  const drive = makeEmptyDrive({ current_state: 'UNMOUNTED', filesystem_path: '/dev/sdc' })
+  const drive = makeEmptyDrive({ current_state: 'DISABLED', filesystem_path: '/dev/sdc' })
   await stubDriveDetailApis(page, drive)
 
   await gotoDriveDetail(page, 2)
@@ -102,7 +102,7 @@ test('Enable Drive button is not visible when drive is AVAILABLE', async ({ page
 test('Enable Drive issues PATCH port + POST refresh and shows success banner when drive becomes AVAILABLE', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
 
-  const drive = makeEmptyDrive({ current_state: 'UNMOUNTED', filesystem_path: '/dev/sdc' })
+  const drive = makeEmptyDrive({ current_state: 'DISABLED', filesystem_path: '/dev/sdc' })
 
   // Track which API calls were made
   const patchRequests = []
@@ -134,13 +134,13 @@ test('Enable Drive issues PATCH port + POST refresh and shows success banner whe
 })
 
 // ---------------------------------------------------------------------------
-// Enable Drive — warning banner when drive stays UNMOUNTED after refresh
+// Enable Drive — warning banner when drive stays DISABLED after refresh
 // ---------------------------------------------------------------------------
 
 test('Enable Drive shows warning banner when drive does not promote to AVAILABLE', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
 
-  const drive = makeEmptyDrive({ current_state: 'UNMOUNTED', filesystem_path: '/dev/sdc' })
+  const drive = makeEmptyDrive({ current_state: 'DISABLED', filesystem_path: '/dev/sdc' })
 
   await stubDriveDetailApis(page, drive)
 
@@ -162,7 +162,7 @@ test('Enable Drive shows warning banner when drive does not promote to AVAILABLE
 test('Enable Drive shows success banner when drive is immediately reconciled to IN_USE', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
 
-  const drive = makeEmptyDrive({ current_state: 'UNMOUNTED', filesystem_path: '/dev/sdc' })
+  const drive = makeEmptyDrive({ current_state: 'DISABLED', filesystem_path: '/dev/sdc' })
 
   await stubDriveDetailApis(page, drive)
 
@@ -188,7 +188,7 @@ test('Enable Drive shows success banner when drive is immediately reconciled to 
 test('Enable Drive shows error banner when PATCH port call fails', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
 
-  const drive = makeEmptyDrive({ current_state: 'UNMOUNTED', filesystem_path: '/dev/sdc' })
+  const drive = makeEmptyDrive({ current_state: 'DISABLED', filesystem_path: '/dev/sdc' })
   await stubDriveDetailApis(page, drive)
 
   await page.route('**/api/admin/ports/7', async (route) => {

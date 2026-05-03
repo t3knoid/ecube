@@ -19,6 +19,11 @@ describe('StatusBadge', () => {
     expect(wrapper.classes()).toContain('badge-warning')
   })
 
+  it('renders warning style for disabled status', () => {
+    const wrapper = mount(StatusBadge, { props: { status: 'DISABLED' } })
+    expect(wrapper.classes()).toContain('badge-warning')
+  })
+
   it('renders danger style for failed status', () => {
     const wrapper = mount(StatusBadge, { props: { status: 'FAILED' } })
     expect(wrapper.classes()).toContain('badge-danger')
