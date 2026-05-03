@@ -40,6 +40,13 @@ Enum startup_analysis_status {
   FAILED
 }
 
+Enum drive_state {
+  DISCONNECTED
+  DISABLED
+  AVAILABLE
+  IN_USE
+}
+
 Enum file_status {
   PENDING
   COPYING
@@ -47,13 +54,6 @@ Enum file_status {
   ERROR
   RETRYING
   TIMEOUT
-}
-
-Enum drive_state {
-  DISCONNECTED
-  DISABLED
-  AVAILABLE
-  IN_USE
 }
 
 Table network_mounts {
@@ -171,27 +171,6 @@ Table usb_ports {
   }
 }
 
-Table export_files {
-  id int [pk, not null]
-  job_id int [not null]
-  project_id varchar [not null]
-  relative_path varchar [not null]
-  size_bytes bigint
-  checksum varchar
-  status file_status [default: 'PENDING']
-  error_message text
-  retry_attempts int [default: 0]
-  startup_analysis_revision int [not null, default: 0]
-
-  indexes {
-    job_id [name: 'ix_export_files_job_id']
-    (job_id, id) [name: 'ix_export_files_job_id_id']
-    (job_id, status) [name: 'ix_export_files_job_status']
-    project_id [name: 'ix_export_files_project_id']
-    (project_id, status) [name: 'ix_export_files_project_status']
-  }
-}
-
 Table job_chain_of_custody_snapshots {
   id int [pk, not null]
   job_id int [not null, unique]
@@ -202,18 +181,6 @@ Table job_chain_of_custody_snapshots {
 
   indexes {
     job_id [unique, name: 'ix_job_chain_of_custody_snapshots_job_id']
-  }
-}
-
-Table manifests {
-  id int [pk, not null]
-  job_id int [not null]
-  manifest_path varchar
-  format varchar [default: 'JSON']
-  created_at timestamptz
-
-  indexes {
-    (job_id, created_at, id) [name: 'ix_manifests_job_created_id']
   }
 }
 
@@ -283,6 +250,7 @@ Table drive_assignments {
   file_count int [not null, default: 0]
   copied_bytes bigint [not null, default: 0]
   assigned_at timestamptz
+  activated_at timestamptz
   released_at timestamptz
 
   indexes {
@@ -291,14 +259,53 @@ Table drive_assignments {
   }
 }
 
+Table export_files {
+  id int [pk, not null]
+  job_id int [not null]
+  drive_assignment_id int
+  project_id varchar [not null]
+  relative_path varchar [not null]
+  size_bytes bigint
+  checksum varchar
+  status file_status [default: 'PENDING']
+  error_message text
+  retry_attempts int [default: 0]
+  startup_analysis_revision int [not null, default: 0]
+
+  indexes {
+    drive_assignment_id [name: 'ix_export_files_drive_assignment_id']
+    job_id [name: 'ix_export_files_job_id']
+    (job_id, id) [name: 'ix_export_files_job_id_id']
+    (job_id, status) [name: 'ix_export_files_job_status']
+    project_id [name: 'ix_export_files_project_id']
+    (project_id, status) [name: 'ix_export_files_project_status']
+  }
+}
+
+Table manifests {
+  id int [pk, not null]
+  job_id int [not null]
+  drive_assignment_id int
+  manifest_path varchar
+  format varchar [default: 'JSON']
+  created_at timestamptz
+
+  indexes {
+    drive_assignment_id [name: 'ix_manifests_drive_assignment_id']
+    (job_id, created_at, id) [name: 'ix_manifests_job_created_id']
+  }
+}
+
 Ref: audit_logs.drive_id > usb_drives.id
 Ref: audit_logs.job_id > export_jobs.id
 Ref: drive_assignments.drive_id > usb_drives.id
 Ref: drive_assignments.job_id > export_jobs.id
+Ref: export_files.drive_assignment_id > drive_assignments.id
 Ref: export_files.job_id > export_jobs.id
 Ref: export_files.project_id > projects.normalized_project_id
 Ref: export_jobs.project_id > projects.normalized_project_id
 Ref: job_chain_of_custody_snapshots.job_id > export_jobs.id
+Ref: manifests.drive_assignment_id > drive_assignments.id
 Ref: manifests.job_id > export_jobs.id
 Ref: startup_analysis_entries.job_id > export_jobs.id
 Ref: usb_drives.port_id > usb_ports.id
