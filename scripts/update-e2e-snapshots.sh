@@ -13,6 +13,10 @@
 # Optional environment variables:
 #   NO_PUSH=1       Skip git push after commit
 #   COMMIT_MSG=...  Override default commit message
+#   COMMIT_USER_NAME / COMMIT_USER_EMAIL
+#                   Override the Git author/committer identity used for
+#                   snapshot update commits. Defaults to the configured
+#                   Frank Refol noreply identity.
 
 set -euo pipefail
 
@@ -21,6 +25,8 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." >/dev/null 2>&1 && pwd)"
 FRONTEND_DIR="${REPO_ROOT}/frontend"
 SNAPSHOT_GLOB="frontend/e2e/*.spec.js-snapshots/"
 PLAYWRIGHT_EXIT=0
+COMMIT_USER_NAME="${COMMIT_USER_NAME:-Frank Refol}"
+COMMIT_USER_EMAIL="${COMMIT_USER_EMAIL:-t3knoid@users.noreply.github.com}"
 
 if [[ ! -f "${FRONTEND_DIR}/package.json" ]]; then
   echo "[ERROR] Could not find frontend/package.json at: ${FRONTEND_DIR}" >&2
@@ -56,8 +62,8 @@ popd >/dev/null
 echo "[INFO] Staging and committing snapshot changes (if any)..."
 pushd "${REPO_ROOT}" >/dev/null
 
-git config user.name "github-actions[bot]"
-git config user.email "github-actions[bot]@users.noreply.github.com"
+git config user.name "${COMMIT_USER_NAME}"
+git config user.email "${COMMIT_USER_EMAIL}"
 
 git add ${SNAPSHOT_GLOB} 2>/dev/null || true
 
