@@ -9,6 +9,14 @@
 
 set -euo pipefail
 
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+PYTHON_BIN="python3"
+if [[ -x "$REPO_ROOT/.venv/bin/python" ]]; then
+    PYTHON_BIN="$REPO_ROOT/.venv/bin/python"
+fi
+
 MD_FILE="docs/testing/03-qa-testing-guide.md"
 XLSX_FILE="docs/testing/ecube-qa-test-cases.xlsx"
 HELP_MD_FILE="docs/operations/13-user-manual.md"
@@ -21,10 +29,10 @@ SCHEMA_MODEL_GLOB='^app/models/'
 # Only run when either file is staged
 if git diff --cached --name-only | grep -qE "(${MD_FILE}|${XLSX_FILE})"; then
     echo "pre-commit: checking QA test-case sync..."
-    if ! python3 scripts/sync_qa_test_cases.py --check; then
+    if ! "$PYTHON_BIN" scripts/sync_qa_test_cases.py --check; then
         echo ""
         echo "ERROR: QA test-case Excel is out of sync with the markdown guide."
-        echo "Run:  python3 scripts/sync_qa_test_cases.py --sync"
+        echo "Run:  $PYTHON_BIN scripts/sync_qa_test_cases.py --sync"
         echo "then stage the updated .xlsx and commit again."
         exit 1
     fi
@@ -45,10 +53,10 @@ fi
 # Only run when SQLAlchemy model metadata or the generated DBML are staged
 if git diff --cached --name-only | grep -qE "(${DBML_FILE})|${SCHEMA_MODEL_GLOB}"; then
     echo "pre-commit: checking DBML schema sync..."
-    if ! python3 scripts/generate_dbml_schema.py --check; then
+    if ! "$PYTHON_BIN" scripts/generate_dbml_schema.py --check; then
         echo ""
         echo "ERROR: DBML schema reference is out of sync with the latest schema changes."
-        echo "Run:  python3 scripts/generate_dbml_schema.py"
+        echo "Run:  $PYTHON_BIN scripts/generate_dbml_schema.py"
         echo "then stage docs/database/ecube-schema.dbml and commit again."
         exit 1
     fi
