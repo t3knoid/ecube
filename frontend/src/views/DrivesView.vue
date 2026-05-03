@@ -340,7 +340,7 @@ onBeforeUnmount(() => {
         {{ formatDriveIdentity(row) }}
       </template>
       <template #cell-current_project_id="{ row }">
-        <span>{{ isValidJobId(row.current_project_job_id) ? formatProjectId(row.current_project_id) : '-' }}</span>
+        <span>{{ formatProjectId(row.current_project_id) }}</span>
       </template>
       <template #cell-current_project_job_id="{ row }">
         <button

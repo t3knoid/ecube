@@ -334,20 +334,36 @@ describe('JobsView grouped create dialog', () => {
 
     expect(wrapper.text()).toContain(i18n.global.t('jobs.selectDrive'))
     expect(driveOptions.join(' ')).toContain('2-1')
+    expect(driveOptions.join(' ')).toContain('2-4')
     expect(driveOptions.join(' ')).not.toContain('#1 -')
-    expect(driveOptions.join(' ')).not.toContain('#4 -')
     expect(driveOptions.join(' ')).not.toContain('USB-001')
-    expect(driveOptions.join(' ')).not.toContain('USB-004')
     expect(driveOptions.join(' ')).not.toContain('#3')
     expect(driveOptions.join(' ')).not.toContain('#5')
     expect(driveOptionValues).toContain('1')
     expect(driveOptionValues).toContain('2')
+    expect(driveOptionValues).toContain('4')
     expect(overflowOptionValues).toContain('2')
+    expect(overflowOptionValues).toContain('4')
     expect(overflowOptionValues).not.toContain('1')
-    expect(overflowOptionValues).not.toContain('4')
 
     expect(mountOptions.join(' ')).toContain('project-001')
     expect(mountOptions.join(' ')).not.toContain('project-002')
+  })
+
+  it('keeps initialized in-use drives eligible for the matching project', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const createButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.create'))
+    await createButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#job-project').setValue('PROJ-001')
+    await flushPromises()
+
+    const driveOptionValues = wrapper.find('#job-drive').findAll('option').map((node) => node.element.value)
+
+    expect(driveOptionValues).toContain('4')
   })
 
   it('keeps primary and overflow drive selections mutually exclusive', async () => {
@@ -362,13 +378,15 @@ describe('JobsView grouped create dialog', () => {
     await flushPromises()
 
     const overflowInputs = wrapper.findAll('.overflow-drive-option input')
-    expect(overflowInputs).toHaveLength(1)
+    expect(overflowInputs).toHaveLength(2)
+    expect(overflowInputs.map((node) => node.element.value)).toEqual(['2', '4'])
 
     await overflowInputs[0].setValue(true)
     await flushPromises()
 
     const driveOptionValues = wrapper.find('#job-drive').findAll('option').map((node) => node.element.value)
     expect(driveOptionValues).not.toContain('2')
+    expect(driveOptionValues).toContain('4')
   })
 
   it('creates and optionally starts the job from the grouped dialog', async () => {
