@@ -272,7 +272,7 @@ const overflowEligibleDrives = computed(() => {
     const state = String(drive?.current_state || '').toUpperCase()
     const boundProject = normalizeProjectId(drive?.current_project_id)
     return Number(drive?.id) !== activeDriveId
-      && ['AVAILABLE', 'IN_USE'].includes(state)
+      && state === 'AVAILABLE'
       && !!drive?.mount_path
       && (!boundProject || boundProject === projectId)
   })
