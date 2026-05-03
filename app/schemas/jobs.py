@@ -224,7 +224,7 @@ class DriveInfoSchema(BaseModel):
     capacity_bytes: Optional[int] = Field(default=None, description="Total storage capacity in bytes")
     available_bytes: Optional[int] = Field(default=None, description="Last known available space in bytes for the mounted drive")
     filesystem_type: Optional[str] = Field(default=None, description="Detected filesystem label (e.g. ext4, exfat)")
-    current_state: DriveState = Field(..., description="Current drive state (DISCONNECTED, DISABLED, UNMOUNTED, AVAILABLE, IN_USE)")
+    current_state: DriveState = Field(..., description="Current drive state (DISCONNECTED, DISABLED, AVAILABLE, IN_USE)")
     is_mounted: bool = Field(default=False, description="Whether the drive is still mounted on the host")
     current_project_id: Optional[str] = Field(default=None, description="Bound project ID if IN_USE")
 

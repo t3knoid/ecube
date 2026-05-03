@@ -47,7 +47,6 @@
     "states": {
       "disconnected": "Disconnected",
       "disabled": "Disabled",
-      "unmounted": "Unmounted",
       "available": "Available",
       "inUse": "In Use"
     },

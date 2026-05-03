@@ -376,7 +376,7 @@ List all drives with state and project assignment.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `project_id` | string | No | When provided, return only drives bound to this project. When omitted, return all drives. |
-| `state` | string (repeatable) | No | Filter by drive state. May be specified multiple times (e.g. `?state=IN_USE&state=AVAILABLE`). Valid values: `DISCONNECTED`, `DISABLED`, `UNMOUNTED`, `AVAILABLE`, `IN_USE`. When omitted, non-disconnected active states (`DISABLED`, `AVAILABLE`, `IN_USE`) are returned unless `include_disconnected=true` is also set. |
+| `state` | string (repeatable) | No | Filter by drive state. May be specified multiple times (e.g. `?state=IN_USE&state=AVAILABLE`). Valid values: `DISCONNECTED`, `DISABLED`, `AVAILABLE`, `IN_USE`. When omitted, non-disconnected active states (`DISABLED`, `AVAILABLE`, `IN_USE`) are returned unless `include_disconnected=true` is also set. |
 | `include_disconnected` | boolean | No | When `true`, `DISCONNECTED` drives are included in the response. Default: `false`. Has no effect when `state` is explicitly provided. |
 
 **Roles:** `admin`, `manager`, `processor`, `auditor`
@@ -727,7 +727,7 @@ All job endpoints that return a single job use the `ExportJobSchema` response, w
 | `capacity_bytes` | integer or null | Total storage capacity in bytes |
 | `available_bytes` | integer or null | Last known available space in bytes for the mounted drive |
 | `filesystem_type` | string or null | Detected filesystem label |
-| `current_state` | string | `DISCONNECTED`, `UNMOUNTED`, `AVAILABLE`, `IN_USE` |
+| `current_state` | string | `DISCONNECTED`, `DISABLED`, `AVAILABLE`, `IN_USE` |
 | `is_mounted` | boolean | Whether the related drive is still mounted on the host |
 | `current_project_id` | string or null | Bound project ID |
 
