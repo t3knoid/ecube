@@ -361,7 +361,7 @@ Database status
 </li><li>
 Number of active jobs
 </li><li>
-Drive state summary (<code>DISCONNECTED</code>, <code>UNMOUNTED</code>, <code>AVAILABLE</code>, <code>IN_USE</code>)
+Drive state summary (<code>DISCONNECTED</code>, <code>DISABLED</code>, <code>AVAILABLE</code>, <code>IN_USE</code>)
 </li><li>
 Table of active jobs
 </li></ul>
@@ -408,14 +408,14 @@ Current state
 <td>None from Drive Detail until the hardware reappears</td>
 </tr>
 <tr>
-<td><code>UNMOUNTED</code></td>
-<td>Drive is physically present but not yet operator-ready, typically because the port is disabled.</td>
-<td>Enable port when the drive is still detected on a known port</td>
+<td><code>DISABLED</code></td>
+<td>Drive is physically present but attached to a disabled port, so it is not yet available for ECUBE operations.</td>
+<td>Enable Drive</td>
 </tr>
 <tr>
 <td><code>AVAILABLE</code></td>
 <td>Drive is present on an enabled port and ready to be formatted or assigned to a project.</td>
-<td>Format, Initialize</td>
+<td>Format, Initialize, Prepare Eject when mounted</td>
 </tr>
 <tr>
 <td><code>IN_USE</code></td>
@@ -425,12 +425,12 @@ Current state
 </tbody>
 </table>
 <p>State transitions follow this order:</p>
-<pre><code>DISCONNECTED → UNMOUNTED → AVAILABLE → IN_USE → AVAILABLE
-                ↑                                   ↑____________|
-                |                                (re-insert same project)
-         (re-detect on disabled port)</code></pre>
+<pre><code>DISCONNECTED → DISABLED → AVAILABLE → IN_USE → AVAILABLE
+   ↑                                     ↑____________|
+   |                                  (re-insert same project)
+     (re-detect on disabled port)</code></pre>
 <p>A drive assigned to one project cannot be re-assigned to a different project without first being formatted. Formatting wipes the drive and clears the project binding.</p>
-<p>The Drives page shows <code>UNMOUNTED</code>, <code>AVAILABLE</code>, and <code>IN_USE</code> by default. Use <code>Show Disconnected drives</code> when you need to include historically known but currently absent hardware in the list.</p>
+<p>The Drives page shows <code>Disabled</code>, <code>AVAILABLE</code>, and <code>IN_USE</code> by default. Use <code>Show Disconnected drives</code> when you need to include historically known but currently absent hardware in the list.</p>
 <p>After a service restart, ECUBE may automatically restore a previously mounted managed USB drive to its expected ECUBE mount slot. If a drive or mount appears to have changed state during startup, review the <code>Audit Logs</code> page for reconciliation events recorded by the system.</p>
 <h2 id="4-2-viewing-drives">4.2 Viewing Drives</h2>
 <p>Use the page controls to:</p>
@@ -497,7 +497,7 @@ Confirm the drive is the intended destination media.
 If you need to assign the drive to a <em>different</em> project, format it first to clear the existing binding.
 </li></ul>
 <h2 id="4-6-prepare-eject">4.6 Prepare Eject</h2>
-<p>Use <code>Prepare Eject</code> before physically removing a drive. This flushes pending writes, unmounts the filesystem, and transitions the drive to <code>AVAILABLE</code>.</p>
+<p>Use <code>Prepare Eject</code> before physically removing a mounted drive. The action is available for <code>IN_USE</code> drives and for <code>AVAILABLE</code> drives that still have an active mount. ECUBE flushes pending writes, unmounts the filesystem, and transitions the drive to <code>AVAILABLE</code>.</p>
 <p>After a successful prepare-eject:</p>
 <ul><li>
 The drive state returns to <code>AVAILABLE</code>.
@@ -509,6 +509,7 @@ The drive <strong>cannot</strong> be initialized for a <em>different</em> projec
 The drive can be physically removed once the operation completes.
 </li></ul>
 <p>If ECUBE reports that the drive is still busy, the confirmation dialog closes cleanly and the page shows a specific retry message. Close any open shell, file browser, or process still using the mounted drive, then retry <code>Prepare Eject</code>.</p>
+<p>If the drive is already <code>AVAILABLE</code> but still mounted, a failed prepare-eject leaves it in <code>AVAILABLE</code> so the operator can retry after resolving the blocking condition.</p>
 <p>If the drive is still assigned to a job that has started and is not yet completed, <code>Prepare Eject</code> is blocked. This includes jobs in <code>RUNNING</code>, <code>PAUSING</code>, <code>PAUSED</code>, or <code>VERIFYING</code>. Complete or otherwise finish the active job before retrying <code>Prepare Eject</code>.</p>
 <p>If ECUBE detects timed-out or failed files in active drive assignments, the first <code>Prepare Eject</code> attempt is blocked with an explicit confirmation-required warning. Review the warning details, then confirm a second prompt to continue with ejection.</p>
 <blockquote><p>Use <code>Chain of Custody</code> from <code>Job Detail</code> to record legal handoff details for the job's assigned drive. The handoff is stored in ECUBE's audit and CoC records without adding a separate archived drive state.</p></blockquote>
@@ -747,6 +748,7 @@ Compare a file's source version against its copied destination version
 <p>The completion summary uses the normal success styling for clean completions. If the summary still shows any failed or timed-out file counts, the summary switches to a red warning background so operators can distinguish a partial-success completion from a clean completed run at a glance.</p>
 <p>During startup analysis, Job Detail can show <code>Preparing copy...</code> before any totals are known. While this state is visible, the page also explains that ECUBE is still scanning the source files and calculating totals, which can take time for large evidence sets.</p>
 <p>Manual Analyze runs use the same startup-analysis engine before copy begins. Job Detail can show <code>Startup analysis started.</code> while the scan is running, then replace it with <code>Startup analysis completed.</code> when the persisted analysis summary is ready. The summary panel can show the startup-analysis state, discovered files, estimated total bytes, last analyzed time, and a sanitized failure reason when analysis fails.</p>
+<p>If startup analysis is already <code>READY</code> and the related drive also has a last known available-space reading, ECUBE checks those values again when <code>Start</code> is pressed. If the destination cannot hold the estimated source size, copy does not begin and the page shows an operator-safe shortfall message so the operator can select another drive or use the follow-on overflow workflow.</p>
 <p>While startup analysis is actively running, Job Detail disables conflicting lifecycle actions so operators cannot edit, start, complete, delete, or clear the startup-analysis cache until the analyze run finishes. Delete and <code>Clear startup analysis cache</code> can remain visible for eligible jobs but stay disabled until the startup-analysis state leaves <code>ANALYZING</code>.</p>
 <p>If the Jobs page remains open while a manual analyze run finishes, ECUBE can show a page-level completion message for that job so operators notice the result without reopening Job Detail.</p>
 <p>If a job is restarted after a failed, paused, or partially successful run and its persisted startup-analysis snapshot is still current, ECUBE can reuse that cached scan instead of repeating the full startup analysis. ECUBE clears the reusable snapshot automatically only after a clean completion with no failed or timed-out files. When operators need to discard that snapshot, the <code>Clear startup analysis cache</code> action opens a confirmation dialog and removes only the cached startup-analysis data. It does not remove per-file history, copied-file state, or other audit-relevant job records.</p>
@@ -1118,6 +1120,8 @@ Restart actions are never automatic from this page and always require explicit c
 Restarting the application service can interrupt active operations. Prefer using a maintenance window or an idle period.
 </li><li>
 <code>Startup Analysis Batch Size</code> accepts values from <code>1</code> to <code>5000</code>. Lower values reduce peak memory use during startup analysis; higher values reduce database round trips.
+</li><li>
+<code>exFAT Cluster Size</code> controls the allocation unit ECUBE uses when formatting drives as exFAT. <code>4K</code> is recommended for most situations. Use larger values only for drives that will store very large files only and no small files.
 </li><li>
 The <code>Default Callback URL</code> must be a valid <code>https://</code> URL and is overridden by any job-specific <code>Webhook callback URL</code> entered on the Jobs page or Job Detail edit dialog.
 </li><li>
