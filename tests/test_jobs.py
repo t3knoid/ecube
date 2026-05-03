@@ -55,6 +55,88 @@ def test_create_job(client, db):
     assert data["target_mount_path"] == "/mnt/ecube/create-001"
 
 
+def test_create_job_reserves_overflow_drives(client, db):
+    primary_drive = UsbDrive(
+        device_identifier="USB-CREATE-PRIMARY-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-001",
+        mount_path="/mnt/ecube/create-primary-001",
+    )
+    overflow_drive = UsbDrive(
+        device_identifier="USB-CREATE-OVERFLOW-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-001",
+        mount_path="/mnt/ecube/create-overflow-001",
+    )
+    db.add_all([primary_drive, overflow_drive])
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-001",
+            "evidence_number": "EV-OVERFLOW-RESERVE-001",
+            "source_path": "/data/evidence",
+            "drive_id": primary_drive.id,
+            "overflow_drive_ids": [overflow_drive.id],
+        },
+    )
+
+    assert response.status_code == 200
+    job_id = response.json()["id"]
+    assignments = (
+        db.query(DriveAssignment)
+        .filter(DriveAssignment.job_id == job_id)
+        .order_by(DriveAssignment.id)
+        .all()
+    )
+    db.refresh(primary_drive)
+    db.refresh(overflow_drive)
+
+    assert len(assignments) == 2
+    assert assignments[0].drive_id == primary_drive.id
+    assert assignments[0].activated_at is not None
+    assert assignments[1].drive_id == overflow_drive.id
+    assert assignments[1].activated_at is None
+    assert primary_drive.current_state == DriveState.IN_USE
+    assert overflow_drive.current_state == DriveState.IN_USE
+
+
+def test_create_job_audits_project_isolation_violation_for_different_drive_project(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-CREATE-ISOLATION-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-OTHER-001",
+        mount_path="/mnt/ecube/create-isolation-001",
+    )
+    db.add(drive)
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-001",
+            "evidence_number": "EV-ISOLATION-001",
+            "source_path": "/data/evidence",
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 403
+    audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "PROJECT_ISOLATION_VIOLATION")
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+    assert audit is not None
+    assert audit.job_id is None
+    assert audit.project_id == "PROJ-001"
+    assert audit.drive_id == drive.id
+    assert audit.details["requested_project_id"] == "PROJ-001"
+    assert audit.details["existing_project_id"] == "PROJ-OTHER-001"
+
+
 def test_create_job_audits_evidence_number_and_processor_notes(client, db):
     drive = UsbDrive(
         device_identifier="USB-CREATE-AUDIT-001",
@@ -1865,6 +1947,54 @@ def test_get_job_files_processor_allowed(client, db):
     assert data["page_size"] == jobs_router.settings.job_detail_files_page_size
 
 
+def test_get_job_files_includes_destination_drive_metadata(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-FILES-DRIVE-001",
+        manufacturer="Acme",
+        product_name="Field Disk",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-FILES-DRIVE-001",
+        mount_path="/mnt/ecube/files-drive-001",
+    )
+    db.add(drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-FILES-DRIVE-001",
+        evidence_number="EV-FILES-DRIVE-001",
+        source_path="/data/files-drive-001",
+        target_mount_path=drive.mount_path,
+        status=JobStatus.COMPLETED,
+    )
+    db.add(job)
+    db.flush()
+
+    assignment = DriveAssignment(drive_id=drive.id, job_id=job.id, file_count=1, copied_bytes=128)
+    db.add(assignment)
+    db.flush()
+
+    db.add(
+        ExportFile(
+            job_id=job.id,
+            project_id="PROJ-FILES-DRIVE-001",
+            relative_path="one.bin",
+            size_bytes=128,
+            status=FileStatus.DONE,
+            checksum="abc123",
+            drive_assignment_id=assignment.id,
+        )
+    )
+    db.commit()
+
+    response = client.get(f"/jobs/{job.id}/files")
+
+    assert response.status_code == 200
+    row = response.json()["files"][0]
+    assert row["drive_assignment_id"] == assignment.id
+    assert row["destination_drive_id"] == drive.id
+    assert row["destination_drive_label"]
+
+
 def test_get_job_files_supports_page_navigation(client, db):
     job = ExportJob(
         project_id="PROJ-FILES-PAGE-001",
@@ -2359,6 +2489,217 @@ def test_start_job_rejects_when_startup_analysis_exceeds_available_drive_space(c
     assert audit.details["shortfall_bytes"] == 3072
 
 
+def test_continue_job_overflow_reassigns_drive_and_requeues_failed_files(client, db):
+    previous_drive = UsbDrive(
+        device_identifier="USB-OVERFLOW-OLD-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-OVERFLOW-001",
+        mount_path="/mnt/ecube/overflow-old-001",
+        available_bytes=0,
+    )
+    next_drive = UsbDrive(
+        device_identifier="USB-OVERFLOW-NEW-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-OVERFLOW-001",
+        mount_path="/mnt/ecube/overflow-new-001",
+        available_bytes=8192,
+    )
+    db.add_all([previous_drive, next_drive])
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-OVERFLOW-001",
+        evidence_number="EV-OVERFLOW-001",
+        source_path="/data/overflow-001",
+        target_mount_path=previous_drive.mount_path,
+        status=JobStatus.COMPLETED,
+        startup_analysis_status=StartupAnalysisStatus.READY,
+        startup_analysis_cache_present=True,
+        startup_analysis_total_bytes=4096,
+        copied_bytes=1024,
+    )
+    db.add(job)
+    db.flush()
+
+    original_assignment = DriveAssignment(drive_id=previous_drive.id, job_id=job.id, file_count=1, copied_bytes=1024)
+    db.add(original_assignment)
+    db.flush()
+
+    db.add_all([
+        ExportFile(
+            job_id=job.id,
+            project_id="PROJ-OVERFLOW-001",
+            relative_path="done.bin",
+            size_bytes=1024,
+            status=FileStatus.DONE,
+            checksum="done-checksum",
+            drive_assignment_id=original_assignment.id,
+        ),
+        ExportFile(
+            job_id=job.id,
+            project_id="PROJ-OVERFLOW-001",
+            relative_path="remaining.bin",
+            size_bytes=3072,
+            status=FileStatus.ERROR,
+            error_message="No space left on device",
+        ),
+    ])
+    db.commit()
+
+    with patch("app.services.copy_engine.run_copy_job") as mock_copy:
+        response = client.post(f"/jobs/{job.id}/overflow", json={"drive_id": next_drive.id, "thread_count": 3})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "RUNNING"
+    assert payload["target_mount_path"] == next_drive.mount_path
+    assert payload["drive"]["id"] == next_drive.id
+    mock_copy.assert_called_once_with(job.id)
+
+    db.refresh(job)
+    db.refresh(previous_drive)
+    db.refresh(next_drive)
+
+    assignments = db.query(DriveAssignment).filter(DriveAssignment.job_id == job.id).order_by(DriveAssignment.id.asc()).all()
+    assert len(assignments) == 2
+    assert assignments[0].released_at is not None
+    assert assignments[1].drive_id == next_drive.id
+    assert previous_drive.current_state == DriveState.AVAILABLE
+    assert next_drive.current_state == DriveState.IN_USE
+
+    pending_file = db.query(ExportFile).filter(ExportFile.job_id == job.id, ExportFile.relative_path == "remaining.bin").one()
+    assert pending_file.status == FileStatus.PENDING
+    assert pending_file.error_message is None
+
+    audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_OVERFLOW_CONTINUATION_STARTED", AuditLog.job_id == job.id)
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+    assert audit is not None
+    assert audit.details["previous_drive_id"] == previous_drive.id
+    assert audit.details["drive_id"] == next_drive.id
+    assert audit.details["retry_file_count"] == 1
+
+
+def test_continue_job_overflow_audits_project_isolation_violation(client, db):
+    previous_drive = UsbDrive(
+        device_identifier="USB-OVERFLOW-ISO-OLD-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-OVERFLOW-ISO-001",
+        mount_path="/mnt/ecube/overflow-iso-old-001",
+        available_bytes=0,
+    )
+    other_project_drive = UsbDrive(
+        device_identifier="USB-OVERFLOW-ISO-NEW-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-OTHER-001",
+        mount_path="/mnt/ecube/overflow-iso-new-001",
+        available_bytes=8192,
+    )
+    db.add_all([previous_drive, other_project_drive])
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-OVERFLOW-ISO-001",
+        evidence_number="EV-OVERFLOW-ISO-001",
+        source_path="/data/overflow-iso-001",
+        target_mount_path=previous_drive.mount_path,
+        status=JobStatus.COMPLETED,
+        startup_analysis_status=StartupAnalysisStatus.READY,
+        startup_analysis_cache_present=True,
+        startup_analysis_total_bytes=4096,
+        copied_bytes=1024,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=previous_drive.id, job_id=job.id, file_count=1, copied_bytes=1024))
+    db.add(
+        ExportFile(
+            job_id=job.id,
+            project_id="PROJ-OVERFLOW-ISO-001",
+            relative_path="remaining.bin",
+            size_bytes=3072,
+            status=FileStatus.ERROR,
+            error_message="No space left on device",
+        )
+    )
+    db.commit()
+
+    with patch("app.services.copy_engine.run_copy_job") as mock_copy:
+        response = client.post(f"/jobs/{job.id}/overflow", json={"drive_id": other_project_drive.id})
+
+    assert response.status_code == 403
+    mock_copy.assert_not_called()
+    audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "PROJECT_ISOLATION_VIOLATION")
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+    assert audit is not None
+    assert audit.job_id == job.id
+    assert audit.project_id == "PROJ-OVERFLOW-ISO-001"
+    assert audit.drive_id == other_project_drive.id
+    assert audit.details["requested_project_id"] == "PROJ-OVERFLOW-ISO-001"
+    assert audit.details["existing_project_id"] == "PROJ-OTHER-001"
+
+
+def test_continue_job_overflow_rejects_when_new_drive_cannot_hold_remaining_bytes(client, db):
+    previous_drive = UsbDrive(
+        device_identifier="USB-OVERFLOW-CAP-OLD-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-OVERFLOW-CAP-001",
+        mount_path="/mnt/ecube/overflow-cap-old-001",
+        available_bytes=0,
+    )
+    next_drive = UsbDrive(
+        device_identifier="USB-OVERFLOW-CAP-NEW-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-OVERFLOW-CAP-001",
+        mount_path="/mnt/ecube/overflow-cap-new-001",
+        available_bytes=512,
+    )
+    db.add_all([previous_drive, next_drive])
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-OVERFLOW-CAP-001",
+        evidence_number="EV-OVERFLOW-CAP-001",
+        source_path="/data/overflow-cap-001",
+        target_mount_path=previous_drive.mount_path,
+        status=JobStatus.COMPLETED,
+        startup_analysis_status=StartupAnalysisStatus.READY,
+        startup_analysis_cache_present=True,
+        startup_analysis_total_bytes=4096,
+        copied_bytes=1024,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=previous_drive.id, job_id=job.id, file_count=1, copied_bytes=1024))
+    db.add(
+        ExportFile(
+            job_id=job.id,
+            project_id="PROJ-OVERFLOW-CAP-001",
+            relative_path="remaining.bin",
+            size_bytes=3072,
+            status=FileStatus.ERROR,
+            error_message="No space left on device",
+        )
+    )
+    db.commit()
+
+    with patch("app.services.copy_engine.run_copy_job") as mock_copy:
+        response = client.post(f"/jobs/{job.id}/overflow", json={"drive_id": next_drive.id})
+
+    assert response.status_code == 409
+    payload = response.json()
+    assert payload["code"] == "OVERFLOW_DRIVE_CAPACITY_SHORTFALL"
+    assert "Estimated remaining size: 3072 bytes" in payload["message"]
+    mock_copy.assert_not_called()
+
+
 @pytest.mark.parametrize("job_status", [JobStatus.PAUSED, JobStatus.FAILED])
 def test_start_job_rejects_zero_byte_restart_when_startup_analysis_exceeds_available_drive_space(client, db, job_status):
     drive = UsbDrive(
@@ -2517,6 +2858,74 @@ def test_create_manifest_overwrites_manifest_json_and_includes_metadata(client, 
     assert manifest_payload["generated_at"]
     manifest_audits = db.query(AuditLog).filter(AuditLog.action == "MANIFEST_CREATED", AuditLog.job_id == job.id).all()
     assert len(manifest_audits) == 1
+
+
+def test_create_manifest_writes_one_manifest_per_drive_assignment(client, db, tmp_path):
+    first_drive_path = tmp_path / "drive-1"
+    second_drive_path = tmp_path / "drive-2"
+    first_drive_path.mkdir()
+    second_drive_path.mkdir()
+
+    first_drive = UsbDrive(
+        device_identifier="USB-MANIFEST-MULTI-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-MANIFEST-MULTI-001",
+        mount_path=str(first_drive_path),
+    )
+    second_drive = UsbDrive(
+        device_identifier="USB-MANIFEST-MULTI-002",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-MANIFEST-MULTI-001",
+        mount_path=str(second_drive_path),
+    )
+    db.add_all([first_drive, second_drive])
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-MANIFEST-MULTI-001",
+        evidence_number="EV-MANIFEST-MULTI-001",
+        source_path="/data/evidence",
+        target_mount_path=str(second_drive_path),
+        status=JobStatus.COMPLETED,
+    )
+    db.add(job)
+    db.flush()
+    first_assignment = DriveAssignment(drive_id=first_drive.id, job_id=job.id)
+    second_assignment = DriveAssignment(drive_id=second_drive.id, job_id=job.id)
+    db.add_all([first_assignment, second_assignment])
+    db.flush()
+    db.add_all([
+        ExportFile(
+            job_id=job.id,
+            project_id="PROJ-MANIFEST-MULTI-001",
+            relative_path="first.bin",
+            status=FileStatus.DONE,
+            checksum="aaa",
+            size_bytes=3,
+            drive_assignment_id=first_assignment.id,
+        ),
+        ExportFile(
+            job_id=job.id,
+            project_id="PROJ-MANIFEST-MULTI-001",
+            relative_path="second.bin",
+            status=FileStatus.DONE,
+            checksum="bbb",
+            size_bytes=4,
+            drive_assignment_id=second_assignment.id,
+        ),
+    ])
+    db.commit()
+
+    response = client.post(f"/jobs/{job.id}/manifest")
+
+    assert response.status_code == 200
+    first_manifest = json.loads((first_drive_path / "manifest.json").read_text(encoding="utf-8"))
+    second_manifest = json.loads((second_drive_path / "manifest.json").read_text(encoding="utf-8"))
+    manifests = db.query(Manifest).filter(Manifest.job_id == job.id).all()
+
+    assert [item["path"] for item in first_manifest["files"]] == ["first.bin"]
+    assert [item["path"] for item in second_manifest["files"]] == ["second.bin"]
+    assert {manifest.drive_assignment_id for manifest in manifests} == {first_assignment.id, second_assignment.id}
 
 
 def test_download_manifest_returns_latest_manifest_as_json_attachment(client, db, tmp_path):

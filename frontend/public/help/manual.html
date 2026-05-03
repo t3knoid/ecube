@@ -658,6 +658,14 @@ Progress label or percentage
 </li></ol>
 <p>Only the <code>Project</code> field is active when the dialog opens. After you select a project, ECUBE unlocks the remaining fields and filters the available mounts and destination drives to project-matching, currently eligible resources.</p>
 <p>The destination selector is labeled <code>Select device</code> and shows the same port-based <code>Device</code> value used elsewhere in the UI, rather than a serial number or <code>#id</code> prefix.</p>
+<p>ECUBE does not copy from an arbitrary share to an arbitrary USB drive. The source side and destination side must both be compatible with the same project:</p>
+<ul><li>
+The source share must already exist in <code>Mounts</code>, be assigned to the project ID, and be in the <code>MOUNTED</code> state
+</li><li>
+The destination drive must be mounted and project-compatible for that same project
+</li><li>
+In the standard operator workflow, that means the drive has already been initialized for that project before the copy starts
+</li></ul>
 <p>Before creating a job, confirm:</p>
 <ul><li>
 The correct project is selected first
@@ -681,7 +689,7 @@ If you enable <code>Run job immediately</code>, the job will start as soon as cr
 <h2 id="6-4-job-detail-verification-and-file-review">6.4 Job Detail, Verification, and File Review</h2>
 <blockquote><p><strong>Access Summary</strong></p></blockquote>
 <blockquote><p><strong>Page visibility:</strong> <code>admin</code>, <code>manager</code>, <code>processor</code>, <code>auditor</code></p></blockquote>
-<blockquote><p><strong>Restricted actions:</strong> <code>Analyze</code>, <code>Edit</code>, <code>Start</code>, <code>Retry Failed Files</code>, <code>Pause</code>, <code>Complete</code>, <code>Verify</code>, and <code>Manifest</code> are enabled for <code>admin</code>, <code>manager</code>, and <code>processor</code> when the current job state allows them. <code>Chain of Custody</code> is available to roles that can open the job-scoped chain-of-custody workflow. Within that report, <code>Custody Handoff</code> appears only for <code>admin</code> and <code>manager</code> when the loaded report still shows incomplete custody. <code>Archive</code> and <code>Clear startup analysis cache</code> remain limited to <code>admin</code> and <code>manager</code> when the current job state allows them. <code>Delete</code> is shown only for eligible pending jobs. Hash inspection and source/destination comparison remain available to <code>admin</code> and <code>auditor</code>.</p></blockquote>
+<blockquote><p><strong>Restricted actions:</strong> <code>Analyze</code>, <code>Edit</code>, <code>Start</code>, <code>Continue on Another Drive</code>, <code>Retry Failed Files</code>, <code>Pause</code>, <code>Complete</code>, <code>Verify</code>, and <code>Manifest</code> are enabled for <code>admin</code>, <code>manager</code>, and <code>processor</code> when the current job state allows them. <code>Chain of Custody</code> is available to roles that can open the job-scoped chain-of-custody workflow. Within that report, <code>Custody Handoff</code> appears only for <code>admin</code> and <code>manager</code> when the loaded report still shows incomplete custody. <code>Archive</code> and <code>Clear startup analysis cache</code> remain limited to <code>admin</code> and <code>manager</code> when the current job state allows them. <code>Delete</code> is shown only for eligible pending jobs. Hash inspection and source/destination comparison remain available to <code>admin</code> and <code>auditor</code>.</p></blockquote>
 <p>The job detail page provides deeper inspection and follow-up controls.</p>
 <p>Near the top of the page, Job Detail also shows the selected destination, the last known available space for the related drive when ECUBE has one, and the current job-specific webhook callback URL.</p>
 <p>Typical functions include:</p>
@@ -691,6 +699,8 @@ Run manual startup analysis before copy starts so the operator can review discov
 Edit a pending, paused, or failed job before resuming work
 </li><li>
 Start a pending job or resume a paused one
+</li><li>
+Continue remaining work on another mounted destination drive when the original destination fills or a partial-success run must move to new media
 </li><li>
 Retry only the failed or timed-out files from a partial-success completed job
 </li><li>
@@ -722,6 +732,8 @@ Compare a file's source version against its copied destination version
 </li><li>
 <code>Start</code> to begin a new job or resume a paused one
 </li><li>
+<code>Continue on Another Drive</code> to choose a different mounted destination drive and continue the remaining work for an eligible <code>PENDING</code>, <code>PAUSED</code>, <code>FAILED</code>, or partial-success <code>COMPLETED</code> job
+</li><li>
 <code>Retry Failed Files</code> to re-queue only <code>ERROR</code> and <code>TIMEOUT</code> file rows on a <code>COMPLETED</code> job that finished with partial-success results
 </li><li>
 <code>Pause</code> to request a safe stop after the current copy work finishes
@@ -740,8 +752,89 @@ Compare a file's source version against its copied destination version
 </li></ul>
 <p>When a pause is requested, the Jobs list and Job Detail page can show a <code>Pause in progress</code> dialog while ECUBE waits for active copy threads to drain. The Start action remains unavailable during <code>PAUSING</code> and becomes available again once the job reaches <code>PAUSED</code>.</p>
 <p>While a job is actively copying, Job Detail shows a live <code>Duration</code> field that reflects cumulative active runtime only. The displayed value continues updating while the job is <code>RUNNING</code>, does not add paused time while the job is <code>PAUSED</code>, and resumes from the previously stored active runtime after a later restart instead of resetting to zero.</p>
-<p>Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner with the location of the refreshed <code>manifest.json</code> file on the destination drive and immediately starts a browser download of the generated manifest without an extra confirmation step.</p>
+<p>Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner for the latest refreshed <code>manifest.json</code> file and immediately starts a browser download of that generated manifest without an extra confirmation step. For jobs that used overflow media, ECUBE refreshes a separate <code>manifest.json</code> on each drive that received successful copies, and each file lists only the files written to that specific drive.</p>
 <p>For a partial-success <code>COMPLETED</code> job, Job Detail can show <code>Retry Failed Files</code> instead of exposing Verify or Manifest too early. This action is available only to <code>admin</code>, <code>manager</code>, and <code>processor</code>, moves the job back into <code>RUNNING</code>, re-queues only failed or timed-out files, and preserves already successful copies.</p>
+<p>If the original destination drive fills or the remaining copy work must move to new media, ECUBE first checks for the next reserved overflow drive that was preassigned to the job during creation. When that reserved drive is still mounted and can hold the remaining estimated bytes, ECUBE keeps the same job ID, activates that reserved drive assignment for chain-of-custody purposes, and automatically resumes only the remaining work on that next drive. If no reserved drive is available or suitable, Job Detail can show <code>Continue on Another Drive</code> so the operator can choose another mounted project-compatible drive and optionally adjust thread count. Automatic manifest generation still waits for a later clean completion, but it refreshes manifests per drive assignment instead of only on the final drive.</p>
+<p>This is not limited to only two drives. If the second drive also fills, the same job can be continued again onto a third drive, and later onto additional drives if needed, as long as each new drive is mounted and project-compatible.</p>
+<p>This continuation happens automatically only when another reserved overflow drive for the same job is still mounted and passes the remaining-capacity check. If there is no eligible prepared drive, ECUBE leaves the job available for the existing manual workflow so an operator can open <code>Job Detail</code>, choose <code>Continue on Another Drive</code>, and explicitly select the next destination drive.</p>
+<h3 id="6-4-1a-overflow-continuation-workflow">6.4.1a Overflow Continuation Workflow</h3>
+<p>Use <code>Continue on Another Drive</code> when the original destination media can no longer carry the rest of the job and ECUBE did not already continue automatically onto another eligible prepared drive.</p>
+<p>Typical reasons include:</p>
+<ul><li>
+The first drive filled before the source set was fully copied
+</li><li>
+A later overflow drive also filled before the remaining work was finished
+</li><li>
+The job reached <code>COMPLETED</code> but still shows failed or timed-out file counts caused by destination-space limits or other media-related interruption
+</li><li>
+The copy must continue on replacement media without creating a second ECUBE job
+</li></ul>
+<p>What this action does:</p>
+<ul><li>
+Keeps the same job ID, evidence number, audit history, and chain-of-custody lineage
+</li><li>
+Adds a new destination-drive assignment for the same logical job
+</li><li>
+Leaves already successful files on the earlier drive unchanged
+</li><li>
+Re-runs only the remaining work on the newly selected drive
+</li><li>
+Refreshes per-drive manifests after a later clean completion so each drive records only the files copied to that media
+</li><li>
+Can be repeated again later if that newly selected drive also overflows
+</li><li>
+Becomes the manual fallback when no eligible automatic handoff drive is available
+</li></ul>
+<p>What to do before you start:</p>
+<ul><li>
+Confirm the replacement drive is inserted, mounted, and project-compatible
+</li><li>
+Confirm the source share for that project is still present and mounted
+</li><li>
+Confirm the original drive has already been handled according to your SOP if it is full or no longer needed in the host
+</li><li>
+Review the job summary so you understand whether the remaining work is pending, failed, or timed out
+</li><li>
+If startup analysis is available, review the operator-safe shortfall or remaining-work guidance shown in Job Detail
+</li></ul>
+<p>Recommended workflow:</p>
+<ol><li>
+Open the affected job in <code>Job Detail</code>.
+</li><li>
+Review the summary counters, especially <code>Files failed</code>, <code>Files timed out</code>, and any destination-space shortfall message.
+</li><li>
+Insert and prepare the next destination drive so it appears as an eligible mounted device for the same project.
+</li><li>
+Click <code>Continue on Another Drive</code>.
+</li><li>
+In the dialog, select the new destination drive.
+</li><li>
+Leave <code>Thread count</code> unchanged unless you have a specific operational reason to change it.
+</li><li>
+Confirm the action.
+</li><li>
+ECUBE resumes the same job on the new drive and records the new drive assignment automatically.
+</li><li>
+Expand the <code>Files</code> panel if you need to confirm which files are now landing on which destination drive.
+</li></ol>
+<p>Important operator notes:</p>
+<ul><li>
+This is not the same as <code>Retry Failed Files</code>. Retry keeps the current destination assignment, while overflow continuation intentionally switches the remaining work to different media.
+</li><li>
+<code>Continue on Another Drive</code> is intended for moving unfinished work forward. It does not merge files back onto the earlier drive.
+</li><li>
+The <code>Destination drive</code> column in the Files panel shows where each copied file ended up after the overflow continuation.
+</li><li>
+Verification and manifest generation still wait for a clean completed result with no failed or timed-out files.
+</li><li>
+Automatic manifest generation still waits for clean completion, but once the job finishes ECUBE refreshes a separate <code>manifest.json</code> on each drive that received successful files for that job.
+</li><li>
+Chain-of-custody reporting continues to follow the same job and will reflect the multiple drive assignments tied to that job.
+</li><li>
+If a second or later overflow drive also fills, repeat the same <code>Continue on Another Drive</code> workflow on that same job.
+</li><li>
+Reserving several overflow drives in the <code>Create Job</code> dialog allows ECUBE to continue automatically only when the next reserved drive is still mounted and large enough for the remaining estimated work.
+</li></ul>
 <p>For evidence-bearing work, treat <code>Chain of Custody</code> as the standard sunset path. Use it to review the stored report and, when needed, launch the separate <code>Custody Handoff</code> dialog to record custody transfer in ECUBE even when external paper paperwork is also being used.</p>
 <p><code>Archive</code> opens its own confirmation dialog and is available only for <code>COMPLETED</code> or <code>FAILED</code> jobs after the related drive has been through <code>Prepare Eject</code>. This is an exception-only path for administrative or non-handoff closure. The confirmation explicitly warns that the job cannot be restored from the UI and that archive does not itself record custody handoff. After confirmation, the job transitions to <code>ARCHIVED</code>, remains viewable in Job Detail for audit and review purposes, drops out of the default Jobs list, and no longer blocks recreation of the same exact project/source/destination work definition.</p>
 <p><code>Delete</code> remains limited to eligible pending jobs that have not yet become part of the operational record. It is not a substitute for closing out historical work.</p>
@@ -762,8 +855,12 @@ File ID
 </li><li>
 Relative path
 </li><li>
+Destination drive
+</li><li>
 Status
 </li></ul>
+<p>The destination-drive column becomes especially important after an overflow continuation, because the same job can now span more than one destination drive while still preserving a single job record.</p>
+<p>This per-file destination information is more granular than the manifest location. At clean completion, ECUBE refreshes a separate <code>manifest.json</code> on each drive assignment that received successful copies, while the table can still show exactly which earlier files were copied to an earlier overflow drive.</p>
 <p>Rows that include a safe file-level error summary are visually emphasized in the Files panel. Select the <code>ERROR</code> or <code>FAILED</code> status badge on desktop, or the matching compact status icon on smaller screens, to open the <code>File Error Details</code> dialog for that row. The dialog shows the file ID, relative path, status, and the sanitized per-file error text returned by the trusted backend.</p>
 <p>Users allowed to inspect hashes open the hash viewer by selecting the file path itself. On smaller screens, ECUBE may replace full status badges with compact status icons and shorten the visible pagination window so the file list stays within the viewport.</p>
 <p>If the job contains more rows than fit on one page, the panel shows a numbered pagination control with left/right navigation. Desktop layouts expose a wider page-number window, while smaller screens show a shorter page-number window to reduce horizontal crowding. The number of rows shown per page is controlled by the admin-only <code>Job Detail Files Per Page</code> runtime setting and is bounded between 20 and 100.</p>
@@ -1518,7 +1615,7 @@ Click <code>Create Job</code> to open the grouped dialog.
 </li><li>
 Select the project first.
 </li><li>
-Choose the filtered source mount and eligible destination drive, then enter the evidence number and source path.
+Choose the filtered source mount and primary destination drive, then use the <code>Overflow drives</code> panel to reserve any additional mounted destination drives in the order ECUBE should use them if the job overflows.
 </li><li>
 Create the job, or enable <code>Run job immediately</code> if you want it to start as soon as creation succeeds.
 </li><li>
@@ -1529,6 +1626,51 @@ Monitor progress until completion.
 Run verification and generate a manifest if required by your workflow.
 </li></ol>
 <p>If the job should notify an external case-management or orchestration system when it completes, enter the destination <code>Webhook callback URL</code> during job creation. Leave the field blank if the job should use the administrator-configured system default instead.</p>
+<p>Important prerequisite reminder:</p>
+<ul><li>
+The source share must already be assigned to the selected project and mounted
+</li><li>
+The destination drive and any reserved overflow drives must already be mounted and eligible for that same project
+</li><li>
+In the standard workflow, initialize the destination drive for the project before starting the job
+</li></ul>
+<h2 id="12-3a-continue-an-export-onto-another-drive">12.3a Continue an Export onto Another Drive</h2>
+<p><strong>Allowed roles:</strong> <code>admin</code>, <code>manager</code>, <code>processor</code></p>
+<ol><li>
+Open the incomplete or partial-success job in <code>Job Detail</code>.
+</li><li>
+Review the summary so you understand why work remains.
+</li><li>
+Insert the next destination drive and confirm it is mounted and eligible for the same project.
+</li><li>
+Click <code>Continue on Another Drive</code>.
+</li><li>
+Select the replacement destination drive in the dialog.
+</li><li>
+Adjust thread count only if needed.
+</li><li>
+Confirm the dialog to resume the same job on the new media.
+</li><li>
+Monitor the job until it reaches a clean completed state.
+</li><li>
+Expand <code>Files</code> if you need to confirm the per-file destination drive assignments.
+</li><li>
+Run verification and generate a manifest only after failed and timed-out counts return to zero.
+</li></ol>
+<p>Notes:</p>
+<ul><li>
+Use this workflow when the original drive fills or when remaining work must move to new media without splitting the operational record into a second job.
+</li><li>
+Already successful files remain associated with the earlier drive; ECUBE does not re-copy them unless they are part of the remaining work.
+</li><li>
+If the new drive is too small for the remaining estimated bytes, ECUBE rejects the action and prompts you to choose another drive.
+</li><li>
+Automatic manifest generation happens only after the resumed job finishes cleanly; at that point ECUBE refreshes one manifest per drive used by the job instead of writing only to the currently active replacement drive.
+</li><li>
+This same workflow can be repeated on a third, fourth, or later drive if additional overflow events occur before the job reaches a clean final completion.
+</li><li>
+ECUBE auto-selects only the next reserved overflow drive for that job when it is still mounted and suitable for the remaining workload; otherwise the operator chooses the next destination manually.
+</li></ul>
 <h2 id="12-4-review-copy-results">12.4 Review Copy Results</h2>
 <p><strong>Allowed roles:</strong> <code>admin</code>, <code>manager</code>, <code>processor</code>, <code>auditor</code></p>
 <ol><li>

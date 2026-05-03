@@ -312,6 +312,7 @@ describe('JobsView grouped create dialog', () => {
     expect(wrapper.find('#job-source-path').attributes('disabled')).toBeDefined()
     expect(wrapper.find('#job-source-path').element.value).toBe('/')
     expect(wrapper.find('#job-drive').attributes('disabled')).toBeDefined()
+    expect(wrapper.findAll('.overflow-drive-option input').every((node) => node.attributes('disabled') !== undefined)).toBe(true)
     expect(wrapper.find('#job-run-immediately').attributes('disabled')).toBeDefined()
   })
 
@@ -327,20 +328,47 @@ describe('JobsView grouped create dialog', () => {
     await flushPromises()
 
     const driveOptions = wrapper.find('#job-drive').findAll('option').map((node) => node.text())
+    const driveOptionValues = wrapper.find('#job-drive').findAll('option').map((node) => node.element.value)
     const mountOptions = wrapper.find('#job-mount').findAll('option').map((node) => node.text())
+    const overflowOptionValues = wrapper.findAll('.overflow-drive-option input').map((node) => node.element.value)
 
     expect(wrapper.text()).toContain(i18n.global.t('jobs.selectDrive'))
     expect(driveOptions.join(' ')).toContain('2-1')
-    expect(driveOptions.join(' ')).toContain('2-4')
     expect(driveOptions.join(' ')).not.toContain('#1 -')
     expect(driveOptions.join(' ')).not.toContain('#4 -')
     expect(driveOptions.join(' ')).not.toContain('USB-001')
     expect(driveOptions.join(' ')).not.toContain('USB-004')
     expect(driveOptions.join(' ')).not.toContain('#3')
     expect(driveOptions.join(' ')).not.toContain('#5')
+    expect(driveOptionValues).toContain('1')
+    expect(driveOptionValues).toContain('2')
+    expect(overflowOptionValues).toContain('2')
+    expect(overflowOptionValues).not.toContain('1')
+    expect(overflowOptionValues).not.toContain('4')
 
     expect(mountOptions.join(' ')).toContain('project-001')
     expect(mountOptions.join(' ')).not.toContain('project-002')
+  })
+
+  it('keeps primary and overflow drive selections mutually exclusive', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const createButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.create'))
+    await createButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#job-project').setValue('PROJ-001')
+    await flushPromises()
+
+    const overflowInputs = wrapper.findAll('.overflow-drive-option input')
+    expect(overflowInputs).toHaveLength(1)
+
+    await overflowInputs[0].setValue(true)
+    await flushPromises()
+
+    const driveOptionValues = wrapper.find('#job-drive').findAll('option').map((node) => node.element.value)
+    expect(driveOptionValues).not.toContain('2')
   })
 
   it('creates and optionally starts the job from the grouped dialog', async () => {
@@ -357,6 +385,7 @@ describe('JobsView grouped create dialog', () => {
     await wrapper.find('#job-mount').setValue('11')
     await wrapper.find('#job-source-path').setValue('folder/subfolder')
     await wrapper.find('#job-drive').setValue('1')
+    await wrapper.findAll('.overflow-drive-option input')[0].setValue(true)
     await wrapper.find('#job-thread-count').setValue('3')
     await wrapper.find('#job-notes').setValue('Operator note')
     await wrapper.find('#job-callback-url').setValue('https://example.com/ecube/webhook')
@@ -371,6 +400,7 @@ describe('JobsView grouped create dialog', () => {
       mount_id: 11,
       source_path: 'folder/subfolder',
       drive_id: 1,
+      overflow_drive_ids: [2],
       thread_count: 3,
       notes: 'Operator note',
       callback_url: 'https://example.com/ecube/webhook',
@@ -403,6 +433,7 @@ describe('JobsView grouped create dialog', () => {
       mount_id: 11,
       source_path: 'folder',
       drive_id: 1,
+      overflow_drive_ids: [],
       thread_count: 4,
       notes: undefined,
       callback_url: undefined,
@@ -446,6 +477,7 @@ describe('JobsView grouped create dialog', () => {
       mount_id: 11,
       source_path: '/folder/subfolder',
       drive_id: 1,
+      overflow_drive_ids: [],
       thread_count: 4,
       notes: undefined,
     })
@@ -475,6 +507,7 @@ describe('JobsView grouped create dialog', () => {
       mount_id: 11,
       source_path: '/',
       drive_id: 1,
+      overflow_drive_ids: [],
       thread_count: 4,
       notes: undefined,
     })

@@ -18,11 +18,13 @@ from app.schemas.audit import ChainOfCustodyHandoffRequest, ChainOfCustodyHandof
 from app.schemas.jobs import (
     DriveInfoSchema,
     ExportJobSchema,
+    JobFileRowSchema,
     JobArchiveRequest,
     JobAnalyzeRequest,
     JobCreate,
     JobDeleteResponse,
     JobFilesResponse,
+    JobOverflowContinueRequest,
     JobStart,
     JobStartupAnalysisClearRequest,
     JobUpdate,
@@ -462,13 +464,30 @@ def get_job_files(
     effective_limit = int(limit or settings.job_detail_files_page_size)
     offset = (page - 1) * effective_limit
     files = file_repo.list_by_job(job.id, limit=effective_limit, offset=offset)
+    serialized_files = [
+        JobFileRowSchema(
+            id=file_row.id,
+            relative_path=file_row.relative_path,
+            status=file_row.status,
+            checksum=file_row.checksum,
+            error_message=file_row.error_message,
+            drive_assignment_id=getattr(file_row, "drive_assignment_id", None),
+            destination_drive_id=getattr(getattr(file_row, "drive_assignment", None), "drive_id", None),
+            destination_drive_label=getattr(
+                getattr(getattr(file_row, "drive_assignment", None), "drive", None),
+                "display_device_label",
+                None,
+            ),
+        )
+        for file_row in files
+    ]
     return JobFilesResponse(
         job_id=job.id,
         page=page,
         page_size=effective_limit,
         total_files=file_repo.count_by_job(job.id),
-        returned_files=len(files),
-        files=files,
+        returned_files=len(serialized_files),
+        files=serialized_files,
     )
 
 
@@ -490,6 +509,34 @@ def start_job(
     **Roles:** ``admin``, ``manager``, ``processor``
     """
     job = job_service.start_job(job_id, body, background_tasks, db, actor=current_user.username, client_ip=get_client_ip(request))
+    return _redact_ip(job, current_user, db)
+
+
+@router.post("/{job_id}/overflow", response_model=ExportJobSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
+def continue_job_overflow(
+    job_id: int,
+    background_tasks: BackgroundTasks,
+    body: JobOverflowContinueRequest,
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
+    request: Request,
+):
+    """Assign a new mounted drive and resume the remaining copy work for a job.
+
+    Uses the existing logical job and appends a new drive assignment so chain-of-custody
+    and file accounting remain tied to one job across overflow media.
+
+    **Roles:** ``admin``, ``manager``, ``processor``
+    """
+    job = job_service.continue_job_overflow(
+        job_id,
+        body,
+        background_tasks,
+        db,
+        actor=current_user.username,
+        client_ip=get_client_ip(request),
+    )
     return _redact_ip(job, current_user, db)
 
 
