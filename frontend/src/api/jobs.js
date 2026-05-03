@@ -82,6 +82,11 @@ export function retryFailedJob(jobId) {
   return toData(apiClient.post(`${API_BASE}/jobs/${id}/retry-failed`))
 }
 
+export function continueJobOverflow(jobId, payload) {
+  const id = normalizeJobId(jobId)
+  return toData(apiClient.post(`${API_BASE}/jobs/${id}/overflow`, payload))
+}
+
 export function analyzeJob(jobId, payload = {}) {
   const id = normalizeJobId(jobId)
   return toData(apiClient.post(`${API_BASE}/jobs/${id}/analyze`, payload))

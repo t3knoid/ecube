@@ -134,6 +134,14 @@ def _drive_assignments_has_manifest_counters(inspector: sa.Inspector) -> bool:
     return {"file_count", "copied_bytes"}.issubset(columns)
 
 
+def _drive_assignments_has_activated_at(inspector: sa.Inspector) -> bool:
+    return any(column.get("name") == "activated_at" for column in inspector.get_columns("drive_assignments"))
+
+
+def _manifests_has_drive_assignment_id(inspector: sa.Inspector) -> bool:
+    return any(column.get("name") == "drive_assignment_id" for column in inspector.get_columns("manifests"))
+
+
 def _job_coc_snapshots_table_exists(inspector: sa.Inspector) -> bool:
     return "job_chain_of_custody_snapshots" in inspector.get_table_names()
 
@@ -152,6 +160,42 @@ def _export_jobs_has_startup_analysis_revision(inspector: sa.Inspector) -> bool:
 
 def _export_files_has_startup_analysis_revision(inspector: sa.Inspector) -> bool:
     return any(column.get("name") == "startup_analysis_revision" for column in inspector.get_columns("export_files"))
+
+
+def _export_files_has_drive_assignment_id(inspector: sa.Inspector) -> bool:
+    return any(column.get("name") == "drive_assignment_id" for column in inspector.get_columns("export_files"))
+
+
+def _upgrade_export_files_drive_assignment_id(inspector: sa.Inspector) -> None:
+    if "export_files" not in inspector.get_table_names():
+        return
+    if _export_files_has_drive_assignment_id(inspector):
+        return
+
+    with op.batch_alter_table("export_files") as batch_op:
+        batch_op.add_column(sa.Column("drive_assignment_id", sa.Integer(), nullable=True))
+        batch_op.create_foreign_key(
+            "fk_export_files_drive_assignment_id_drive_assignments",
+            "drive_assignments",
+            ["drive_assignment_id"],
+            ["id"],
+        )
+        batch_op.create_index("ix_export_files_drive_assignment_id", ["drive_assignment_id"], unique=False)
+
+    bind = op.get_bind()
+    bind.execute(
+        sa.text(
+            "UPDATE export_files "
+            "SET drive_assignment_id = ("
+            "    SELECT drive_assignments.id "
+            "    FROM drive_assignments "
+            "    WHERE drive_assignments.job_id = export_files.job_id "
+            "    ORDER BY drive_assignments.assigned_at ASC, drive_assignments.id ASC "
+            "    LIMIT 1"
+            ") "
+            "WHERE drive_assignment_id IS NULL"
+        )
+    )
 
 
 def _create_job_coc_snapshots_table() -> None:
@@ -241,6 +285,47 @@ def _upgrade_drive_assignment_manifest_counters(inspector: sa.Inspector) -> None
     with op.batch_alter_table("drive_assignments") as batch_op:
         batch_op.alter_column("file_count", existing_type=sa.Integer(), server_default=None)
         batch_op.alter_column("copied_bytes", existing_type=sa.BigInteger(), server_default=None)
+
+
+def _upgrade_drive_assignment_activation_schema(inspector: sa.Inspector) -> None:
+    if "drive_assignments" not in inspector.get_table_names() or _drive_assignments_has_activated_at(inspector):
+        return
+
+    with op.batch_alter_table("drive_assignments") as batch_op:
+        batch_op.add_column(sa.Column("activated_at", sa.DateTime(timezone=True), nullable=True))
+
+    bind = op.get_bind()
+    bind.execute(sa.text("UPDATE drive_assignments SET activated_at = assigned_at WHERE activated_at IS NULL"))
+
+
+def _upgrade_manifest_drive_assignment_schema(inspector: sa.Inspector) -> None:
+    if "manifests" not in inspector.get_table_names() or _manifests_has_drive_assignment_id(inspector):
+        return
+
+    with op.batch_alter_table("manifests") as batch_op:
+        batch_op.add_column(sa.Column("drive_assignment_id", sa.Integer(), nullable=True))
+        batch_op.create_foreign_key(
+            "fk_manifests_drive_assignment_id_drive_assignments",
+            "drive_assignments",
+            ["drive_assignment_id"],
+            ["id"],
+        )
+        batch_op.create_index("ix_manifests_drive_assignment_id", ["drive_assignment_id"], unique=False)
+
+    bind = op.get_bind()
+    bind.execute(
+        sa.text(
+            "UPDATE manifests "
+            "SET drive_assignment_id = ("
+            "    SELECT drive_assignments.id "
+            "    FROM drive_assignments "
+            "    WHERE drive_assignments.job_id = manifests.job_id "
+            "    ORDER BY drive_assignments.assigned_at DESC, drive_assignments.id DESC "
+            "    LIMIT 1"
+            ") "
+            "WHERE drive_assignment_id IS NULL"
+        )
+    )
 
 
 def _backfill_export_file_projects() -> None:
@@ -377,6 +462,7 @@ def _upgrade_startup_analysis_schema(inspector: sa.Inspector) -> None:
             batch_op.add_column(sa.Column("startup_analysis_revision", sa.Integer(), nullable=False, server_default="0"))
     if not _startup_analysis_entries_table_exists(inspector):
         _create_startup_analysis_entries_table()
+    _upgrade_export_files_drive_assignment_id(inspector)
 
 
 def upgrade() -> None:
@@ -390,6 +476,9 @@ def upgrade() -> None:
                 batch_op.add_column(sa.Column("nfs_client_version", sa.String(), nullable=True))
         if "drive_assignments" in existing_tables:
             _upgrade_drive_assignment_manifest_counters(inspector)
+            _upgrade_drive_assignment_activation_schema(inspector)
+        if "manifests" in existing_tables:
+            _upgrade_manifest_drive_assignment_schema(inspector)
         if not _job_coc_snapshots_table_exists(inspector):
             _create_job_coc_snapshots_table()
         _upgrade_legacy_project_schema(inspector, existing_tables)
@@ -554,9 +643,26 @@ def upgrade() -> None:
     _create_job_coc_snapshots_table()
 
     op.create_table(
+        "drive_assignments",
+        sa.Column("id", sa.Integer, primary_key=True),
+        sa.Column("drive_id", sa.Integer, sa.ForeignKey("usb_drives.id"), nullable=False),
+        sa.Column("job_id", sa.Integer, sa.ForeignKey("export_jobs.id"), nullable=False),
+        sa.Column("file_count", sa.Integer, nullable=False, server_default="0"),
+        sa.Column("copied_bytes", sa.BigInteger, nullable=False, server_default="0"),
+        sa.Column(
+            "assigned_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+        ),
+        sa.Column("activated_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("released_at", sa.DateTime(timezone=True), nullable=True),
+    )
+
+    op.create_table(
         "export_files",
         sa.Column("id", sa.Integer, primary_key=True),
         sa.Column("job_id", sa.Integer, sa.ForeignKey("export_jobs.id"), nullable=False),
+        sa.Column("drive_assignment_id", sa.Integer, sa.ForeignKey("drive_assignments.id"), nullable=True),
         sa.Column("project_id", sa.String, sa.ForeignKey("projects.normalized_project_id"), nullable=False),
         sa.Column("relative_path", sa.String, nullable=False),
         sa.Column("size_bytes", sa.BigInteger, nullable=True),
@@ -570,6 +676,7 @@ def upgrade() -> None:
         sa.Column("retry_attempts", sa.Integer(), nullable=True, server_default="0"),
         sa.Column("startup_analysis_revision", sa.Integer(), nullable=False, server_default="0"),
     )
+    op.create_index("ix_export_files_drive_assignment_id", "export_files", ["drive_assignment_id"])
     op.create_index("ix_export_files_project_id", "export_files", ["project_id"])
     op.create_index("ix_export_files_project_status", "export_files", ["project_id", "status"])
 
@@ -579,6 +686,7 @@ def upgrade() -> None:
         "manifests",
         sa.Column("id", sa.Integer, primary_key=True),
         sa.Column("job_id", sa.Integer, sa.ForeignKey("export_jobs.id"), nullable=False),
+        sa.Column("drive_assignment_id", sa.Integer, sa.ForeignKey("drive_assignments.id"), nullable=True),
         sa.Column("manifest_path", sa.String, nullable=True),
         sa.Column("format", sa.String, default="JSON"),
         sa.Column(
@@ -587,21 +695,7 @@ def upgrade() -> None:
             server_default=sa.func.now(),
         ),
     )
-
-    op.create_table(
-        "drive_assignments",
-        sa.Column("id", sa.Integer, primary_key=True),
-        sa.Column("drive_id", sa.Integer, sa.ForeignKey("usb_drives.id"), nullable=False),
-        sa.Column("job_id", sa.Integer, sa.ForeignKey("export_jobs.id"), nullable=False),
-        sa.Column("file_count", sa.Integer, nullable=False, server_default="0"),
-        sa.Column("copied_bytes", sa.BigInteger, nullable=False, server_default="0"),
-        sa.Column(
-            "assigned_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.func.now(),
-        ),
-        sa.Column("released_at", sa.DateTime(timezone=True), nullable=True),
-    )
+    op.create_index("ix_manifests_drive_assignment_id", "manifests", ["drive_assignment_id"])
 
     op.create_table(
         "audit_logs",
@@ -670,6 +764,7 @@ def downgrade() -> None:
     op.execute(sa.text("DROP INDEX IF EXISTS ix_audit_logs_job_timestamp_id"))
     op.execute(sa.text("DROP INDEX IF EXISTS ix_audit_logs_project_timestamp_id"))
     op.execute(sa.text("DROP INDEX IF EXISTS ix_audit_logs_timestamp_id"))
+    op.execute(sa.text("DROP INDEX IF EXISTS ix_manifests_drive_assignment_id"))
     op.execute(sa.text("DROP INDEX IF EXISTS ix_manifests_job_created_id"))
     op.execute(sa.text("DROP INDEX IF EXISTS ix_drive_assignments_drive_released_assigned_id"))
     op.execute(sa.text("DROP INDEX IF EXISTS ix_drive_assignments_job_released_assigned_id"))
@@ -680,6 +775,7 @@ def downgrade() -> None:
     op.execute(sa.text("DROP INDEX IF EXISTS ix_export_jobs_status_created_id"))
     op.drop_index("ix_startup_analysis_entries_job_entry_path", table_name="startup_analysis_entries")
     op.drop_index("ix_job_chain_of_custody_snapshots_job_id", table_name="job_chain_of_custody_snapshots")
+    op.drop_index("ix_export_files_drive_assignment_id", table_name="export_files")
     op.drop_index("ix_export_files_project_status", table_name="export_files")
     op.drop_index("ix_export_files_project_id", table_name="export_files")
     op.drop_index("ix_export_jobs_project_id", table_name="export_jobs")

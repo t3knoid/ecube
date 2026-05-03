@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
-import { analyzeJob, archiveJob, getJob, getJobChainOfCustody, refreshJobChainOfCustody, getJobFiles, startJob, retryFailedJob, pauseJob, verifyJob, downloadManifest, updateJob, completeJob, deleteJob, clearJobStartupAnalysisCache, confirmJobChainOfCustodyHandoff } from '@/api/jobs.js'
+import { analyzeJob, archiveJob, continueJobOverflow, getJob, getJobChainOfCustody, refreshJobChainOfCustody, getJobFiles, startJob, retryFailedJob, pauseJob, verifyJob, downloadManifest, updateJob, completeJob, deleteJob, clearJobStartupAnalysisCache, confirmJobChainOfCustodyHandoff } from '@/api/jobs.js'
 import { normalizeErrorMessage } from '@/api/client.js'
 import { getFileHashes, compareFiles } from '@/api/files.js'
 import { getDrives } from '@/api/drives.js'
@@ -56,6 +56,7 @@ const showEditDialog = ref(false)
 const showDeleteDialog = ref(false)
 const showArchiveDialog = ref(false)
 const showStartupAnalysisCleanupDialog = ref(false)
+const showOverflowDialog = ref(false)
 const showPausePendingDialog = ref(false)
 const showCocDialog = ref(false)
 const showCocHandoffDialog = ref(false)
@@ -66,6 +67,7 @@ const cocDialogRef = ref(null)
 const cocHandoffDialogRef = ref(null)
 const editDialogRef = ref(null)
 const pauseDialogRef = ref(null)
+const overflowDialogRef = ref(null)
 const hashDialogRef = ref(null)
 const fileErrorDialogRef = ref(null)
 const cocDialogTriggerRef = ref(null)
@@ -83,6 +85,11 @@ const editForm = ref({
   drive_id: null,
   thread_count: 4,
   callback_url: '',
+})
+
+const overflowForm = ref({
+  drive_id: null,
+  thread_count: null,
 })
 
 const cocLoading = ref(false)
@@ -244,8 +251,32 @@ const startupAnalysisSummary = computed(() => {
 const fileColumns = computed(() => ([
   { key: 'id', label: t('common.labels.id'), align: 'right' },
   { key: 'relative_path', label: t('jobs.path'), width: isMobileViewport.value ? '12rem' : null },
+  { key: 'destination_drive_label', label: t('jobs.destinationDrive') },
   { key: 'status', label: t('common.labels.status'), align: 'center' },
 ]))
+
+const retryableFileCount = computed(() => Number(job.value?.files_failed || 0) + Number(job.value?.files_timed_out || 0))
+
+const canContinueOverflow = computed(() => {
+  const status = String(job.value?.status || '').toUpperCase()
+  if (!canOperate.value || currentStartupAnalysisStatus.value === 'ANALYZING') return false
+  if (status === 'COMPLETED') return retryableFileCount.value > 0
+  return ['PENDING', 'FAILED', 'PAUSED'].includes(status)
+})
+
+const overflowEligibleDrives = computed(() => {
+  const projectId = normalizeProjectId(job.value?.project_id)
+  const activeDriveId = Number(job.value?.drive?.id || 0)
+  if (!projectId) return []
+  return supportingDrives.value.filter((drive) => {
+    const state = String(drive?.current_state || '').toUpperCase()
+    const boundProject = normalizeProjectId(drive?.current_project_id)
+    return Number(drive?.id) !== activeDriveId
+      && state === 'AVAILABLE'
+      && !!drive?.mount_path
+      && (!boundProject || boundProject === projectId)
+  })
+})
 
 const jobFailureReason = computed(() => {
   if (!job.value) return ''
@@ -381,6 +412,13 @@ const actionItems = computed(() => {
       label: t('jobs.start'),
       disabled: !canStart.value || acting.value,
       run: () => runAction('start'),
+      visible: true,
+    },
+    {
+      key: 'overflow',
+      label: t('jobs.continueOverflow'),
+      disabled: !canContinueOverflow.value || acting.value,
+      run: () => openOverflowDialog(),
       visible: true,
     },
     {
@@ -950,6 +988,10 @@ function closeEditDialog() {
   showEditDialog.value = false
 }
 
+function closeOverflowDialog() {
+  showOverflowDialog.value = false
+}
+
 function closeCocDialog() {
   showCocDialog.value = false
   showCocHandoffDialog.value = false
@@ -1102,6 +1144,37 @@ async function openEditDialog() {
     callback_url: String(job.value.callback_url || ''),
   }
   showEditDialog.value = true
+}
+
+async function openOverflowDialog() {
+  if (!job.value || !canContinueOverflow.value) return
+  dialogTriggerRef.value = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  error.value = ''
+  await loadSupportingData()
+  overflowForm.value = {
+    drive_id: overflowEligibleDrives.value[0]?.id ?? null,
+    thread_count: Number(job.value.thread_count || 4),
+  }
+  showOverflowDialog.value = true
+}
+
+async function submitOverflowContinuation() {
+  if (!job.value || !overflowForm.value.drive_id) return
+  acting.value = true
+  error.value = ''
+  try {
+    job.value = normalizeProjectRecord(await continueJobOverflow(job.value.id, {
+      drive_id: Number(overflowForm.value.drive_id),
+      thread_count: Number(overflowForm.value.thread_count || job.value.thread_count || 4),
+    }), ['project_id'])
+    closeOverflowDialog()
+    await refreshAll()
+    jobPoller.start()
+  } catch (err) {
+    error.value = buildJobError(err)
+  } finally {
+    acting.value = false
+  }
 }
 
 function editFormReady() {
@@ -1283,6 +1356,18 @@ async function refreshAll() {
     return
   }
 
+  if (showOverflowDialog.value) {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeOverflowDialog()
+      return
+    }
+    if (event.key === 'Tab') {
+      trapFocusWithin(event, overflowDialogRef.value)
+    }
+    return
+  }
+
   loading.value = true
   error.value = ''
   try {
@@ -1446,6 +1531,28 @@ watch(showEditDialog, async (open) => {
   }
 
   if (!showPausePendingDialog.value) {
+    document.removeEventListener('keydown', handleDialogKeydown)
+  }
+  const trigger = dialogTriggerRef.value
+  dialogTriggerRef.value = null
+  await nextTick()
+  if (trigger instanceof HTMLElement) {
+    trigger.focus()
+  }
+})
+
+watch(showOverflowDialog, async (open) => {
+  if (open) {
+    document.addEventListener('keydown', handleDialogKeydown)
+    await nextTick()
+    const target = overflowDialogRef.value?.querySelector('#job-overflow-drive')
+    if (target instanceof HTMLElement) {
+      target.focus()
+    }
+    return
+  }
+
+  if (!showEditDialog.value && !showCocDialog.value && !showPausePendingDialog.value && !showHashDialog.value && !showFileErrorDialog.value) {
     document.removeEventListener('keydown', handleDialogKeydown)
   }
   const trigger = dialogTriggerRef.value
@@ -1778,6 +1885,9 @@ onUnmounted(() => {
               {{ row.relative_path }}
             </button>
           </template>
+          <template #cell-destination_drive_label="{ row }">
+            <span class="wrap-anywhere">{{ row.destination_drive_label || t('common.labels.notAvailable') }}</span>
+          </template>
           <template #cell-status="{ row }">
             <button
               v-if="hasFileError(row)"
@@ -1822,6 +1932,39 @@ onUnmounted(() => {
         />
       </div>
     </article>
+
+    <teleport to="body">
+      <div v-if="showOverflowDialog" class="dialog-overlay" @click.self="closeOverflowDialog">
+        <div ref="overflowDialogRef" class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="job-overflow-title">
+          <h2 id="job-overflow-title">{{ t('jobs.continueOverflow') }}</h2>
+          <p class="muted">{{ t('jobs.overflowDialogDescription') }}</p>
+
+          <div class="dialog-groups">
+            <fieldset class="dialog-group">
+              <legend>{{ t('jobs.destinationGroup') }}</legend>
+
+              <label for="job-overflow-drive">{{ t('jobs.selectOverflowDrive') }}</label>
+              <select id="job-overflow-drive" v-model="overflowForm.drive_id">
+                <option :value="null">{{ t('jobs.chooseDrive') }}</option>
+                <option v-for="drive in overflowEligibleDrives" :key="drive.id" :value="drive.id">
+                  {{ formatDriveLabel(drive) }}
+                </option>
+              </select>
+
+              <label for="job-overflow-thread-count">{{ t('jobs.threadCount') }}</label>
+              <input id="job-overflow-thread-count" v-model.number="overflowForm.thread_count" type="number" min="1" max="8" />
+            </fieldset>
+          </div>
+
+          <div class="dialog-actions">
+            <button class="btn" :disabled="acting" @click="closeOverflowDialog">{{ t('common.actions.cancel') }}</button>
+            <button class="btn btn-primary" :disabled="acting || !overflowForm.drive_id" @click="submitOverflowContinuation">
+              {{ acting ? t('common.labels.loading') : t('jobs.continueOverflowConfirm') }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </teleport>
 
     <teleport to="body">
       <div v-if="showEditDialog" class="dialog-overlay" @click.self="closeEditDialog">

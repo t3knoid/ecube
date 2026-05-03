@@ -229,6 +229,7 @@ class FileRepository:
         """Return files belonging to *job_id*, optionally paged by *offset* and *limit*."""
         query = (
             self.db.query(ExportFile)
+            .options(joinedload(ExportFile.drive_assignment).joinedload(DriveAssignment.drive))
             .filter(ExportFile.job_id == job_id)
             .order_by(ExportFile.id)
         )
@@ -571,6 +572,7 @@ class FileRepository:
 
     def save_completed_copy(self, export_file: ExportFile, assignment_id: Optional[int]) -> None:
         """Persist DONE status and assignment file-count updates in one transaction."""
+        export_file.drive_assignment_id = assignment_id
         if assignment_id is not None:
             self.db.execute(
                 update(DriveAssignment)
@@ -719,15 +721,43 @@ class DriveAssignmentRepository:
         return assignment
 
     def get_active_for_job(self, job_id: int) -> Optional[DriveAssignment]:
-        """Return the most recent unreleased assignment for *job_id*, or ``None``."""
+        """Return the most recent active unreleased assignment for *job_id*, or ``None``."""
         return (
             self.db.query(DriveAssignment)
             .options(joinedload(DriveAssignment.drive).joinedload(UsbDrive.port))
             .filter(
                 DriveAssignment.job_id == job_id,
+                DriveAssignment.activated_at.isnot(None),
                 DriveAssignment.released_at.is_(None),
             )
-            .order_by(DriveAssignment.assigned_at.desc(), DriveAssignment.id.desc())
+            .order_by(DriveAssignment.activated_at.desc(), DriveAssignment.id.desc())
+            .first()
+        )
+
+    def get_reserved_for_job_and_drive(self, job_id: int, drive_id: int) -> Optional[DriveAssignment]:
+        return (
+            self.db.query(DriveAssignment)
+            .options(joinedload(DriveAssignment.drive).joinedload(UsbDrive.port))
+            .filter(
+                DriveAssignment.job_id == job_id,
+                DriveAssignment.drive_id == drive_id,
+                DriveAssignment.activated_at.is_(None),
+                DriveAssignment.released_at.is_(None),
+            )
+            .order_by(DriveAssignment.assigned_at.asc(), DriveAssignment.id.asc())
+            .first()
+        )
+
+    def get_next_reserved_for_job(self, job_id: int) -> Optional[DriveAssignment]:
+        return (
+            self.db.query(DriveAssignment)
+            .options(joinedload(DriveAssignment.drive).joinedload(UsbDrive.port))
+            .filter(
+                DriveAssignment.job_id == job_id,
+                DriveAssignment.activated_at.is_(None),
+                DriveAssignment.released_at.is_(None),
+            )
+            .order_by(DriveAssignment.assigned_at.asc(), DriveAssignment.id.asc())
             .first()
         )
 
@@ -746,11 +776,12 @@ class DriveAssignmentRepository:
             .options(joinedload(DriveAssignment.drive).joinedload(UsbDrive.port))
             .filter(
                 DriveAssignment.job_id.in_(job_ids),
+                DriveAssignment.activated_at.isnot(None),
                 DriveAssignment.released_at.is_(None),
             )
             .order_by(
                 DriveAssignment.job_id,
-                DriveAssignment.assigned_at.desc(),
+                DriveAssignment.activated_at.desc(),
                 DriveAssignment.id.desc(),
             )
             .all()
@@ -795,5 +826,24 @@ class ManifestRepository:
             self.db.query(Manifest)
             .filter(Manifest.job_id == job_id)
             .order_by(Manifest.id.desc())
+            .first()
+        )
+
+    def list_by_job(self, job_id: int) -> List[Manifest]:
+        return (
+            self.db.query(Manifest)
+            .filter(Manifest.job_id == job_id)
+            .order_by(Manifest.created_at.desc(), Manifest.id.desc())
+            .all()
+        )
+
+    def get_latest_for_assignment(self, job_id: int, drive_assignment_id: int) -> Optional[Manifest]:
+        return (
+            self.db.query(Manifest)
+            .filter(
+                Manifest.job_id == job_id,
+                Manifest.drive_assignment_id == drive_assignment_id,
+            )
+            .order_by(Manifest.created_at.desc(), Manifest.id.desc())
             .first()
         )
