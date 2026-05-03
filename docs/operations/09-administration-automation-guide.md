@@ -1602,6 +1602,7 @@ Every audit entry contains:
 | `JOB_TIMEOUT` | Copy job exceeded time limit |
 | `JOB_STATUS_PERSIST_FAILED` | Failed to save job status to database |
 | `JOB_RECONCILED` | In-progress job (RUNNING/VERIFYING) failed during startup reconciliation |
+| `JOB_STARTUP_ANALYSIS_RECONCILED` | Stale startup-analysis state (`ANALYZING`) recovered during startup reconciliation |
 | `MANIFEST_CREATED` | Manifest file generated on drive |
 
 #### File Operations
@@ -1752,8 +1753,11 @@ ensures only one worker runs reconciliation — the others skip it:
    and transitions stale entries to `UNMOUNTED` (or `ERROR` if the OS check
    fails). Emits `MOUNT_RECONCILED` audit events.
 2. **Job reconciliation** — marks any `RUNNING` or `VERIFYING` jobs as
-   `FAILED` (no worker process survives a restart). Emits `JOB_RECONCILED`
-   audit events.
+  `FAILED` (no worker process survives a restart). The same pass also
+  recovers jobs left in `startup_analysis_status=ANALYZING`: if the persisted
+  startup-analysis snapshot is still current, ECUBE restores `READY`; if not,
+  it clears the stale snapshot and resets the job to `NOT_ANALYZED`. Emits
+  `JOB_RECONCILED` and `JOB_STARTUP_ANALYSIS_RECONCILED` audit events.
 3. **Drive reconciliation** — re-runs USB discovery to sync physical device
    presence with the database (same as a periodic discovery cycle).
 
@@ -1766,7 +1770,7 @@ A stale lock (> 5 minutes, indicating a crashed worker) is reclaimed
 automatically by the next startup. No manual recovery steps are required
 after a service restart.
 
-The jobs pass emits a deterministic startup log line immediately after `Startup reconciliation: checking jobs`: `Startup reconciliation: jobs result`. On success, the structured fields include `status: ok`, `jobs_checked`, and `jobs_corrected`; on failure, the fields include `status: failed` and `reason: job_reconciliation_failed`. This log signature is operator-safe and can be used for startup observability alerts.
+The jobs pass emits a deterministic startup log line immediately after `Startup reconciliation: checking jobs`: `Startup reconciliation: jobs result`. On success, the structured fields include `status: ok`, `jobs_checked`, `jobs_corrected`, `startup_analysis_checked`, and `startup_analysis_corrected`; on failure, the fields include `status: failed` and `reason: job_reconciliation_failed`. This log signature is operator-safe and can be used for startup observability alerts.
 
 | Setting | Default | Description |
 |---------|---------|-------------|
