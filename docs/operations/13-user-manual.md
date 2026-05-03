@@ -747,7 +747,7 @@ Manual Analyze runs use the same startup-analysis engine before copy begins. Job
 
 If startup analysis is already `READY` and the related drive also has a last known available-space reading, ECUBE checks those values again when `Start` is pressed. If the destination cannot hold the estimated source size, copy does not begin and the page shows an operator-safe shortfall message so the operator can select another drive or use the follow-on overflow workflow.
 
-While startup analysis is actively running, Job Detail disables conflicting lifecycle actions so operators cannot edit, start, complete, delete, or clear the startup-analysis cache until the analyze run finishes. Delete and `Clear startup analysis cache` can remain visible for eligible jobs but stay disabled until the startup-analysis state leaves `ANALYZING`.
+While startup analysis is actively running, Job Detail disables conflicting lifecycle actions so operators cannot edit, start, complete, delete, or clear the startup-analysis cache until the analyze run finishes. Delete and `Clear startup analysis cache` can remain visible for eligible jobs but stay disabled until the startup-analysis state leaves `ANALYZING`. If ECUBE restarts before that analyze run finishes, startup reconciliation automatically removes the stale in-progress lockout before operators return to the page: current cached results come back as `READY`, and incomplete cached state is discarded so the job returns to a retryable `NOT_ANALYZED` state.
 
 If the Jobs page remains open while a manual analyze run finishes, ECUBE can show a page-level completion message for that job so operators notice the result without reopening Job Detail.
 
