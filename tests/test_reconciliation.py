@@ -847,6 +847,7 @@ class TestReconcileJobs:
         source_dir.mkdir()
         sample_file = source_dir / "sample.txt"
         sample_file.write_text("abc")
+        analyzed_at = datetime(2026, 5, 1, tzinfo=timezone.utc)
 
         job = ExportJob(
             project_id="PROJ-RECON-ANALYZE-002",
@@ -854,6 +855,7 @@ class TestReconcileJobs:
             source_path=str(source_dir),
             status=JobStatus.PENDING,
             startup_analysis_status=StartupAnalysisStatus.ANALYZING,
+            startup_analysis_last_analyzed_at=analyzed_at,
             startup_analysis_cache_present=True,
             startup_analysis_revision=1,
             startup_analysis_file_count=1,
@@ -885,7 +887,9 @@ class TestReconcileJobs:
 
         db.refresh(job)
         assert job.startup_analysis_status == StartupAnalysisStatus.READY
-        assert job.startup_analysis_last_analyzed_at is not None
+        restored_analyzed_at = job.startup_analysis_last_analyzed_at
+        assert restored_analyzed_at is not None
+        assert restored_analyzed_at.replace(tzinfo=timezone.utc) == analyzed_at
         assert job.file_count == 1
         assert job.total_bytes == 3
         assert result["jobs_checked"] == 1

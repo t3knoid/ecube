@@ -825,6 +825,7 @@ def _reconcile_stale_startup_analysis(
 
     old_status = job.startup_analysis_status.value
     if cache_restored:
+        analyzed_at = job.startup_analysis_last_analyzed_at
         job.file_count = int(job.startup_analysis_file_count or 0)
         job.total_bytes = int(job.startup_analysis_total_bytes or 0)
         job.copied_bytes = int(
@@ -835,7 +836,7 @@ def _reconcile_stale_startup_analysis(
                 .all()
             )
         )
-        _set_startup_analysis_ready(job)
+        _set_startup_analysis_ready(job, analyzed_at=analyzed_at)
         new_status = StartupAnalysisStatus.READY.value
         reason = "valid_cache_restored_after_restart"
     else:
