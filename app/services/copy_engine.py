@@ -387,7 +387,10 @@ def _try_automatic_overflow_handoff(db: Session, job_id: int) -> bool:
     try:
         job_repo.save(job)
     except Exception:
-        logger.exception("Database error while auto-continuing overflow for job %s", job_id)
+        logger.exception(
+            "Database error while auto-continuing overflow",
+            extra={"job_id": job_id},
+        )
         return False
 
     logger.info(
