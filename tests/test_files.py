@@ -2,7 +2,8 @@
 
 import pytest
 
-from app.models.jobs import ExportFile, ExportJob, FileStatus, JobStatus
+from app.models.hardware import DriveState, UsbDrive
+from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus
 
 
 # ---------------------------------------------------------------------------
@@ -105,6 +106,64 @@ def test_get_file_hashes_live_computation(admin_client, db, tmp_path):
     data = response.json()
     assert data["md5"] == expected_md5
     assert data["sha256"] == expected_sha256
+
+
+def test_get_file_hashes_prefers_assigned_overflow_drive_path(admin_client, db, tmp_path):
+    import hashlib
+
+    source_root = tmp_path / "source"
+    destination_root = tmp_path / "overflow-destination"
+    source_root.mkdir()
+    destination_root.mkdir()
+    (source_root / "doc.txt").write_text("source-version", encoding="utf-8")
+    content = b"overflow-destination-version"
+    (destination_root / "doc.txt").write_bytes(content)
+
+    drive = UsbDrive(
+        device_identifier="USB-FILE-HASH-OVERFLOW-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        mount_path=str(destination_root),
+    )
+    db.add(drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-001",
+        evidence_number="EV-HASH-OVERFLOW-001",
+        source_path=str(source_root),
+        target_mount_path=str(tmp_path / "latest-destination"),
+        status=JobStatus.COMPLETED,
+        total_bytes=len(content),
+        copied_bytes=len(content),
+        file_count=1,
+        thread_count=4,
+    )
+    db.add(job)
+    db.flush()
+
+    assignment = DriveAssignment(drive_id=drive.id, job_id=job.id)
+    db.add(assignment)
+    db.flush()
+
+    ef = ExportFile(
+        job_id=job.id,
+        relative_path="doc.txt",
+        size_bytes=len(content),
+        checksum="old_checksum",
+        status=FileStatus.DONE,
+        drive_assignment_id=assignment.id,
+    )
+    db.add(ef)
+    db.commit()
+    db.refresh(ef)
+
+    response = admin_client.get(f"/files/{ef.id}/hashes")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["md5"] == hashlib.md5(content).hexdigest()
+    assert data["sha256"] == hashlib.sha256(content).hexdigest()
 
 
 def test_get_file_hashes_auditor_allowed(auditor_client, db):
@@ -243,6 +302,65 @@ def test_compare_same_file_id_returns_clear_error_when_destination_missing(admin
 
     assert response.status_code == 409
     assert "Destination file is unavailable for comparison" in response.text
+
+
+def test_compare_same_file_id_uses_assigned_overflow_destination(admin_client, db, tmp_path):
+    source_root = tmp_path / "source"
+    first_destination_root = tmp_path / "overflow-destination"
+    source_root.mkdir()
+    first_destination_root.mkdir()
+    (source_root / "doc.txt").write_text("source-version", encoding="utf-8")
+    (first_destination_root / "doc.txt").write_text("destination-version", encoding="utf-8")
+
+    drive = UsbDrive(
+        device_identifier="USB-COMPARE-OVERFLOW-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-COMPARE-OVERFLOW-001",
+        mount_path=str(first_destination_root),
+    )
+    db.add(drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-COMPARE-OVERFLOW-001",
+        evidence_number="EV-COMPARE-OVERFLOW-001",
+        source_path=str(source_root),
+        target_mount_path=str(tmp_path / "latest-destination"),
+        status=JobStatus.COMPLETED,
+        total_bytes=32,
+        copied_bytes=32,
+        file_count=1,
+        thread_count=4,
+    )
+    db.add(job)
+    db.flush()
+
+    assignment = DriveAssignment(drive_id=drive.id, job_id=job.id)
+    db.add(assignment)
+    db.flush()
+
+    export_file = ExportFile(
+        job_id=job.id,
+        relative_path="doc.txt",
+        size_bytes=19,
+        checksum="a" * 64,
+        status=FileStatus.DONE,
+        drive_assignment_id=assignment.id,
+    )
+    db.add(export_file)
+    db.commit()
+    db.refresh(export_file)
+
+    response = admin_client.post(
+        "/files/compare",
+        json={"file_id_a": export_file.id, "file_id_b": export_file.id},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["path_match"] is True
+    assert data["hash_match"] is False
+    assert data["match"] is False
 
 
 def test_compare_files_hash_mismatch(admin_client, db):

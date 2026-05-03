@@ -6,6 +6,7 @@ import JobDetailView from '@/views/JobDetailView.vue'
 const mocks = vi.hoisted(() => ({
   analyzeJob: vi.fn(),
   archiveJob: vi.fn(),
+  continueJobOverflow: vi.fn(),
   getJob: vi.fn(),
   getJobChainOfCustody: vi.fn(),
   refreshJobChainOfCustody: vi.fn(),
@@ -67,6 +68,7 @@ vi.mock('@/stores/auth.js', () => ({
 vi.mock('@/api/jobs.js', () => ({
   analyzeJob: (...args) => mocks.analyzeJob(...args),
   archiveJob: (...args) => mocks.archiveJob(...args),
+  continueJobOverflow: (...args) => mocks.continueJobOverflow(...args),
   getJob: (...args) => mocks.getJob(...args),
   getJobChainOfCustody: (...args) => mocks.getJobChainOfCustody(...args),
   refreshJobChainOfCustody: (...args) => mocks.refreshJobChainOfCustody(...args),
@@ -179,6 +181,7 @@ describe('JobDetailView start action', () => {
     mocks.refreshJobChainOfCustody.mockReset()
     mocks.analyzeJob.mockReset()
     mocks.archiveJob.mockReset()
+    mocks.continueJobOverflow.mockReset()
     mocks.getJobFiles.mockReset()
     mocks.startJob.mockReset()
     mocks.retryFailedJob.mockReset()
@@ -237,6 +240,7 @@ describe('JobDetailView start action', () => {
     mocks.getJobFiles.mockResolvedValue({ files: [], total_files: 0, returned_files: 0, page: 1, page_size: 40 })
     mocks.getDrives.mockResolvedValue([
       { id: 1, device_identifier: 'USB-001', port_system_path: '2-1', current_project_id: 'PROJ-001', current_state: 'AVAILABLE', mount_path: '/mnt/ecube/1' },
+      { id: 2, device_identifier: 'USB-002', port_system_path: '2-2', current_project_id: 'PROJ-001', current_state: 'AVAILABLE', mount_path: '/mnt/ecube/2' },
     ])
     mocks.getMounts.mockResolvedValue([
       { id: 4, project_id: 'PROJ-001', status: 'MOUNTED', remote_path: 'server:/exports/project-001', local_mount_point: '/nfs/project-001' },
@@ -246,6 +250,7 @@ describe('JobDetailView start action', () => {
     mocks.retryFailedJob.mockResolvedValue({ id: 6, status: 'RUNNING', project_id: 'PROJ-001', evidence_number: 'EV-006', thread_count: 4, copied_bytes: 10, total_bytes: 20, files_failed: 0, files_timed_out: 0, source_path: '/nfs/project-001/evidence', target_mount_path: '/mnt/ecube/1' })
     mocks.completeJob.mockResolvedValue({ id: 6, status: 'COMPLETED', project_id: 'PROJ-001', evidence_number: 'EV-006', thread_count: 4, copied_bytes: 0, total_bytes: 0 })
     mocks.archiveJob.mockResolvedValue({ id: 6, status: 'ARCHIVED', project_id: 'PROJ-001', evidence_number: 'EV-006', thread_count: 4, copied_bytes: 0, total_bytes: 0, source_path: '/nfs/project-001/evidence', target_mount_path: '/mnt/ecube/1' })
+    mocks.continueJobOverflow.mockResolvedValue({ id: 6, status: 'RUNNING', project_id: 'PROJ-001', evidence_number: 'EV-006', thread_count: 4, copied_bytes: 10, total_bytes: 20, files_failed: 0, files_timed_out: 0, source_path: '/nfs/project-001/evidence', target_mount_path: '/mnt/ecube/2', drive: { id: 2, available_bytes: 4096 } })
     mocks.deleteJob.mockResolvedValue({ status: 'deleted' })
     mocks.clearJobStartupAnalysisCache.mockResolvedValue({ id: 6, status: 'FAILED', project_id: 'PROJ-001', evidence_number: 'EV-006', thread_count: 4, copied_bytes: 0, total_bytes: 0, startup_analysis_cached: false })
     mocks.getJobChainOfCustody.mockResolvedValue({ selector_mode: 'JOB', project_id: 'PROJ-001', snapshot_updated_at: '2026-04-28T19:30:00Z', reports: [] })
@@ -1517,6 +1522,47 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).not.toContain(i18n.global.t('jobs.fileErrorDetailsEmpty'))
   })
 
+  it('shows destination drive metadata in the files table', async () => {
+    mocks.getJobFiles.mockResolvedValue({
+      files: [
+        { id: 1, relative_path: 'done/doc-001.txt', status: 'DONE', destination_drive_label: 'USB-002 (Drive #2)' },
+      ],
+      total_files: 1,
+      returned_files: 1,
+      page: 1,
+      page_size: 40,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.find('.files-panel-toggle').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.columns-stub').text()).toContain(i18n.global.t('jobs.destinationDrive'))
+    expect(wrapper.text()).toContain('USB-002 (Drive #2)')
+  })
+
+  it('opens the overflow dialog and submits the selected overflow drive', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const overflowButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.continueOverflow'))
+    expect(overflowButton).toBeTruthy()
+    await overflowButton.trigger('click')
+    await flushPromises()
+
+    const driveSelect = wrapper.find('#job-overflow-drive')
+    expect(driveSelect.exists()).toBe(true)
+    expect(driveSelect.element.value).toBe('2')
+
+    await wrapper.find('.dialog-panel #job-overflow-thread-count').setValue('6')
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.continueOverflowConfirm')).trigger('click')
+    await flushPromises()
+
+    expect(mocks.continueJobOverflow).toHaveBeenCalledWith(6, { drive_id: 2, thread_count: 6 })
+  })
+
   it('does not show a file error affordance when the current page has no file errors', async () => {
     mocks.getJobFiles.mockResolvedValue({
       files: [{ id: 1, relative_path: 'done/doc-001.txt', status: 'DONE', error_message: '' }],
@@ -2355,6 +2401,7 @@ describe('JobDetailView start action', () => {
     ])
 
     expect(wrapper.find('.actions-menu').exists()).toBe(true)
+    expect(wrapper.find('.detail-action-menu-overflow').exists()).toBe(true)
     expect(wrapper.find('.detail-action-menu-coc').exists()).toBe(true)
     expect(wrapper.find('.detail-action-menu-complete').exists()).toBe(true)
     expect(wrapper.find('.detail-action-menu-delete').exists()).toBe(true)
@@ -2409,6 +2456,7 @@ describe('JobDetailView start action', () => {
       i18n.global.t('common.actions.edit'),
       i18n.global.t('jobs.analyze'),
       i18n.global.t('jobs.start'),
+      i18n.global.t('jobs.continueOverflow'),
       i18n.global.t('jobs.retryFailedFiles'),
       i18n.global.t('jobs.pause'),
       i18n.global.t('jobs.complete'),
