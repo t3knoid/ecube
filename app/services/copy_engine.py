@@ -347,7 +347,6 @@ def _probe_drive_available_bytes(
                 "raw_error": str(exc),
             },
         )
-        logger.exception("Assigned drive capacity probe raised an unexpected exception")
         return None
 
 
