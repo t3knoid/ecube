@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive, UsbHub, UsbPort
-from app.models.jobs import DriveAssignment, ExportJob, JobStatus
+from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, StartupAnalysisEntry, StartupAnalysisStatus
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.models.system import ReconciliationLock
 from app.models.users import UserRole
@@ -813,6 +813,96 @@ class TestReconcileJobs:
         assert audit.details["new_status"] == "FAILED"
         assert audit.details["reason"] == "interrupted by restart"
 
+    def test_stale_startup_analysis_without_valid_cache_resets_to_not_analyzed(self, db: Session):
+        job = ExportJob(
+            project_id="PROJ-RECON-ANALYZE-001",
+            evidence_number="EV-RECON-ANALYZE-001",
+            source_path="/data/recon-analyze-001",
+            status=JobStatus.PENDING,
+            startup_analysis_status=StartupAnalysisStatus.ANALYZING,
+            startup_analysis_failure_reason="stale state",
+        )
+        db.add(job)
+        db.commit()
+
+        result = reconcile_jobs(db)
+
+        db.refresh(job)
+        assert job.startup_analysis_status == StartupAnalysisStatus.NOT_ANALYZED
+        assert job.startup_analysis_failure_reason is None
+        assert result["jobs_checked"] == 1
+        assert result["jobs_corrected"] == 1
+        assert result["startup_analysis_checked"] == 1
+        assert result["startup_analysis_corrected"] == 1
+
+        audit = db.query(AuditLog).filter(AuditLog.action == "JOB_STARTUP_ANALYSIS_RECONCILED").first()
+        assert audit is not None
+        assert audit.job_id == job.id
+        assert audit.details["old_status"] == "ANALYZING"
+        assert audit.details["new_status"] == "NOT_ANALYZED"
+        assert audit.details["reason"] == "analysis_interrupted_by_restart"
+
+    def test_stale_startup_analysis_with_current_cache_restores_ready(self, db: Session, tmp_path):
+        source_dir = tmp_path / "startup-analysis"
+        source_dir.mkdir()
+        sample_file = source_dir / "sample.txt"
+        sample_file.write_text("abc")
+        analyzed_at = datetime(2026, 5, 1, tzinfo=timezone.utc)
+
+        job = ExportJob(
+            project_id="PROJ-RECON-ANALYZE-002",
+            evidence_number="EV-RECON-ANALYZE-002",
+            source_path=str(source_dir),
+            status=JobStatus.PENDING,
+            startup_analysis_status=StartupAnalysisStatus.ANALYZING,
+            startup_analysis_last_analyzed_at=analyzed_at,
+            startup_analysis_cache_present=True,
+            startup_analysis_revision=1,
+            startup_analysis_file_count=1,
+            startup_analysis_total_bytes=3,
+        )
+        db.add(job)
+        db.flush()
+        db.add(
+            ExportFile(
+                job_id=job.id,
+                project_id=job.project_id,
+                relative_path="sample.txt",
+                size_bytes=3,
+                status=FileStatus.PENDING,
+                startup_analysis_revision=1,
+            )
+        )
+        db.add(
+            StartupAnalysisEntry(
+                job_id=job.id,
+                entry_type="directory",
+                relative_path="",
+                mtime_ns=source_dir.stat().st_mtime_ns,
+            )
+        )
+        db.commit()
+
+        result = reconcile_jobs(db)
+
+        db.refresh(job)
+        assert job.startup_analysis_status == StartupAnalysisStatus.READY
+        restored_analyzed_at = job.startup_analysis_last_analyzed_at
+        assert restored_analyzed_at is not None
+        assert restored_analyzed_at.replace(tzinfo=timezone.utc) == analyzed_at
+        assert job.file_count == 1
+        assert job.total_bytes == 3
+        assert result["jobs_checked"] == 1
+        assert result["jobs_corrected"] == 1
+        assert result["startup_analysis_checked"] == 1
+        assert result["startup_analysis_corrected"] == 1
+
+        audit = db.query(AuditLog).filter(AuditLog.action == "JOB_STARTUP_ANALYSIS_RECONCILED").first()
+        assert audit is not None
+        assert audit.job_id == job.id
+        assert audit.details["new_status"] == "READY"
+        assert audit.details["reason"] == "valid_cache_restored_after_restart"
+
     def test_multiple_jobs_each_handled(self, db: Session):
         j1 = _make_job(db, JobStatus.RUNNING)
         j2 = _make_job(db, JobStatus.VERIFYING)
@@ -1202,6 +1292,8 @@ class TestRunStartupReconciliation:
         assert getattr(matches[0], "status", None) == "ok"
         assert getattr(matches[0], "jobs_checked", None) == 1
         assert getattr(matches[0], "jobs_corrected", None) == 1
+        assert getattr(matches[0], "startup_analysis_checked", None) == 0
+        assert getattr(matches[0], "startup_analysis_corrected", None) == 0
 
     def test_identity_failure_does_not_block_other_passes(self, db: Session):
         _make_mount(db, MountStatus.MOUNTED, "/mnt/stale")
