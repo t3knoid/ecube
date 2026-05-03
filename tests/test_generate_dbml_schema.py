@@ -36,3 +36,17 @@ def test_dbml_generate_writes_output(tmp_path, monkeypatch, capsys):
     assert exit_code == 0
     assert output_path.read_text(encoding="utf-8") == "GENERATED\n"
     assert f"Wrote DBML to {output_path}" in capsys.readouterr().out
+
+
+def test_dbml_generate_skips_write_when_output_is_current(tmp_path, monkeypatch, capsys):
+    output_path = tmp_path / "schema.dbml"
+    output_path.write_text("UNCHANGED\n", encoding="utf-8")
+    original_mtime = output_path.stat().st_mtime_ns
+    monkeypatch.setattr(generate_dbml_schema, "generate_dbml", lambda: "UNCHANGED\n")
+
+    exit_code = generate_dbml_schema.main(["--output", str(output_path)])
+
+    assert exit_code == 0
+    assert output_path.read_text(encoding="utf-8") == "UNCHANGED\n"
+    assert output_path.stat().st_mtime_ns == original_mtime
+    assert f"DBML unchanged: {output_path}" in capsys.readouterr().out

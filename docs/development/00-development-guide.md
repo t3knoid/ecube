@@ -221,7 +221,7 @@ See [02 — Configuration Reference](../operations/04-configuration-reference.md
 
 ### Pre-Commit Hook (Optional)
 
-The versioned pre-commit hook blocks commits when generated documentation assets are stale. Today it enforces both QA test-case spreadsheet sync and in-app help sync.
+The versioned pre-commit hook blocks commits when generated documentation assets are stale. Today it enforces QA test-case spreadsheet sync, in-app help sync, and DBML schema sync.
 
 ```bash
 git config core.hooksPath .githooks
@@ -230,6 +230,8 @@ git config core.hooksPath .githooks
 When staged changes touch [docs/testing/03-qa-testing-guide.md](../testing/03-qa-testing-guide.md) or [docs/testing/ecube-qa-test-cases.xlsx](../testing/ecube-qa-test-cases.xlsx), the hook runs `python3 scripts/sync_qa_test_cases.py --check`.
 
 When staged changes touch [docs/operations/13-user-manual.md](../operations/13-user-manual.md), [frontend/public/help/manual.html](../../frontend/public/help/manual.html), [scripts/build-help.mjs](../../scripts/build-help.mjs), or [frontend/package.json](../../frontend/package.json), the hook runs `npm --prefix frontend run build:help:check` and blocks the commit until the generated help file is refreshed and staged.
+
+When staged changes touch [app/models](../../app/models) or [docs/database/ecube-schema.dbml](../../docs/database/ecube-schema.dbml), the hook runs `python3 scripts/generate_dbml_schema.py --check` and blocks the commit until you regenerate and stage the DBML file. Release-migration text and generator-script changes alone do not trigger this check because the DBML file is generated from SQLAlchemy model metadata, not directly from Alembic modules.
 
 ---
 

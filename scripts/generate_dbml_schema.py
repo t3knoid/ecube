@@ -11,6 +11,8 @@ import argparse
 import re
 from collections import OrderedDict
 from pathlib import Path
+from typing import Optional, Sequence
+
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -220,18 +222,39 @@ def generate_dbml() -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def main() -> int:
+def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Generate ECUBE DBML schema file")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Verify the output file is already up to date without rewriting it",
+    )
     parser.add_argument(
         "--output",
         default="docs/database/ecube-schema.dbml",
         help="Output DBML file path",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(list(argv) if argv is not None else None)
 
     output_path = Path(args.output)
+    rendered = generate_dbml()
+    existing = output_path.read_text(encoding="utf-8") if output_path.exists() else None
+
+    if args.check:
+        if existing != rendered:
+            print(
+                f"ERROR: {output_path} is out of date. Run python3 scripts/generate_dbml_schema.py and stage the updated DBML file."
+            )
+            return 1
+        print(f"DBML is up to date: {output_path}")
+        return 0
+
+    if existing == rendered:
+        print(f"DBML unchanged: {output_path}")
+        return 0
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(generate_dbml(), encoding="utf-8")
+    output_path.write_text(rendered, encoding="utf-8")
     print(f"Wrote DBML to {output_path}")
     return 0
 
