@@ -102,6 +102,41 @@ def test_create_job_reserves_overflow_drives(client, db):
     assert overflow_drive.current_state == DriveState.IN_USE
 
 
+def test_create_job_audits_project_isolation_violation_for_different_drive_project(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-CREATE-ISOLATION-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-OTHER-001",
+        mount_path="/mnt/ecube/create-isolation-001",
+    )
+    db.add(drive)
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-001",
+            "evidence_number": "EV-ISOLATION-001",
+            "source_path": "/data/evidence",
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 403
+    audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "PROJECT_ISOLATION_VIOLATION")
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+    assert audit is not None
+    assert audit.job_id is None
+    assert audit.project_id == "PROJ-001"
+    assert audit.drive_id == drive.id
+    assert audit.details["requested_project_id"] == "PROJ-001"
+    assert audit.details["existing_project_id"] == "PROJ-OTHER-001"
+
+
 def test_create_job_audits_evidence_number_and_processor_notes(client, db):
     drive = UsbDrive(
         device_identifier="USB-CREATE-AUDIT-001",
@@ -2546,6 +2581,69 @@ def test_continue_job_overflow_reassigns_drive_and_requeues_failed_files(client,
     assert audit.details["previous_drive_id"] == previous_drive.id
     assert audit.details["drive_id"] == next_drive.id
     assert audit.details["retry_file_count"] == 1
+
+
+def test_continue_job_overflow_audits_project_isolation_violation(client, db):
+    previous_drive = UsbDrive(
+        device_identifier="USB-OVERFLOW-ISO-OLD-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-OVERFLOW-ISO-001",
+        mount_path="/mnt/ecube/overflow-iso-old-001",
+        available_bytes=0,
+    )
+    other_project_drive = UsbDrive(
+        device_identifier="USB-OVERFLOW-ISO-NEW-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-OTHER-001",
+        mount_path="/mnt/ecube/overflow-iso-new-001",
+        available_bytes=8192,
+    )
+    db.add_all([previous_drive, other_project_drive])
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-OVERFLOW-ISO-001",
+        evidence_number="EV-OVERFLOW-ISO-001",
+        source_path="/data/overflow-iso-001",
+        target_mount_path=previous_drive.mount_path,
+        status=JobStatus.COMPLETED,
+        startup_analysis_status=StartupAnalysisStatus.READY,
+        startup_analysis_cache_present=True,
+        startup_analysis_total_bytes=4096,
+        copied_bytes=1024,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=previous_drive.id, job_id=job.id, file_count=1, copied_bytes=1024))
+    db.add(
+        ExportFile(
+            job_id=job.id,
+            project_id="PROJ-OVERFLOW-ISO-001",
+            relative_path="remaining.bin",
+            size_bytes=3072,
+            status=FileStatus.ERROR,
+            error_message="No space left on device",
+        )
+    )
+    db.commit()
+
+    with patch("app.services.copy_engine.run_copy_job") as mock_copy:
+        response = client.post(f"/jobs/{job.id}/overflow", json={"drive_id": other_project_drive.id})
+
+    assert response.status_code == 403
+    mock_copy.assert_not_called()
+    audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "PROJECT_ISOLATION_VIOLATION")
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+    assert audit is not None
+    assert audit.job_id == job.id
+    assert audit.project_id == "PROJ-OVERFLOW-ISO-001"
+    assert audit.drive_id == other_project_drive.id
+    assert audit.details["requested_project_id"] == "PROJ-OVERFLOW-ISO-001"
+    assert audit.details["existing_project_id"] == "PROJ-OTHER-001"
 
 
 def test_continue_job_overflow_rejects_when_new_drive_cannot_hold_remaining_bytes(client, db):

@@ -118,6 +118,35 @@ def _is_drive_assigned_to_another_job(
     return query.count() > 0
 
 
+def _audit_project_isolation_violation(
+    *,
+    audit_repo: AuditRepository,
+    actor: Optional[str],
+    client_ip: Optional[str],
+    requested_project_id: str,
+    drive_id: int,
+    existing_project_id: Optional[str],
+    job_id: Optional[int] = None,
+) -> None:
+    try:
+        audit_repo.add(
+            action="PROJECT_ISOLATION_VIOLATION",
+            user=actor,
+            project_id=requested_project_id,
+            drive_id=drive_id,
+            job_id=job_id,
+            details={
+                "project_id": requested_project_id,
+                "drive_id": drive_id,
+                "existing_project_id": existing_project_id,
+                "requested_project_id": requested_project_id,
+            },
+            client_ip=client_ip,
+        )
+    except Exception:
+        logger.exception("Failed to write audit log for PROJECT_ISOLATION_VIOLATION")
+
+
 def _manifest_targets_for_job(job: ExportJob, db: Session) -> list[tuple[DriveAssignment, list[ExportFile]]]:
     assignments_by_id = {assignment.id: assignment for assignment in job.assignments}
     grouped_files: dict[int, list[ExportFile]] = {}
@@ -752,6 +781,15 @@ def create_job(
             mount_path = cast(Optional[str], drive_row.mount_path)
 
             if current_project_id not in (None, body.project_id):
+                db.rollback()
+                _audit_project_isolation_violation(
+                    audit_repo=audit_repo,
+                    actor=actor,
+                    client_ip=client_ip,
+                    requested_project_id=body.project_id,
+                    drive_id=drive_id,
+                    existing_project_id=current_project_id,
+                )
                 raise HTTPException(status_code=403, detail="Drive belongs to a different project")
             if current_state not in (DriveState.AVAILABLE, DriveState.IN_USE):
                 raise HTTPException(status_code=409, detail="Drive is not available")
@@ -1231,6 +1269,15 @@ def continue_job_overflow(
     drive_state = cast(DriveState, drive_row.current_state)
     drive_mount_path = cast(Optional[str], drive_row.mount_path)
     if drive_project_id not in (None, cast(Optional[str], job_row.project_id)):
+        _audit_project_isolation_violation(
+            audit_repo=audit_repo,
+            actor=actor,
+            client_ip=client_ip,
+            requested_project_id=cast(str, job_row.project_id),
+            drive_id=int(body.drive_id),
+            existing_project_id=drive_project_id,
+            job_id=job_id,
+        )
         raise HTTPException(status_code=403, detail="Drive belongs to a different project")
     if drive_state not in (DriveState.AVAILABLE, DriveState.IN_USE):
         raise HTTPException(status_code=409, detail="Drive is not available")
@@ -1388,6 +1435,15 @@ def update_job(
     drive_mount_path = cast(Optional[str], drive_row.mount_path)
 
     if drive_project_id not in (None, cast(Optional[str], job_row.project_id)):
+        _audit_project_isolation_violation(
+            audit_repo=audit_repo,
+            actor=actor,
+            client_ip=client_ip,
+            requested_project_id=cast(str, job_row.project_id),
+            drive_id=int(requested_drive_id),
+            existing_project_id=drive_project_id,
+            job_id=job_id,
+        )
         raise HTTPException(status_code=403, detail="Drive belongs to a different project")
     if drive_state not in (DriveState.AVAILABLE, DriveState.IN_USE):
         raise HTTPException(status_code=409, detail="Drive is not available")
