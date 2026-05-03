@@ -2,7 +2,7 @@ import { useI18n } from 'vue-i18n'
 
 const DRIVE_STATE_KEYS = {
   DISCONNECTED: 'drives.states.disconnected',
-  UNMOUNTED: 'drives.states.unmounted',
+  DISABLED: 'drives.states.disabled',
   AVAILABLE: 'drives.states.available',
   IN_USE: 'drives.states.inUse',
 }

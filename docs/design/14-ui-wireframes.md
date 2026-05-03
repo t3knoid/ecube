@@ -462,7 +462,7 @@ The active-jobs table on this screen treats valid `Job ID` values as the navigat
 │  ◎ Users     │  ┌─ Drives ───────────────┐  ┌─ Mounts ────────────────────┐  │
 │  ◎ System    │  │                        │  │                             │  │
 │              │  │  DISCONNECTED 0          │  │  MOUNTED     3             │  │
-│              │  │  AVAILABLE   3          │  │  UNMOUNTED   0             │  │
+│              │  │  AVAILABLE   3          │  │  DISABLED    0             │  │
 │              │  │  IN_USE      2          │  │  ERROR       1             │  │
 │              │  │              ──         │  │              ──            │  │
 │              │  │  Total       5          │  │  Total       4             │  │
@@ -520,7 +520,7 @@ The active-jobs table on this screen treats valid `Job ID` values as the navigat
 │              │  [ Manage Ports ]  [ Manage Hubs ]  (admin/manager — 4c/4d)   │
 │              │                                                               │
 │              │  ┌─ Lifecycle Reference ─────────────────────────────────────┐ │
-│              │  │   DISCONNECTED ──▶ UNMOUNTED ──▶ AVAILABLE ──▶ IN_USE     │ │
+│              │  │   DISCONNECTED ──▶ DISABLED ──▶ AVAILABLE ──▶ IN_USE      │ │
 │              │  │     ▲                │             (initialize)  │        │ │
 │              │  │     │                └──────────▶ (enable port)  │        │ │
 │              │  │     │                      ▲                     │ (eject)│ │
@@ -529,7 +529,7 @@ The active-jobs table on this screen treats valid `Job ID` values as the navigat
 └──────────────┴───────────────────────────────────────────────────────────────┘
 ```
 
-**State color key:** 🟢 IN_USE (green) · 🟡 AVAILABLE (yellow) · 🟠 UNMOUNTED (amber) · ⚪ DISCONNECTED (gray)
+**State color key:** 🟢 IN_USE (green) · 🟡 AVAILABLE (yellow) · 🟠 DISABLED (amber) · ⚪ DISCONNECTED (gray)
 
 ### 4b — Drive Detail Panel (UC-4.7, UC-4.4, UC-4.5, UC-4.6)
 
@@ -584,8 +584,8 @@ Shown when a drive row is selected (slide-out panel or detail page).
 | Drive State | Format | Initialize | Eject |
 |-------------|--------|------------|-------|
 | DISCONNECTED | disabled | disabled | disabled |
-| UNMOUNTED | disabled | disabled | disabled |
-| AVAILABLE   | enabled | enabled (if destination mounted) | disabled |
+| DISABLED | disabled | disabled | disabled |
+| AVAILABLE   | enabled | enabled (if destination mounted) | enabled when mounted |
 | IN_USE      | disabled | disabled | enabled |
 
 **Key Interaction:** When a drive row or detail view has a valid related job, the `Job ID` context can open the existing Job Detail page for that job.
@@ -614,8 +614,8 @@ Accessible from the Drive Management screen via a "Manage Ports" button. Visible
 │              │  └────┴────────┴──────────────────────────┴──────┴──────┴───────┴─────────────────┴────────┘│
 │              │                                                                          │
 │              │  ⚠ Changes take effect on the next discovery refresh.                     │
-│              │    Drives on disabled ports remain in UNMOUNTED state.                     │
-│              │    AVAILABLE drives are demoted to UNMOUNTED when port disabled.           │
+│              │    Drives on disabled ports remain in DISABLED state.                      │
+│              │    AVAILABLE drives are demoted to DISABLED when port disabled.            │
 │              │    Drives already IN_USE are not affected.                                │
 │              │                                                                          │
 │              │  [ Refresh Drives ] — run discovery after enabling ports                  │

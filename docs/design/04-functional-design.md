@@ -11,23 +11,23 @@
 
 - Implement a finite-state machine for drive states and legal transitions.
 - Gate all transitions through a single service module to ensure consistency.
-- The recommended persisted drive states are `DISCONNECTED`, `UNMOUNTED`, `AVAILABLE`, and `IN_USE`.
+- The active persisted drive states are `DISCONNECTED`, `DISABLED`, `AVAILABLE`, and `IN_USE`.
 
 ### 4.1.0 Recommended Drive State Semantics
 
 - `DISCONNECTED` — drive record exists but the hardware is not presently physically available.
-- `UNMOUNTED` — drive is physically present but not yet operator-ready, typically because its port is disabled.
+- `DISABLED` — drive is physically present but not yet operator-ready because its port is disabled.
 - `AVAILABLE` — drive is present, writable, and eligible for initialization or job assignment.
 - `IN_USE` — drive is actively assigned to a project/job workflow and may receive data writes.
 
 Recommended legal transitions:
 
-- `DISCONNECTED → UNMOUNTED` when hardware is rediscovered on a disabled port.
+- `DISCONNECTED → DISABLED` when hardware is rediscovered on a disabled port.
 - `DISCONNECTED → AVAILABLE` on discovery of a usable drive on an enabled port.
-- `UNMOUNTED → AVAILABLE` when the port becomes enabled and discovery reruns.
+- `DISABLED → AVAILABLE` when the port becomes enabled and discovery reruns.
 - `AVAILABLE → IN_USE` on initialize or job assignment.
 - `IN_USE → AVAILABLE` on prepare-eject.
-- `AVAILABLE → UNMOUNTED` on disabled-port reconciliation.
+- `AVAILABLE → DISABLED` on disabled-port reconciliation.
 - `AVAILABLE → DISCONNECTED` on physical removal.
 
 Note: custody handoff confirmation records legal transfer details for the assigned drive but does not introduce a separate archival drive state. The expected operational flow remains `IN_USE → AVAILABLE` (prepare-eject) followed by custody handoff recording on the related job.
@@ -337,12 +337,12 @@ The callback body is a JSON object containing:
 - Hub and port records are upserted using stable hardware identity keys.
 - **Hardware enrichment:** Discovery should capture vendor, product, and negotiated-speed metadata when available, without erasing previously known values with empty readings.
 - **Label preservation:** Admin-assigned hub and port labels are never overwritten by discovery.
-- Drive state transitions follow FSM rules: `DISCONNECTED → UNMOUNTED` when a drive is rediscovered on a disabled port, `UNMOUNTED → AVAILABLE` when that port becomes enabled, `AVAILABLE → DISCONNECTED` on removal, and `AVAILABLE → UNMOUNTED` when a still-present drive is blocked by a disabled port (unless `IN_USE` — project isolation takes priority).
+- Drive state transitions follow FSM rules: `DISCONNECTED → DISABLED` when a drive is rediscovered on a disabled port, `DISABLED → AVAILABLE` when that port becomes enabled, `AVAILABLE → DISCONNECTED` on removal, and `AVAILABLE → DISABLED` when a still-present drive is blocked by a disabled port (unless `IN_USE` — project isolation takes priority).
 - **Port enablement filtering:** Each USB port has an `enabled` flag (default `false`). Discovery uses this flag to gate drive availability:
-  - A newly discovered drive on a **disabled** port is inserted in `UNMOUNTED` state (not `AVAILABLE`).
-  - A reconnecting drive on a **disabled** port remains `UNMOUNTED` while it is still physically present.
-  - An `AVAILABLE` drive whose port is subsequently **disabled** is demoted to `UNMOUNTED` on the next discovery sync.
-  - Drives with no associated port (`port_id = NULL`) are treated as **disabled** while present — they remain in `UNMOUNTED` state.
+  - A newly discovered drive on a **disabled** port is inserted in `DISABLED` state (not `AVAILABLE`).
+  - A reconnecting drive on a **disabled** port remains `DISABLED` while it is still physically present.
+  - An `AVAILABLE` drive whose port is subsequently **disabled** is demoted to `DISABLED` on the next discovery sync.
+  - Drives with no associated port (`port_id = NULL`) are treated as **disabled** while present — they remain in `DISABLED` state.
   - Drives already in `IN_USE` state are **never** changed by the enablement filter — project isolation takes priority.
   - Port enablement changes take effect on the next discovery sync.
 - Refresh operation is fully idempotent: running multiple times without hardware changes produces no mutations.
@@ -387,9 +387,9 @@ Reconciliation runs during application startup, before the service begins normal
 ### 4.11.3 Drive Reconciliation
 
 - Delegates to the normal discovery refresh path (see § 4.10) with `actor="system"`.
-- This re-reads the USB topology and applies the standard drive FSM transitions (`DISCONNECTED ↔ UNMOUNTED ↔ AVAILABLE`, with `IN_USE` preserved).
+- This re-reads the USB topology and applies the standard drive FSM transitions (`DISCONNECTED ↔ DISABLED ↔ AVAILABLE`, with `IN_USE` preserved).
 - Startup mount reconciliation runs before this discovery pass so previously mounted managed USB drives can be returned to their expected ECUBE mount slots before steady-state discovery refreshes drive state.
-- Drives that are no longer physically present and were `AVAILABLE` or `UNMOUNTED` are transitioned to `DISCONNECTED`.
+- Drives that are no longer physically present and were `AVAILABLE` or `DISABLED` are transitioned to `DISCONNECTED`.
 
 ### Failure Isolation
 

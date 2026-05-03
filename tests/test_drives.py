@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy import text
 
 from app.exceptions import ConflictError
 from app.infrastructure.drive_eject import EjectResult
@@ -175,9 +176,9 @@ def test_list_drives_default_excludes_disconnected(client, db):
     """GET /drives without project_id returns connected drives (excludes DISCONNECTED by default)."""
     d1 = UsbDrive(device_identifier="USB-1", current_state=DriveState.IN_USE, current_project_id="PROJ-001")
     d2 = UsbDrive(device_identifier="USB-2", current_state=DriveState.AVAILABLE)
-    d4 = UsbDrive(device_identifier="USB-4", current_state=DriveState.UNMOUNTED)
+    d5 = UsbDrive(device_identifier="USB-5", current_state=DriveState.DISABLED)
     d3 = UsbDrive(device_identifier="USB-3", current_state=DriveState.DISCONNECTED)
-    db.add_all([d1, d2, d3, d4])
+    db.add_all([d1, d2, d3, d5])
     db.commit()
 
     response = client.get("/drives")
@@ -186,7 +187,7 @@ def test_list_drives_default_excludes_disconnected(client, db):
     ids = [d["device_identifier"] for d in data]
     assert "USB-1" in ids
     assert "USB-2" in ids
-    assert "USB-4" in ids
+    assert "USB-5" in ids
     assert "USB-3" not in ids
 
 
@@ -417,6 +418,30 @@ def test_mount_drive_success(manager_client, db):
     assert audit.details["mount_slot"] == "[redacted]"
     assert "filesystem_path" not in audit.details
     assert "mount_path" not in audit.details
+
+
+def test_normalize_unreleased_drive_states_promotes_unmounted_to_disabled(db):
+    from app.services.drive_service import normalize_unreleased_drive_states
+
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-UNRELEASED",
+        current_state=DriveState.DISABLED,
+        filesystem_type="ext4",
+        filesystem_path="/dev/sdz",
+    )
+    db.add(drive)
+    db.commit()
+
+    db.execute(
+        text("UPDATE usb_drives SET current_state = :state WHERE id = :drive_id"),
+        {"state": "UNMOUNTED", "drive_id": drive.id},
+    )
+    db.commit()
+
+    assert normalize_unreleased_drive_states(db) == 1
+
+    db.refresh(drive)
+    assert drive.current_state == DriveState.DISABLED
 
 
 def test_mount_drive_requires_recognized_filesystem(manager_client, db):
@@ -740,14 +765,13 @@ def test_initialize_empty_drive_is_rejected(manager_client, db):
     assert log.details["current_state"] == "DISCONNECTED"
     assert log.details["requested_project_id"] == "PROJ-NEW"
 
-
-def test_initialize_unmounted_drive_is_rejected(manager_client, db):
-    """UNMOUNTED drives are physically present but not ready; initialization must be rejected with 409."""
+def test_initialize_disabled_drive_is_rejected(manager_client, db):
+    """DISABLED drives are physically present on blocked ports; initialization must be rejected with 409."""
     from app.models.audit import AuditLog
 
     drive = UsbDrive(
-        device_identifier="USB003U",
-        current_state=DriveState.UNMOUNTED,
+        device_identifier="USB003D",
+        current_state=DriveState.DISABLED,
         filesystem_type="ext4",
     )
     db.add(drive)
@@ -755,15 +779,15 @@ def test_initialize_unmounted_drive_is_rejected(manager_client, db):
 
     response = manager_client.post(f"/drives/{drive.id}/initialize", json={"project_id": "PROJ-NEW"})
     assert response.status_code == 409
-    assert "unmounted" in response.json()["message"].lower()
+    assert "disabled" in response.json()["message"].lower()
 
     db.refresh(drive)
-    assert drive.current_state == DriveState.UNMOUNTED
+    assert drive.current_state == DriveState.DISABLED
 
     log = db.query(AuditLog).filter(AuditLog.action == "INIT_REJECTED_NOT_AVAILABLE").order_by(AuditLog.id.desc()).first()
     assert log is not None
     assert log.details["drive_id"] == drive.id
-    assert log.details["current_state"] == "UNMOUNTED"
+    assert log.details["current_state"] == "DISABLED"
     assert log.details["requested_project_id"] == "PROJ-NEW"
 
 
@@ -822,6 +846,27 @@ def test_prepare_eject(manager_client, db):
     # Project binding is preserved through eject so re-insert for the same
     # project is allowed without a format, and cross-project reuse is blocked.
     assert data["current_project_id"] == "PROJ-001"
+
+
+def test_prepare_eject_mounted_available_drive(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB005-AVAILABLE",
+        current_state=DriveState.AVAILABLE,
+        current_project_id=None,
+        filesystem_path="/dev/sdb",
+        mount_path="/mnt/ecube/usb005-available",
+    )
+    db.add(drive)
+    db.commit()
+
+    provider = _fake_eject()
+    with patch("app.routers.drives.get_drive_eject", return_value=provider):
+        response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["current_state"] == "AVAILABLE"
+    assert data["mount_path"] is None
 
 
 @pytest.mark.parametrize("status", [
@@ -1323,8 +1368,8 @@ def test_prepare_eject_invalid_device_path(manager_client, db):
     assert "/tmp/../../etc/passwd" not in str(log.details)
 
 
-def test_prepare_eject_requires_in_use_state(manager_client, db):
-    """Prepare-eject must reject drives not in IN_USE state (409 Conflict).
+def test_prepare_eject_requires_ejectable_state(manager_client, db):
+    """Prepare-eject must reject drives that are not in an ejectable state (409 Conflict).
     
     Verifies that prepare_eject is NOT called (fast-fail optimization).
     """
@@ -1341,7 +1386,7 @@ def test_prepare_eject_requires_in_use_state(manager_client, db):
         response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
 
     assert response.status_code == 409
-    assert "not in IN_USE state" in response.json()["message"]
+    assert "not in an ejectable state" in response.json()["message"]
     # Verify prepare_eject was NOT called (fast-fail before OS operations)
     provider.prepare_eject.assert_not_called()
 
@@ -1352,7 +1397,7 @@ def test_prepare_eject_requires_in_use_state(manager_client, db):
 
 
 def test_prepare_eject_available_state_conflict(manager_client, db):
-    """Prepare-eject on AVAILABLE drive returns 409 Conflict.
+    """Prepare-eject on unmounted AVAILABLE drive returns 409 Conflict.
     
     Verifies that prepare_eject is NOT called (fast-fail optimization).
     """
@@ -1369,7 +1414,7 @@ def test_prepare_eject_available_state_conflict(manager_client, db):
         response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
 
     assert response.status_code == 409
-    assert "not in IN_USE state" in response.json()["message"]
+    assert "not mounted" in response.json()["message"]
     # Verify prepare_eject was NOT called (fast-fail before OS operations)
     provider.prepare_eject.assert_not_called()
 

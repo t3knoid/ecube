@@ -24,7 +24,7 @@ const badgeClass = computed(() => {
   if (['FAILED', 'ERROR', 'DISCONNECTED', 'FALSE'].includes(value)) {
     return 'badge-danger'
   }
-  if (['RUNNING', 'VERIFYING', 'COPYING', 'IN_USE', 'DEGRADED', 'UNMOUNTED'].includes(value)) {
+  if (['RUNNING', 'VERIFYING', 'COPYING', 'IN_USE', 'DEGRADED', 'DISABLED', 'UNMOUNTED'].includes(value)) {
     return 'badge-warning'
   }
   if (['PENDING', 'DISCONNECTED', 'UNKNOWN'].includes(value)) {
