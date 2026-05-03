@@ -48,6 +48,12 @@ def _resolve_source_file_path(ef: ExportFile, db: Session) -> Optional[Path]:
 
 def _resolve_destination_file_path(ef: ExportFile, db: Session) -> Optional[Path]:
     """Return the destination-side on-disk path for *ef*."""
+    drive_assignment = getattr(ef, "drive_assignment", None)
+    assigned_drive = getattr(drive_assignment, "drive", None) if drive_assignment is not None else None
+    assigned_mount_path = getattr(assigned_drive, "mount_path", None) if assigned_drive is not None else None
+    if assigned_mount_path:
+        return Path(assigned_mount_path) / ef.relative_path
+
     job = JobRepository(db).get(ef.job_id)
     if job is None or not job.target_mount_path:
         return None

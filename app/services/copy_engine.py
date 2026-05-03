@@ -12,8 +12,10 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
-from app.models.jobs import ExportFile, FileStatus, JobStatus, StartupAnalysisEntry, StartupAnalysisStatus
+from app.models.hardware import DriveState, UsbDrive
+from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, StartupAnalysisEntry, StartupAnalysisStatus
 from app.repositories.audit_repository import AuditRepository
+from app.repositories.drive_repository import DriveRepository
 from app.repositories.job_repository import (
     DriveAssignmentRepository,
     FileRepository,
@@ -307,6 +309,116 @@ def _source_path_for_relative_path(source: Path, relative_path: str) -> Path:
     if source.is_dir():
         return source / Path(relative_path)
     return source
+
+
+def _is_overflow_retryable_file(export_file: ExportFile) -> bool:
+    return export_file.status == FileStatus.ERROR and export_file.error_message == "Target storage is full"
+
+
+def _select_automatic_overflow_assignment(
+    *,
+    db: Session,
+    job: ExportJob,
+) -> Optional[DriveAssignment]:
+    assignment_repo = DriveAssignmentRepository(db)
+    reserved_assignment = assignment_repo.get_next_reserved_for_job(job.id)
+    if reserved_assignment is None:
+        return None
+
+    drive = getattr(reserved_assignment, "drive", None)
+    if drive is None:
+        return None
+    if getattr(drive, "current_state", None) != DriveState.IN_USE:
+        return None
+    if not getattr(drive, "mount_path", None):
+        return None
+
+    remaining_bytes = int(job.startup_analysis_total_bytes or 0) - int(job.copied_bytes or 0)
+    available_bytes = getattr(drive, "available_bytes", None)
+    if available_bytes is not None and remaining_bytes > int(available_bytes):
+        return None
+    return reserved_assignment
+
+
+def _try_automatic_overflow_handoff(db: Session, job_id: int) -> bool:
+    job_repo = JobRepository(db)
+    file_repo = FileRepository(db)
+    assignment_repo = DriveAssignmentRepository(db)
+    drive_repo = DriveRepository(db)
+
+    job = job_repo.get_for_update(job_id)
+    if job is None:
+        return False
+
+    incomplete_files = file_repo.list_incomplete_by_job(job_id)
+    if not incomplete_files:
+        return False
+    if not all(_is_overflow_retryable_file(export_file) for export_file in incomplete_files):
+        return False
+
+    active_assignment = assignment_repo.get_active_for_job(job_id)
+    if active_assignment is None:
+        return False
+
+    next_assignment = _select_automatic_overflow_assignment(
+        db=db,
+        job=job,
+    )
+    if next_assignment is None:
+        return False
+
+    next_drive = getattr(next_assignment, "drive", None)
+    if next_drive is None:
+        return False
+
+    active_assignment.released_at = datetime.now(timezone.utc)
+    next_assignment.activated_at = datetime.now(timezone.utc)
+    current_drive = drive_repo.get_for_update(int(active_assignment.drive_id))
+    if current_drive is not None:
+        current_drive.current_state = DriveState.AVAILABLE
+
+    job.target_mount_path = next_drive.mount_path
+    job.status = JobStatus.RUNNING
+    job.completed_at = None
+    job.failure_reason = None
+    next_drive.current_state = DriveState.IN_USE
+    file_repo.reset_failed_for_retry(job_id)
+
+    try:
+        job_repo.save(job)
+    except Exception:
+        logger.exception("Database error while auto-continuing overflow for job %s", job_id)
+        return False
+
+    logger.info(
+        "Automatic overflow continuation started",
+        extra={
+            "job_id": job_id,
+            "project_id": job.project_id,
+            "previous_drive_id": int(active_assignment.drive_id),
+            "drive_id": int(next_drive.id),
+            "reason": "automatic_overflow_handoff",
+        },
+    )
+    try:
+        AuditRepository(db).add(
+            action="JOB_OVERFLOW_CONTINUATION_STARTED",
+            job_id=job_id,
+            project_id=job.project_id,
+            drive_id=int(next_drive.id),
+            details={
+                "project_id": job.project_id,
+                "previous_drive_id": int(active_assignment.drive_id),
+                "drive_id": int(next_drive.id),
+                "drive_assignment_id": int(next_assignment.id),
+                "retry_file_count": len(incomplete_files),
+                "automatic": True,
+            },
+        )
+    except Exception:
+        logger.exception("Failed to write audit log for JOB_OVERFLOW_CONTINUATION_STARTED")
+
+    return True
 
 
 def _clear_startup_analysis_cache(job: Any) -> None:
@@ -1593,209 +1705,220 @@ def run_copy_job(job_id: int) -> None:
         error_count = 0
 
         try:
-            source = Path(job.source_path)
-            target = Path(job.target_mount_path) if job.target_mount_path else None
-
-            preparation = prepare_job_startup_analysis(job_id)
-
-            job = job_repo.get(job_id)
-            if preparation["reused_cached_analysis"]:
-                try:
-                    AuditRepository(db).add(
-                        action="JOB_STARTUP_ANALYSIS_REUSED",
-                        job_id=job_id,
-                        details={
-                            "cached_file_count": int(preparation["file_count"]),
-                            "cached_total_bytes": int(preparation["total_bytes"]),
-                        },
-                    )
-                except Exception:
-                    logger.error("Failed to write audit log for JOB_STARTUP_ANALYSIS_REUSED")
-
-            max_retries = job.max_file_retries if job.max_file_retries is not None else settings.copy_default_max_retries
-            retry_delay = float(job.retry_delay_seconds) if job.retry_delay_seconds is not None else settings.copy_default_retry_delay_seconds
-
-            pause_requested = False
-
-            executor = ThreadPoolExecutor(
-                max_workers=job.thread_count or settings.copy_default_thread_count,
-                thread_name_prefix=f"copy-job-{job_id}",
-            )
-            try:
-                pending_after_id: int | None = None
-                batch_limit = max(1, (job.thread_count or settings.copy_default_thread_count) * COPY_PENDING_BATCH_MULTIPLIER)
-                while True:
-                    pending_files = file_repo.list_pending_by_job_after_id(
-                        job_id,
-                        after_id=pending_after_id,
-                        limit=batch_limit,
-                    )
-                    if not pending_files:
-                        break
-                    pending_after_id = pending_files[-1].id
-                    futures = {
-                        executor.submit(
-                            _process_file,
-                            ef.id,
-                            _source_path_for_relative_path(source, ef.relative_path),
-                            target,
-                            max_retries,
-                            retry_delay,
-                        ): ef.id
-                        for ef in pending_files
-                    }
-                    for future in as_completed(futures):
-                        try:
-                            future.result()
-                        except Exception:
-                            # Worker already recorded FileStatus.ERROR in its own session;
-                            # unexpected exceptions are caught here to let other workers finish.
-                            pass
-
-                        db.expire_all()
-                        latest_job = job_repo.get(job_id)
-                        latest_started_at_key = _normalize_started_at(
-                            latest_job.started_at if latest_job else None
-                        )
-                        if latest_job and latest_started_at_key and latest_started_at_key != run_started_at_key:
-                            for pending in futures:
-                                if not pending.done():
-                                    pending.cancel()
-                            logger.info(
-                                "Skipping stale copy worker after newer resume",
-                                extra={"job_id": job_id, "started_at": str(run_started_at)},
-                            )
-                            return
-                        if latest_job and latest_job.status in (JobStatus.PAUSING, JobStatus.PAUSED):
-                            pause_requested = True
-                            for pending in futures:
-                                if not pending.done():
-                                    pending.cancel()
-                            break
-                    if pause_requested:
-                        break
-
-            finally:
-                # Always wait for running workers to finish so the DB session is
-                # idle before the main thread uses it.  cancel_futures=True
-                # prevents queued (not-yet-started) tasks from running.
-                executor.shutdown(wait=True, cancel_futures=True)
-
-            # Determine final job status.
-            db.expire_all()
-            done_count, error_count = file_repo.count_done_and_errors(job_id)
-            timeout_count = db.query(ExportFile).filter(
-                ExportFile.job_id == job_id,
-                ExportFile.status == FileStatus.TIMEOUT,
-            ).count()
-
-            job = job_repo.get(job_id)
-            if job:
-                if _normalize_started_at(job.started_at) != run_started_at_key:
-                    logger.info(
-                        "Skipping stale finalization for resumed copy job",
-                        extra={"job_id": job_id, "started_at": str(run_started_at)},
-                    )
+            while True:
+                job = job_repo.get(job_id)
+                if job is None:
                     return
-                run_finished_at = datetime.now(timezone.utc)
-                total_active_seconds = _calculate_total_active_seconds(
-                    job.active_duration_seconds,
-                    run_started_at,
-                    run_finished_at,
+
+                source = Path(job.source_path)
+                target = Path(job.target_mount_path) if job.target_mount_path else None
+
+                preparation = prepare_job_startup_analysis(job_id)
+
+                job = job_repo.get(job_id)
+                if job is None:
+                    return
+                if preparation["reused_cached_analysis"]:
+                    try:
+                        AuditRepository(db).add(
+                            action="JOB_STARTUP_ANALYSIS_REUSED",
+                            job_id=job_id,
+                            details={
+                                "cached_file_count": int(preparation["file_count"]),
+                                "cached_total_bytes": int(preparation["total_bytes"]),
+                            },
+                        )
+                    except Exception:
+                        logger.error("Failed to write audit log for JOB_STARTUP_ANALYSIS_REUSED")
+
+                max_retries = job.max_file_retries if job.max_file_retries is not None else settings.copy_default_max_retries
+                retry_delay = float(job.retry_delay_seconds) if job.retry_delay_seconds is not None else settings.copy_default_retry_delay_seconds
+
+                pause_requested = False
+
+                executor = ThreadPoolExecutor(
+                    max_workers=job.thread_count or settings.copy_default_thread_count,
+                    thread_name_prefix=f"copy-job-{job_id}",
                 )
-                job.active_duration_seconds = int(round(total_active_seconds))
-                all_files_finished = (done_count + error_count + timeout_count) >= int(job.file_count or 0)
-                if (pause_requested or job.status in (JobStatus.PAUSING, JobStatus.PAUSED)) and not all_files_finished:
-                    job.status = JobStatus.PAUSED
-                    job.completed_at = None
-                    try:
-                        job_repo.save(job)
-                    except Exception:
-                        logger.error("DB commit failed setting job %s to PAUSED", job_id)
-                else:
-                    # File-level ERROR/TIMEOUT outcomes are preserved for recall/retry,
-                    # but they do not make the whole job FAILED once all files finish.
-                    job.status = JobStatus.COMPLETED if all_files_finished else JobStatus.FAILED
-                    job.completed_at = datetime.now(timezone.utc)
-                    cache_cleared = False
-                    cache_clear_details: dict[str, int] = {}
-                    if (
-                        job.status == JobStatus.COMPLETED
-                        and error_count == 0
-                        and timeout_count == 0
-                        and job.startup_analysis_cached
-                    ):
-                        cache_clear_details = _startup_analysis_cache_details(job)
-                        db.query(StartupAnalysisEntry).filter(
-                            StartupAnalysisEntry.job_id == job_id,
-                        ).delete(synchronize_session=False)
-                        _clear_startup_analysis_entries(job)
-                        cache_cleared = True
-                    try:
-                        job_repo.save(job)
-                    except Exception:
-                        logger.error("DB commit failed setting final status for job %s", job_id)
+                try:
+                    pending_after_id: int | None = None
+                    batch_limit = max(1, (job.thread_count or settings.copy_default_thread_count) * COPY_PENDING_BATCH_MULTIPLIER)
+                    while True:
+                        pending_files = file_repo.list_pending_by_job_after_id(
+                            job_id,
+                            after_id=pending_after_id,
+                            limit=batch_limit,
+                        )
+                        if not pending_files:
+                            break
+                        pending_after_id = pending_files[-1].id
+                        futures = {
+                            executor.submit(
+                                _process_file,
+                                ef.id,
+                                _source_path_for_relative_path(source, ef.relative_path),
+                                target,
+                                max_retries,
+                                retry_delay,
+                            ): ef.id
+                            for ef in pending_files
+                        }
+                        for future in as_completed(futures):
+                            try:
+                                future.result()
+                            except Exception:
+                                # Worker already recorded FileStatus.ERROR in its own session;
+                                # unexpected exceptions are caught here to let other workers finish.
+                                pass
+
+                            db.expire_all()
+                            latest_job = job_repo.get(job_id)
+                            latest_started_at_key = _normalize_started_at(
+                                latest_job.started_at if latest_job else None
+                            )
+                            if latest_job and latest_started_at_key and latest_started_at_key != run_started_at_key:
+                                for pending in futures:
+                                    if not pending.done():
+                                        pending.cancel()
+                                logger.info(
+                                    "Skipping stale copy worker after newer resume",
+                                    extra={"job_id": job_id, "started_at": str(run_started_at)},
+                                )
+                                return
+                            if latest_job and latest_job.status in (JobStatus.PAUSING, JobStatus.PAUSED):
+                                pause_requested = True
+                                for pending in futures:
+                                    if not pending.done():
+                                        pending.cancel()
+                                break
+                        if pause_requested:
+                            break
+
+                finally:
+                    # Always wait for running workers to finish so the DB session is
+                    # idle before the main thread uses it.  cancel_futures=True
+                    # prevents queued (not-yet-started) tasks from running.
+                    executor.shutdown(wait=True, cancel_futures=True)
+
+                # Determine final job status.
+                db.expire_all()
+                done_count, error_count = file_repo.count_done_and_errors(job_id)
+                timeout_count = db.query(ExportFile).filter(
+                    ExportFile.job_id == job_id,
+                    ExportFile.status == FileStatus.TIMEOUT,
+                ).count()
+
+                if error_count > 0 and timeout_count == 0 and _try_automatic_overflow_handoff(db, job_id):
+                    db.expire_all()
+                    continue
+
+                job = job_repo.get(job_id)
+                if job:
+                    if _normalize_started_at(job.started_at) != run_started_at_key:
+                        logger.info(
+                            "Skipping stale finalization for resumed copy job",
+                            extra={"job_id": job_id, "started_at": str(run_started_at)},
+                        )
+                        return
+                    run_finished_at = datetime.now(timezone.utc)
+                    total_active_seconds = _calculate_total_active_seconds(
+                        job.active_duration_seconds,
+                        run_started_at,
+                        run_finished_at,
+                    )
+                    job.active_duration_seconds = int(round(total_active_seconds))
+                    all_files_finished = (done_count + error_count + timeout_count) >= int(job.file_count or 0)
+                    if (pause_requested or job.status in (JobStatus.PAUSING, JobStatus.PAUSED)) and not all_files_finished:
+                        job.status = JobStatus.PAUSED
+                        job.completed_at = None
                         try:
-                            AuditRepository(db).add(
-                                action="JOB_STATUS_PERSIST_FAILED",
-                                job_id=job_id,
-                                details={
-                                    "intended_status": job.status.value,
-                                    "file_count": job.file_count,
-                                    "error_count": error_count,
-                                    "timeout_count": timeout_count,
-                                    "elapsed_seconds": round(total_active_seconds, 2),
-                                },
-                            )
+                            job_repo.save(job)
                         except Exception:
-                            logger.error("Failed to write audit log for JOB_STATUS_PERSIST_FAILED")
+                            logger.error("DB commit failed setting job %s to PAUSED", job_id)
                     else:
-                        audit_action = "JOB_COMPLETED" if job.status == JobStatus.COMPLETED else "JOB_FAILED"
-                        elapsed_seconds = round(total_active_seconds, 2)
-                        copy_rate_mb_s = _calculate_copy_rate_mb_s(job.copied_bytes or 0, elapsed_seconds)
-                        _log_job_path_context(job_id, job.source_path, job.target_mount_path, "copy-finished")
-                        if job.status == JobStatus.FAILED:
-                            logger.error(
-                                f"JOB_FAILED job_id={job_id} project_id={job.project_id} "
-                                f"status={job.status.value} started_at={job.started_at.isoformat() if job.started_at else None} failed_at={job.completed_at.isoformat() if job.completed_at else None} "
-                                f"thread_count={job.thread_count} files_copied={done_count} file_count={job.file_count} error_count={error_count} timeout_count={timeout_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} elapsed_seconds={elapsed_seconds} copy_rate_mb_s={copy_rate_mb_s}",
-                                extra={
-                                    "job_id": job_id,
-                                    "project_id": job.project_id,
-                                    "status": job.status.value,
-                                    "started_at": job.started_at.isoformat() if job.started_at else None,
-                                    "thread_count": job.thread_count,
-                                    "files_copied": done_count,
-                                    "file_count": job.file_count,
-                                    "error_count": error_count,
-                                    "timeout_count": timeout_count,
-                                    "copied_bytes": job.copied_bytes or 0,
-                                    "total_bytes": job.total_bytes or 0,
-                                    "elapsed_seconds": elapsed_seconds,
-                                    "copy_rate_mb_s": copy_rate_mb_s,
-                                },
-                            )
+                        # File-level ERROR/TIMEOUT outcomes are preserved for recall/retry,
+                        # but they do not make the whole job FAILED once all files finish.
+                        job.status = JobStatus.COMPLETED if all_files_finished else JobStatus.FAILED
+                        job.completed_at = datetime.now(timezone.utc)
+                        cache_cleared = False
+                        cache_clear_details: dict[str, int] = {}
+                        if (
+                            job.status == JobStatus.COMPLETED
+                            and error_count == 0
+                            and timeout_count == 0
+                            and job.startup_analysis_cached
+                        ):
+                            cache_clear_details = _startup_analysis_cache_details(job)
+                            db.query(StartupAnalysisEntry).filter(
+                                StartupAnalysisEntry.job_id == job_id,
+                            ).delete(synchronize_session=False)
+                            _clear_startup_analysis_entries(job)
+                            cache_cleared = True
+                        try:
+                            job_repo.save(job)
+                        except Exception:
+                            logger.error("DB commit failed setting final status for job %s", job_id)
+                            try:
+                                AuditRepository(db).add(
+                                    action="JOB_STATUS_PERSIST_FAILED",
+                                    job_id=job_id,
+                                    details={
+                                        "intended_status": job.status.value,
+                                        "file_count": job.file_count,
+                                        "error_count": error_count,
+                                        "timeout_count": timeout_count,
+                                        "elapsed_seconds": round(total_active_seconds, 2),
+                                    },
+                                )
+                            except Exception:
+                                logger.error("Failed to write audit log for JOB_STATUS_PERSIST_FAILED")
                         else:
-                            logger.info(
-                                f"JOB_COMPLETED job_id={job_id} project_id={job.project_id} "
-                                f"status={job.status.value} started_at={job.started_at.isoformat() if job.started_at else None} completed_at={job.completed_at.isoformat() if job.completed_at else None} "
-                                f"thread_count={job.thread_count} files_copied={done_count} file_count={job.file_count} error_count={error_count} timeout_count={timeout_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} elapsed_seconds={elapsed_seconds} copy_rate_mb_s={copy_rate_mb_s}",
-                                extra={
-                                    "job_id": job_id,
-                                    "project_id": job.project_id,
-                                    "status": job.status.value,
-                                    "started_at": job.started_at.isoformat() if job.started_at else None,
-                                    "thread_count": job.thread_count,
-                                    "files_copied": done_count,
-                                    "file_count": job.file_count,
-                                    "error_count": error_count,
-                                    "timeout_count": timeout_count,
-                                    "copied_bytes": job.copied_bytes or 0,
-                                    "total_bytes": job.total_bytes or 0,
-                                    "elapsed_seconds": elapsed_seconds,
-                                    "copy_rate_mb_s": copy_rate_mb_s,
-                                },
-                            )
+                            audit_action = "JOB_COMPLETED" if job.status == JobStatus.COMPLETED else "JOB_FAILED"
+                            elapsed_seconds = round(total_active_seconds, 2)
+                            copy_rate_mb_s = _calculate_copy_rate_mb_s(job.copied_bytes or 0, elapsed_seconds)
+                            _log_job_path_context(job_id, job.source_path, job.target_mount_path, "copy-finished")
+                            if job.status == JobStatus.FAILED:
+                                logger.error(
+                                    f"JOB_FAILED job_id={job_id} project_id={job.project_id} "
+                                    f"status={job.status.value} started_at={job.started_at.isoformat() if job.started_at else None} failed_at={job.completed_at.isoformat() if job.completed_at else None} "
+                                    f"thread_count={job.thread_count} files_copied={done_count} file_count={job.file_count} error_count={error_count} timeout_count={timeout_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} elapsed_seconds={elapsed_seconds} copy_rate_mb_s={copy_rate_mb_s}",
+                                    extra={
+                                        "job_id": job_id,
+                                        "project_id": job.project_id,
+                                        "status": job.status.value,
+                                        "started_at": job.started_at.isoformat() if job.started_at else None,
+                                        "thread_count": job.thread_count,
+                                        "files_copied": done_count,
+                                        "file_count": job.file_count,
+                                        "error_count": error_count,
+                                        "timeout_count": timeout_count,
+                                        "copied_bytes": job.copied_bytes or 0,
+                                        "total_bytes": job.total_bytes or 0,
+                                        "elapsed_seconds": elapsed_seconds,
+                                        "copy_rate_mb_s": copy_rate_mb_s,
+                                    },
+                                )
+                            else:
+                                logger.info(
+                                    f"JOB_COMPLETED job_id={job_id} project_id={job.project_id} "
+                                    f"status={job.status.value} started_at={job.started_at.isoformat() if job.started_at else None} completed_at={job.completed_at.isoformat() if job.completed_at else None} "
+                                    f"thread_count={job.thread_count} files_copied={done_count} file_count={job.file_count} error_count={error_count} timeout_count={timeout_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} elapsed_seconds={elapsed_seconds} copy_rate_mb_s={copy_rate_mb_s}",
+                                    extra={
+                                        "job_id": job_id,
+                                        "project_id": job.project_id,
+                                        "status": job.status.value,
+                                        "started_at": job.started_at.isoformat() if job.started_at else None,
+                                        "thread_count": job.thread_count,
+                                        "files_copied": done_count,
+                                        "file_count": job.file_count,
+                                        "error_count": error_count,
+                                        "timeout_count": timeout_count,
+                                        "copied_bytes": job.copied_bytes or 0,
+                                        "total_bytes": job.total_bytes or 0,
+                                        "elapsed_seconds": elapsed_seconds,
+                                        "copy_rate_mb_s": copy_rate_mb_s,
+                                    },
+                                )
                         try:
                             AuditRepository(db).add(
                                 action=audit_action,
@@ -1836,6 +1959,7 @@ def run_copy_job(job_id: int) -> None:
                             from app.services import job_service
 
                             job_service.auto_generate_manifest_for_completed_job(job.id, db)
+                break
         except Exception as exc:
             db.rollback()
             safe_reason = _sanitize_job_failure_reason(

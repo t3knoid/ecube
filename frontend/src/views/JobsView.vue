@@ -52,6 +52,7 @@ const form = ref({
   project_id: '',
   evidence_number: '',
   drive_id: null,
+  overflow_drive_ids: [],
   mount_id: null,
   source_path: '/',
   thread_count: 4,
@@ -232,6 +233,7 @@ function resetForm() {
     project_id: '',
     evidence_number: '',
     drive_id: null,
+    overflow_drive_ids: [],
     mount_id: null,
     source_path: '/',
     thread_count: 4,
@@ -313,6 +315,22 @@ const eligibleDrives = computed(() => {
       && !!drive?.mount_path
       && (!boundProject || boundProject === selectedProject.value)
   })
+})
+
+const selectedOverflowDriveIds = computed(() => (
+  Array.isArray(form.value.overflow_drive_ids)
+    ? form.value.overflow_drive_ids.map((value) => Number(value)).filter((value) => Number.isInteger(value))
+    : []
+))
+
+const primaryEligibleDrives = computed(() => {
+  const reservedOverflowIds = new Set(selectedOverflowDriveIds.value)
+  return eligibleDrives.value.filter((drive) => !reservedOverflowIds.has(Number(drive.id)))
+})
+
+const overflowEligibleDrives = computed(() => {
+  const primaryDriveId = Number(form.value.drive_id)
+  return eligibleDrives.value.filter((drive) => Number(drive.id) !== primaryDriveId)
 })
 
 function formReady() {
@@ -436,16 +454,23 @@ async function refreshJobsPage() {
 function syncEligibleSelections() {
   if (!projectSelected.value) {
     form.value.drive_id = null
+    form.value.overflow_drive_ids = []
     form.value.mount_id = null
     return
   }
 
-  const hasDrive = eligibleDrives.value.some((drive) => Number(drive.id) === Number(form.value.drive_id))
+  const eligibleDriveIds = new Set(eligibleDrives.value.map((drive) => Number(drive.id)))
+  form.value.overflow_drive_ids = selectedOverflowDriveIds.value.filter((driveId) => eligibleDriveIds.has(driveId))
+
+  const hasDrive = primaryEligibleDrives.value.some((drive) => Number(drive.id) === Number(form.value.drive_id))
   const hasMount = eligibleMounts.value.some((mount) => Number(mount.id) === Number(form.value.mount_id))
 
   if (!hasDrive) {
-    form.value.drive_id = eligibleDrives.value[0]?.id ?? null
+    form.value.drive_id = primaryEligibleDrives.value[0]?.id ?? null
   }
+  form.value.overflow_drive_ids = selectedOverflowDriveIds.value.filter(
+    (driveId) => driveId !== Number(form.value.drive_id),
+  )
   if (!hasMount) {
     form.value.mount_id = eligibleMounts.value[0]?.id ?? null
   }
@@ -516,10 +541,13 @@ async function submitCreateJob() {
     await loadSupportingData()
     syncEligibleSelections()
 
-    const driveStillEligible = eligibleDrives.value.some((drive) => Number(drive.id) === Number(form.value.drive_id))
+    const driveStillEligible = primaryEligibleDrives.value.some((drive) => Number(drive.id) === Number(form.value.drive_id))
     const mountStillEligible = eligibleMounts.value.some((mount) => Number(mount.id) === Number(form.value.mount_id))
+    const overflowStillEligible = selectedOverflowDriveIds.value.every((driveId) => (
+      overflowEligibleDrives.value.some((drive) => Number(drive.id) === driveId)
+    ))
 
-    if (!driveStillEligible || !mountStillEligible) {
+    if (!driveStillEligible || !mountStillEligible || !overflowStillEligible) {
       createDialogError.value = t('jobs.selectionUnavailable')
       return
     }
@@ -537,6 +565,7 @@ async function submitCreateJob() {
       mount_id: Number(form.value.mount_id),
       source_path: resolveSourcePath(),
       drive_id: Number(form.value.drive_id),
+      overflow_drive_ids: selectedOverflowDriveIds.value,
       thread_count: Number(form.value.thread_count),
       notes: form.value.notes.trim() || undefined,
       callback_url: form.value.callback_url.trim() || undefined,
@@ -780,7 +809,7 @@ onBeforeUnmount(() => {
             <p v-if="createDialogError" class="error-banner dialog-error-banner" role="alert" aria-live="assertive">{{ createDialogError }}</p>
             <p v-if="!availableProjects.length" class="muted">{{ t('jobs.noProjectsAvailable') }}</p>
             <p v-else-if="projectSelected && !eligibleMounts.length" class="muted">{{ t('jobs.noEligibleMounts') }}</p>
-            <p v-else-if="projectSelected && !eligibleDrives.length" class="muted">{{ t('jobs.noEligibleDrives') }}</p>
+            <p v-else-if="projectSelected && !primaryEligibleDrives.length" class="muted">{{ t('jobs.noEligibleDrives') }}</p>
           </div>
 
           <div class="dialog-body job-create-scroll-region">
@@ -835,10 +864,22 @@ onBeforeUnmount(() => {
                 <label for="job-drive">{{ t('jobs.selectDrive') }}</label>
                 <select id="job-drive" v-model="form.drive_id" :disabled="!projectSelected">
                   <option :value="null">{{ t('jobs.chooseDrive') }}</option>
-                  <option v-for="drive in eligibleDrives" :key="drive.id" :value="drive.id">
+                  <option v-for="drive in primaryEligibleDrives" :key="drive.id" :value="drive.id">
                     {{ formatDriveLabel(drive) }}
                   </option>
                 </select>
+
+                <div class="overflow-panel">
+                  <p class="overflow-panel-title">{{ t('jobs.overflowPanelTitle') }}</p>
+                  <p class="muted field-hint">{{ t('jobs.overflowPanelHelp') }}</p>
+                  <p v-if="projectSelected && !overflowEligibleDrives.length" class="muted">{{ t('jobs.noEligibleOverflowDrives') }}</p>
+                  <div v-else class="overflow-drive-list">
+                    <label v-for="drive in overflowEligibleDrives" :key="drive.id" class="checkbox-row overflow-drive-option">
+                      <input v-model="form.overflow_drive_ids" type="checkbox" :value="drive.id" :disabled="!projectSelected" />
+                      <span>{{ formatDriveLabel(drive) }}</span>
+                    </label>
+                  </div>
+                </div>
               </fieldset>
 
               <fieldset class="dialog-group">
@@ -901,6 +942,30 @@ onBeforeUnmount(() => {
 
 .field-hint {
   margin-top: calc(var(--space-xs) * -1);
+}
+
+.overflow-panel {
+  margin-top: var(--space-md);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--color-border);
+}
+
+.overflow-panel-title {
+  margin: 0;
+  font-weight: var(--font-weight-semibold);
+}
+
+.overflow-drive-list {
+  display: grid;
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+}
+
+.overflow-drive-option {
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg-secondary);
 }
 
 .job-status-icon {
