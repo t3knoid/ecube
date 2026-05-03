@@ -23,6 +23,7 @@ stale to other workers.
 
 import logging
 import os
+from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from typing import Any, Callable, Dict, Optional
 
@@ -38,9 +39,10 @@ from app.infrastructure.usb_discovery import DiscoveredTopology
 from app.infrastructure import FilesystemDetector
 from app.exceptions import ConflictError
 from app.models.hardware import DriveState, UsbDrive
-from app.models.jobs import DriveAssignment, ExportJob, JobStatus
+from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, StartupAnalysisEntry, StartupAnalysisStatus
 from app.models.network import MountStatus, NetworkMount
 from app.models.system import ReconciliationLock
+from app.repositories.job_repository import FileRepository, StartupAnalysisEntryRepository
 from app.repositories.user_role_repository import UserRoleRepository
 from app.repositories.audit_repository import AuditRepository
 from app.services.callback_service import deliver_callback
@@ -798,6 +800,65 @@ def run_manual_managed_mount_reconciliation(
 _IN_PROGRESS_STATUSES = (JobStatus.RUNNING, JobStatus.VERIFYING)
 
 
+def _reconcile_stale_startup_analysis(
+    db: Session,
+    job: ExportJob,
+    *,
+    file_repo: FileRepository,
+    startup_entry_repo: StartupAnalysisEntryRepository,
+) -> Optional[dict[str, Any]]:
+    if job.startup_analysis_status != StartupAnalysisStatus.ANALYZING:
+        return None
+
+    from app.services.copy_engine import (
+        _cached_startup_analysis_is_current,
+        _clear_startup_analysis_cache,
+        _set_startup_analysis_ready,
+    )
+
+    cache_restored = bool(job.startup_analysis_cache_present) and _cached_startup_analysis_is_current(
+        job,
+        Path(job.source_path),
+        file_repo,
+        startup_entry_repo,
+    )
+
+    old_status = job.startup_analysis_status.value
+    if cache_restored:
+        analyzed_at = job.startup_analysis_last_analyzed_at
+        job.file_count = int(job.startup_analysis_file_count or 0)
+        job.total_bytes = int(job.startup_analysis_total_bytes or 0)
+        job.copied_bytes = int(
+            sum(
+                export_file.size_bytes or 0
+                for export_file in db.query(ExportFile)
+                .filter(ExportFile.job_id == job.id, ExportFile.status == FileStatus.DONE)
+                .all()
+            )
+        )
+        _set_startup_analysis_ready(job, analyzed_at=analyzed_at)
+        new_status = StartupAnalysisStatus.READY.value
+        reason = "valid_cache_restored_after_restart"
+    else:
+        db.query(StartupAnalysisEntry).filter(
+            StartupAnalysisEntry.job_id == job.id
+        ).delete(synchronize_session=False)
+        _clear_startup_analysis_cache(job)
+        new_status = StartupAnalysisStatus.NOT_ANALYZED.value
+        reason = "analysis_interrupted_by_restart"
+
+    return {
+        "job_id": job.id,
+        "project_id": job.project_id,
+        "old_status": old_status,
+        "new_status": new_status,
+        "reason": reason,
+        "cache_restored": cache_restored,
+        "cached_file_count": int(job.startup_analysis_file_count or 0),
+        "cached_total_bytes": int(job.startup_analysis_total_bytes or 0),
+    }
+
+
 def reconcile_jobs(db: Session) -> Dict[str, int]:
     """Fail any ``RUNNING`` or ``VERIFYING`` jobs that lost their worker.
 
@@ -811,10 +872,20 @@ def reconcile_jobs(db: Session) -> Dict[str, int]:
         .filter(ExportJob.status.in_(_IN_PROGRESS_STATUSES))
         .all()
     )
+    startup_analysis_jobs = (
+        db.query(ExportJob)
+        .filter(ExportJob.startup_analysis_status == StartupAnalysisStatus.ANALYZING)
+        .all()
+    )
 
-    checked = len(jobs)
+    checked = len(jobs) + len(startup_analysis_jobs)
     corrected = 0
     audit_entries = []
+    startup_analysis_checked = len(startup_analysis_jobs)
+    startup_analysis_audit_entries = []
+
+    file_repo = FileRepository(db)
+    startup_entry_repo = StartupAnalysisEntryRepository(db)
 
     for job in jobs:
         old_status = job.status
@@ -830,6 +901,20 @@ def reconcile_jobs(db: Session) -> Dict[str, int]:
             "reason": "interrupted by restart",
         })
 
+    for job in startup_analysis_jobs:
+        audit_entry = _reconcile_stale_startup_analysis(
+            db,
+            job,
+            file_repo=file_repo,
+            startup_entry_repo=startup_entry_repo,
+        )
+        if audit_entry is None:
+            continue
+        corrected += 1
+        startup_analysis_audit_entries.append(audit_entry)
+
+    startup_analysis_corrected = len(startup_analysis_audit_entries)
+
     if corrected:
         try:
             db.commit()
@@ -840,24 +925,47 @@ def reconcile_jobs(db: Session) -> Dict[str, int]:
 
     # Best-effort audit — failures are logged but must not roll back
     # the state corrections committed above.
-    if audit_entries:
+    if audit_entries or startup_analysis_audit_entries:
         audit_repo = AuditRepository(db)
         try:
-            audit_repo.add_many([
-                {
-                    "action": "JOB_RECONCILED",
-                    "user": "system",
-                    "job_id": e["job_id"],
-                    "details": e,
-                }
-                for e in audit_entries
-            ])
+            audit_repo.add_many(
+                [
+                    {
+                        "action": "JOB_RECONCILED",
+                        "user": "system",
+                        "job_id": e["job_id"],
+                        "details": e,
+                    }
+                    for e in audit_entries
+                ]
+                + [
+                    {
+                        "action": "JOB_STARTUP_ANALYSIS_RECONCILED",
+                        "user": "system",
+                        "job_id": e["job_id"],
+                        "details": e,
+                    }
+                    for e in startup_analysis_audit_entries
+                ]
+            )
         except Exception:
             db.rollback()
             db.expire_all()
             logger.error(
-                "Failed to write audit logs for JOB_RECONCILED",
+                "Failed to write audit logs for startup job reconciliation",
             )
+
+    for audit_entry in startup_analysis_audit_entries:
+        logger.info(
+            "Recovered stale startup analysis after restart",
+            extra={
+                "job_id": audit_entry["job_id"],
+                "project_id": audit_entry["project_id"],
+                "old_status": audit_entry["old_status"],
+                "new_status": audit_entry["new_status"],
+                "reason": audit_entry["reason"],
+            },
+        )
 
     for job, audit_entry in zip(jobs, audit_entries):
         try:
@@ -878,7 +986,12 @@ def reconcile_jobs(db: Session) -> Dict[str, int]:
                 extra={"job_id": job.id, "event": "JOB_RECONCILED"},
             )
 
-    return {"jobs_checked": checked, "jobs_corrected": corrected}
+    return {
+        "jobs_checked": checked,
+        "jobs_corrected": corrected,
+        "startup_analysis_checked": startup_analysis_checked,
+        "startup_analysis_corrected": startup_analysis_corrected,
+    }
 
 
 # -----------------------------------------------------------------------
@@ -1164,6 +1277,8 @@ def run_startup_reconciliation(
                     "status": "ok",
                     "jobs_checked": results["jobs"].get("jobs_checked", 0),
                     "jobs_corrected": results["jobs"].get("jobs_corrected", 0),
+                    "startup_analysis_checked": results["jobs"].get("startup_analysis_checked", 0),
+                    "startup_analysis_corrected": results["jobs"].get("startup_analysis_corrected", 0),
                 },
             )
 
