@@ -11,7 +11,7 @@
 
 - Implement a finite-state machine for drive states and legal transitions.
 - Gate all transitions through a single service module to ensure consistency.
-- The active persisted drive states are `DISCONNECTED`, `DISABLED`, `AVAILABLE`, and `IN_USE`; `UNMOUNTED` remains in the enum only for legacy compatibility during reconciliation.
+- The active persisted drive states are `DISCONNECTED`, `DISABLED`, `AVAILABLE`, and `IN_USE`.
 
 ### 4.1.0 Recommended Drive State Semantics
 
@@ -19,7 +19,6 @@
 - `DISABLED` — drive is physically present but not yet operator-ready because its port is disabled.
 - `AVAILABLE` — drive is present, writable, and eligible for initialization or job assignment.
 - `IN_USE` — drive is actively assigned to a project/job workflow and may receive data writes.
-- `UNMOUNTED` — retained legacy enum value that should reconcile forward to `DISABLED` or `AVAILABLE` on the next discovery pass.
 
 Recommended legal transitions:
 
@@ -388,9 +387,9 @@ Reconciliation runs during application startup, before the service begins normal
 ### 4.11.3 Drive Reconciliation
 
 - Delegates to the normal discovery refresh path (see § 4.10) with `actor="system"`.
-- This re-reads the USB topology and applies the standard drive FSM transitions (`DISCONNECTED ↔ DISABLED ↔ AVAILABLE`, with `IN_USE` preserved, and legacy `UNMOUNTED` rows reconciled forward).
+- This re-reads the USB topology and applies the standard drive FSM transitions (`DISCONNECTED ↔ DISABLED ↔ AVAILABLE`, with `IN_USE` preserved).
 - Startup mount reconciliation runs before this discovery pass so previously mounted managed USB drives can be returned to their expected ECUBE mount slots before steady-state discovery refreshes drive state.
-- Drives that are no longer physically present and were `AVAILABLE`, `DISABLED`, or legacy `UNMOUNTED` are transitioned to `DISCONNECTED`.
+- Drives that are no longer physically present and were `AVAILABLE` or `DISABLED` are transitioned to `DISCONNECTED`.
 
 ### Failure Isolation
 

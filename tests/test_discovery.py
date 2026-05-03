@@ -705,26 +705,6 @@ def test_disabled_port_drive_reconciles_to_available_when_reenabled_and_mounted_
     assert drive.current_project_id is None
     assert drive.mount_path == "/media/ecube/usb-mounted"
 
-
-def test_legacy_unmounted_drive_reconciles_to_available_when_port_enabled(db):
-    topology = _simple_topology()
-
-    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
-
-    drive = db.query(UsbDrive).one()
-    drive.current_state = DriveState.UNMOUNTED
-
-    port = db.query(UsbPort).one()
-    port.enabled = True
-    db.commit()
-
-    summary = run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
-
-    db.refresh(drive)
-    assert summary["drives_updated"] == 1
-    assert drive.current_state == DriveState.AVAILABLE
-
-
 def test_disabled_port_drive_reconciles_to_in_use_when_reenabled_and_mounted_with_project(db):
     topology = DiscoveredTopology(
         hubs=[DiscoveredHub(system_identifier="usb1", name="Test Hub", vendor_id="1d6b", product_id="0002")],
