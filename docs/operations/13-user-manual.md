@@ -337,7 +337,6 @@ Every drive moves through a defined set of states. Actions available in the UI d
 |-----------|-------------------------------------------------------------------------|-----------------------------------|
 | `DISCONNECTED` | Drive is known to the system but is not currently physically present. | None from Drive Detail until the hardware reappears |
 | `DISABLED` | Drive is physically present but attached to a disabled port, so it is not yet available for ECUBE operations. | Enable Drive |
-| `UNMOUNTED` | Legacy compatibility state for older rows that have not yet been reconciled by discovery. | Mount when the drive is otherwise ready |
 | `AVAILABLE` | Drive is present on an enabled port and ready to be formatted or assigned to a project. | Format, Initialize, Prepare Eject when mounted |
 | `IN_USE` | Drive is assigned to a project. Jobs can target this drive. | Prepare Eject |
 
@@ -352,7 +351,7 @@ DISCONNECTED → DISABLED → AVAILABLE → IN_USE → AVAILABLE
 
 A drive assigned to one project cannot be re-assigned to a different project without first being formatted. Formatting wipes the drive and clears the project binding.
 
-The Drives page shows `Disabled`, legacy `Unmounted`, `AVAILABLE`, and `IN_USE` by default. Use `Show Disconnected drives` when you need to include historically known but currently absent hardware in the list.
+The Drives page shows `Disabled`, `AVAILABLE`, and `IN_USE` by default. Use `Show Disconnected drives` when you need to include historically known but currently absent hardware in the list.
 
 After a service restart, ECUBE may automatically restore a previously mounted managed USB drive to its expected ECUBE mount slot. If a drive or mount appears to have changed state during startup, review the `Audit Logs` page for reconciliation events recorded by the system.
 

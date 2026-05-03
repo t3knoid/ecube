@@ -3,6 +3,7 @@ import os
 from typing import List, Optional
 
 from fastapi import HTTPException
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -30,6 +31,22 @@ PREPARE_EJECT_BLOCKING_JOB_STATUSES = (
     JobStatus.PAUSED,
     JobStatus.VERIFYING,
 )
+
+
+def normalize_unreleased_drive_states(db: Session) -> int:
+    result = db.execute(
+        text(
+            "UPDATE usb_drives "
+            "SET current_state = :disabled "
+            "WHERE current_state = :unmounted"
+        ),
+        {
+            "disabled": DriveState.DISABLED.value,
+            "unmounted": "UNMOUNTED",
+        },
+    )
+    db.commit()
+    return int(result.rowcount or 0)
 
 
 def _safe_drive_log_context(drive: UsbDrive, *, reason: Optional[str] = None) -> dict:
@@ -136,7 +153,7 @@ def get_all_drives(
         for drive in drives:
             request_available_space_refresh_for_drive(drive)
         return drives
-    drives = repo.list_by_states([DriveState.DISABLED, DriveState.UNMOUNTED, DriveState.AVAILABLE, DriveState.IN_USE])  # DISCONNECTED excluded by default
+    drives = repo.list_by_states([DriveState.DISABLED, DriveState.AVAILABLE, DriveState.IN_USE])  # DISCONNECTED excluded by default
     for drive in drives:
         request_available_space_refresh_for_drive(drive)
     return drives
@@ -160,10 +177,10 @@ def initialize_drive(
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
 
-    # DISCONNECTED drives are physically absent. DISABLED drives are present
-    # on a blocked port, and UNMOUNTED drives are enabled but not yet mounted.
-    # Initialization requires AVAILABLE so the drive is reachable and ready.
-    if drive.current_state in (DriveState.DISCONNECTED, DriveState.DISABLED, DriveState.UNMOUNTED):
+    # DISCONNECTED drives are physically absent, and DISABLED drives are
+    # present on a blocked port. Initialization requires AVAILABLE so the
+    # drive is reachable and ready.
+    if drive.current_state in (DriveState.DISCONNECTED, DriveState.DISABLED):
         try:
             audit_repo.add(
                 action="INIT_REJECTED_NOT_AVAILABLE",
@@ -187,7 +204,7 @@ def initialize_drive(
                 if drive.current_state == DriveState.DISCONNECTED
                 else "Drive is DISABLED (physically present on a disabled port) and cannot be initialized."
                 if drive.current_state == DriveState.DISABLED
-                else "Drive is UNMOUNTED (physically present but not operator-ready) and cannot be initialized."
+                else "Drive is not ready and cannot be initialized."
             ),
         )
 
@@ -408,10 +425,10 @@ def mount_drive(
     initial_filesystem_path = drive.filesystem_path
     initial_project_id = drive.current_project_id
 
-    if initial_state not in (DriveState.UNMOUNTED, DriveState.AVAILABLE, DriveState.IN_USE):
+    if initial_state not in (DriveState.AVAILABLE, DriveState.IN_USE):
         raise HTTPException(
             status_code=409,
-            detail="Drive must be UNMOUNTED, AVAILABLE, or IN_USE before it can be mounted",
+            detail="Drive must be AVAILABLE or IN_USE before it can be mounted",
         )
 
     if drive.filesystem_type in {None, "unformatted", "unknown"}:
@@ -592,10 +609,6 @@ def mount_drive(
             raise HTTPException(status_code=409, detail=detail)
 
     drive.mount_path = mount_point
-    if initial_state == DriveState.UNMOUNTED:
-        drive.current_state = (
-            DriveState.IN_USE if bool(normalize_project_id(initial_project_id)) else DriveState.AVAILABLE
-        )
     try:
         drive_repo.save(drive)
     except Exception:

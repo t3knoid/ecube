@@ -75,7 +75,7 @@ function driveStatusTone(status) {
   if (['FAILED', 'ERROR', 'DISCONNECTED', 'FALSE'].includes(value)) {
     return 'danger'
   }
-  if (['DISABLED', 'UNMOUNTED'].includes(value)) {
+  if (['DISABLED'].includes(value)) {
     return 'warning'
   }
   if (['RUNNING', 'VERIFYING', 'COPYING', 'IN_USE', 'DEGRADED'].includes(value)) {
@@ -316,7 +316,6 @@ onBeforeUnmount(() => {
       <select v-model="stateFilter" :aria-label="t('drives.allStates')">
         <option value="ALL">{{ t('drives.allStates') }}</option>
         <option value="DISABLED">{{ t('drives.states.disabled') }}</option>
-        <option value="UNMOUNTED">{{ t('drives.states.unmounted') }}</option>
         <option value="AVAILABLE">{{ t('drives.states.available') }}</option>
         <option value="IN_USE">{{ t('drives.states.inUse') }}</option>
       </select>
