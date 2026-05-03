@@ -384,8 +384,19 @@ async def lifespan(application: FastAPI):
                     )
             finally:
                 db.close()
-        except Exception:
-            logger.exception("Startup drive-state normalization failed")
+        except Exception as exc:
+            failure = _classify_unhandled_exception(exc)
+            logger.info(
+                "Startup drive-state normalization failed",
+                extra={
+                    "category": failure["category"],
+                    "recommended_action": failure["recommended_action"],
+                },
+            )
+            logger.debug(
+                "Startup drive-state normalization raw failure",
+                extra={"category": failure["category"], "raw_error": str(exc)},
+            )
 
     if db_runtime_ready and settings.audit_log_retention_days > 0:
         try:
