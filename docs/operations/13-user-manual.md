@@ -770,7 +770,7 @@ When expanded, the file table usually shows:
 
 The destination-drive column becomes especially important after an overflow continuation, because the same job can now span more than one destination drive while still preserving a single job record.
 
-This per-file destination information is more granular than the manifest location. The manifest file itself is written once at clean completion to the drive that is active when the job finishes, while the table can still show that earlier files were copied to an earlier overflow drive.
+This per-file destination information is more granular than the manifest location. At clean completion, ECUBE refreshes a separate `manifest.json` on each drive assignment that received successful copies, while the table can still show exactly which earlier files were copied to an earlier overflow drive.
 
 Rows that include a safe file-level error summary are visually emphasized in the Files panel. Select the `ERROR` or `FAILED` status badge on desktop, or the matching compact status icon on smaller screens, to open the `File Error Details` dialog for that row. The dialog shows the file ID, relative path, status, and the sanitized per-file error text returned by the trusted backend.
 
