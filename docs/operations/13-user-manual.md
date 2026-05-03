@@ -296,7 +296,7 @@ Typical information shown:
 - Overall system health
 - Database status
 - Number of active jobs
-- Drive state summary (`DISCONNECTED`, `UNMOUNTED`, `AVAILABLE`, `IN_USE`)
+- Drive state summary (`DISCONNECTED`, `DISABLED`, `AVAILABLE`, `IN_USE`)
 - Table of active jobs
 
 Use the dashboard when you need a quick answer to questions such as:
@@ -336,22 +336,22 @@ Every drive moves through a defined set of states. Actions available in the UI d
 | State | Meaning | Actions available |
 |-----------|-------------------------------------------------------------------------|-----------------------------------|
 | `DISCONNECTED` | Drive is known to the system but is not currently physically present. | None from Drive Detail until the hardware reappears |
-| `UNMOUNTED` | Drive is physically present but not yet operator-ready, typically because the port is disabled. | Enable port when the drive is still detected on a known port |
-| `AVAILABLE` | Drive is present on an enabled port and ready to be formatted or assigned to a project. | Format, Initialize |
+| `DISABLED` | Drive is physically present but attached to a disabled port, so it is not yet available for ECUBE operations. | Enable Drive |
+| `AVAILABLE` | Drive is present on an enabled port and ready to be formatted or assigned to a project. | Format, Initialize, Prepare Eject when mounted |
 | `IN_USE` | Drive is assigned to a project. Jobs can target this drive. | Prepare Eject |
 
 State transitions follow this order:
 
 ```
-DISCONNECTED → UNMOUNTED → AVAILABLE → IN_USE → AVAILABLE
-                ↑                                   ↑____________|
-                |                                (re-insert same project)
-         (re-detect on disabled port)
+DISCONNECTED → DISABLED → AVAILABLE → IN_USE → AVAILABLE
+   ↑                                     ↑____________|
+   |                                  (re-insert same project)
+     (re-detect on disabled port)
 ```
 
 A drive assigned to one project cannot be re-assigned to a different project without first being formatted. Formatting wipes the drive and clears the project binding.
 
-The Drives page shows `UNMOUNTED`, `AVAILABLE`, and `IN_USE` by default. Use `Show Disconnected drives` when you need to include historically known but currently absent hardware in the list.
+The Drives page shows `Disabled`, `AVAILABLE`, and `IN_USE` by default. Use `Show Disconnected drives` when you need to include historically known but currently absent hardware in the list.
 
 After a service restart, ECUBE may automatically restore a previously mounted managed USB drive to its expected ECUBE mount slot. If a drive or mount appears to have changed state during startup, review the `Audit Logs` page for reconciliation events recorded by the system.
 
@@ -422,7 +422,7 @@ Before initializing a drive:
 
 ### 7.6 Prepare Eject
 
-Use `Prepare Eject` before physically removing a drive. This flushes pending writes, unmounts the filesystem, and transitions the drive to `AVAILABLE`.
+Use `Prepare Eject` before physically removing a mounted drive. The action is available for `IN_USE` drives and for `AVAILABLE` drives that still have an active mount. ECUBE flushes pending writes, unmounts the filesystem, and transitions the drive to `AVAILABLE`.
 
 After a successful prepare-eject:
 
@@ -432,6 +432,8 @@ After a successful prepare-eject:
 - The drive can be physically removed once the operation completes.
 
 If ECUBE reports that the drive is still busy, the confirmation dialog closes cleanly and the page shows a specific retry message. Close any open shell, file browser, or process still using the mounted drive, then retry `Prepare Eject`.
+
+If the drive is already `AVAILABLE` but still mounted, a failed prepare-eject leaves it in `AVAILABLE` so the operator can retry after resolving the blocking condition.
 
 If the drive is still assigned to a job that has started and is not yet completed, `Prepare Eject` is blocked. This includes jobs in `RUNNING`, `PAUSING`, `PAUSED`, or `VERIFYING`. Complete or otherwise finish the active job before retrying `Prepare Eject`.
 
