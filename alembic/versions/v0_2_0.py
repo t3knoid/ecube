@@ -182,6 +182,9 @@ def _upgrade_export_files_drive_assignment_id(inspector: sa.Inspector) -> None:
         )
         batch_op.create_index("ix_export_files_drive_assignment_id", ["drive_assignment_id"], unique=False)
 
+    if "drive_assignments" not in inspector.get_table_names():
+        return
+
     bind = op.get_bind()
     bind.execute(
         sa.text(

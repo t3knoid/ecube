@@ -136,10 +136,12 @@ def _audit_project_isolation_violation(
             drive_id=drive_id,
             job_id=job_id,
             details={
+                "actor": actor,
                 "project_id": requested_project_id,
                 "drive_id": drive_id,
                 "existing_project_id": existing_project_id,
                 "requested_project_id": requested_project_id,
+                "attempted_project_id": requested_project_id,
             },
             client_ip=client_ip,
         )
@@ -795,7 +797,7 @@ def create_job(
                 raise HTTPException(status_code=409, detail="Drive is not available")
             if not mount_path:
                 raise HTTPException(status_code=409, detail="Assigned drive is not mounted")
-            if _is_drive_assigned_to_another_job(db, drive_id=drive_id):
+            if not require_primary_overlap_check and _is_drive_assigned_to_another_job(db, drive_id=drive_id):
                 raise HTTPException(status_code=409, detail="Drive is already assigned to another job")
 
             if current_project_id is None:
