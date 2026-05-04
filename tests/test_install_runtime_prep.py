@@ -1,4 +1,5 @@
 import os
+import stat
 import subprocess
 import textwrap
 from pathlib import Path
@@ -221,6 +222,7 @@ def test_ensure_host_password_policy_defaults_enables_pam_pwquality_and_seeds_po
     assert "password\trequired\tpam_pwhistory.so remember=12 use_authtok enforce_for_root" in common_password_text
     assert common_password_text.index("pam_pwquality.so") < common_password_text.index("pam_unix.so")
     assert common_password_text.index("pam_pwhistory.so") < common_password_text.index("pam_unix.so")
+    assert stat.S_IMODE(common_password.stat().st_mode) == 0o644
 
     pwquality_text = pwquality_conf.read_text(encoding="utf-8")
     assert "minlen = 8" in pwquality_text
