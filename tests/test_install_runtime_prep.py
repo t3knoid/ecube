@@ -184,3 +184,86 @@ def test_write_env_file_persists_configured_usb_mount_base_path(tmp_path):
     assert result.returncode == 0, f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
     env_text = (install_dir / ".env").read_text(encoding="utf-8")
     assert "USB_MOUNT_BASE_PATH=/srv/ecube-usb\n" in env_text
+
+
+def test_ensure_host_password_policy_defaults_enables_pam_pwquality_and_seeds_policy(tmp_path):
+    common_password = tmp_path / "common-password"
+    common_password.write_text(
+        "password requisite pam_cracklib.so retry=3\n"
+        "password [success=1 default=ignore] pam_unix.so obscure use_authtok try_first_pass yescrypt\n",
+        encoding="utf-8",
+    )
+    pwquality_conf = tmp_path / "pwquality.conf"
+    pwquality_conf.write_text("# existing policy\nminlen = 8\n", encoding="utf-8")
+
+    env = {
+        **os.environ,
+        "LOG_FILE": str(tmp_path / "install.log"),
+    }
+    result = _run_install_function(
+        tmp_path,
+        textwrap.dedent(
+            f"""
+            COMMON_PASSWORD_PAM_PATH={common_password}
+            PWQUALITY_CONF_PATH={pwquality_conf}
+            DRY_RUN=false
+            _ensure_host_password_policy_defaults
+            """
+        ),
+        env,
+    )
+
+    assert result.returncode == 0, f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+
+    common_password_text = common_password.read_text(encoding="utf-8")
+    assert "pam_cracklib.so" not in common_password_text
+    assert "password\trequisite\tpam_pwquality.so local_users_only" in common_password_text
+    assert "password\trequired\tpam_pwhistory.so remember=12 use_authtok enforce_for_root" in common_password_text
+    assert common_password_text.index("pam_pwquality.so") < common_password_text.index("pam_unix.so")
+    assert common_password_text.index("pam_pwhistory.so") < common_password_text.index("pam_unix.so")
+
+    pwquality_text = pwquality_conf.read_text(encoding="utf-8")
+    assert "minlen = 8" in pwquality_text
+    assert "minclass = 3" in pwquality_text
+    assert "maxrepeat = 3" in pwquality_text
+    assert "maxsequence = 4" in pwquality_text
+    assert "maxclassrepeat = 0" in pwquality_text
+    assert "dictcheck = 1" in pwquality_text
+    assert "usercheck = 1" in pwquality_text
+    assert "difok = 5" in pwquality_text
+    assert "retry = 3" in pwquality_text
+    assert "enforce_for_root = 1" in pwquality_text
+
+
+def test_ensure_host_password_policy_defaults_is_idempotent_for_pam_pwquality(tmp_path):
+    common_password = tmp_path / "common-password"
+    common_password.write_text(
+        "password\trequisite\tpam_pwquality.so local_users_only\n"
+        "password\trequired\tpam_pwhistory.so remember=12 use_authtok enforce_for_root\n"
+        "password [success=1 default=ignore] pam_unix.so obscure use_authtok try_first_pass yescrypt\n",
+        encoding="utf-8",
+    )
+    pwquality_conf = tmp_path / "pwquality.conf"
+    pwquality_conf.write_text("enforce_for_root = 1\n", encoding="utf-8")
+
+    env = {
+        **os.environ,
+        "LOG_FILE": str(tmp_path / "install.log"),
+    }
+    result = _run_install_function(
+        tmp_path,
+        textwrap.dedent(
+            f"""
+            COMMON_PASSWORD_PAM_PATH={common_password}
+            PWQUALITY_CONF_PATH={pwquality_conf}
+            DRY_RUN=false
+            _ensure_host_password_policy_defaults
+            """
+        ),
+        env,
+    )
+
+    assert result.returncode == 0, f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+    common_password_text = common_password.read_text(encoding="utf-8")
+    assert common_password_text.count("pam_pwquality.so") == 1
+    assert common_password_text.count("pam_pwhistory.so") == 1

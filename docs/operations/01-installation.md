@@ -154,12 +154,14 @@ The installer will:
 5. Install the root-owned helper `/usr/local/bin/ecube-write-pwquality-conf` used for atomic updates to `/etc/security/pwquality.conf`.
 6. Install `/etc/sudoers.d/ecube-user-mgmt` with narrowly scoped `NOPASSWD` rules for setup OS user/group management, `chage`, password-policy helper writes, mount/unmount operations, and selected drive filesystem commands.
 7. Install `/etc/pam.d/ecube` PAM configuration for local and domain user authentication (detects SSSD at install time and installs an SSSD-enabled or local-only variant accordingly).
-8. Set up a Python virtual environment in `<install-dir>/venv`.
-9. Generate a self-signed TLS certificate (skipped with `--no-tls`).
-10. Write `<install-dir>/.env` with a random `SECRET_KEY`, empty `SETUP_DEFAULT_ADMIN_USERNAME` (populated later by the superuser creation step), and runtime defaults. `DATABASE_URL` is left empty and configured later via the setup wizard.
-11. Write and start the `ecube.service` systemd unit.
-12. Deploy the pre-built frontend to `<install-dir>/www` so FastAPI serves the SPA directly (no separate web server required).
-13. Optionally configure `ufw` firewall rules.
+8. Ensure the host `/etc/pam.d/common-password` stack includes `pam_pwquality.so local_users_only` and `pam_pwhistory.so remember=12 use_authtok enforce_for_root`, replacing any `pam_cracklib.so` entry, so `chpasswd` enforces ECUBE password policy for locally managed accounts.
+9. Seed missing defaults in `/etc/security/pwquality.conf` while preserving any existing administrator-managed values; `enforce_for_root = 1` is always enforced.
+10. Set up a Python virtual environment in `<install-dir>/venv`.
+11. Generate a self-signed TLS certificate (skipped with `--no-tls`).
+12. Write `<install-dir>/.env` with a random `SECRET_KEY`, empty `SETUP_DEFAULT_ADMIN_USERNAME` (populated later by the superuser creation step), and runtime defaults. `DATABASE_URL` is left empty and configured later via the setup wizard.
+13. Write and start the `ecube.service` systemd unit.
+14. Deploy the pre-built frontend to `<install-dir>/www` so FastAPI serves the SPA directly (no separate web server required).
+15. Optionally configure `ufw` firewall rules.
 
 At the end it prints a summary with the UI URL, API URL, and service management commands.
 

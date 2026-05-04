@@ -1630,6 +1630,140 @@ EOF_PAM
   fi
 }
 
+_set_or_append_pwquality_key() {
+  local policy_file="$1"
+  local key="$2"
+  local value="$3"
+  local replace_existing="${4:-true}"
+  local tmp_file
+  tmp_file="$(mktemp)"
+
+  awk -v key="$key" -v value="$value" -v replace_existing="$replace_existing" '
+    BEGIN { updated = 0 }
+    {
+      line = $0
+      stripped = line
+      sub(/^[[:space:]]+/, "", stripped)
+
+      if (stripped ~ /^#/) {
+        print line
+        next
+      }
+
+      if (stripped ~ ("^" key "[[:space:]]*=")) {
+        if (replace_existing == "true") {
+          print key " = " value
+        } else {
+          print line
+        }
+        updated = 1
+        next
+      }
+
+      print line
+    }
+    END {
+      if (!updated) {
+        print key " = " value
+      }
+    }
+  ' "$policy_file" > "$tmp_file"
+
+  mv -f "$tmp_file" "$policy_file"
+}
+
+_ensure_common_password_stack() {
+  local common_password_path="$1"
+  local common_password_tmp
+
+  common_password_tmp="$(mktemp)"
+  awk '
+    BEGIN {
+      inserted = 0
+      saw_pwquality = 0
+      saw_pwhistory = 0
+      saw_unix = 0
+    }
+    {
+      line = $0
+      stripped = line
+      sub(/^[[:space:]]+/, "", stripped)
+
+      if (stripped ~ /^password[[:space:]].*pam_pwquality\.so([[:space:]]|$)/) {
+        saw_pwquality = 1
+        next
+      }
+
+      if (stripped ~ /^password[[:space:]].*pam_cracklib\.so([[:space:]]|$)/) {
+        next
+      }
+
+      if (stripped ~ /^password[[:space:]].*pam_pwhistory\.so([[:space:]]|$)/) {
+        saw_pwhistory = 1
+        next
+      }
+
+      if (!inserted && stripped ~ /^password[[:space:]].*pam_unix\.so([[:space:]]|$)/) {
+        print "password\trequisite\tpam_pwquality.so local_users_only"
+        print "password\trequired\tpam_pwhistory.so remember=12 use_authtok enforce_for_root"
+        inserted = 1
+        saw_unix = 1
+      }
+
+      print line
+      next
+    }
+    END {
+      if (!inserted) {
+        print "password\trequisite\tpam_pwquality.so local_users_only"
+        print "password\trequired\tpam_pwhistory.so remember=12 use_authtok enforce_for_root"
+      }
+    }
+  ' "$common_password_path" > "$common_password_tmp"
+
+  mv -f "$common_password_tmp" "$common_password_path"
+}
+
+_ensure_host_password_policy_defaults() {
+  local common_password_path="${COMMON_PASSWORD_PAM_PATH:-/etc/pam.d/common-password}"
+  local pwquality_conf_path="${PWQUALITY_CONF_PATH:-/etc/security/pwquality.conf}"
+
+  info "Ensuring host PAM password complexity enforcement..."
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    echo "[DRY-RUN] Would ensure the ECUBE password stack is enabled in ${common_password_path}"
+    echo "[DRY-RUN] Would seed missing ECUBE password policy defaults in ${pwquality_conf_path}"
+    return
+  fi
+
+  if [[ -f "$common_password_path" ]]; then
+    _ensure_common_password_stack "$common_password_path"
+    ok "Host password stack configured in ${common_password_path}"
+  else
+    warn "${common_password_path} not found — unable to ensure pam_pwquality password enforcement."
+  fi
+
+  mkdir -p "$(dirname -- "$pwquality_conf_path")"
+  touch "$pwquality_conf_path"
+
+  _set_or_append_pwquality_key "$pwquality_conf_path" minlen 14 false
+  _set_or_append_pwquality_key "$pwquality_conf_path" minclass 3 false
+  _set_or_append_pwquality_key "$pwquality_conf_path" maxrepeat 3 false
+  _set_or_append_pwquality_key "$pwquality_conf_path" maxsequence 4 false
+  _set_or_append_pwquality_key "$pwquality_conf_path" maxclassrepeat 0 false
+  _set_or_append_pwquality_key "$pwquality_conf_path" dictcheck 1 false
+  _set_or_append_pwquality_key "$pwquality_conf_path" usercheck 1 false
+  _set_or_append_pwquality_key "$pwquality_conf_path" difok 5 false
+  _set_or_append_pwquality_key "$pwquality_conf_path" retry 3 false
+  _set_or_append_pwquality_key "$pwquality_conf_path" enforce_for_root 1
+
+  chmod 0644 "$pwquality_conf_path"
+  if [[ "$(id -u)" == "0" ]]; then
+    chown root:root "$pwquality_conf_path"
+  fi
+  ok "Password policy defaults merged into ${pwquality_conf_path}"
+}
+
 # ===========================================================================
 # DOWNLOAD / EXTRACT RELEASE PACKAGE (when --version is given)
 # ===========================================================================
@@ -1903,6 +2037,9 @@ install_backend() {
 
   # Install the dedicated PAM config so both local and domain users can authenticate.
   _install_pam_config
+
+  # Ensure host password changes and resets enforce the ECUBE pwquality baseline.
+  _ensure_host_password_policy_defaults
 
   # 2. Add ecube to required system groups
   # 'shadow' membership allows PAM local password checks to work on hardened
