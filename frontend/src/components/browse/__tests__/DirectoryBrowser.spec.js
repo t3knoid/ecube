@@ -57,6 +57,15 @@ describe('DirectoryBrowser', () => {
     expect(breadcrumbButtons).toHaveLength(0)
   })
 
+  it('shows a slash root crumb at the root when explicitly requested', async () => {
+    const wrapper = mountView({ showRootCrumbAtRoot: true })
+    await flushPromises()
+
+    const breadcrumbButtons = wrapper.findAll('.breadcrumb > .crumb-btn')
+    expect(breadcrumbButtons).toHaveLength(1)
+    expect(breadcrumbButtons[0].text()).toBe('/')
+  })
+
   it('shows a slash root crumb after navigating into a subdirectory and allows returning to root', async () => {
     const wrapper = mountView()
     await flushPromises()
@@ -75,5 +84,46 @@ describe('DirectoryBrowser', () => {
     expect(wrapper.find('.crumb-current').exists()).toBe(false)
     expect(wrapper.findAll('.breadcrumb > button.crumb-btn')).toHaveLength(0)
     expect(mocks.getDirectory).toHaveBeenLastCalledWith('/mnt/ecube/1', '', 1, 100)
+  })
+
+  it('renders a single leading slash in breadcrumbs for mount-id browsing with a blank root label', async () => {
+    mocks.getDirectoryByMountId.mockImplementation((_mountId, subdir) => {
+      if (subdir === 'ev1') {
+        return Promise.resolve({
+          entries: [
+            { name: 'VOL1', type: 'directory', size_bytes: null, modified_at: '2026-05-03T12:00:00Z' },
+          ],
+          has_more: false,
+        })
+      }
+
+      if (subdir === 'ev1/VOL1') {
+        return Promise.resolve({
+          entries: [
+            { name: 'DATA', type: 'directory', size_bytes: null, modified_at: '2026-05-03T12:00:00Z' },
+          ],
+          has_more: false,
+        })
+      }
+
+      return Promise.resolve({
+        entries: [
+          { name: 'ev1', type: 'directory', size_bytes: null, modified_at: '2026-05-03T12:00:00Z' },
+        ],
+        has_more: false,
+      })
+    })
+
+    const wrapper = mountView({ mountPath: '', mountId: 11, rootLabel: '' })
+    await flushPromises()
+
+    await wrapper.find('.entry-nav-btn').trigger('click')
+    await flushPromises()
+    await wrapper.find('.entry-nav-btn').trigger('click')
+    await flushPromises()
+
+    const breadcrumbText = wrapper.find('.breadcrumb').text()
+    expect(breadcrumbText.startsWith('//')).toBe(false)
+    expect(breadcrumbText).toBe('/ev1/VOL1')
   })
 })

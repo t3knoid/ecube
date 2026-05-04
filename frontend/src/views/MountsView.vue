@@ -120,7 +120,6 @@ const columns = computed(() => {
     { key: 'status', label: t('common.labels.status') },
     { key: 'current_project_job_id', label: t('jobs.jobId'), align: 'right' },
     { key: 'last_checked_at', label: t('mounts.lastChecked') },
-    { key: 'actions', label: '', align: 'center' },
   ]
 
   if (isMobileViewport.value) {
@@ -219,16 +218,16 @@ function isValidJobId(value) {
   return Number.isInteger(normalizedJobId) && normalizedJobId > 0
 }
 
-function openRelatedJob(jobId) {
-  const normalizedJobId = Number(jobId)
-  if (!Number.isInteger(normalizedJobId) || normalizedJobId < 1) return
-  router.push({ name: 'job-detail', params: { id: normalizedJobId } })
-}
-
 function openMountDetails(mountId) {
   const normalizedMountId = Number(mountId)
   if (!Number.isInteger(normalizedMountId) || normalizedMountId < 1) return
   router.push({ name: 'mount-detail', params: { id: normalizedMountId } })
+}
+
+function openRelatedJob(jobId) {
+  const normalizedJobId = Number(jobId)
+  if (!Number.isInteger(normalizedJobId) || normalizedJobId < 1) return
+  router.push({ name: 'job-detail', params: { id: normalizedJobId } })
 }
 
 async function loadPublicAuthConfig() {
@@ -345,8 +344,9 @@ function browseLabel(mount) {
     : t('mounts.browse')
 }
 
-function mountRootLabel(mount) {
-  return formatProjectId(mount?.project_id)
+function mountBrowseTitle(mount) {
+  if (!mount?.project_id) return t('browse.browseMountContents')
+  return t('browse.browseMountContentsTitle', { project: formatProjectId(mount.project_id) })
 }
 
 function formValid() {
@@ -589,18 +589,6 @@ function requestRemove(mount) {
   void runRemove(mount)
 }
 
-function closeRowActionsMenu(event) {
-  const menu = event?.currentTarget instanceof HTMLElement ? event.currentTarget.closest('details') : null
-  if (menu instanceof HTMLDetailsElement) {
-    menu.removeAttribute('open')
-  }
-}
-
-function handleMenuBrowse(mount, event) {
-  closeRowActionsMenu(event)
-  void toggleBrowse(mount.id)
-}
-
 const browsePanelRef = ref(null)
 
 async function toggleBrowse(mountId) {
@@ -708,7 +696,19 @@ onBeforeUnmount(() => {
           {{ row.id }}
         </button>
       </template>
-      <template #cell-project_id="{ row }">{{ formatProjectId(row.project_id) }}</template>
+      <template #cell-project_id="{ row }">
+        <button
+          v-if="row.status === 'MOUNTED'"
+          class="cell-link mount-project-link"
+          type="button"
+          :aria-expanded="browsingMountId === row.id"
+          :aria-label="mountBrowseTitle(row)"
+          @click="toggleBrowse(row.id)"
+        >
+          {{ formatProjectId(row.project_id) }}
+        </button>
+        <span v-else>{{ formatProjectId(row.project_id) }}</span>
+      </template>
       <template #cell-current_project_job_id="{ row }">
         <button
           v-if="isValidJobId(row.current_project_job_id)"
@@ -734,56 +734,25 @@ onBeforeUnmount(() => {
         <StatusBadge v-else :status="row.status" />
       </template>
       <template #cell-last_checked_at="{ row }">{{ toIso(row.last_checked_at) }}</template>
-      <template #cell-actions="{ row }">
-        <div class="row-actions">
-          <button
-            class="btn"
-            :disabled="row.status !== 'MOUNTED'"
-            :title="row.status !== 'MOUNTED' ? t('mounts.browseUnavailable') : ''"
-            :aria-expanded="browsingMountId === row.id"
-            :aria-label="browseLabel(row)"
-            @click="toggleBrowse(row.id)"
-          >
-            {{ t('mounts.browse') }}
-          </button>
-        </div>
-        <details class="row-actions-menu">
-          <summary class="row-actions-toggle" :aria-label="`${formatProjectId(row.project_id)} mount actions`">
-            <span class="row-actions-toggle-dots" aria-hidden="true">
-              <span class="row-actions-toggle-dot" />
-              <span class="row-actions-toggle-dot" />
-              <span class="row-actions-toggle-dot" />
-            </span>
-          </summary>
-          <div class="row-actions-popover">
-            <button
-              class="btn row-action-menu-browse"
-              :disabled="row.status !== 'MOUNTED'"
-              :title="row.status !== 'MOUNTED' ? t('mounts.browseUnavailable') : ''"
-              :aria-expanded="browsingMountId === row.id"
-              :aria-label="browseLabel(row)"
-              @click="handleMenuBrowse(row, $event)"
-            >
-              {{ t('mounts.browse') }}
-            </button>
-          </div>
-        </details>
-      </template>
     </DataTable>
 
     <!-- Inline directory browser panel for the currently browsed mount -->
     <section
-      v-if="activeBrowsedMount"
+      v-if="activeBrowsedMount?.status === 'MOUNTED'"
       ref="browsePanelRef"
       class="browse-panel"
-      :aria-label="browseLabel(activeBrowsedMount)"
+      :aria-label="mountBrowseTitle(activeBrowsedMount)"
     >
-      <h3 class="browse-panel-title">
-        {{ t('browse.browseMountContents') }}: {{ formatProjectId(activeBrowsedMount.project_id) }}
-      </h3>
+      <header class="browse-panel-header">
+        <h3 class="browse-panel-title">{{ mountBrowseTitle(activeBrowsedMount) }}</h3>
+        <button class="btn" @click="toggleBrowse(activeBrowsedMount.id)">
+          {{ t('common.actions.close') }}
+        </button>
+      </header>
       <DirectoryBrowser
         :mount-id="activeBrowsedMount.id"
-        :root-label="mountRootLabel(activeBrowsedMount)"
+        root-label=""
+        :show-root-crumb-at-root="true"
       />
     </section>
 
@@ -936,7 +905,6 @@ onBeforeUnmount(() => {
 
 .header-row,
 .actions,
-.row-actions,
 .credential-header-row,
 .share-discovery-item {
   display: flex;
@@ -1031,61 +999,6 @@ onBeforeUnmount(() => {
   gap: var(--space-2xs);
 }
 
-.row-actions {
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.row-actions-menu {
-  display: none;
-  position: relative;
-}
-
-.row-actions-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  list-style: none;
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius);
-  background: var(--color-bg-secondary);
-  color: var(--color-text-primary);
-  cursor: pointer;
-}
-
-.row-actions-toggle-dots {
-  display: inline-grid;
-  gap: 0.15rem;
-}
-
-.row-actions-toggle-dot {
-  width: 0.25rem;
-  height: 0.25rem;
-  border-radius: 9999px;
-  background: currentColor;
-}
-
-.row-actions-toggle::-webkit-details-marker {
-  display: none;
-}
-
-.row-actions-popover {
-  position: absolute;
-  top: calc(100% + var(--space-2xs));
-  right: 0;
-  z-index: 2;
-  min-width: 8.5rem;
-  display: grid;
-  gap: var(--space-2xs);
-  padding: var(--space-2xs);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius);
-  background: var(--color-bg-primary);
-  box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.12));
-}
-
 input,
 select {
   border: 1px solid var(--color-border);
@@ -1154,6 +1067,13 @@ select {
   padding-right: var(--space-2xs);
 }
 
+.browse-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
 .share-browser-panel {
   max-height: min(85vh, 44rem);
 }
@@ -1177,14 +1097,6 @@ select {
 @media (max-width: 768px) {
   :deep(.table-scroll-wrapper) {
     overflow: visible;
-  }
-
-  .row-actions {
-    display: none;
-  }
-
-  .row-actions-menu {
-    display: inline-block;
   }
 }
 </style>

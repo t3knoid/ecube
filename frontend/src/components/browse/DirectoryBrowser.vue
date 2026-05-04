@@ -18,6 +18,10 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  showRootCrumbAtRoot: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const { t } = useI18n()
@@ -40,7 +44,7 @@ const breadcrumbs = computed(() => {
   return parts
 })
 
-const showRootCrumb = computed(() => Boolean(props.rootLabel) || breadcrumbs.value.length > 0)
+const showRootCrumb = computed(() => Boolean(props.rootLabel) || props.showRootCrumbAtRoot || breadcrumbs.value.length > 0)
 
 const rootCrumbLabel = computed(() => {
   if (props.rootLabel) {

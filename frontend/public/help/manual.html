@@ -528,6 +528,8 @@ Refresh the mount list
 Add a new mount definition
 </li><li>
 Open Mount Detail for an existing mount definition from the clickable mount ID
+</li><li>
+Open browse for a mounted share from the clickable project value on the Mounts page
 </li></ul>
 <p><code>admin</code> and <code>manager</code> users can also edit or remove a mount from Mount Detail. <code>processor</code> and <code>auditor</code> users can open Mount Detail and browse mounted shares, but they do not see <code>Edit</code> or <code>Remove</code> actions and sensitive path fields remain redacted.</p>
 <h2 id="5-1-adding-a-mount">5.1 Adding a Mount</h2>
@@ -581,7 +583,9 @@ Use <code>Clear saved credentials</code> if you need to remove previously stored
 <ul><li>
 <strong>From Drive Detail:</strong> Click the <code>Browse</code> button on any mounted drive to open the directory browser rooted at that drive's mount point.
 </li><li>
-<strong>From Mounts:</strong> Click the <code>Browse</code> button on any mounted network share from the list, or open Mount Detail and browse from there. The button is disabled for shares that are not currently mounted.
+<strong>From Mounts:</strong> Click the mounted share's <code>Project</code> value to open browse directly from the list. The browse panel title uses the same project value in the form <code>Browse mount &lt;project&gt; contents</code>.
+</li><li>
+<strong>Mounted share root display:</strong> Mounted-share browsing starts at <code>/</code>. The breadcrumb must not expose the share name, local mount point, or a doubled leading slash such as <code>//folder</code>.
 </li></ul>
 <p><strong>Navigating:</strong></p>
 <ul><li>

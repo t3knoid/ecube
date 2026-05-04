@@ -89,7 +89,7 @@ function mountView() {
                 <slot name="cell-project_id" :row="row" />
                 <slot name="cell-current_project_job_id" :row="row" />
                 <slot name="cell-status" :row="row" />
-                <slot name="cell-actions" :row="row" />
+                <slot name="cell-last_checked_at" :row="row" />
               </div>
             </div>
           `,
@@ -114,8 +114,8 @@ function mountView() {
           `,
         },
         DirectoryBrowser: {
-          props: ['mountPath', 'rootLabel'],
-          template: '<div class="directory-browser-stub">{{ rootLabel || mountPath }}</div>',
+          props: ['mountPath', 'mountId', 'rootLabel', 'showRootCrumbAtRoot'],
+          template: '<div class="directory-browser-stub">{{ mountId ?? mountPath }}|{{ rootLabel }}|{{ showRootCrumbAtRoot }}</div>',
         },
       },
     },
@@ -197,37 +197,50 @@ describe('MountsView removal flow', () => {
     expect(mocks.push).toHaveBeenCalledWith({ name: 'mount-detail', params: { id: 11 } })
   })
 
-  it('does not expose edit or remove buttons in the desktop action row', async () => {
+  it('uses the project value as the browse entry point for a mounted share', async () => {
+    mocks.getMounts.mockResolvedValueOnce([buildMount({ status: 'MOUNTED', local_mount_point: '/smb/demo-case-002' })])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const browseButton = wrapper.findAll('.mount-project-link')
+    expect(browseButton).toHaveLength(1)
+    expect(browseButton[0].text()).toBe('PROJ-011')
+
+    await browseButton[0].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Browse mount PROJ-011 contents')
+    expect(wrapper.find('.directory-browser-stub').text()).toBe('11||true')
+  })
+
+  it('does not expose separate browse, edit, or remove buttons in the desktop list', async () => {
     mocks.getMounts.mockResolvedValue([buildMount({ status: 'MOUNTED' })])
 
     const wrapper = mountView()
     await flushPromises()
 
     const labels = wrapper.findAll('button').map((node) => node.text())
-    expect(labels).toContain(i18n.global.t('mounts.browse'))
+    expect(labels).toContain('11')
+    expect(labels).toContain('PROJ-011')
+    expect(labels).not.toContain(i18n.global.t('mounts.browse'))
     expect(labels).not.toContain(i18n.global.t('mounts.details'))
     expect(labels).not.toContain(i18n.global.t('common.actions.edit'))
     expect(labels).not.toContain(i18n.global.t('mounts.remove'))
   })
 
-  it('forwards compact row action menu browse button without a separate details action', async () => {
+  it('does not render a separate browse action control when the mount ID is clickable', async () => {
     mocks.getMounts.mockResolvedValueOnce([buildMount({ status: 'MOUNTED', local_mount_point: '/smb/demo-case-002' })])
 
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.find('.row-action-menu-details').exists()).toBe(false)
-
-    const browseButton = wrapper.find('.row-action-menu-browse')
-    expect(browseButton.exists()).toBe(true)
-
-    await browseButton.trigger('click')
-    await flushPromises()
-
-    expect(wrapper.find('.directory-browser-stub').exists()).toBe(true)
+    expect(wrapper.find('.mount-id-link').exists()).toBe(true)
+    expect(wrapper.find('.mount-project-link').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain(i18n.global.t('mounts.browse'))
   })
 
-  it('omits wide metadata columns in mobile view while keeping compact status and the row menu trigger', async () => {
+  it('omits wide metadata columns in mobile view while keeping compact status and mount-id browsing', async () => {
     viewportState.mobile = true
     installMatchMediaMock()
     mocks.getMounts.mockResolvedValue([buildMount({ status: 'MOUNTED' })])
@@ -239,7 +252,8 @@ describe('MountsView removal flow', () => {
     expect(labels).not.toContain(i18n.global.t('common.labels.type'))
     expect(labels).not.toContain(i18n.global.t('mounts.lastChecked'))
     expect(wrapper.find('.mount-status-icon').attributes('aria-label')).toBe('MOUNTED')
-    expect(wrapper.find('.row-actions-toggle-dots').exists()).toBe(true)
+    expect(wrapper.find('.mount-id-link').exists()).toBe(true)
+    expect(wrapper.find('.mount-project-link').exists()).toBe(true)
   })
 
   it('shows the related project job ID and links it to Job Detail', async () => {
@@ -487,7 +501,7 @@ describe('MountsView removal flow', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const browseButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.browse'))
+    const browseButton = wrapper.findAll('.mount-project-link').at(0)
     expect(browseButton).toBeTruthy()
     expect(browseButton.attributes('aria-label')).not.toContain('/smb/project2')
 
@@ -495,7 +509,7 @@ describe('MountsView removal flow', () => {
     await flushPromises()
 
     expect(wrapper.text()).not.toContain('/smb/demo-case-002')
-    expect(wrapper.find('.directory-browser-stub').text()).toContain('PROJ-011')
+    expect(wrapper.find('.directory-browser-stub').text()).toBe('11||true')
   })
 
   it('does not render remote or local path columns in the mounts table', async () => {
@@ -677,7 +691,7 @@ describe('MountsView removal flow', () => {
 
   it('does not render manager-only row actions for non-manager roles', async () => {
     authState.roles = ['auditor']
-    mocks.getMounts.mockResolvedValue([buildMount()])
+    mocks.getMounts.mockResolvedValue([buildMount({ status: 'MOUNTED' })])
 
     const wrapper = mountView()
     await flushPromises()
@@ -689,6 +703,8 @@ describe('MountsView removal flow', () => {
     expect(buttonTexts).not.toContain(i18n.global.t('mounts.remove'))
     expect(buttonTexts).not.toContain(i18n.global.t('mounts.details'))
     expect(buttonTexts).toContain('11')
+    expect(buttonTexts).toContain('PROJ-011')
+    expect(buttonTexts).not.toContain(i18n.global.t('mounts.browse'))
   })
 
   it('clears the test success banner when the add dialog is cancelled', async () => {
