@@ -7,7 +7,7 @@ time (issue #124).
 
 import os
 import re
-from typing import Annotated, Optional
+from typing import Annotated, Callable, Match, Optional
 
 from pydantic import BeforeValidator
 
@@ -174,6 +174,17 @@ def resolve_source_path(
 
 _PATH_LIKE_RE = re.compile(r"(?<![A-Za-z0-9._-])/(?:[^\s'\"=:;,])+")
 
+_PASSWORD_POLICY_DETAIL_PATTERNS: tuple[tuple[re.Pattern[str], str | Callable[[Match[str]], str]], ...] = (
+    (re.compile(r"shorter than\s+(\d+)\s+characters", re.IGNORECASE), lambda match: f"New password must be at least {match.group(1)} characters long."),
+    (re.compile(r"already used|reuse|password history", re.IGNORECASE), "New password cannot reuse a previous password."),
+    (re.compile(r"dictionary check|dictionary word|too simplistic/systematic", re.IGNORECASE), "New password cannot be based on a dictionary word or common password."),
+    (re.compile(r"same consecutive characters|too many consecutive characters|maxrepeat", re.IGNORECASE), "New password contains too many repeated consecutive characters."),
+    (re.compile(r"monotonic character sequence|sequence", re.IGNORECASE), "New password contains a character sequence that violates the active password policy."),
+    (re.compile(r"contains the user name|contains the user name in some form|usercheck", re.IGNORECASE), "New password must not contain the username."),
+    (re.compile(r"too similar|difok|similarity", re.IGNORECASE), "New password is too similar to the current password."),
+    (re.compile(r"not enough different classes|minclass|uppercase|lowercase|digit|non-alphanumeric|character classes", re.IGNORECASE), "New password does not include enough character variety to satisfy the active password policy."),
+)
+
 
 def redact_pathlike_substrings(value: object, placeholder: str = "[redacted-path]") -> str:
     """Replace path-like substrings in error text with a safe placeholder."""
@@ -256,6 +267,30 @@ def sanitize_error_message(err: object, default_message: str = "Operation failed
         return "Filesystem type is not supported by the host"
     if "no such file" in lowered or "not found" in lowered:
         return "Target device or path was not found"
+
+    return default_message
+
+
+def summarize_password_policy_violation(
+    err: object,
+    default_message: str = "New password does not satisfy the active password policy.",
+) -> str:
+    """Return a safe, specific summary for password-policy failures when possible."""
+    text = redact_pathlike_substrings(err).strip()
+    if not text:
+        return default_message
+
+    for pattern, replacement in _PASSWORD_POLICY_DETAIL_PATTERNS:
+        match = pattern.search(text)
+        if not match:
+            continue
+        if callable(replacement):
+            return replacement(match)
+        return replacement
+
+    sanitized = sanitize_error_message(err, default_message)
+    if sanitized != default_message:
+        return sanitized
 
     return default_message
 

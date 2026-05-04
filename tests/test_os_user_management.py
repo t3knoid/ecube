@@ -1169,7 +1169,7 @@ class TestOSUserEndpoints:
         assert resp.status_code == 422
         body = resp.json()
         assert body["code"] == "HTTP_422"
-        assert body["message"] == "New password does not satisfy the active password policy."
+        assert body["message"] == "New password cannot be based on a dictionary word or common password."
 
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
@@ -1207,7 +1207,7 @@ class TestOSUserEndpoints:
         assert resp.status_code == 422
         body = resp.json()
         assert body["code"] == "HTTP_422"
-        assert body["message"] == "New password does not satisfy the active password policy."
+        assert body["message"] == "New password cannot reuse a previous password."
 
     @patch("app.services.os_user_service.subprocess.run")
     def test_create_user_forbidden_in_demo_mode(self, mock_subprocess, admin_client, db, monkeypatch):
@@ -1887,7 +1887,7 @@ class TestSetupEndpoints:
         assert resp.status_code == 422
         body = resp.json()
         assert body["code"] == "HTTP_422"
-        assert body["message"] == "New password does not satisfy the active password policy."
+        assert body["message"] == "New password must be at least 14 characters long."
 
     @patch("app.routers.setup.get_os_user_provider")
     def test_initialize_returns_422_for_password_policy_violation_when_existing_user_recovery_fails(
@@ -1913,7 +1913,7 @@ class TestSetupEndpoints:
         assert resp.status_code == 422
         body = resp.json()
         assert body["code"] == "HTTP_422"
-        assert body["message"] == "New password does not satisfy the active password policy."
+        assert body["message"] == "New password cannot reuse a previous password."
 
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")

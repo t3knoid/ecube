@@ -445,7 +445,7 @@ def test_change_password_returns_422_for_pam_policy_violation(unauthenticated_cl
     )
 
     assert resp.status_code == 422
-    assert resp.json()["message"] == "New password does not satisfy the active password policy."
+    assert resp.json()["message"] == "New password cannot be based on a dictionary word or common password."
 
 
 # ---------------------------------------------------------------------------

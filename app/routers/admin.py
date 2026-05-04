@@ -68,7 +68,7 @@ from app.services.discovery_service import run_discovery_sync
 from app.services.os_user_service import is_demo_account_password_locked, validate_group_name, validate_username
 from app.constants import ECUBE_GROUPNAME_PATTERN, USERNAME_PATTERN, ECUBE_GROUP_ROLE_MAP, RESERVED_USERNAMES
 from app.utils.client_ip import get_client_ip
-from app.utils.sanitize import sanitize_error_message
+from app.utils.sanitize import sanitize_error_message, summarize_password_policy_violation
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +93,7 @@ def _get_provider() -> OsUserProvider:
 
 
 def _safe_password_policy_rejection_message(message: str) -> str:
-    sanitized = sanitize_error_message(message, "New password does not satisfy the active password policy.")
+    sanitized = summarize_password_policy_violation(message, "New password does not satisfy the active password policy.")
     if sanitized in {
         "Permission or authentication failure",
         "Operation timed out",
