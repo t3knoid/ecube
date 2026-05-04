@@ -1,9 +1,13 @@
 # Stage 1: Build the Vue 3 SPA
 FROM node:20-alpine3.21 AS frontend-build
-WORKDIR /app
+WORKDIR /opt/ecube/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
-COPY frontend/ .
+WORKDIR /opt/ecube
+COPY scripts/build-help.mjs /opt/ecube/scripts/build-help.mjs
+COPY docs/operations/13-user-manual.md /opt/ecube/docs/operations/13-user-manual.md
+COPY frontend /opt/ecube/frontend
+WORKDIR /opt/ecube/frontend
 RUN npm run build
 
 # Stage 2: Python application with bundled frontend
@@ -54,7 +58,7 @@ RUN mkdir -p /opt/ecube/certs
 RUN touch /opt/ecube/.env && chmod 600 /opt/ecube/.env
 
 # Bundle the pre-built frontend into the image
-COPY --from=frontend-build /app/dist /opt/ecube/www
+COPY --from=frontend-build /opt/ecube/frontend/dist /opt/ecube/www
 
 ENV SERVE_FRONTEND_PATH=/opt/ecube/www
 

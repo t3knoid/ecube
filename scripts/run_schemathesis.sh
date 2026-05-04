@@ -127,6 +127,8 @@ ECUBE_POSTGRES_HOST_PORT="$POSTGRES_HOST_PORT"
 ECUBE_SECRET_KEY="$SECRET_KEY"
 ECUBE_MAX_WAIT="$MAX_WAIT"
 
+_compose_temp_file=""
+
 # ---- Preflight checks ----
 for cmd in docker curl tee; do
   if ! command -v "$cmd" &>/dev/null; then
@@ -148,6 +150,12 @@ else
 fi
 
 ecube_require_compose
+
+if grep -q '^[[:space:]]*container_name:' "$ECUBE_COMPOSE_FILE"; then
+  _compose_temp_file="$(mktemp "$PROJECT_ROOT/.schemathesis-compose.XXXXXX.yml")"
+  sed '/^[[:space:]]*container_name:/d' "$ECUBE_COMPOSE_FILE" > "$_compose_temp_file"
+  ECUBE_COMPOSE_FILE="$_compose_temp_file"
+fi
 
 if ! "$PYTHON" -c "import jwt" 2>/dev/null; then
   echo "ERROR: PyJWT is required. Install it with: pip install PyJWT" >&2
@@ -172,6 +180,9 @@ _env_backup=""
 
 cleanup() {
   ecube_compose_down
+  if [[ -n "${_compose_temp_file:-}" && -f "$_compose_temp_file" ]]; then
+    rm -f "$_compose_temp_file"
+  fi
   if [[ -n "${_env_backup:-}" && -f "$_env_backup" ]]; then
     mv "$_env_backup" "$_env_file"
   fi
