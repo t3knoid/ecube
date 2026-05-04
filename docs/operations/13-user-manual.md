@@ -4,7 +4,7 @@
 |---|---|
 | Title | ECUBE User Manual |
 | Purpose | Guides end users, processors, managers, and auditors through day-to-day ECUBE workflows and operational tasks. |
-| Updated on | 05/02/26 |
+| Updated on | 05/03/26 |
 | Audience | Processors, managers, auditors, administrators, end users. |
 
 ## Table of Contents
@@ -321,9 +321,9 @@ The `Drives` page shows detected USB drives and their current state.
 
 Typical drive fields include:
 
+- Drive ID
 - Device (port-based identifier such as `2-1`)
 - Project when the drive has a related job association
-- Capacity
 - Related job ID when the drive is currently tied to a job
 - Current state
 
@@ -366,6 +366,8 @@ Use the page controls to:
 - Sort results
 
 When ECUBE can correlate a drive to a related job, the `Job ID` value on the Drives page acts as a direct link into that job's detail view. Drives without a related job keep the current placeholder behavior instead of showing a stale or guessed job ID.
+
+The `Drive ID` value on the Drives page also acts as the direct navigation entry point into Drive Detail. The list no longer shows a separate `Details` row action, so list-level actions stay focused on row-specific operations such as `Browse` when the drive has a managed mount path.
 
 ### 7.3 Drive Detail Page
 

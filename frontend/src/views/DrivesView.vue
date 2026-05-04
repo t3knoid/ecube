@@ -241,14 +241,16 @@ watch(showDisconnected, () => {
   loadDrives()
 })
 
-function openDrive(drive) {
-  router.push({ name: 'drive-detail', params: { id: drive.id } })
-}
-
 function openRelatedJob(jobId) {
   const normalizedJobId = Number(jobId)
   if (!Number.isInteger(normalizedJobId) || normalizedJobId < 1) return
   router.push({ name: 'job-detail', params: { id: normalizedJobId } })
+}
+
+function openDriveById(driveId) {
+  const normalizedDriveId = Number(driveId)
+  if (!Number.isInteger(normalizedDriveId) || normalizedDriveId < 1) return
+  router.push({ name: 'drive-detail', params: { id: normalizedDriveId } })
 }
 
 function closeRowActionsMenu(event) {
@@ -256,11 +258,6 @@ function closeRowActionsMenu(event) {
   if (menu instanceof HTMLDetailsElement) {
     menu.removeAttribute('open')
   }
-}
-
-function handleMenuOpenDrive(drive, event) {
-  closeRowActionsMenu(event)
-  openDrive(drive)
 }
 
 function handleMenuBrowse(drive, event) {
@@ -336,6 +333,11 @@ onBeforeUnmount(() => {
     </div>
 
     <DataTable :columns="columns" :rows="paged" :empty-text="t('drives.empty')">
+      <template #cell-id="{ row }">
+        <button class="cell-link drive-id-link" type="button" @click="openDriveById(row.id)">
+          {{ row.id }}
+        </button>
+      </template>
       <template #cell-display_device_label="{ row }">
         {{ formatDriveIdentity(row) }}
       </template>
@@ -368,7 +370,6 @@ onBeforeUnmount(() => {
       </template>
       <template #cell-actions="{ row }">
         <div class="row-actions">
-          <button class="btn" @click="openDrive(row)">{{ t('drives.details') }}</button>
           <button
             v-if="row.mount_path"
             class="btn"
@@ -386,9 +387,6 @@ onBeforeUnmount(() => {
             </span>
           </summary>
           <div class="row-actions-popover">
-            <button class="btn row-action-menu-details" @click="handleMenuOpenDrive(row, $event)">
-              {{ t('drives.details') }}
-            </button>
             <button
               v-if="row.mount_path"
               class="btn row-action-menu-browse"
