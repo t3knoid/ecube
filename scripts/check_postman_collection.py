@@ -163,9 +163,9 @@ def extract_openapi_operations(openapi_schema: dict[str, Any]) -> list[OpenAPIOp
 
 
 def load_openapi_operations() -> list[OpenAPIOperation]:
-    from app.main import app
+    from app.openapi import load_openapi_schema
 
-    return extract_openapi_operations(app.openapi())
+    return extract_openapi_operations(load_openapi_schema())
 
 
 def find_generated_sync_folder(collection_payload: dict[str, Any]) -> dict[str, Any] | None:
