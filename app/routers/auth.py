@@ -31,7 +31,7 @@ from app.infrastructure.pam_protocol import PamAuthenticator
 from app.infrastructure.password_policy_protocol import PasswordPolicyProvider
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_422
 from app.utils.client_ip import get_client_ip
-from app.utils.sanitize import sanitize_error_message
+from app.utils.sanitize import sanitize_error_message, summarize_password_policy_violation
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ def _is_pam_policy_violation(message: str) -> bool:
 
 
 def _safe_password_policy_rejection_message(message: str) -> str:
-    sanitized = sanitize_error_message(message, "New password does not satisfy the active password policy.")
+    sanitized = summarize_password_policy_violation(message, "New password does not satisfy the active password policy.")
     if sanitized in {
         "Permission or authentication failure",
         "Operation timed out",
