@@ -17,27 +17,45 @@ test('audit filters and export csv', async ({ page }) => {
   await setupAuthenticatedPage(page, ['auditor'])
   await stubDrivesApi(page, [])
 
+  await routeJson(page, '**/api/audit/options', {
+    actions: ['LOGIN'],
+    users: ['frank'],
+    job_ids: [],
+  })
+
+  const auditEntries = [
+    {
+      id: 1,
+      timestamp: '2026-03-29T10:00:00Z',
+      user: 'frank',
+      action: 'LOGIN',
+      job_id: null,
+      client_ip: '127.0.0.1',
+      details: { message: 'ok' },
+    },
+  ]
+
   await page.route(/\/api\/audit(?!\/)/, async (route) => {
+    const requestUrl = new URL(route.request().url())
+    const limit = Number(requestUrl.searchParams.get('limit') || auditEntries.length)
+    const offset = Number(requestUrl.searchParams.get('offset') || 0)
+    const entries = auditEntries.slice(offset, offset + limit)
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify([
-        {
-          id: 1,
-          timestamp: '2026-03-29T10:00:00Z',
-          user: 'frank',
-          action: 'LOGIN',
-          job_id: null,
-          client_ip: '127.0.0.1',
-          details: { message: 'ok' },
-        },
-      ]),
+      body: JSON.stringify({
+        entries,
+        total: auditEntries.length,
+        limit,
+        offset,
+        has_more: offset + entries.length < auditEntries.length,
+      }),
     })
   })
 
   await page.goto('/audit')
-  await page.getByPlaceholder('Filter by user').fill('frank')
-  await page.getByPlaceholder('Filter by action').fill('LOGIN')
+  await page.getByLabel('Filter by user').selectOption('frank')
+  await page.getByLabel('Filter by action').selectOption('LOGIN')
 
   // Date filter — inputs are datetime-local, targeted by aria-label
   await page.getByLabel('From Date').fill('2026-03-29T00:00')
@@ -90,7 +108,7 @@ test('job detail chain of custody report renders printable sections and CoC expo
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify([]),
+      body: JSON.stringify({ entries: [], total: 0, limit: 20, offset: 0, has_more: false }),
     })
   })
 

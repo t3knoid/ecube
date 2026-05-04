@@ -4,7 +4,7 @@
 |---|---|
 | Title | REST API Design |
 | Purpose | Describes how the ECUBE API works, including route structure, authentication and authorization model, payload shapes, endpoint behavior, and implementation-oriented constraints. |
-| Updated on | 04/08/26 |
+| Updated on | 05/04/26 |
 | Audience | Engineers, implementers, maintainers, and technical reviewers. |
 
 **OpenAPI Documentation:** This API contract is also available interactively via OpenAPI (Swagger) when the ECUBE API server is running:
@@ -1032,9 +1032,40 @@ Download the most recently generated manifest for the job as an `application/jso
 
 ### `GET /audit`
 
-Return audit logs with filters.
+Return audit logs with server-backed pagination, exact filters, and free-text search.
 
 **Roles:** `admin`, `manager`, `auditor`
+
+**Behavior:**
+
+1. Validates caller authorization with the audit-read policy.
+2. Applies exact-match filters for structured fields such as `user`, `action`, `job_id`, `project_id`, `drive_id`, `since`, and `until`.
+3. Applies optional case-insensitive substring search across operator-safe audit fields.
+4. Returns a paged response object containing `entries`, `limit`, `offset`, `total`, and `has_more`.
+
+**Response notes:**
+
+- Audit entries remain sorted most-recent first.
+- `include_total=false` skips the exact `total` count so clients can page forward using `has_more` without forcing a recount on every request; in that mode `total` is `null`.
+- `search` can match safe visible fields such as action, actor, job or project identifiers, timestamps, and serialized details.
+- `client_ip` is included in search only for roles that are already allowed to view the field in the response payload.
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid token
+- `403 Forbidden` — Insufficient role
+
+### `GET /audit/options`
+
+Return distinct filter values for the Audit UI.
+
+**Roles:** `admin`, `manager`, `auditor`
+
+**Behavior:**
+
+1. Validates caller authorization with the audit-read policy.
+2. Queries the audit store for distinct `action`, `user`, and `job_id` values.
+3. Returns those values in `actions`, `users`, and `job_ids` arrays for combo-box or select-based filtering.
 
 **Error responses:**
 

@@ -4,7 +4,7 @@
 |---|---|
 | Title | ECUBE User Manual |
 | Purpose | Guides end users, processors, managers, and auditors through day-to-day ECUBE workflows and operational tasks. |
-| Updated on | 05/03/26 |
+| Updated on | 05/04/26 |
 | Audience | Processors, managers, auditors, administrators, end users. |
 
 ## Table of Contents
@@ -820,18 +820,25 @@ The `Audit` page is available only to authorized roles.
 
 Use it to:
 
-- Refresh recent audit activity
-- Filter by user
-- Filter by action
-- Filter by date/time range
+- Refresh the current server-backed result set
+- Filter by user, action, and job using dropdown filters populated from stored audit values
+- Search across visible audit fields with a free-text search box
+- Filter by date/time range across the full audit history
+- Move through paginated result pages using numbered page shortcuts
 - Expand structured details for individual records
-- Export the result set as CSV
+- Export the full filtered result set as CSV
+
+Pagination behavior:
+
+- On wider screens, the Audit page shows numbered shortcuts for the current 10-page window and jump controls to the next or previous 10 pages.
+- On smaller screens, the same controls shrink to a 5-page window so the page shortcuts remain usable without crowding the layout.
 
 The audit page is useful for review, compliance, and incident follow-up.
 
 When exporting CSV:
 
 - Review filters before export so the file contains the intended data set
+- Export follows the active filters and retrieves all matching pages, not only the rows currently visible on screen
 - Treat exported audit data as sensitive operational evidence
 
 ![Audit page with filters and export tools (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/audit-default-chromium-linux.png)

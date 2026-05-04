@@ -4,7 +4,7 @@
 |---|---|
 | Title | UI Use Cases |
 | Purpose | Provides a catalog of ECUBE user interface use cases that define expected UI behavior for design, development, and QA validation. |
-| Updated on | 04/28/26 |
+| Updated on | 05/04/26 |
 | Audience | UI designers, developers, QA. |
 
 ## Table of Contents
@@ -164,10 +164,11 @@ Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 
 | UC# | Use Case | Primary Actor | Roles |
 |-----|----------|---------------|-------|
 | UC-7.1 | Browse audit logs (paginated, most recent first) | Admin, Manager, Auditor | admin, manager, auditor |
-| UC-7.2 | Filter audit logs by user | Admin, Manager, Auditor | admin, manager, auditor |
-| UC-7.3 | Filter audit logs by action type | Admin, Manager, Auditor | admin, manager, auditor |
-| UC-7.4 | Filter audit logs by job ID | Admin, Manager, Auditor | admin, manager, auditor |
-| UC-7.5 | Filter audit logs by date range | Admin, Manager, Auditor | admin, manager, auditor |
+| UC-7.2 | Filter audit logs by distinct user values | Admin, Manager, Auditor | admin, manager, auditor |
+| UC-7.3 | Filter audit logs by distinct action values | Admin, Manager, Auditor | admin, manager, auditor |
+| UC-7.4 | Filter audit logs by distinct job ID values | Admin, Manager, Auditor | admin, manager, auditor |
+| UC-7.5 | Filter audit logs by date range across the full audit history | Admin, Manager, Auditor | admin, manager, auditor |
+| UC-7.5a | Search audit logs by free-text substring across visible fields | Admin, Manager, Auditor | admin, manager, auditor |
 | UC-7.6 | View audit entry details (structured JSON metadata) | Admin, Manager, Auditor | admin, manager, auditor |
 | UC-7.7 | Export/download audit logs | Admin, Manager, Auditor | admin, manager, auditor |
 | UC-7.8 | Retrieve chain-of-custody report by drive ID | Admin, Manager, Auditor | admin, manager, auditor |
@@ -181,7 +182,7 @@ Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 
 
 **UI Implication:** Audit and chain-of-custody now live on separate surfaces:
 
-1. **Audit Logs** (UC-7.1–7.7): Traditional log viewer with multi-filter sidebar (user, action type dropdown, job ID, date range picker). Paginated table with expandable detail rows showing the JSON `details` payload. Dedicated `Export Audit CSV` button for compliance reporting.
+1. **Audit Logs** (UC-7.1–7.7): Traditional log viewer with server-backed pagination and filter controls populated from backend distinct values. The page supports user, action, job, date-range, and free-text search filters, shows the newest matching rows first, and expands individual rows to reveal the JSON `details` payload. Pagination uses numbered shortcut windows instead of simple previous/next-only controls: wider screens expose the current 10-page window while smaller screens reduce the shortcut window to 5 pages. `Export Audit CSV` exports the full filtered result set rather than only the currently visible page.
 
 	Startup reconciliation may add `MOUNT_RECONCILED` and `DRIVE_MOUNT_RECONCILED` entries when ECUBE restores expected managed mounts or removes orphan managed mount points during service startup.
 

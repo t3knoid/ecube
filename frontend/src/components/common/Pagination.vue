@@ -83,7 +83,7 @@ function goToNextWindow() {
           type="button"
           class="btn page-btn page-window-btn page-window-prev"
           :disabled="windowStart <= 1"
-          :aria-label="t('common.actions.previous')"
+          :aria-label="t('common.actions.previousPageWindow', { count: resolvedJumpSize })"
           @click="goToPreviousWindow"
         >
           <span aria-hidden="true">&lt;</span>
@@ -103,7 +103,7 @@ function goToNextWindow() {
           type="button"
           class="btn page-btn page-window-btn page-window-next"
           :disabled="windowEnd >= totalPages"
-          :aria-label="t('common.actions.next')"
+          :aria-label="t('common.actions.nextPageWindow', { count: resolvedJumpSize })"
           @click="goToNextWindow"
         >
           <span aria-hidden="true">&gt;</span>

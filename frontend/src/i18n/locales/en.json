@@ -335,6 +335,11 @@
     "details": "Details",
     "exportAuditCsv": "Export Audit CSV",
     "exportCsv": "Export CoC CSV",
+    "anyUser": "Any user",
+    "anyAction": "Any action",
+    "jobIdFilter": "Filter by job",
+    "anyJob": "Any job",
+    "searchFilter": "Search audit logs",
     "userFilter": "Filter by user",
     "actionFilter": "Filter by action",
     "applyFilters": "Apply",
@@ -690,7 +695,9 @@
       "confirm": "Confirm",
       "back": "Back",
       "previous": "Previous",
-      "next": "Next"
+      "next": "Next",
+      "previousPageWindow": "Previous {count} pages",
+      "nextPageWindow": "Next {count} pages"
     },
     "labels": {
       "loading": "Loading…",

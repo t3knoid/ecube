@@ -900,22 +900,32 @@ Path match
 <p>The <code>Audit</code> page is available only to authorized roles.</p>
 <p>Use it to:</p>
 <ul><li>
-Refresh recent audit activity
+Refresh the current server-backed result set
 </li><li>
-Filter by user
+Filter by user, action, and job using dropdown filters populated from stored audit values
 </li><li>
-Filter by action
+Search across visible audit fields with a free-text search box
 </li><li>
-Filter by date/time range
+Filter by date/time range across the full audit history
+</li><li>
+Move through paginated result pages using numbered page shortcuts
 </li><li>
 Expand structured details for individual records
 </li><li>
-Export the result set as CSV
+Export the full filtered result set as CSV
+</li></ul>
+<p>Pagination behavior:</p>
+<ul><li>
+On wider screens, the Audit page shows numbered shortcuts for the current 10-page window and jump controls to the next or previous 10 pages.
+</li><li>
+On smaller screens, the same controls shrink to a 5-page window so the page shortcuts remain usable without crowding the layout.
 </li></ul>
 <p>The audit page is useful for review, compliance, and incident follow-up.</p>
 <p>When exporting CSV:</p>
 <ul><li>
 Review filters before export so the file contains the intended data set
+</li><li>
+Export follows the active filters and retrieves all matching pages, not only the rows currently visible on screen
 </li><li>
 Treat exported audit data as sensitive operational evidence
 </li></ul>

@@ -2,7 +2,8 @@ from datetime import datetime
 import logging
 from typing import Any, Dict, List, Mapping, Optional
 
-from sqlalchemy.orm import Session
+from sqlalchemy import String, cast, or_
+from sqlalchemy.orm import Query, Session
 
 from app.models.audit import AuditLog
 from app.utils.sanitize import normalize_project_id, sanitize_audit_details
@@ -137,10 +138,94 @@ class AuditRepository:
         job_id: Optional[int] = None,
         since: Optional[datetime] = None,
         until: Optional[datetime] = None,
+        search: Optional[str] = None,
+        include_client_ip_in_search: bool = False,
         limit: int = 100,
         offset: int = 0,
     ) -> List[AuditLog]:
         """Return audit log entries matching the given filters."""
+        q = self._filtered_query(
+            user=user,
+            action=action,
+            project_id=project_id,
+            drive_id=drive_id,
+            job_id=job_id,
+            since=since,
+            until=until,
+            search=search,
+            include_client_ip_in_search=include_client_ip_in_search,
+        )
+        return q.order_by(AuditLog.timestamp.desc(), AuditLog.id.desc()).offset(offset).limit(limit).all()
+
+    def count(
+        self,
+        user: Optional[str] = None,
+        action: Optional[str] = None,
+        project_id: Optional[str] = None,
+        drive_id: Optional[int] = None,
+        job_id: Optional[int] = None,
+        since: Optional[datetime] = None,
+        until: Optional[datetime] = None,
+        search: Optional[str] = None,
+        include_client_ip_in_search: bool = False,
+    ) -> int:
+        """Return the count of audit log entries matching the given filters."""
+        q = self._filtered_query(
+            user=user,
+            action=action,
+            project_id=project_id,
+            drive_id=drive_id,
+            job_id=job_id,
+            since=since,
+            until=until,
+            search=search,
+            include_client_ip_in_search=include_client_ip_in_search,
+        )
+        return q.order_by(None).count()
+
+    def filter_options(self) -> Dict[str, List[Any]]:
+        """Return distinct filter values for audit log search controls."""
+        actions = [
+            row[0]
+            for row in self.db.query(AuditLog.action)
+            .filter(AuditLog.action.isnot(None))
+            .distinct()
+            .order_by(AuditLog.action.asc())
+            .all()
+            if row[0]
+        ]
+        users = [
+            row[0]
+            for row in self.db.query(AuditLog.user)
+            .filter(AuditLog.user.isnot(None))
+            .distinct()
+            .order_by(AuditLog.user.asc())
+            .all()
+            if row[0]
+        ]
+        job_ids = [
+            row[0]
+            for row in self.db.query(AuditLog.job_id)
+            .filter(AuditLog.job_id.isnot(None))
+            .distinct()
+            .order_by(AuditLog.job_id.asc())
+            .all()
+            if row[0] is not None
+        ]
+        return {"actions": actions, "users": users, "job_ids": job_ids}
+
+    def _filtered_query(
+        self,
+        user: Optional[str] = None,
+        action: Optional[str] = None,
+        project_id: Optional[str] = None,
+        drive_id: Optional[int] = None,
+        job_id: Optional[int] = None,
+        since: Optional[datetime] = None,
+        until: Optional[datetime] = None,
+        search: Optional[str] = None,
+        include_client_ip_in_search: bool = False,
+    ) -> Query:
         normalized_project_id = _normalize_project_id(project_id)
         q = self.db.query(AuditLog)
         if user is not None:
@@ -157,7 +242,23 @@ class AuditRepository:
             q = q.filter(AuditLog.timestamp >= since)
         if until is not None:
             q = q.filter(AuditLog.timestamp <= until)
-        return q.order_by(AuditLog.timestamp.desc(), AuditLog.id.desc()).offset(offset).limit(limit).all()
+
+        normalized_search = (search or "").strip()
+        if normalized_search:
+            pattern = f"%{normalized_search}%"
+            search_clauses = [
+                AuditLog.user.ilike(pattern),
+                AuditLog.action.ilike(pattern),
+                AuditLog.project_id.ilike(pattern),
+                cast(AuditLog.drive_id, String).ilike(pattern),
+                cast(AuditLog.job_id, String).ilike(pattern),
+                cast(AuditLog.details, String).ilike(pattern),
+                cast(AuditLog.timestamp, String).ilike(pattern),
+            ]
+            if include_client_ip_in_search:
+                search_clauses.append(AuditLog.client_ip.ilike(pattern))
+            q = q.filter(or_(*search_clauses))
+        return q
 
 
 def best_effort_audit(

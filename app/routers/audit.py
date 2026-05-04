@@ -11,6 +11,8 @@ from app.database import get_db
 from app.exceptions import EncodingError
 from app.repositories.audit_repository import AuditRepository
 from app.schemas.audit import (
+    AuditLogFilterOptionsResponse,
+    AuditLogListResponse,
     AuditLogSchema,
     ChainOfCustodyHandoffRequest,
     ChainOfCustodyHandoffResponse,
@@ -28,18 +30,7 @@ router = APIRouter(prefix="/audit", tags=["audit"])
 
 _ALLOWED = require_roles("admin", "manager", "auditor")
 _WRITE_ALLOWED = require_roles("admin", "manager")
-_IP_VISIBLE_ROLES = {"admin", "auditor"}
-
-
-def _redact_ip(entry, user: CurrentUser) -> AuditLogSchema:
-    """Serialize an AuditLog, redacting client_ip for non-admin/auditor roles."""
-    schema = AuditLogSchema.model_validate(entry)
-    if not _IP_VISIBLE_ROLES.intersection(user.roles):
-        schema.client_ip = None
-    return schema
-
-
-@router.get("", response_model=List[AuditLogSchema], responses={**R_401, **R_403, **R_422})
+@router.get("", response_model=AuditLogListResponse, responses={**R_401, **R_403, **R_422})
 def list_audit_logs(
     user: Optional[str] = Query(default=None, description="Filter by user"),
     action: Optional[str] = Query(default=None, description="Filter by action"),
@@ -48,6 +39,8 @@ def list_audit_logs(
     job_id: Optional[int] = OptionalIntQuery(description="Filter by job ID"),
     since: Optional[datetime] = OptionalDatetimeQuery(description="Filter entries at or after this timestamp (ISO 8601)"),
     until: Optional[datetime] = OptionalDatetimeQuery(description="Filter entries at or before this timestamp (ISO 8601)"),
+    search: Optional[str] = Query(default=None, description="Case-insensitive substring search across operator-visible audit fields"),
+    include_total: bool = Query(default=True, description="Whether to compute the exact total count for the current filter set"),
     limit: int = Query(default=settings.audit_log_default_limit, ge=1, le=settings.audit_log_max_limit, description="Maximum number of results"),
     offset: int = Query(default=0, ge=0, description="Number of results to skip"),
     db: Session = Depends(get_db),
@@ -63,7 +56,9 @@ def list_audit_logs(
             raise EncodingError("project_id is empty after removing invalid characters")
         project_id = normalized_project_id
 
-    entries = AuditRepository(db).query(
+    return audit_service.list_audit_logs(
+        db,
+        roles=current_user.roles,
         user=user,
         action=action,
         project_id=project_id,
@@ -71,10 +66,23 @@ def list_audit_logs(
         job_id=job_id,
         since=since,
         until=until,
+        search=search,
+        include_total=include_total,
         limit=limit,
         offset=offset,
     )
-    return [_redact_ip(e, current_user) for e in entries]
+
+
+@router.get("/options", response_model=AuditLogFilterOptionsResponse, responses={**R_401, **R_403})
+def get_audit_filter_options(
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(_ALLOWED),
+):
+    """Return distinct filter values for the audit log search controls.
+
+    **Roles:** ``admin``, ``manager``, ``auditor``
+    """
+    return audit_service.get_audit_filter_options(db)
 
 
 @router.get("/chain-of-custody", response_model=ChainOfCustodyReportSchema, responses={**R_401, **R_403, **R_404, **R_409, **R_422})

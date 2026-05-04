@@ -383,7 +383,7 @@ class TestAuditLogClientIpRedaction:
         self._insert_audit_entry(db)
         resp = admin_client.get("/audit", params={"action": "TEST_REDACT"})
         assert resp.status_code == 200
-        entries = resp.json()
+        entries = resp.json()["entries"]
         assert len(entries) >= 1
         assert entries[0]["client_ip"] == "10.88.88.88"
 
@@ -391,7 +391,7 @@ class TestAuditLogClientIpRedaction:
         self._insert_audit_entry(db)
         resp = auditor_client.get("/audit", params={"action": "TEST_REDACT"})
         assert resp.status_code == 200
-        entries = resp.json()
+        entries = resp.json()["entries"]
         assert len(entries) >= 1
         assert entries[0]["client_ip"] == "10.88.88.88"
 
@@ -399,6 +399,6 @@ class TestAuditLogClientIpRedaction:
         self._insert_audit_entry(db)
         resp = manager_client.get("/audit", params={"action": "TEST_REDACT"})
         assert resp.status_code == 200
-        entries = resp.json()
+        entries = resp.json()["entries"]
         assert len(entries) >= 1
         assert entries[0]["client_ip"] is None
