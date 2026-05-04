@@ -2828,6 +2828,25 @@
 					"response": []
 				},
 				{
+					"name": "POST /auth/change-password",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/auth/change-password",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"change-password"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Change Password\n\noperationId: change_password_auth_change_password_post"
+					},
+					"response": []
+				},
+				{
 					"name": "GET /auth/public-config",
 					"request": {
 						"method": "GET",

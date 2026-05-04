@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { postLogin } from '@/api/auth.js'
+import { postChangePassword, postLogin } from '@/api/auth.js'
 import { LOGIN_PATH } from '@/constants/routes.js'
 import { STORAGE_TOKEN_KEY } from '@/constants/storage.js'
 import { EXPIRED_QUERY_KEY, EXPIRED_QUERY_VALUE } from '@/constants/auth.js'
@@ -47,6 +47,7 @@ export const useAuthStore = defineStore('auth', () => {
   const groups = ref([])
   const expiresAt = ref(null)
   const expiredOnLoad = ref(false)
+  const passwordWarningDays = ref(null)
 
   let expiryInterval = null
 
@@ -82,6 +83,7 @@ export const useAuthStore = defineStore('auth', () => {
     groups.value = []
     expiresAt.value = null
     expiredOnLoad.value = false
+    passwordWarningDays.value = null
     sessionStorage.removeItem(STORAGE_TOKEN_KEY)
   }
 
@@ -92,6 +94,25 @@ export const useAuthStore = defineStore('auth', () => {
     const payload = await postLogin(user, password)
     const jwt = payload.access_token
     _applyToken(jwt)
+    passwordWarningDays.value = Number.isInteger(payload.password_expiration_warning_days)
+      ? payload.password_expiration_warning_days
+      : null
+    _startExpiryCheck()
+  }
+
+  async function changePassword(usernameValue, currentPassword, newPassword) {
+    clearAuth()
+
+    const payload = await postChangePassword({
+      username: usernameValue,
+      current_password: currentPassword,
+      new_password: newPassword,
+    })
+    const jwt = payload.access_token
+    _applyToken(jwt)
+    passwordWarningDays.value = Number.isInteger(payload.password_expiration_warning_days)
+      ? payload.password_expiration_warning_days
+      : null
     _startExpiryCheck()
   }
 
@@ -152,11 +173,13 @@ export const useAuthStore = defineStore('auth', () => {
     groups,
     expiresAt,
     expiredOnLoad,
+    passwordWarningDays,
     isAuthenticated,
     hasRole,
     hasAnyRole,
     clearAuth,
     login,
+    changePassword,
     logout,
     checkExpiry,
     initialize,

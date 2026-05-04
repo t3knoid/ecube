@@ -50,8 +50,11 @@
 | UC-2.3 | View current session info (username, roles, token expiry) | Authenticated user | any |
 | UC-2.4 | Log out / end session | Authenticated user | any |
 | UC-2.5 | Handle expired token (re-authenticate prompt) | Authenticated user | any |
+| UC-2.6 | Recover from expired local password with forced change dialog | Local authenticated user | — |
+| UC-2.7 | Submit self-service password change during expired-password recovery | Local authenticated user | — |
+| UC-2.8 | View and dismiss password-expiry warning banner after login | Authenticated local user | any |
 
-**UI Implication:** Login page supports credential-based sign-in and session-expiry handling. Session state is enforced by router guards with redirects to `/login` (expired/auth-required) and `/setup` (uninitialized systems). If a normal API call later returns the backend setup-required `503` contract, the shared frontend client also returns the browser to `/setup` instead of leaving the operator on a generic server-error dead end.
+**UI Implication:** Login page supports credential-based sign-in, session-expiry handling, and expired-password recovery. Session state is enforced by router guards with redirects to `/login` (expired/auth-required) and `/setup` (uninitialized systems). If `POST /auth/token` returns `401` with `reason: password_expired`, the login page opens a non-dismissible password-change dialog that requires the current password plus matching new-password confirmation, lists the active password rules inline, and keeps backend `422` PAM policy errors in that dialog instead of routing them through the global toast handler. After a successful login inside the password warning window, the dashboard shows a dismissible banner with the remaining days until expiration; dismissal is session-scoped only. If a normal API call later returns the backend setup-required `503` contract, the shared frontend client also returns the browser to `/setup` instead of leaving the operator on a generic server-error dead end.
 
 ---
 
@@ -215,10 +218,11 @@ Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 
 | UC-9.2 | Update logging settings (`log_level`, `log_format`, log rotation) | Admin | admin |
 | UC-9.3 | Enable/disable file logging and set log file path | Admin | admin |
 | UC-9.4 | Update copy and DB pool runtime settings (`copy_job_timeout`, `job_detail_files_page_size`, `mkfs_exfat_cluster_size`, `db_pool_size`, `db_pool_max_overflow`) | Admin | admin |
-| UC-9.5 | Review restart-required changes after save | Admin | admin |
-| UC-9.6 | Request ECUBE service restart from UI confirmation dialog | Admin | admin |
+| UC-9.5 | View and update PAM password-policy settings | Admin | admin |
+| UC-9.6 | Review restart-required changes after save | Admin | admin |
+| UC-9.7 | Request ECUBE service restart from UI confirmation dialog | Admin | admin |
 
-**UI Implication:** Admin-only `Configuration` page provides editable logging, copy job timeout, exFAT cluster size, Job Detail files-per-page, and DB pool fields, localized error handling, and a restart-required panel. Save applies supported changes immediately where possible and lists deferred settings that require service restart.
+**UI Implication:** Admin-only `Configuration` page provides editable logging, password-policy, copy job timeout, exFAT cluster size, Job Detail files-per-page, and DB pool fields, localized error handling, and a restart-required panel. The `Password Policy` panel is loaded from `/admin/password-policy`, exposes the writable allowlisted PAM settings as numeric or enabled/disabled inputs, keeps `enforce_for_root` read-only as explanatory text, and saves independently of ordinary runtime configuration fields while still sharing the same page-level save action. Save applies supported changes immediately where possible and lists deferred settings that require service restart.
 
 ---
 

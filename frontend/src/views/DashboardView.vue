@@ -9,17 +9,33 @@ import { usePolling } from '@/composables/usePolling.js'
 import DataTable from '@/components/common/DataTable.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
+import { useAuthStore } from '@/stores/auth.js'
 import { calculateJobProgress, isJobProgressActive } from '@/utils/jobProgress.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
 const { t } = useI18n()
 const router = useRouter()
+const authStore = useAuthStore()
+
+const PASSWORD_WARNING_DISMISS_KEY = 'ecube-password-warning-dismissed-days'
 
 const health = ref({ status: 'unknown', database: 'unknown', active_jobs: 0 })
 const drives = ref([])
 const jobs = ref([])
 const loading = ref(true)
 const error = ref('')
+const dismissedPasswordWarning = ref(sessionStorage.getItem(PASSWORD_WARNING_DISMISS_KEY) || '')
+
+const showPasswordWarning = computed(() => {
+  if (!Number.isInteger(authStore.passwordWarningDays)) return false
+  return String(authStore.passwordWarningDays) !== dismissedPasswordWarning.value
+})
+
+function dismissPasswordWarning() {
+  const value = Number.isInteger(authStore.passwordWarningDays) ? String(authStore.passwordWarningDays) : ''
+  dismissedPasswordWarning.value = value
+  sessionStorage.setItem(PASSWORD_WARNING_DISMISS_KEY, value)
+}
 
 const driveCounts = computed(() => {
   const counts = { DISCONNECTED: 0, DISABLED: 0, AVAILABLE: 0, IN_USE: 0 }
@@ -122,6 +138,11 @@ onUnmounted(() => {
       <button class="btn" @click="refreshSnapshot">{{ t('common.actions.refresh') }}</button>
     </header>
 
+    <div v-if="showPasswordWarning" class="warning-banner">
+      <p>{{ t('dashboard.passwordExpiryWarning', { days: authStore.passwordWarningDays }) }}</p>
+      <button class="btn" type="button" @click="dismissPasswordWarning">{{ t('common.actions.dismiss') }}</button>
+    </div>
+
     <p v-if="error" class="error-banner">{{ error }}</p>
     <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
 
@@ -190,6 +211,18 @@ onUnmounted(() => {
 .view-root {
   display: grid;
   gap: var(--space-lg);
+}
+
+.warning-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-alert-warning-border);
+  border-radius: var(--border-radius-lg);
+  background: var(--color-alert-warning-bg);
+  color: var(--color-alert-warning-text);
 }
 
 .view-header {
