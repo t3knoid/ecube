@@ -83,6 +83,17 @@ def _get_provider() -> OsUserProvider:
     return get_os_user_provider()
 
 
+def _safe_password_policy_rejection_message(message: str) -> str:
+    sanitized = sanitize_error_message(message, "New password does not satisfy the active password policy.")
+    if sanitized in {
+        "Permission or authentication failure",
+        "Operation timed out",
+        "Target device or path was not found",
+    }:
+        return "New password does not satisfy the active password policy."
+    return sanitized
+
+
 def _raise_os_error(exc: OSUserError, *, context: str = "OS operation") -> None:
     """Map an :class:`OSUserError` to an appropriate HTTP error and raise it.
 
@@ -98,6 +109,8 @@ def _raise_os_error(exc: OSUserError, *, context: str = "OS operation") -> None:
 
     if "already exists" in lowered:
         raise HTTPException(status_code=409, detail=msg)
+    if "pam:" in lowered or "bad password" in lowered or "password fails" in lowered:
+        raise HTTPException(status_code=422, detail=_safe_password_policy_rejection_message(msg))
     if "does not exist" in lowered:
         # Distinguish between missing groups (input validation) and other entities.
         # Messages for group validation errors are expected to start with "Group ".
@@ -109,7 +122,10 @@ def _raise_os_error(exc: OSUserError, *, context: str = "OS operation") -> None:
     if "timed out" in lowered:
         raise HTTPException(status_code=504, detail=msg)
 
-    logger.exception("%s failed: %s", context, msg)
+    logger.exception(
+        "OS management operation failed",
+        extra={"operation_context": context},
+    )
     raise HTTPException(status_code=500, detail=msg)
 
 

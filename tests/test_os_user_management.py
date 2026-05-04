@@ -144,6 +144,7 @@ class TestCreateUser:
         calls = [c.args[0] for c in mock_subprocess.call_args_list]
         assert ["sudo", "-n", "/usr/sbin/useradd", "-m", "-N", "-g", "ecube-admins", "testuser"] in calls
         assert ["sudo", "-n", "/usr/sbin/chpasswd"] in calls
+        assert ["sudo", "-n", "/usr/bin/chage", "-M", "90", "-m", "1", "-W", "14", "testuser"] in calls
         # Only one requested group => it is used as the primary group, so no
         # usermod -aG call is required.
         assert not any("/usr/sbin/usermod" in cmd for cmd in calls)
@@ -205,6 +206,29 @@ class TestCreateUser:
 
         calls = [c.args[0] for c in mock_subprocess.call_args_list]
         assert ["sudo", "-n", "/usr/sbin/usermod", "-aG", "ecube-managers", "testuser"] in calls
+
+    @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_create_user_chage_failure_deletes_user(self, mock_pwd, mock_grp, mock_subprocess):
+        mock_pwd.getpwnam.side_effect = [
+            KeyError("no such user"),
+        ]
+        mock_grp.getgrnam.return_value = _make_grp(name="ecube-admins")
+
+        mock_subprocess.side_effect = [
+            _ok_result(),
+            _ok_result(),
+            _fail_result(stderr="chage: permission denied"),
+            _ok_result(),
+        ]
+
+        with pytest.raises(OSUserError, match="chage"):
+            create_user("testuser", "s3cret", groups=["ecube-admins"])
+
+        calls = [c.args[0] for c in mock_subprocess.call_args_list]
+        assert ["sudo", "-n", "/usr/bin/chage", "-M", "90", "-m", "1", "-W", "14", "testuser"] in calls
+        assert ["sudo", "-n", "/usr/sbin/userdel", "-r", "testuser"] in calls
 
     @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
@@ -1098,6 +1122,27 @@ class TestOSUserEndpoints:
         })
         assert resp.status_code == 200
         assert "reset" in resp.json()["message"].lower()
+
+    @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_reset_password_returns_422_for_pam_policy_violation(self, mock_pwd, mock_grp, mock_subprocess, admin_client):
+        mock_pwd.getpwnam.return_value = _make_pw()
+        mock_grp.getgrall.return_value = [
+            _make_grp(name="ecube-admins", members=["testuser"]),
+        ]
+        mock_subprocess.return_value = _fail_result(
+            stderr="chpasswd: PAM: BAD PASSWORD: The password fails the dictionary check"
+        )
+
+        resp = admin_client.put("/admin/os-users/testuser/password", json={
+            "password": "password",
+        })
+
+        assert resp.status_code == 422
+        body = resp.json()
+        assert body["code"] == "HTTP_422"
+        assert body["message"] == "New password does not satisfy the active password policy."
 
     @patch("app.services.os_user_service.subprocess.run")
     def test_create_user_forbidden_in_demo_mode(self, mock_subprocess, admin_client, db, monkeypatch):

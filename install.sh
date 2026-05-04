@@ -1122,7 +1122,7 @@ _configured_usb_mount_base_path() {
 }
 
 _ensure_runtime_host_packages() {
-  local packages=(exfatprogs nfs-common cifs-utils smbclient usbutils util-linux)
+  local packages=(exfatprogs nfs-common cifs-utils smbclient usbutils util-linux passwd libpam-pwquality)
   local missing_packages=()
   local kernel_extra_package=""
   local apt_index_updated=false
@@ -1168,6 +1168,29 @@ _ensure_runtime_host_packages() {
   _update_runtime_package_index
   run apt-get install -y "${missing_packages[@]}"
   ok "Runtime host packages installed: ${missing_packages[*]}"
+}
+
+_install_password_policy_writer_helper() {
+  local helper_dest="/usr/local/bin/ecube-write-pwquality-conf"
+  local script_dir
+  script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+  local helper_src="${script_dir}/deploy/ecube-write-pwquality-conf"
+
+  info "Installing password policy writer helper..."
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    echo "[DRY-RUN] Would install ${helper_src} → ${helper_dest}"
+    return
+  fi
+
+  if [[ ! -f "${helper_src}" ]]; then
+    error "Password policy helper source not found: ${helper_src}"
+    exit 1
+  fi
+
+  install -d -m 0755 /usr/local/bin
+  install -m 0755 -o root -g root "${helper_src}" "${helper_dest}"
+  ok "Password policy writer helper installed: ${helper_dest}"
 }
 
 _prepare_managed_mount_roots() {
@@ -1546,6 +1569,7 @@ _install_os_user_mgmt_sudoers() {
 # /etc/sudoers.d/ecube-user-mgmt
 # Narrowly scoped privilege escalation for the ECUBE service account.
 ecube ALL=(root) NOPASSWD: /usr/sbin/useradd, /usr/sbin/usermod, /usr/sbin/userdel, /usr/sbin/groupadd, /usr/sbin/groupdel, /usr/sbin/chpasswd
+ecube ALL=(root) NOPASSWD: /usr/bin/chage, /usr/local/bin/ecube-write-pwquality-conf
 ecube ALL=(root) NOPASSWD: /bin/mount, /bin/umount, /sbin/mount.nfs, /usr/sbin/mount.nfs, /usr/bin/nsenter, /bin/nsenter
 ecube ALL=(root) NOPASSWD: /bin/sync, /sbin/mkfs.ext4, /sbin/mkfs.exfat
 ecube ALL=(root) NOPASSWD: /bin/mkdir, /bin/chown, /usr/bin/chown
@@ -1870,6 +1894,9 @@ install_backend() {
 
   # 1. System user and USB device access
   _ensure_ecube_user
+
+  # Install the root-owned helper used for atomic pwquality.conf writes.
+  _install_password_policy_writer_helper
 
   # Ensure setup endpoints can manage OS users/groups without interactive sudo.
   _install_os_user_mgmt_sudoers
@@ -2377,6 +2404,11 @@ do_uninstall() {
   if [[ -f /etc/sudoers.d/ecube-user-mgmt ]]; then
     run rm -f /etc/sudoers.d/ecube-user-mgmt
     ok "/etc/sudoers.d/ecube-user-mgmt removed"
+  fi
+
+  if [[ -f /usr/local/bin/ecube-write-pwquality-conf ]]; then
+    run rm -f /usr/local/bin/ecube-write-pwquality-conf
+    ok "/usr/local/bin/ecube-write-pwquality-conf removed"
   fi
 
   # Remove ECUBE PAM configuration.

@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+target_path="/etc/security/pwquality.conf"
+target_dir="$(dirname -- "$target_path")"
+temp_path="$(mktemp "${target_dir}/.pwquality.conf.tmp.XXXXXX")"
+
+cleanup() {
+  rm -f -- "$temp_path"
+}
+
+trap cleanup EXIT
+
+cat > "$temp_path"
+chown root:root "$temp_path"
+chmod 0644 "$temp_path"
+mv -f "$temp_path" "$target_path"

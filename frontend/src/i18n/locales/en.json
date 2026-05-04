@@ -23,11 +23,24 @@
   "auth": {
     "login": "Log In",
     "logout": "Log Out",
+    "changePassword": "Change Password",
     "loggingIn": "Logging in…",
     "username": "Username",
     "password": "Password",
+    "newPassword": "New Password",
     "confirmPassword": "Confirm Password",
     "passwordMismatch": "Passwords do not match",
+    "passwordExpiredTitle": "Password Change Required",
+    "passwordExpiredMessage": "Your password has expired. Set a new password to continue.",
+    "passwordPolicy": {
+      "title": "Password requirements",
+      "minLength": "At least 14 characters",
+      "characterClasses": "Use at least 3 character classes",
+      "maxRepeat": "Avoid more than 3 repeated characters in a row",
+      "maxSequence": "Avoid sequences longer than 4 characters",
+      "usernameCheck": "Must not contain your username",
+      "dictionaryCheck": "Dictionary words are rejected"
+    },
     "sessionExpired": "Session Expired",
     "sessionExpiredMessage": "Your session has expired. Please log in again to continue.",
     "demoAccess": "Demo Access",
@@ -530,6 +543,7 @@
   },
   "dashboard": {
     "systemHealth": "System Health",
+    "passwordExpiryWarning": "Your password will expire in {days} day | Your password will expire in {days} days",
     "driveSummary": "Drive Summary",
     "project": "Project",
     "progress": "Progress",
@@ -575,6 +589,7 @@
       "logging": "Logging",
       "shares": "Shares",
       "databasePool": "Database Connection Pool",
+      "passwordPolicy": "Password Policy",
       "copyJobs": "Copy Jobs",
       "webhooks": "Webhooks"
     },
@@ -669,6 +684,18 @@
       "title": "Restart ECUBE service?",
       "body": "Some configuration changes require restarting the ECUBE service to take effect. Restart now?"
     },
+    "passwordPolicy": {
+      "minlen": "Minimum password length",
+      "minclass": "Minimum character classes",
+      "maxrepeat": "Max consecutive identical characters",
+      "maxsequence": "Max monotonic sequence length",
+      "maxclassrepeat": "Max same-class run length",
+      "dictcheck": "Dictionary check",
+      "usercheck": "Reject passwords containing username",
+      "difok": "Minimum characters different from old password",
+      "retry": "Retry attempts",
+      "enforceForRoot": "enforce_for_root is always enforced and cannot be disabled."
+    },
     "errors": {
       "loadFailed": "Failed to load configuration.",
       "saveFailed": "Failed to save configuration.",
@@ -700,6 +727,7 @@
       "complete": "Complete",
       "create": "Create",
       "refresh": "Refresh",
+      "dismiss": "Dismiss",
       "close": "Close",
       "confirm": "Confirm",
       "back": "Back",
@@ -727,7 +755,9 @@
       "id": "ID",
       "traceReferencePrefix": "Ref:",
       "progress": "Progress",
-      "protected": "Protected"
+      "protected": "Protected",
+      "enabled": "Enabled",
+      "disabled": "Disabled"
     },
     "plural": {
       "file": "no files | 1 file | {count} files",

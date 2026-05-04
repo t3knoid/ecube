@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   route: { query: {} },
   push: vi.fn(),
   login: vi.fn(),
+  changePassword: vi.fn(),
   getPublicAuthConfig: vi.fn(),
   theme: { currentLogo: null, currentLogoAlt: "Organization Logo" },
 }));
@@ -18,7 +19,11 @@ vi.mock("vue-router", () => ({
 }));
 
 vi.mock("@/stores/auth.js", () => ({
-  useAuthStore: () => ({ login: mocks.login }),
+  useAuthStore: () => ({
+    login: mocks.login,
+    changePassword: mocks.changePassword,
+    passwordWarningDays: null,
+  }),
 }));
 
 vi.mock("@/stores/theme.js", () => ({
@@ -34,6 +39,7 @@ describe("LoginView logo behavior", () => {
     mocks.route.query = {};
     mocks.push.mockReset();
     mocks.login.mockReset();
+    mocks.changePassword.mockReset();
     mocks.getPublicAuthConfig.mockReset();
     mocks.getPublicAuthConfig.mockResolvedValue({
       demo_mode_enabled: false,
@@ -126,5 +132,77 @@ describe("LoginView logo behavior", () => {
     expect(banner.exists()).toBe(true);
     expect(banner.text()).toContain(i18n.global.t("setup.alreadyInitializedTitle"));
     expect(banner.text()).toContain(i18n.global.t("setup.alreadyInitialized"));
+  });
+
+  it("opens the forced password change dialog when the backend reports an expired password", async () => {
+    mocks.login.mockRejectedValue({
+      response: {
+        data: {
+          reason: "password_expired",
+          message: "Password expired",
+        },
+      },
+    });
+    mocks.changePassword.mockResolvedValue(undefined);
+
+    const wrapper = mount(LoginView, { attachTo: document.body, global: { plugins: [i18n] } });
+    await flushPromises();
+
+    await wrapper.find('#username').setValue('operator1');
+    await wrapper.find('#password').setValue('Old#123456');
+    await wrapper.find('form').trigger('submit.prevent');
+    await flushPromises();
+
+    expect(document.body.textContent).toContain(i18n.global.t('auth.passwordExpiredTitle'));
+
+    const dialogRoot = document.body;
+    dialogRoot.querySelector('#password-change-new').value = 'New#123456789';
+    dialogRoot.querySelector('#password-change-new').dispatchEvent(new Event('input'));
+    dialogRoot.querySelector('#password-change-confirm').value = 'New#123456789';
+    dialogRoot.querySelector('#password-change-confirm').dispatchEvent(new Event('input'));
+    await nextTick();
+
+    dialogRoot.querySelector('.dialog-actions .btn.btn-primary').click();
+    await flushPromises();
+
+    expect(mocks.changePassword).toHaveBeenCalledWith('operator1', 'Old#123456', 'New#123456789');
+    expect(mocks.push).toHaveBeenCalledWith('/');
+    wrapper.unmount();
+  });
+
+  it("does not open the forced password change dialog for demo accounts when password changes are disabled", async () => {
+    mocks.getPublicAuthConfig.mockResolvedValue({
+      demo_mode_enabled: true,
+      login_message: "Demo mode",
+      demo_accounts: [
+        {
+          username: "demo_manager",
+          label: "Manager demo",
+          description: "Review mounts, drives, and jobs.",
+        },
+      ],
+      shared_password: "demo",
+      password_change_allowed: false,
+    });
+    mocks.login.mockRejectedValue({
+      response: {
+        data: {
+          reason: "password_expired",
+          message: "Password expired",
+        },
+      },
+    });
+
+    const wrapper = mount(LoginView, { attachTo: document.body, global: { plugins: [i18n] } });
+    await flushPromises();
+
+    await wrapper.find('#username').setValue('demo_manager');
+    await wrapper.find('form').trigger('submit.prevent');
+    await flushPromises();
+
+    expect(document.body.textContent).not.toContain(i18n.global.t('auth.passwordExpiredTitle'));
+    expect(wrapper.text()).toContain(i18n.global.t('auth.demoPasswordManaged'));
+    expect(mocks.changePassword).not.toHaveBeenCalled();
+    wrapper.unmount();
   });
 });

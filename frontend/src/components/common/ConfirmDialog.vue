@@ -34,6 +34,14 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  confirmDisabled: {
+    type: Boolean,
+    default: false,
+  },
+  dismissible: {
+    type: Boolean,
+    default: true,
+  },
 })
 
 const emit = defineEmits(['update:modelValue', 'confirm', 'cancel'])
@@ -55,6 +63,13 @@ const describedBy = computed(() => {
 function close() {
   emit('update:modelValue', false)
   emit('cancel')
+}
+
+function dismiss() {
+  if (!props.dismissible) {
+    return
+  }
+  close()
 }
 
 function confirm() {
@@ -121,7 +136,7 @@ function onKeydown(event) {
 
   if (event.key === 'Escape') {
     event.preventDefault()
-    close()
+    dismiss()
   }
 }
 
@@ -151,7 +166,7 @@ onUnmounted(() => {
 
 <template>
   <teleport to="body">
-    <div v-if="modelValue" class="dialog-overlay" @click.self="close">
+    <div v-if="modelValue" class="dialog-overlay" @click.self="dismiss">
       <div
         ref="dialogPanelRef"
         class="dialog-panel"
@@ -170,7 +185,7 @@ onUnmounted(() => {
           <button
             class="btn"
             :class="dangerous ? 'btn-danger' : 'btn-primary'"
-            :disabled="busy"
+            :disabled="busy || confirmDisabled"
             @click="confirm"
           >
             {{ confirmLabel }}
