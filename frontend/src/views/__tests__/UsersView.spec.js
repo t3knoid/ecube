@@ -417,4 +417,50 @@ describe('UsersView existing OS-user confirmation flow', () => {
     const resetButtons = wrapper.findAll('button').filter((node) => node.text() === i18n.global.t('users.resetPassword'))
     expect(resetButtons).toHaveLength(0)
   })
+
+  it('uses the shared set password dialog when resetting a user password', async () => {
+    mocks.getUsers.mockResolvedValue({
+      users: [{ username: 'frank', roles: ['admin'] }],
+    })
+    mocks.getOsUsers.mockResolvedValue({
+      users: [{
+        username: 'frank',
+        uid: 1001,
+        gid: 1001,
+        home: '/home/frank',
+        shell: '/bin/bash',
+        groups: ['ecube-admins'],
+      }],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const resetButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('users.resetPassword'))
+    expect(resetButton).toBeTruthy()
+    await resetButton.trigger('click')
+    await flushPromises()
+
+    expect(findDialogPanelByTitle(wrapper, i18n.global.t('users.setPassword'))).toBeTruthy()
+    expect(wrapper.find('#set-password-field').exists()).toBe(true)
+    expect(wrapper.find('#confirm-password-field').exists()).toBe(true)
+
+    await wrapper.find('#set-password-field').setValue('StrongPass#123')
+    await wrapper.find('#confirm-password-field').setValue('StrongPass#123')
+    await flushPromises()
+
+    const passwordPanel = findDialogPanelByTitle(wrapper, i18n.global.t('users.setPassword'))
+    expect(passwordPanel).toBeTruthy()
+    const setPasswordButton = passwordPanel
+      .findAll('.dialog-actions button')
+      .find((node) => node.text() === i18n.global.t('users.setPassword'))
+    expect(setPasswordButton).toBeTruthy()
+    await setPasswordButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.resetOsUserPassword).toHaveBeenCalledWith('frank', {
+      password: 'StrongPass#123',
+    })
+    expect(findDialogPanelByTitle(wrapper, i18n.global.t('users.setPassword'))).toBeFalsy()
+  })
 })

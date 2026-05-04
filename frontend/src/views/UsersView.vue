@@ -29,8 +29,6 @@ const publicAuthConfig = ref({
 })
 
 const osUsers = ref([])
-const passwordResetTarget = ref('')
-const passwordResetValue = ref('')
 
 const osUserPage = ref(1)
 const pageSize = ref(10)
@@ -399,53 +397,23 @@ function cancelPasswordDialog() {
   showPassword.value = false
 }
 
-async function submitResetPassword(username) {
-  if (isDemoPasswordLockedUser(username)) {
-    error.value = t('users.resetPasswordUnavailable')
-    return
-  }
-  if (!passwordResetValue.value) return
-  saving.value = true
-  error.value = ''
-  try {
-    await resetOsUserPassword(username, { password: passwordResetValue.value })
-    passwordResetTarget.value = ''
-    passwordResetValue.value = ''
-  } catch (err) {
-    const status = err?.response?.status
-    const code = err?.response?.data?.code
-    if (status === 403 || code === 'FORBIDDEN' || code === 'HTTP_403') {
-      error.value = t('common.errors.insufficientPermissions')
-    } else if (status === 409 || code === 'CONFLICT' || code === 'HTTP_409') {
-      error.value = t('common.errors.requestConflict')
-    } else if (status === 422 || code === 'VALIDATION_ERROR' || code === 'HTTP_422') {
-      error.value = t('common.errors.validationFailed')
-    } else if (!status) {
-      error.value = t('common.errors.networkError')
-    } else if (status >= 500) {
-      error.value = t('common.errors.serverError', { status })
-    } else {
-      error.value = t('common.errors.validationFailed')
-    }
-  } finally {
-    saving.value = false
-  }
-}
-
-function cancelResetPassword() {
-  passwordResetTarget.value = ''
-  passwordResetValue.value = ''
-}
-
 function openResetPassword(username) {
   if (isDemoPasswordLockedUser(username)) {
-    passwordResetTarget.value = ''
-    passwordResetValue.value = ''
+    pendingUsernameForPassword.value = null
+    pendingCreateUserPayload.value = null
+    passwordDialog.value = false
+    setPasswordForm.value = { password: '', confirmPassword: '' }
+    showPassword.value = false
     error.value = t('users.resetPasswordUnavailable')
     return
   }
-  passwordResetTarget.value = username
-  passwordResetValue.value = ''
+  error.value = ''
+  pendingCreateUserPayload.value = null
+  pendingExistingUserPayload.value = null
+  pendingUsernameForPassword.value = username
+  setPasswordForm.value = { password: '', confirmPassword: '' }
+  showPassword.value = false
+  passwordDialog.value = true
 }
 
 onMounted(loadAll)
@@ -482,11 +450,6 @@ onMounted(loadAll)
           <div class="inline-reset">
             <button v-if="canResetPassword(row)" class="btn" @click="openResetPassword(row.username)">{{ t('users.resetPassword') }}</button>
             <span v-else class="muted">{{ t('users.resetPasswordUnavailable') }}</span>
-            <div v-if="canResetPassword(row) && passwordResetTarget === row.username" class="inline-form">
-              <input v-model="passwordResetValue" type="password" :placeholder="t('auth.password')" :aria-label="t('users.resetPassword')" autocomplete="new-password" />
-              <button class="btn btn-primary" @click="submitResetPassword(row.username)">{{ t('users.savePassword') }}</button>
-              <button class="btn" @click="cancelResetPassword">{{ t('common.actions.cancel') }}</button>
-            </div>
           </div>
         </template>
       </DataTable>
