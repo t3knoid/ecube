@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
@@ -36,8 +36,15 @@ const db = ref({
 const admin = ref({
   username: 'admin',
   password: '',
+  confirmPassword: '',
   trust_proxy_headers: false,
 })
+
+const adminPasswordMismatch = computed(() => (
+  !!admin.value.password
+  && !!admin.value.confirmPassword
+  && admin.value.password !== admin.value.confirmPassword
+))
 
 const connectionOk = ref(false)
 const provisionOk = ref(false)
@@ -75,7 +82,7 @@ function step2Valid() {
 }
 
 function step3Valid() {
-  return !!admin.value.username && !!admin.value.password
+  return !!admin.value.username && !!admin.value.password && !!admin.value.confirmPassword && !adminPasswordMismatch.value
 }
 
 async function runConnectDatabase() {
@@ -273,7 +280,24 @@ onMounted(async () => {
         <label for="admin-username">{{ t('auth.username') }}</label>
         <input id="admin-username" v-model="admin.username" type="text" />
         <label for="admin-password">{{ t('auth.password') }}</label>
-        <input id="admin-password" v-model="admin.password" type="password" autocomplete="new-password" />
+        <input
+          id="admin-password"
+          v-model="admin.password"
+          type="password"
+          autocomplete="new-password"
+          :aria-invalid="adminPasswordMismatch ? 'true' : 'false'"
+          :aria-describedby="adminPasswordMismatch ? 'admin-password-mismatch' : undefined"
+        />
+        <label for="admin-password-confirm">{{ t('auth.confirmPassword') }}</label>
+        <input
+          id="admin-password-confirm"
+          v-model="admin.confirmPassword"
+          type="password"
+          autocomplete="new-password"
+          :aria-invalid="adminPasswordMismatch ? 'true' : 'false'"
+          :aria-describedby="adminPasswordMismatch ? 'admin-password-mismatch' : undefined"
+        />
+        <p v-if="adminPasswordMismatch" id="admin-password-mismatch" class="error-banner">{{ t('auth.passwordMismatch') }}</p>
         <button class="btn" :disabled="busy || !step3Valid() || complete" @click="runInitializeSetup">
           {{ t('setup.createAdmin') }}
         </button>

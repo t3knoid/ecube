@@ -37,7 +37,7 @@
 | UC-1.5 | Update database connection settings | Admin | admin |
 | UC-1.6 | Initialize system (create first admin) | Any (unauthenticated, one-time) | — |
 
-**UI Implication:** A setup wizard flow that detects uninitialized state and guides through UC-1.2 → UC-1.3 → UC-1.6 sequentially.
+**UI Implication:** A setup wizard flow that detects uninitialized state and guides through UC-1.2 → UC-1.3 → UC-1.6 sequentially. The final admin-account step now requires the operator to enter the password twice and blocks completion with a visible validation message until the password and confirmation values match.
 
 ---
 

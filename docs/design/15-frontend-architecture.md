@@ -440,7 +440,7 @@ Vue I18n 9.x provides the localization infrastructure. All user-visible strings 
 
 | Component | Wireframe Screen | Use Cases | Key Features |
 |-----------|-----------------|-----------|-------------|
-| `SetupWizardView.vue` | Screen 1 | UC-1.1 – UC-1.6 | Multi-step wizard (DB test → provision → reverse-proxy settings → create admin), submits `trust_proxy_headers`, and handles informational `already_initialized` setup responses; renders outside AppShell |
+| `SetupWizardView.vue` | Screen 1 | UC-1.1 – UC-1.6 | Multi-step wizard (DB test → provision → reverse-proxy settings → create admin), requires matching admin password and confirmation values before setup completion, submits `trust_proxy_headers`, and handles informational `already_initialized` setup responses; renders outside AppShell |
 | `LoginView.vue` | Screen 2 | UC-2.1 – UC-2.2 | Username/password form; error display; renders outside AppShell |
 | `DashboardView.vue` | Screen 3 | UC-8.1 – UC-8.2 | Summary cards: drive counts by state, active jobs, system health; polls introspection |
 | `DrivesView.vue` | Screen 4a | UC-4.1 – UC-4.3 | Drive list table with status badges; refresh/rescan button |
