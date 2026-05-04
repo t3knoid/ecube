@@ -13,6 +13,12 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
   const validatePayloads = []
 
   await routeJson(page, '**/api/jobs**', [])
+  await routeJson(page, '**/api/browse**', {
+    entries: [
+      { name: 'evidence', type: 'directory', size_bytes: null, modified_at: '2026-05-03T12:00:00Z' },
+    ],
+    has_more: false,
+  })
 
   await page.route('**/api/mounts', async (route) => {
     if (route.request().method() === 'GET') {
@@ -143,6 +149,10 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
     },
   ])
 
+  await page.getByRole('row').filter({ has: page.getByText('CASE-2026-001') }).getByRole('button', { name: 'Browse mount CASE-2026-001 contents' }).click()
+  await expect(page.getByRole('heading', { name: 'Browse mount CASE-2026-001 contents' })).toBeVisible()
+  await expect(page.locator('.breadcrumb').getByRole('button', { name: '/' })).toBeVisible()
+
   await page.getByRole('row').filter({ has: page.getByText('CASE-2026-001') }).getByRole('button', { name: '11' }).click()
   await expect(page).toHaveURL(/\/mounts\/11$/)
   await expect(page.getByRole('heading', { name: 'Mount Detail #11' })).toBeVisible()
@@ -210,13 +220,19 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
   await expectNoCriticalA11yViolations(page)
 })
 
-test('mounts mobile overflow menu stays visible without expanding the row', async ({ page }) => {
+test('mounts mobile mounted rows browse from the project value without expanding the row', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await setupAuthenticatedPage(page, ['admin'])
 
   const mounts = [{ id: 10, type: 'SMB', remote_path: '//server/project', local_mount_point: '/smb/project', project_id: 'CASE-2026-001', status: 'MOUNTED' }]
 
   await routeJson(page, '**/api/jobs**', [])
+  await routeJson(page, '**/api/browse**', {
+    entries: [
+      { name: 'Reports', type: 'directory', size_bytes: null, modified_at: '2026-05-03T12:00:00Z' },
+    ],
+    has_more: false,
+  })
 
   await page.route('**/api/mounts', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mounts) })
@@ -228,21 +244,12 @@ test('mounts mobile overflow menu stays visible without expanding the row', asyn
   const row = page.locator('tbody tr').first()
   const rowBoxBefore = await row.boundingBox()
 
-  const toggle = page.getByLabel('CASE-2026-001 mount actions')
-  await toggle.click()
-
-  const popover = page.locator('.row-actions-popover').first()
-  await expect(popover).toBeVisible()
-  const popoverBox = await popover.boundingBox()
+  await page.getByRole('row').filter({ has: page.getByText('CASE-2026-001') }).getByRole('button', { name: 'Browse mount CASE-2026-001 contents' }).click()
+  await expect(page.getByRole('heading', { name: 'Browse mount CASE-2026-001 contents' })).toBeVisible()
 
   const rowBoxAfter = await row.boundingBox()
 
   expect(rowBoxBefore).not.toBeNull()
-  expect(popoverBox).not.toBeNull()
   expect(rowBoxAfter).not.toBeNull()
-  expect(popoverBox.x).toBeGreaterThanOrEqual(0)
-  expect(popoverBox.y).toBeGreaterThanOrEqual(0)
-  expect(popoverBox.x + popoverBox.width).toBeLessThanOrEqual(390)
-  expect(popoverBox.y + popoverBox.height).toBeLessThanOrEqual(844)
   expect(Math.abs(rowBoxAfter.height - rowBoxBefore.height)).toBeLessThanOrEqual(1)
 })

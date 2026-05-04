@@ -86,6 +86,11 @@ const nfsClientVersionSelectOptions = computed(() => [
   ...nfsClientVersionOptions.value.map((option) => ({ value: option, label: option })),
 ])
 
+function mountBrowseTitle(record) {
+  if (!record?.project_id) return t('browse.browseMountContents')
+  return t('browse.browseMountContentsTitle', { project: normalizeProjectId(record.project_id) || '-' })
+}
+
 function toIso(value) {
   if (!value) return '-'
   const parsed = new Date(value)
@@ -449,10 +454,10 @@ onBeforeUnmount(() => {
 
     <section v-if="browseExpanded && mountRecord?.id" class="browse-panel">
       <header class="browse-panel-header">
-        <h2>{{ t('browse.browseMountContents') }}</h2>
+        <h2>{{ mountBrowseTitle(mountRecord) }}</h2>
         <button class="btn" @click="browseExpanded = false">{{ t('common.actions.close') }}</button>
       </header>
-      <DirectoryBrowser :mount-id="mountRecord.id" :root-label="mountRecord.project_id || t('mounts.browse')" />
+      <DirectoryBrowser :mount-id="mountRecord.id" root-label="" :show-root-crumb-at-root="true" />
     </section>
 
     <ConfirmDialog

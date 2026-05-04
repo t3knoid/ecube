@@ -81,8 +81,8 @@ function mountView() {
           `,
         },
         DirectoryBrowser: {
-          props: ['mountPath', 'mountId', 'rootLabel'],
-          template: '<div class="directory-browser-stub">{{ mountId ?? mountPath }}|{{ rootLabel }}</div>',
+          props: ['mountPath', 'mountId', 'rootLabel', 'showRootCrumbAtRoot'],
+          template: '<div class="directory-browser-stub">{{ mountId ?? mountPath }}|{{ rootLabel }}|{{ showRootCrumbAtRoot }}</div>',
         },
         StatusBadge: {
           props: ['status'],
@@ -144,8 +144,8 @@ describe('MountDetailView', () => {
     await browseButton.trigger('click')
     await flushPromises()
 
-    expect(wrapper.find('.directory-browser-stub').text()).toContain('11')
-    expect(wrapper.find('.directory-browser-stub').text()).toContain('PROJ-011')
+    expect(wrapper.text()).toContain('Browse mount PROJ-011 contents')
+    expect(wrapper.find('.directory-browser-stub').text()).toBe('11||true')
   })
 
   it('opens the edit dialog prefilled and submits updates through validateMount and updateMount', async () => {
@@ -252,7 +252,6 @@ describe('MountDetailView', () => {
     await browseButton.trigger('click')
     await flushPromises()
 
-    expect(wrapper.find('.directory-browser-stub').text()).toContain('11')
-    expect(wrapper.find('.directory-browser-stub').text()).toContain('PROJ-011')
+    expect(wrapper.find('.directory-browser-stub').text()).toBe('11||true')
   })
 })
