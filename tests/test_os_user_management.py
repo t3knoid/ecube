@@ -1142,7 +1142,7 @@ class TestOSUserEndpoints:
         assert resp.status_code == 422
         body = resp.json()
         assert body["code"] == "HTTP_422"
-        assert "bad password" in body["message"].lower()
+        assert body["message"] == "New password does not satisfy the active password policy."
 
     @patch("app.services.os_user_service.subprocess.run")
     def test_create_user_forbidden_in_demo_mode(self, mock_subprocess, admin_client, db, monkeypatch):
