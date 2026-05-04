@@ -655,7 +655,7 @@ Progress label or percentage
 <ol><li>
 <code>Job details</code> — project, evidence number, optional notes, and thread count
 </li><li>
-<code>Source</code> — the mounted project source and source path
+<code>Source</code> — the mounted project source, a trusted source path field, and a folder browser for the selected mount
 </li><li>
 <code>Destination</code> — the eligible mounted USB device for the selected project
 </li><li>
@@ -684,7 +684,7 @@ If you need a job-specific webhook, enter the <code>Webhook callback URL</code> 
 If you enable <code>Run job immediately</code>, the job will start as soon as creation succeeds
 </li></ul>
 <p>For <code>thread count</code>, start with the default value unless your administrator has given you a different recommendation. If you need to change it, a good rule is to choose a value no higher than the number of CPUs visible to the operating system and reduce it again if the host becomes sluggish or copy speed does not improve.</p>
-<p>The source path is interpreted inside the selected mounted share. Entering only / uses the root of that share, and attempts to navigate outside the selected share are rejected before the job is created.</p>
+<p>The source path is interpreted inside the selected mounted share. Entering only / uses the root of that share, and attempts to navigate outside the selected share are rejected before the job is created. If you prefer not to type the path manually, use <code>Browse folders</code> in the <code>Source</code> section after selecting a mount. As you move through the mounted share, ECUBE updates the existing <code>Source path</code> field live, and the browser shows a <code>..</code> row whenever you can move back up to the parent folder.</p>
 <h2 id="6-3-opening-a-job">6.3 Opening a Job</h2>
 <p>Open a job to view details and perform follow-up actions.</p>
 <p>The Jobs list hides archived jobs by default. To review archived work, enable <code>Show Archived Jobs</code> to bring those records back into the list.</p>
@@ -1630,7 +1630,9 @@ Click <code>Create Job</code> to open the grouped dialog.
 </li><li>
 Select the project first.
 </li><li>
-Choose the filtered source mount and primary destination drive, then use the <code>Overflow drives</code> panel to reserve any additional mounted destination drives in the order ECUBE should use them if the job overflows.
+Choose the filtered source mount. Enter the source path manually, or click <code>Browse folders</code>, navigate inside the mounted share while the <code>Source path</code> field updates live, and use <code>..</code> when you need to move to the parent folder.
+</li><li>
+Choose the primary destination drive, then use the <code>Overflow drives</code> panel to reserve any additional mounted destination drives in the order ECUBE should use them if the job overflows.
 </li><li>
 Create the job, or enable <code>Run job immediately</code> if you want it to start as soon as creation succeeds.
 </li><li>

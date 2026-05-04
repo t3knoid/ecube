@@ -7,6 +7,7 @@ import { hasArchivedJobs, listJobs, createJob, startJob, pauseJob } from '@/api/
 import { getDrives } from '@/api/drives.js'
 import { getMounts } from '@/api/mounts.js'
 import { normalizeErrorMessage } from '@/api/client.js'
+import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
@@ -34,6 +35,7 @@ const createDialogError = ref('')
 const compatibilityNote = ref('')
 
 const showCreateDialog = ref(false)
+const showSourceBrowser = ref(false)
 const showPausePendingDialog = ref(false)
 const pausePendingJobId = ref(null)
 const createDialogRef = ref(null)
@@ -229,6 +231,7 @@ function formatMountLabel(mount) {
 }
 
 function resetForm() {
+  showSourceBrowser.value = false
   form.value = {
     project_id: '',
     evidence_number: '',
@@ -241,6 +244,11 @@ function resetForm() {
     callback_url: '',
     run_immediately: false,
   }
+}
+
+function toggleSourceBrowser() {
+  if (!canBrowseSelectedMount.value) return
+  showSourceBrowser.value = !showSourceBrowser.value
 }
 
 function trapFocusWithin(event, container) {
@@ -305,6 +313,12 @@ const eligibleMounts = computed(() => {
       && normalizeProjectId(mount?.project_id) === selectedProject.value,
   )
 })
+
+const selectedMountRecord = computed(() => (
+  eligibleMounts.value.find((mount) => Number(mount.id) === Number(form.value.mount_id)) || null
+))
+
+const canBrowseSelectedMount = computed(() => Number.isInteger(Number(selectedMountRecord.value?.id || NaN)))
 
 const eligibleDrives = computed(() => {
   if (!projectSelected.value) return []
@@ -636,6 +650,10 @@ watch(
   },
 )
 
+watch(() => form.value.mount_id, () => {
+  showSourceBrowser.value = false
+})
+
 watch(showArchivedJobs, async (nextValue) => {
   page.value = 1
   await loadJobs()
@@ -858,6 +876,28 @@ onBeforeUnmount(() => {
 
                 <label for="job-source-path">{{ t('jobs.sourcePath') }}</label>
                 <input id="job-source-path" v-model="form.source_path" type="text" :disabled="!projectSelected" :placeholder="t('jobs.sourcePathHint')" />
+                <div class="source-browser-actions">
+                  <button
+                    id="job-source-browse-toggle"
+                    type="button"
+                    class="btn"
+                    :disabled="!canBrowseSelectedMount"
+                    @click="toggleSourceBrowser"
+                  >
+                    {{ showSourceBrowser ? t('common.actions.close') : t('jobs.browseSourcePath') }}
+                  </button>
+                </div>
+
+                <div v-if="showSourceBrowser && selectedMountRecord" class="source-browser-content">
+                  <DirectoryBrowser
+                    v-model:current-directory="form.source_path"
+                    :mount-id="Number(selectedMountRecord.id)"
+                    root-label=""
+                    :directories-only="true"
+                    :show-breadcrumb="false"
+                    :show-parent-entry="true"
+                  />
+                </div>
               </fieldset>
 
               <fieldset class="dialog-group">
@@ -959,6 +999,15 @@ onBeforeUnmount(() => {
 
 .field-hint {
   margin-top: calc(var(--space-xs) * -1);
+}
+
+.source-browser-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.source-browser-content {
+  margin-top: var(--space-sm);
 }
 
 .overflow-panel {

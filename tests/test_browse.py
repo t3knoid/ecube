@@ -150,6 +150,34 @@ class TestBrowseHappyPath:
         assert d2["page"] == 2
         assert d2["has_more"] is False
 
+    def test_browse_directories_only_paginates_matching_directories(self, client, db, tmp_path):
+        """Directory-only browsing paginates directories rather than mixed raw entries."""
+        mount_point = str(tmp_path)
+        (tmp_path / "file_00.txt").write_text("a")
+        (tmp_path / "file_01.txt").write_text("b")
+        (tmp_path / "alpha").mkdir()
+        (tmp_path / "beta").mkdir()
+
+        _make_network_mount(db, mount_point)
+
+        with patch("app.config.settings.browse_allowed_prefixes", [str(tmp_path)]):
+            response_page_1 = client.get(f"/browse?path={mount_point}&directories_only=true&page=1&page_size=1")
+            response_page_2 = client.get(f"/browse?path={mount_point}&directories_only=true&page=2&page_size=1")
+
+        assert response_page_1.status_code == 200
+        assert response_page_2.status_code == 200
+
+        data_page_1 = response_page_1.json()
+        data_page_2 = response_page_2.json()
+
+        assert len(data_page_1["entries"]) == 1
+        assert len(data_page_2["entries"]) == 1
+        assert all(entry["type"] == "directory" for entry in data_page_1["entries"])
+        assert all(entry["type"] == "directory" for entry in data_page_2["entries"])
+        assert {data_page_1["entries"][0]["name"], data_page_2["entries"][0]["name"]} == {"alpha", "beta"}
+        assert data_page_1["has_more"] is True
+        assert data_page_2["has_more"] is False
+
     def test_browse_empty_directory(self, client, db, tmp_path):
         """Browsing an empty directory returns entries=[] and total=0."""
         mount_point = str(tmp_path)
