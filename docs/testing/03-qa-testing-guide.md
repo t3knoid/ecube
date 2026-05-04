@@ -1551,7 +1551,7 @@ Setup endpoints are unauthenticated during first-run.
 | # | Test | How | Expected |
 |---|------|-----|----------|
 | 1 | Status — not initialized | `GET /setup/status` on fresh database | 200, `{"initialized": false}` |
-| 2 | Initialize | `POST /setup/initialize` with valid username and password | 200, returns message, username, groups_created |
+| 2 | Initialize | Complete the setup wizard with matching admin password and confirmation values | 200, returns message, username, groups_created |
 | 3 | Status — initialized | `GET /setup/status` after initialization | 200, `{"initialized": true}` |
 | 4 | Re-initialize informational | `POST /setup/initialize` again | 200, status=`already_initialized` |
 | 5 | Invalid username | `POST /setup/initialize` with uppercase or special chars | 422 |
@@ -1565,6 +1565,7 @@ Setup endpoints are unauthenticated during first-run.
 | 13 | Runtime env target consistency | Validate running service env file target and setup persistence target are the same (`ECUBE_ENV_FILE`) | Runtime env file is updated, not a workspace-relative `.env` |
 | 14 | Uninstall drop fails closed on invalid target | Run `install.sh --uninstall --drop-database` with missing/invalid/maintenance `DATABASE_URL` | Installer exits non-zero with explicit drop-target error; uninstall does not silently continue |
 | 15 | Setup-required API redirect | While using a normal UI screen, trigger a backend response with status `503`, code `HTTP_503`, and message `Database is not configured yet. Complete setup first.` | The browser redirects to `/setup` and the operator is not left only with the generic server-error toast |
+| 16 | Setup password confirmation mismatch | In the final setup wizard step, enter different values in the admin password and confirmation fields | The wizard shows a password-mismatch validation message and does not submit setup until the two values match |
 
 ### 12.12 Chain-of-Custody Handoff
 

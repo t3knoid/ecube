@@ -102,6 +102,7 @@ describe('SetupWizardView existing admin reconciliation', () => {
     await flushPromises()
 
     await wrapper.find('#admin-password').setValue('Admin#123')
+    await wrapper.find('#admin-password-confirm').setValue('Admin#123')
     await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('setup.createAdmin')).trigger('click')
     await flushPromises()
 
@@ -145,6 +146,7 @@ describe('SetupWizardView existing admin reconciliation', () => {
     await flushPromises()
 
     await wrapper.find('#admin-password').setValue('Admin#123')
+    await wrapper.find('#admin-password-confirm').setValue('Admin#123')
     await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('setup.createAdmin')).trigger('click')
     await flushPromises()
 
@@ -153,6 +155,41 @@ describe('SetupWizardView existing admin reconciliation', () => {
       password: 'Admin#123',
       trust_proxy_headers: true,
     })
+  })
+
+  it('blocks setup completion when the admin password confirmation does not match', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.find('#db-admin-user').setValue('postgres')
+    await wrapper.find('#db-admin-pass').setValue('DbAdmin#123')
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('setup.connectDatabase')).trigger('click')
+    await flushPromises()
+
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.next')).trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#app-db-pass').setValue('AppDb#123')
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('setup.provisionDb')).trigger('click')
+    await flushPromises()
+
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.next')).trigger('click')
+    await flushPromises()
+
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.next')).trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#admin-password').setValue('Admin#123')
+    await wrapper.find('#admin-password-confirm').setValue('Admin#456')
+
+    const createButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('setup.createAdmin'))
+    expect(createButton.attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).toContain(i18n.global.t('auth.passwordMismatch'))
+
+    await createButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.initializeSetup).not.toHaveBeenCalled()
   })
 
   it('redirects already-initialized systems to login without showing a setup error', async () => {

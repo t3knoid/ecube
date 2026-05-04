@@ -180,7 +180,7 @@ The setup wizard walks through:
 1. Testing database connectivity
 2. Provisioning the application database
 3. Choosing reverse-proxy client IP behavior (`TRUST_PROXY_HEADERS`)
-4. Creating the first administrative account
+4. Creating the first administrative account by entering the password twice for confirmation
 5. Completing setup and returning to login
 
 For direct/native deployments, leave reverse-proxy header trust disabled. Enable it only when ECUBE is behind a trusted reverse proxy that sets `X-Forwarded-For` or `X-Real-IP`.
@@ -190,7 +190,7 @@ Important first-run behavior:
 - If the admin username entered in setup does not yet exist on the host, ECUBE creates that OS user, adds it to `ecube-admins`, and grants the ECUBE `admin` role.
 - If the admin username already exists on the host, ECUBE treats that as a reconciliation path instead of an error. The wizard adds the existing OS user to `ecube-admins`, syncs the ECUBE `admin` role, resets the password entered in the wizard, and then completes setup successfully.
 - In the existing-user path, the setup screen shows an informational success message indicating that the existing OS admin user was reconciled.
-- After either path completes, return to the login page and sign in with the username and password entered during setup.
+- After either path completes, return to the login page and sign in with the username and password you entered and confirmed during setup.
 
 If you are not responsible for installation, stop here and contact the administrator who owns the deployment.
 
