@@ -310,6 +310,7 @@
     "browseContents": "Browse Drive Contents",
     "browseDriveContentsTitle": "Browse {device} Contents",
     "browseMountContents": "Browse Mount Contents",
+    "browseMountContentsTitle": "Browse mount {project} contents",
     "loadError": "Failed to load directory listing. Please try again.",
     "empty": "This directory is empty.",
     "tableLabel": "Directory contents",
