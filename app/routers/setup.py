@@ -47,14 +47,41 @@ from app.infrastructure import get_os_user_provider
 from app.infrastructure.os_user_protocol import OSUserError
 from app.schemas.errors import R_400, R_404, R_409, R_422, R_500
 from app.utils.client_ip import get_client_ip
+from app.utils.sanitize import sanitize_error_message
 
 logger = logging.getLogger(__name__)
+
+_PASSWORD_POLICY_ERROR_MARKERS = (
+    "pam:",
+    "bad password",
+    "password fails",
+    "password has been already used",
+    "password unchanged",
+    "have exhausted maximum number of retries",
+    "shorter than",
+)
 
 # Serialize concurrent initialization attempts so only one runs at a time.
 _init_lock = threading.Lock()
 
 
 router = APIRouter(prefix="/setup", tags=["setup"], route_class=LocalOnlyRoute)
+
+
+def _is_password_policy_violation(message: str) -> bool:
+    lowered = (message or "").lower()
+    return any(marker in lowered for marker in _PASSWORD_POLICY_ERROR_MARKERS)
+
+
+def _safe_password_policy_rejection_message(message: str) -> str:
+    sanitized = sanitize_error_message(message, "New password does not satisfy the active password policy.")
+    if sanitized in {
+        "Permission or authentication failure",
+        "Operation timed out",
+        "Target device or path was not found",
+    }:
+        return "New password does not satisfy the active password policy."
+    return sanitized
 
 
 def _get_db_or_none():
@@ -517,6 +544,11 @@ def _run_os_setup(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except OSUserError as exc:
+        if _is_password_policy_violation(exc.message):
+            raise HTTPException(
+                status_code=422,
+                detail=_safe_password_policy_rejection_message(exc.message),
+            )
         # User may already exist (e.g. re-running setup after partial failure).
         if "already exists" not in exc.message.lower():
             raise HTTPException(
@@ -538,7 +570,14 @@ def _run_os_setup(
             provider.reset_password(
                 body.username, body.password, _skip_managed_check=True,
             )
-        except (OSUserError, ValueError) as pw_exc:
+        except ValueError as pw_exc:
+            raise HTTPException(status_code=422, detail=str(pw_exc))
+        except OSUserError as pw_exc:
+            if _is_password_policy_violation(pw_exc.message):
+                raise HTTPException(
+                    status_code=422,
+                    detail=_safe_password_policy_rejection_message(pw_exc.message),
+                )
             raise HTTPException(
                 status_code=500,
                 detail=f"User exists but failed to reset password: {pw_exc}",
