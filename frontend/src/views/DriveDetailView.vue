@@ -227,15 +227,31 @@ async function runFormat() {
   clearBanners()
   try {
     drive.value = normalizeProjectRecord(
-      await formatDrive(drive.value.id, { filesystem_type: filesystemType.value }),
+      await formatDrive(drive.value.id, { filesystem_type: filesystemType.value }, { timeout: 0 }),
       ['current_project_id'],
     )
     currentProjectEvidenceNumber.value = ''
     relatedJobId.value = null
     infoMessage.value = t('drives.formatSuccess')
     showFormatDialog.value = false
-  } catch {
-    error.value = t('common.errors.requestConflict')
+  } catch (err) {
+    const status = err?.response?.status
+    const detail = normalizeErrorMessage(err?.response?.data, null)
+    if (!status) {
+      error.value = t('common.errors.networkError')
+    } else if (status === 403) {
+      error.value = detail || t('common.errors.insufficientPermissions')
+    } else if (status === 404) {
+      error.value = detail || t('common.errors.notFound')
+    } else if (status === 409) {
+      error.value = detail || t('common.errors.requestConflict')
+    } else if (status === 422) {
+      error.value = detail || t('common.errors.validationFailed')
+    } else if (status >= 500) {
+      error.value = detail || t('common.errors.serverError', { status })
+    } else {
+      error.value = t('common.errors.serverErrorGeneric')
+    }
   } finally {
     saving.value = false
   }

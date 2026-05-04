@@ -217,12 +217,12 @@ Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 
 | UC-9.1 | View current runtime configuration settings | Admin | admin |
 | UC-9.2 | Update logging settings (`log_level`, `log_format`, log rotation) | Admin | admin |
 | UC-9.3 | Enable/disable file logging and set log file path | Admin | admin |
-| UC-9.4 | Update copy and DB pool runtime settings (`copy_job_timeout`, `job_detail_files_page_size`, `mkfs_exfat_cluster_size`, `db_pool_size`, `db_pool_max_overflow`) | Admin | admin |
+| UC-9.4 | Update copy and DB pool runtime settings (`copy_job_timeout`, `job_detail_files_page_size`, `mkfs_exfat_cluster_size`, `drive_format_timeout_seconds`, `drive_mount_timeout_seconds`, `db_pool_size`, `db_pool_max_overflow`) | Admin | admin |
 | UC-9.5 | View and update PAM password-policy settings | Admin | admin |
 | UC-9.6 | Review restart-required changes after save | Admin | admin |
 | UC-9.7 | Request ECUBE service restart from UI confirmation dialog | Admin | admin |
 
-**UI Implication:** Admin-only `Configuration` page provides editable logging, password-policy, copy job timeout, exFAT cluster size, Job Detail files-per-page, and DB pool fields, localized error handling, and a restart-required panel. The `Password Policy` panel is loaded from `/admin/password-policy`, exposes the writable allowlisted PAM settings as numeric or enabled/disabled inputs, keeps `enforce_for_root` read-only as explanatory text, and saves independently of ordinary runtime configuration fields while still sharing the same page-level save action. Save applies supported changes immediately where possible and lists deferred settings that require service restart.
+**UI Implication:** Admin-only `Configuration` page provides editable logging, password-policy, copy job timeout, exFAT cluster size, drive format timeout, drive mount timeout, Job Detail files-per-page, and DB pool fields, localized error handling, and a restart-required panel. The `Password Policy` panel is loaded from `/admin/password-policy`, exposes the writable allowlisted PAM settings as numeric or enabled/disabled inputs, keeps `enforce_for_root` read-only as explanatory text, and saves independently of ordinary runtime configuration fields while still sharing the same page-level save action. Save applies supported changes immediately where possible and lists deferred settings that require service restart.
 
 ---
 

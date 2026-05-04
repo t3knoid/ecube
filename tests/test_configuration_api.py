@@ -276,6 +276,52 @@ class TestConfigurationEndpoints:
             settings.mkfs_exfat_cluster_size = original_value
 
     @patch("app.services.configuration_service.database_service._write_env_settings")
+    def test_update_configuration_persists_drive_format_timeout_seconds(
+        self,
+        mock_write_env,
+        admin_client,
+    ):
+        original_value = settings.drive_format_timeout_seconds
+        try:
+            resp = admin_client.put(
+                "/admin/configuration",
+                json={"drive_format_timeout_seconds": 1800},
+            )
+            assert resp.status_code == 200, resp.json()
+
+            payload = resp.json()
+            assert "drive_format_timeout_seconds" in payload["changed_settings"]
+            assert payload["restart_required"] is False
+
+            written = mock_write_env.call_args.args[0]
+            assert written.get("DRIVE_FORMAT_TIMEOUT_SECONDS") == "1800"
+        finally:
+            settings.drive_format_timeout_seconds = original_value
+
+    @patch("app.services.configuration_service.database_service._write_env_settings")
+    def test_update_configuration_persists_drive_mount_timeout_seconds(
+        self,
+        mock_write_env,
+        admin_client,
+    ):
+        original_value = settings.drive_mount_timeout_seconds
+        try:
+            resp = admin_client.put(
+                "/admin/configuration",
+                json={"drive_mount_timeout_seconds": 300},
+            )
+            assert resp.status_code == 200, resp.json()
+
+            payload = resp.json()
+            assert "drive_mount_timeout_seconds" in payload["changed_settings"]
+            assert payload["restart_required"] is False
+
+            written = mock_write_env.call_args.args[0]
+            assert written.get("DRIVE_MOUNT_TIMEOUT_SECONDS") == "300"
+        finally:
+            settings.drive_mount_timeout_seconds = original_value
+
+    @patch("app.services.configuration_service.database_service._write_env_settings")
     def test_update_configuration_persists_callback_default_url(
         self,
         mock_write_env,

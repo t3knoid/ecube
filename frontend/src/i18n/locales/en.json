@@ -635,6 +635,14 @@
         "label": "exFAT Cluster Size",
         "help": "Allocation unit used when ECUBE formats a drive as exFAT. 4KB is recommended for most situations. Use larger clusters only for drives that will store very large files only and no small files."
       },
+      "drive_format_timeout_seconds": {
+        "label": "Drive Format Timeout (seconds)",
+        "help": "Maximum time ECUBE allows a drive format command to run before it is treated as failed. Use a larger value for large media that require extended exFAT formatting time."
+      },
+      "drive_mount_timeout_seconds": {
+        "label": "Drive Mount Timeout (seconds)",
+        "help": "Maximum time ECUBE allows a drive mount command to run before it is treated as failed. Increase this for large removable media or slower USB links that need extra time to mount."
+      },
       "copy_job_timeout": {
         "label": "Per-file Copy Timeout (seconds)",
         "help": "Maximum time allowed for one file copy/checksum attempt. Set to 0 to disable timeout enforcement."

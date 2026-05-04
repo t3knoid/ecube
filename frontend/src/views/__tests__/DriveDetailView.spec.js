@@ -347,12 +347,39 @@ describe('DriveDetailView mount workflow', () => {
     await wrapper.find('.confirm-dialog-confirm').trigger('click')
     await flushPromises()
 
-    expect(mocks.formatDrive).toHaveBeenCalledWith(7, { filesystem_type: 'ext4' })
+    expect(mocks.formatDrive).toHaveBeenCalledWith(7, { filesystem_type: 'ext4' }, { timeout: 0 })
     expect(wrapper.text()).not.toContain('EV-STALE')
     expect(wrapper.text()).toContain(`${i18n.global.t('jobs.evidence')}-`)
     expect(wrapper.text()).not.toContain('44')
     expect(wrapper.text()).toContain(`${i18n.global.t('jobs.jobId')}-`)
     expect(wrapper.find('.cell-link').exists()).toBe(false)
+  })
+
+  it('shows sanitized backend detail when drive formatting fails', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-007', mount_path: null })])
+    mocks.formatDrive.mockRejectedValue({
+      response: {
+        status: 500,
+        data: {
+          detail: 'Format timed out after 900s',
+        },
+      },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const formatButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.format'))
+    expect(formatButton).toBeTruthy()
+
+    await formatButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('.confirm-dialog-confirm').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Format timed out after 900s')
+    expect(wrapper.text()).not.toContain(i18n.global.t('common.errors.requestConflict'))
   })
 
   it('hides Enable Drive when the drive is disconnected and not physically detected', async () => {

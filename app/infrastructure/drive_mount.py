@@ -326,28 +326,29 @@ class LinuxDriveMount:
             mountable,
             mount_point,
         ]
+        mount_timeout_seconds = settings.drive_mount_timeout_seconds
 
         try:
             subprocess.run(
                 _with_host_mount_namespace(mount_command),
                 check=True,
                 capture_output=True,
-                timeout=settings.subprocess_timeout_seconds,
+                timeout=mount_timeout_seconds,
             )
         except subprocess.TimeoutExpired:
             _log_drive_mount_safe_warning(
                 "Drive mount timed out",
                 phase="mount_timeout",
                 mount_point=mount_point,
-                raw_error=f"mount timed out after {settings.subprocess_timeout_seconds}s",
+                raw_error=f"mount timed out after {mount_timeout_seconds}s",
             )
             _log_drive_mount_debug_failure(
                 "Drive mount timeout details",
                 device_path=mountable,
                 mount_point=mount_point,
-                raw_error=f"mount timed out after {settings.subprocess_timeout_seconds}s",
+                raw_error=f"mount timed out after {mount_timeout_seconds}s",
             )
-            return False, f"mount timed out after {settings.subprocess_timeout_seconds}s"
+            return False, f"mount timed out after {mount_timeout_seconds}s"
         except subprocess.CalledProcessError as exc:
             stderr = (exc.stderr or b"").decode(errors="replace").strip()
             _log_drive_mount_safe_warning(
