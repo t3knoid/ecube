@@ -72,6 +72,15 @@ from app.utils.sanitize import sanitize_error_message
 
 logger = logging.getLogger(__name__)
 
+_PASSWORD_POLICY_ERROR_MARKERS = (
+    "pam:",
+    "bad password",
+    "password fails",
+    "password has been already used",
+    "password unchanged",
+    "have exhausted maximum number of retries",
+)
+
 _SENSITIVE_LOG_PATTERNS = [
     re.compile(r"(?i)(authorization\s*[:=]\s*)(bearer|basic)\s+[^\s,;]+"),
     re.compile(r"(?i)(\b(?:password|passwd|pwd|secret|token|api[_-]?key|client_secret|access_token|refresh_token)\b\s*[:=]\s*)([^\s,;]+)"),
@@ -109,7 +118,7 @@ def _raise_os_error(exc: OSUserError, *, context: str = "OS operation") -> None:
 
     if "already exists" in lowered:
         raise HTTPException(status_code=409, detail=msg)
-    if "pam:" in lowered or "bad password" in lowered or "password fails" in lowered:
+    if any(marker in lowered for marker in _PASSWORD_POLICY_ERROR_MARKERS):
         raise HTTPException(status_code=422, detail=_safe_password_policy_rejection_message(msg))
     if "does not exist" in lowered:
         # Distinguish between missing groups (input validation) and other entities.

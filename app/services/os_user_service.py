@@ -60,6 +60,15 @@ _PASS_MAX_DAYS = "90"
 _PASS_MIN_DAYS = "1"
 _PASS_WARN_AGE = "14"
 
+_PASSWORD_POLICY_ERROR_MARKERS = (
+    "pam:",
+    "bad password",
+    "password fails",
+    "password has been already used",
+    "password unchanged",
+    "have exhausted maximum number of retries",
+)
+
 
 def _require_posix() -> None:
     """Raise a clear error when POSIX modules are unavailable."""
@@ -177,6 +186,12 @@ def _run_sudo(
             f"Command failed (exit {result.returncode}): {stderr}",
             returncode=result.returncode,
         )
+
+    if check and cmd and cmd[0] == settings.chpasswd_binary_path:
+        stderr = (result.stderr or "").strip()
+        lowered = stderr.lower()
+        if stderr and any(marker in lowered for marker in _PASSWORD_POLICY_ERROR_MARKERS):
+            raise OSUserError(stderr, returncode=result.returncode)
     return result
 
 
@@ -383,7 +398,17 @@ def create_user(
     _run_sudo([settings.useradd_binary_path, "-m", "-N", "-g", primary_group, username])
 
     # Set password via stdin (never on command line).
-    _run_sudo([settings.chpasswd_binary_path], stdin_data=f"{username}:{password}")
+    try:
+        _run_sudo([settings.chpasswd_binary_path], stdin_data=f"{username}:{password}")
+    except OSUserError:
+        try:
+            _run_sudo([settings.userdel_binary_path, "-r", username])
+        except Exception:
+            logger.error(
+                "Failed to clean up OS user after password setup failure",
+                extra={"username": username},
+            )
+        raise
 
     try:
         _apply_password_expiration_policy(username)

@@ -53,7 +53,17 @@ def _classify_pam_auth_failure(pam: PamAuthenticator) -> tuple[str | None, str]:
 
 def _is_pam_policy_violation(message: str) -> bool:
     lowered = (message or "").lower()
-    return "pam:" in lowered or "bad password" in lowered or "password fails" in lowered
+    return any(
+        marker in lowered
+        for marker in (
+            "pam:",
+            "bad password",
+            "password fails",
+            "password has been already used",
+            "password unchanged",
+            "have exhausted maximum number of retries",
+        )
+    )
 
 
 def _safe_password_policy_rejection_message(message: str) -> str:

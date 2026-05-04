@@ -270,6 +270,33 @@ class TestCreateUser:
         calls = [c.args[0] for c in mock_subprocess.call_args_list]
         assert ["sudo", "-n", "/usr/sbin/userdel", "-r", "testuser"] in calls
 
+    @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_create_user_chpasswd_policy_stderr_deletes_user(self, mock_pwd, mock_grp, mock_subprocess):
+        mock_pwd.getpwnam.side_effect = [
+            KeyError("no such user"),
+        ]
+        mock_grp.getgrnam.return_value = _make_grp(name="ecube-admins")
+
+        mock_subprocess.side_effect = [
+            _ok_result(),
+            _ok_result(
+                stderr=(
+                    "Password has been already used. Choose another.\n"
+                    "passwd: Have exhausted maximum number of retries for service\n"
+                    "passwd: password unchanged"
+                )
+            ),
+            _ok_result(),
+        ]
+
+        with pytest.raises(OSUserError, match="already used"):
+            create_user("testuser", "s3cret", groups=["ecube-admins"])
+
+        calls = [c.args[0] for c in mock_subprocess.call_args_list]
+        assert ["sudo", "-n", "/usr/sbin/userdel", "-r", "testuser"] in calls
+
 
 class TestDeleteUser:
     """os_user_service.delete_user()."""
@@ -1137,6 +1164,44 @@ class TestOSUserEndpoints:
 
         resp = admin_client.put("/admin/os-users/testuser/password", json={
             "password": "password",
+        })
+
+        assert resp.status_code == 422
+        body = resp.json()
+        assert body["code"] == "HTTP_422"
+        assert body["message"] == "New password does not satisfy the active password policy."
+
+    @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_create_user_returns_422_for_password_history_violation_even_when_chpasswd_exits_zero(
+        self,
+        mock_pwd,
+        mock_grp,
+        mock_subprocess,
+        admin_client,
+    ):
+        mock_pwd.getpwnam.side_effect = [
+            KeyError("no such user"),
+            KeyError("no such user"),
+        ]
+        mock_grp.getgrnam.return_value = _make_grp(name="ecube-processors")
+        mock_subprocess.side_effect = [
+            _ok_result(),
+            _ok_result(
+                stderr=(
+                    "Password has been already used. Choose another.\n"
+                    "passwd: Have exhausted maximum number of retries for service\n"
+                    "passwd: password unchanged"
+                )
+            ),
+            _ok_result(),
+        ]
+
+        resp = admin_client.post("/admin/os-users", json={
+            "username": "newuser",
+            "password": "StrongPass#123",
+            "roles": ["processor"],
         })
 
         assert resp.status_code == 422
