@@ -12,7 +12,7 @@ from typing import Any, Generator
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.routing import BaseRoute, Match
@@ -43,6 +43,36 @@ logger = logging.getLogger(__name__)
 
 _USB_DISCOVERY_READY_CACHE: dict[type, float] = {}
 _USB_DISCOVERY_READY_CACHE_LOCK = threading.Lock()
+
+_SETUP_REDIRECT_EXEMPT_PATHS = frozenset({
+    "/setup",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+    "/health",
+    "/health/live",
+    "/health/ready",
+})
+
+
+def _is_browser_navigation_request(request: Request) -> bool:
+    accept = (request.headers.get("accept") or "").lower()
+    return request.method == "GET" and "text/html" in accept
+
+
+def _should_redirect_to_setup(request: Request) -> bool:
+    path = request.url.path
+    original_path = str(request.scope.get("_original_path") or "")
+
+    if path in _SETUP_REDIRECT_EXEMPT_PATHS:
+        return False
+    if path.startswith(("/setup/", "/assets/")):
+        return False
+    if path in {"/favicon.ico", "/robots.txt"}:
+        return False
+    if path.startswith("/api/") or original_path.startswith("/api/"):
+        return False
+    return True
 
 
 def _is_missing_table_error(exc: Exception) -> bool:
@@ -555,6 +585,9 @@ async def fallback_status_logging(request: Request, call_next):
     (Payload Too Large) responses may come from Uvicorn's ASGI request limits.
     Add fallback log lines for observability.
     """
+    if not db_module.is_database_configured() and _is_browser_navigation_request(request) and _should_redirect_to_setup(request):
+        return RedirectResponse(url="/setup", status_code=307)
+
     response = await call_next(request)
     if request.method == "GET" and request.url.path.endswith("/audit/chain-of-custody"):
         response.headers["Cache-Control"] = "no-store"
