@@ -13,6 +13,8 @@ const loading = ref(false)
 const saving = ref(false)
 const restarting = ref(false)
 const error = ref('')
+const passwordPolicyError = ref('')
+const passwordPolicyAvailable = ref(true)
 
 const showRestartConfirm = ref(false)
 const restartPending = ref(false)
@@ -111,7 +113,7 @@ const hasChanges = computed(() => {
   if (nextSecret) {
     return true
   }
-  if (Object.keys(passwordPolicyForm.value).some((key) => passwordPolicyForm.value[key] !== originalPasswordPolicyForm.value[key])) {
+  if (passwordPolicyAvailable.value && Object.keys(passwordPolicyForm.value).some((key) => passwordPolicyForm.value[key] !== originalPasswordPolicyForm.value[key])) {
     return true
   }
   return !!(form.value.clear_callback_hmac_secret && originalForm.value.callback_hmac_secret_configured)
@@ -291,15 +293,23 @@ function buildPasswordPolicyPayload() {
 async function loadConfiguration() {
   loading.value = true
   error.value = ''
+  passwordPolicyError.value = ''
+  passwordPolicyAvailable.value = true
   try {
-    const [configurationResponse, passwordPolicyResponse] = await Promise.all([
-      getConfiguration(),
-      getPasswordPolicy(),
-    ])
+    const configurationResponse = await getConfiguration()
     normalizeForm(configurationResponse)
-    normalizePasswordPolicy(passwordPolicyResponse)
   } catch (err) {
     error.value = getConfigurationErrorMessage(err, 'load')
+    loading.value = false
+    return
+  }
+
+  try {
+    const passwordPolicyResponse = await getPasswordPolicy()
+    normalizePasswordPolicy(passwordPolicyResponse)
+  } catch (err) {
+    passwordPolicyAvailable.value = false
+    passwordPolicyError.value = getConfigurationErrorMessage(err, 'load')
   } finally {
     loading.value = false
   }
@@ -313,7 +323,7 @@ async function saveConfiguration() {
     error.value = err instanceof Error ? err.message : t('common.errors.validationFailed')
     return
   }
-  const passwordPolicyPayload = buildPasswordPolicyPayload()
+  const passwordPolicyPayload = passwordPolicyAvailable.value ? buildPasswordPolicyPayload() : {}
   if (Object.keys(payload).length === 0 && Object.keys(passwordPolicyPayload).length === 0) return
 
   saving.value = true
@@ -443,38 +453,40 @@ onMounted(loadConfiguration)
       <article class="panel">
         <h2>{{ t('configuration.sections.passwordPolicy') }}</h2>
 
+        <p v-if="passwordPolicyError" class="error-banner">{{ passwordPolicyError }}</p>
+
         <label for="cfg-policy-minlen">{{ t('configuration.passwordPolicy.minlen') }}</label>
-        <input id="cfg-policy-minlen" v-model.number="passwordPolicyForm.minlen" type="number" min="12" max="128" />
+        <input id="cfg-policy-minlen" v-model.number="passwordPolicyForm.minlen" type="number" min="12" max="128" :disabled="!passwordPolicyAvailable || saving" />
 
         <label for="cfg-policy-minclass">{{ t('configuration.passwordPolicy.minclass') }}</label>
-        <input id="cfg-policy-minclass" v-model.number="passwordPolicyForm.minclass" type="number" min="0" max="4" />
+        <input id="cfg-policy-minclass" v-model.number="passwordPolicyForm.minclass" type="number" min="0" max="4" :disabled="!passwordPolicyAvailable || saving" />
 
         <label for="cfg-policy-maxrepeat">{{ t('configuration.passwordPolicy.maxrepeat') }}</label>
-        <input id="cfg-policy-maxrepeat" v-model.number="passwordPolicyForm.maxrepeat" type="number" min="0" />
+        <input id="cfg-policy-maxrepeat" v-model.number="passwordPolicyForm.maxrepeat" type="number" min="0" :disabled="!passwordPolicyAvailable || saving" />
 
         <label for="cfg-policy-maxsequence">{{ t('configuration.passwordPolicy.maxsequence') }}</label>
-        <input id="cfg-policy-maxsequence" v-model.number="passwordPolicyForm.maxsequence" type="number" min="0" />
+        <input id="cfg-policy-maxsequence" v-model.number="passwordPolicyForm.maxsequence" type="number" min="0" :disabled="!passwordPolicyAvailable || saving" />
 
         <label for="cfg-policy-maxclassrepeat">{{ t('configuration.passwordPolicy.maxclassrepeat') }}</label>
-        <input id="cfg-policy-maxclassrepeat" v-model.number="passwordPolicyForm.maxclassrepeat" type="number" min="0" />
+        <input id="cfg-policy-maxclassrepeat" v-model.number="passwordPolicyForm.maxclassrepeat" type="number" min="0" :disabled="!passwordPolicyAvailable || saving" />
 
         <label for="cfg-policy-dictcheck">{{ t('configuration.passwordPolicy.dictcheck') }}</label>
-        <select id="cfg-policy-dictcheck" v-model.number="passwordPolicyForm.dictcheck">
+        <select id="cfg-policy-dictcheck" v-model.number="passwordPolicyForm.dictcheck" :disabled="!passwordPolicyAvailable || saving">
           <option :value="1">{{ t('common.labels.enabled') }}</option>
           <option :value="0">{{ t('common.labels.disabled') }}</option>
         </select>
 
         <label for="cfg-policy-usercheck">{{ t('configuration.passwordPolicy.usercheck') }}</label>
-        <select id="cfg-policy-usercheck" v-model.number="passwordPolicyForm.usercheck">
+        <select id="cfg-policy-usercheck" v-model.number="passwordPolicyForm.usercheck" :disabled="!passwordPolicyAvailable || saving">
           <option :value="1">{{ t('common.labels.enabled') }}</option>
           <option :value="0">{{ t('common.labels.disabled') }}</option>
         </select>
 
         <label for="cfg-policy-difok">{{ t('configuration.passwordPolicy.difok') }}</label>
-        <input id="cfg-policy-difok" v-model.number="passwordPolicyForm.difok" type="number" min="0" max="255" />
+        <input id="cfg-policy-difok" v-model.number="passwordPolicyForm.difok" type="number" min="0" max="255" :disabled="!passwordPolicyAvailable || saving" />
 
         <label for="cfg-policy-retry">{{ t('configuration.passwordPolicy.retry') }}</label>
-        <input id="cfg-policy-retry" v-model.number="passwordPolicyForm.retry" type="number" min="1" max="10" />
+        <input id="cfg-policy-retry" v-model.number="passwordPolicyForm.retry" type="number" min="1" max="10" :disabled="!passwordPolicyAvailable || saving" />
 
         <p class="field-help">{{ t('configuration.passwordPolicy.enforceForRoot') }}</p>
       </article>

@@ -56,6 +56,12 @@ def test_get_password_policy_admin_endpoint_reads_current_values(admin_client, m
     assert body["retry"] == 3
 
 
+def test_get_password_policy_forbidden_for_processor(client):
+    resp = client.get("/admin/password-policy")
+
+    assert resp.status_code == 403
+
+
 def test_put_password_policy_updates_file_and_audits(admin_client, db, monkeypatch, tmp_path):
     policy_path = tmp_path / "pwquality.conf"
     policy_path.write_text("minlen = 14\nretry = 3\n", encoding="utf-8")
@@ -78,6 +84,12 @@ def test_put_password_policy_updates_file_and_audits(admin_client, db, monkeypat
     assert len(logs) == 1
     assert logs[0].details["previous_values"]["minlen"] == 14
     assert logs[0].details["new_values"]["minlen"] == 18
+
+
+def test_put_password_policy_forbidden_for_processor(client):
+    resp = client.put("/admin/password-policy", json={"minlen": 18})
+
+    assert resp.status_code == 403
 
 
 def test_put_password_policy_rejects_enforce_for_root_zero(admin_client):
