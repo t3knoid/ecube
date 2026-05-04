@@ -52,6 +52,14 @@ export function getLogLines(params = {}) {
   return toData(apiClient.get(`${API_BASE}/admin/logs/view`, { params }))
 }
 
+export function getPasswordPolicy() {
+  return toData(apiClient.get(`${API_BASE}/admin/password-policy`))
+}
+
+export function updatePasswordPolicy(payload) {
+  return toData(apiClient.put(`${API_BASE}/admin/password-policy`, payload))
+}
+
 export function enablePort(portId) {
   return toData(apiClient.patch(`${API_BASE}/admin/ports/${portId}`, { enabled: true }))
 }

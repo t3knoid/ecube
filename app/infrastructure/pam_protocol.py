@@ -15,6 +15,9 @@ from typing import List, Protocol
 class PamAuthenticator(Protocol):
     """Protocol for PAM authentication backends (allows test mocking)."""
 
+    code: int | None
+    reason: str | None
+
     def authenticate(self, username: str, password: str) -> bool: ...
 
     def get_user_groups(self, username: str) -> List[str]: ...

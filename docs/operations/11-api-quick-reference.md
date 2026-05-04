@@ -17,10 +17,11 @@
 6. [Jobs (`/jobs`)](#jobsjobs)
 7. [Audit (`/audit`)](#auditaudit)
 8. [Admin Users (`/admin/os-users`)](#admin-users-adminos-users)
-9. [Admin Logs (`/admin/logs`)](#admin-logs-adminlogs)
-10. [Introspection (`/introspection`)](#introspectionintrospection)
-11. [Telemetry (`/telemetry`)](#telemetrytelemetry)
-12. [Support and Resources](#support-and-resources)
+9. [Admin Password Policy (`/admin/password-policy`)](#admin-password-policy-adminpassword-policy)
+10. [Admin Logs (`/admin/logs`)](#admin-logs-adminlogs)
+11. [Introspection (`/introspection`)](#introspectionintrospection)
+12. [Telemetry (`/telemetry`)](#telemetrytelemetry)
+13. [Support and Resources](#support-and-resources)
 
 ---
 
@@ -60,6 +61,7 @@ authentication:
 - `GET /health/ready`
 - `GET /introspection/version`
 - `POST /auth/token` (login / token issuance)
+- `POST /auth/change-password` (expired-password recovery)
 - `GET /setup/status`
 - `POST /setup/initialize`
 - `GET /setup/database/system-info`
@@ -78,6 +80,12 @@ Setup initialize behavior:
 - `POST /setup/initialize` accepts `trust_proxy_headers` (boolean, default `false`) in addition to admin username/password.
 - If setup is already initialized, `POST /setup/initialize` returns `200` with `status="already_initialized"` and an informational message instead of returning `409`.
 - Once setup is already initialized, the call returns informational success but does not persist runtime setting changes; post-setup configuration updates require authenticated admin workflows.
+
+Authentication response behavior:
+
+- `POST /auth/token` returns `401` with `reason="password_expired"` when PAM requires an immediate password change, and `401` with `reason="account_expired"` when the account itself has expired.
+- Successful `POST /auth/token` responses can include `password_expiration_warning_days` when the account is inside the warning window.
+- `POST /auth/change-password` accepts `{ "username", "current_password", "new_password" }`, returns a fresh bearer token on success, and returns `422` when PAM rejects the proposed replacement password.
 
 ---
 
@@ -258,6 +266,25 @@ curl -H "Authorization: Bearer $TOKEN" \
 - `201 Created` for brand-new OS account creation
 
 `GET /admin/os-users` visibility behavior:
+
+Password reset behavior:
+
+- `PUT /admin/os-users/{username}/password` returns `422 Unprocessable Content` when PAM rejects the new password because it violates the active host password policy.
+
+---
+
+## Admin Password Policy (`/admin/password-policy`)
+
+| Method | Endpoint | Role | Description |
+| ------ | -------- | ---- | ----------- |
+| GET | `/admin/password-policy` | admin | Return the current writable PAM password-policy settings derived from `pwquality.conf`. |
+| PUT | `/admin/password-policy` | admin | Update allowlisted password-policy keys and persist them through the root-owned helper. |
+
+Notes:
+
+- Writable keys are `minlen`, `minclass`, `maxrepeat`, `maxsequence`, `maxclassrepeat`, `dictcheck`, `usercheck`, `difok`, and `retry`.
+- `enforce_for_root` is always enforced and cannot be set to `0`; attempts to do so return `422 Unprocessable Content`.
+- Successful updates emit the `PASSWORD_POLICY_UPDATED` audit action with previous and new values.
 
 - includes users in `ecube-*` OS groups
 - includes usernames with DB role assignments in `user_roles`

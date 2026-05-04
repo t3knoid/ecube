@@ -275,6 +275,9 @@ Operational notes:
 | `GROUPADD_BINARY_PATH`       | `/usr/sbin/groupadd`   | Path to `groupadd` (must match sudoers whitelist).             |
 | `GROUPDEL_BINARY_PATH`       | `/usr/sbin/groupdel`   | Path to `groupdel` (must match sudoers whitelist).             |
 | `CHPASSWD_BINARY_PATH`       | `/usr/sbin/chpasswd`   | Path to `chpasswd` (must match sudoers whitelist).             |
+| `CHAGE_BINARY_PATH`          | `/usr/bin/chage`       | Path to `chage` used for password-expiration inspection and default aging policy application. |
+| `PWQUALITY_CONF_PATH`        | `/etc/security/pwquality.conf` | Path to the PAM password-quality configuration file used by the password-policy API. |
+| `PASSWORD_POLICY_WRITER_PATH` | `/usr/local/bin/ecube-write-pwquality-conf` | Root-owned helper used for atomic writes to `pwquality.conf` when `USE_SUDO=true`. |
 | `PROCFS_MOUNTS_PATH`         | `/proc/mounts`         | Path to `/proc/mounts` for reading active mounts.              |
 | `PROCFS_DISKSTATS_PATH`      | `/proc/diskstats`      | Path to `/proc/diskstats` for block-device I/O statistics. |
 | `SYSFS_USB_DEVICES_PATH`     | `/sys/bus/usb/devices` | Sysfs USB devices directory.                                   |

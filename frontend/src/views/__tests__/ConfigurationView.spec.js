@@ -5,7 +5,9 @@ import ConfigurationView from '@/views/ConfigurationView.vue'
 
 const mocks = vi.hoisted(() => ({
   getConfiguration: vi.fn(),
+  getPasswordPolicy: vi.fn(),
   updateConfiguration: vi.fn(),
+  updatePasswordPolicy: vi.fn(),
   restartConfigurationService: vi.fn(),
   toast: {
     success: vi.fn(),
@@ -19,6 +21,11 @@ vi.mock('@/api/configuration.js', () => ({
   getConfiguration: (...args) => mocks.getConfiguration(...args),
   updateConfiguration: (...args) => mocks.updateConfiguration(...args),
   restartConfigurationService: (...args) => mocks.restartConfigurationService(...args),
+}))
+
+vi.mock('@/api/admin.js', () => ({
+  getPasswordPolicy: (...args) => mocks.getPasswordPolicy(...args),
+  updatePasswordPolicy: (...args) => mocks.updatePasswordPolicy(...args),
 }))
 
 vi.mock('@/composables/useToast.js', () => ({
@@ -68,15 +75,33 @@ function mountView() {
   })
 }
 
+function buildPasswordPolicyResponse(overrides = {}) {
+  return {
+    minlen: 14,
+    minclass: 3,
+    maxrepeat: 3,
+    maxsequence: 4,
+    maxclassrepeat: 0,
+    dictcheck: 1,
+    usercheck: 1,
+    difok: 5,
+    retry: 3,
+    ...overrides,
+  }
+}
+
 describe('ConfigurationView logging defaults', () => {
   beforeEach(() => {
     mocks.getConfiguration.mockReset()
+    mocks.getPasswordPolicy.mockReset()
     mocks.updateConfiguration.mockReset()
+    mocks.updatePasswordPolicy.mockReset()
     mocks.restartConfigurationService.mockReset()
     mocks.toast.success.mockReset()
     mocks.toast.warning.mockReset()
     mocks.toast.error.mockReset()
     mocks.toast.info.mockReset()
+    mocks.getPasswordPolicy.mockResolvedValue(buildPasswordPolicyResponse())
   })
 
   it('shows file logging enabled on first load when the backend exposes the default log path', async () => {
@@ -112,6 +137,25 @@ describe('ConfigurationView logging defaults', () => {
     await flushPromises()
 
     expect(mocks.updateConfiguration).toHaveBeenCalledWith({ job_detail_files_page_size: 80 })
+  })
+
+  it('loads and saves password policy values', async () => {
+    mocks.getConfiguration.mockResolvedValue(buildResponse())
+    mocks.getPasswordPolicy.mockResolvedValue(buildPasswordPolicyResponse({ minlen: 16, retry: 4 }))
+    mocks.updatePasswordPolicy.mockResolvedValue(buildPasswordPolicyResponse({ minlen: 18, retry: 5 }))
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const minlenInput = wrapper.find('#cfg-policy-minlen')
+    expect(minlenInput.element.value).toBe('16')
+
+    await minlenInput.setValue('18')
+    await wrapper.find('#cfg-policy-retry').setValue('5')
+    await wrapper.find('.action-row .btn.btn-primary').trigger('click')
+    await flushPromises()
+
+    expect(mocks.updatePasswordPolicy).toHaveBeenCalledWith({ minlen: 18, retry: 5 })
   })
 
   it('loads and saves the startup analysis batch size', async () => {
@@ -357,6 +401,7 @@ describe('ConfigurationView logging defaults', () => {
       i18n.global.t('configuration.sections.logging'),
       i18n.global.t('configuration.sections.shares'),
       i18n.global.t('configuration.sections.databasePool'),
+      i18n.global.t('configuration.sections.passwordPolicy'),
       i18n.global.t('configuration.sections.copyJobs'),
       i18n.global.t('configuration.sections.webhooks'),
     ])

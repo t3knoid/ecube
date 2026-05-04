@@ -56,6 +56,9 @@ logger = logging.getLogger(__name__)
 
 # Default subprocess timeout (seconds).
 _SUBPROCESS_TIMEOUT = settings.subprocess_timeout_seconds
+_PASS_MAX_DAYS = "90"
+_PASS_MIN_DAYS = "1"
+_PASS_WARN_AGE = "14"
 
 
 def _require_posix() -> None:
@@ -175,6 +178,22 @@ def _run_sudo(
             returncode=result.returncode,
         )
     return result
+
+
+def _apply_password_expiration_policy(username: str) -> None:
+    """Apply the ECUBE password-aging baseline to a newly created OS user."""
+    _run_sudo(
+        [
+            settings.chage_binary_path,
+            "-M",
+            _PASS_MAX_DAYS,
+            "-m",
+            _PASS_MIN_DAYS,
+            "-W",
+            _PASS_WARN_AGE,
+            username,
+        ]
+    )
 
 
 def validate_username(username: str) -> None:
@@ -366,6 +385,18 @@ def create_user(
     # Set password via stdin (never on command line).
     _run_sudo([settings.chpasswd_binary_path], stdin_data=f"{username}:{password}")
 
+    try:
+        _apply_password_expiration_policy(username)
+    except OSUserError:
+        try:
+            _run_sudo([settings.userdel_binary_path, "-r", username])
+        except Exception:
+            logger.error(
+                "Failed to clean up OS user after password policy setup failure",
+                extra={"username": username},
+            )
+        raise
+
     # Add requested supplementary groups (excluding the primary group).
     # If usermod fails, delete the newly created user so the caller never
     # sees a partial account.
@@ -378,8 +409,8 @@ def create_user(
                 _run_sudo([settings.userdel_binary_path, "-r", username])
             except Exception:
                 logger.error(
-                    "Failed to clean up OS user '%s' after usermod failure",
-                    username,
+                    "Failed to clean up OS user after group assignment failure",
+                    extra={"username": username},
                 )
             raise
 

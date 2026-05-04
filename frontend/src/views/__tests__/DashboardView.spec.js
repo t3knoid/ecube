@@ -8,12 +8,17 @@ const mocks = vi.hoisted(() => ({
   getDrives: vi.fn(),
   listJobs: vi.fn(),
   push: vi.fn(),
+  authStore: { passwordWarningDays: null },
 }))
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({
     push: mocks.push,
   }),
+}))
+
+vi.mock('@/stores/auth.js', () => ({
+  useAuthStore: () => mocks.authStore,
 }))
 
 vi.mock('@/api/introspection.js', () => ({
@@ -70,9 +75,26 @@ describe('DashboardView active jobs', () => {
     mocks.getDrives.mockReset()
     mocks.listJobs.mockReset()
     mocks.push.mockReset()
+    mocks.authStore.passwordWarningDays = null
+    sessionStorage.clear()
 
     mocks.getSystemHealth.mockResolvedValue({ status: 'ok', database: 'connected', active_jobs: 1 })
     mocks.getDrives.mockResolvedValue([])
+  })
+
+  it('shows a dismissible password expiry warning banner', async () => {
+    mocks.listJobs.mockResolvedValue([])
+    mocks.authStore.passwordWarningDays = 7
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Your password will expire in 7 day')
+
+    await wrapper.find('.warning-banner .btn').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.warning-banner').exists()).toBe(false)
   })
 
   it('keeps running progress aligned with finished file counts', async () => {

@@ -5,6 +5,7 @@ import { useI18n } from "vue-i18n";
 import { getPublicAuthConfig } from "@/api/auth.js";
 import { useAuthStore } from "@/stores/auth.js";
 import { useThemeStore } from "@/stores/theme.js";
+import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import { EXPIRED_QUERY_KEY, EXPIRED_QUERY_VALUE } from "@/constants/auth.js";
 
 const router = useRouter();
@@ -18,6 +19,15 @@ const password = ref("");
 const error = ref("");
 const loading = ref(false);
 const logoLoadFailed = ref(false);
+const showPasswordChangeDialog = ref(false);
+const passwordChangeBusy = ref(false);
+const passwordChangeError = ref("");
+const passwordChangeForm = ref({
+  username: "",
+  currentPassword: "",
+  newPassword: "",
+  confirmPassword: "",
+});
 const publicAuthConfig = ref({
   demo_mode_enabled: false,
   login_message: null,
@@ -25,6 +35,29 @@ const publicAuthConfig = ref({
   shared_password: null,
   password_change_allowed: true,
 });
+
+const passwordPolicyHints = computed(() => [
+  t("auth.passwordPolicy.minLength"),
+  t("auth.passwordPolicy.characterClasses"),
+  t("auth.passwordPolicy.maxRepeat"),
+  t("auth.passwordPolicy.maxSequence"),
+  t("auth.passwordPolicy.usernameCheck"),
+  t("auth.passwordPolicy.dictionaryCheck"),
+]);
+const passwordChangeMismatch = computed(
+  () =>
+    !!passwordChangeForm.value.newPassword &&
+    !!passwordChangeForm.value.confirmPassword &&
+    passwordChangeForm.value.newPassword !== passwordChangeForm.value.confirmPassword,
+);
+const canSubmitPasswordChange = computed(
+  () =>
+    !!passwordChangeForm.value.username &&
+    !!passwordChangeForm.value.currentPassword &&
+    !!passwordChangeForm.value.newPassword &&
+    !!passwordChangeForm.value.confirmPassword &&
+    !passwordChangeMismatch.value,
+);
 
 const sessionExpired = computed(
   () => route.query[EXPIRED_QUERY_KEY] === EXPIRED_QUERY_VALUE,
@@ -50,6 +83,19 @@ const showDemoLoginPanel = computed(() => {
         config.shared_password.trim())),
   );
 });
+
+function isDemoPasswordLockedUser(usernameValue) {
+  if (
+    !publicAuthConfig.value.demo_mode_enabled ||
+    publicAuthConfig.value.password_change_allowed !== false
+  ) {
+    return false;
+  }
+
+  return (publicAuthConfig.value.demo_accounts || []).some(
+    (account) => account?.username === usernameValue,
+  );
+}
 
 watch(
   () => themeStore.currentLogo,
@@ -116,6 +162,21 @@ async function handleLogin() {
     router.push("/");
   } catch (err) {
     const responseData = err.response?.data || {};
+    if (responseData.reason === "password_expired") {
+      if (isDemoPasswordLockedUser(username.value)) {
+        error.value = t("auth.demoPasswordManaged");
+        return;
+      }
+      passwordChangeError.value = "";
+      passwordChangeForm.value = {
+        username: username.value,
+        currentPassword: password.value,
+        newPassword: "",
+        confirmPassword: "",
+      };
+      showPasswordChangeDialog.value = true;
+      return;
+    }
     if (
       typeof responseData.message === "string" &&
       responseData.message.trim()
@@ -144,6 +205,52 @@ async function handleLogin() {
     }
   } finally {
     loading.value = false;
+  }
+}
+
+function closePasswordChangeDialog() {
+  showPasswordChangeDialog.value = false;
+  passwordChangeBusy.value = false;
+  passwordChangeError.value = "";
+  passwordChangeForm.value = {
+    username: "",
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  };
+}
+
+function handlePasswordChangeCancel() {
+  password.value = "";
+  closePasswordChangeDialog();
+}
+
+async function handlePasswordChangeConfirm() {
+  if (!canSubmitPasswordChange.value) {
+    return;
+  }
+
+  passwordChangeBusy.value = true;
+  passwordChangeError.value = "";
+  try {
+    await authStore.changePassword(
+      passwordChangeForm.value.username,
+      passwordChangeForm.value.currentPassword,
+      passwordChangeForm.value.newPassword,
+    );
+    closePasswordChangeDialog();
+    router.push("/");
+  } catch (err) {
+    const responseData = err.response?.data || {};
+    if (typeof responseData.message === "string" && responseData.message.trim()) {
+      passwordChangeError.value = responseData.message;
+    } else if (typeof responseData.detail === "string" && responseData.detail.trim()) {
+      passwordChangeError.value = responseData.detail;
+    } else {
+      passwordChangeError.value = t("common.errors.validationFailed");
+    }
+  } finally {
+    passwordChangeBusy.value = false;
   }
 }
 </script>
@@ -253,6 +360,75 @@ async function handleLogin() {
         {{ error }}
       </div>
     </div>
+
+    <ConfirmDialog
+      v-model="showPasswordChangeDialog"
+      :title="t('auth.passwordExpiredTitle')"
+      :message="t('auth.passwordExpiredMessage')"
+      :confirm-label="t('auth.changePassword')"
+      :cancel-label="t('auth.logout')"
+      :busy="passwordChangeBusy"
+      :confirm-disabled="!canSubmitPasswordChange"
+      :dismissible="false"
+      @confirm="handlePasswordChangeConfirm"
+      @cancel="handlePasswordChangeCancel"
+    >
+      <div class="password-change-grid">
+        <div class="form-group">
+          <label for="password-change-current">{{ t("auth.password") }}</label>
+          <input
+            id="password-change-current"
+            v-model="passwordChangeForm.currentPassword"
+            type="password"
+            autocomplete="current-password"
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="password-change-new">{{ t("auth.newPassword") }}</label>
+          <input
+            id="password-change-new"
+            v-model="passwordChangeForm.newPassword"
+            type="password"
+            autocomplete="new-password"
+            :aria-invalid="passwordChangeMismatch ? 'true' : 'false'"
+            :aria-describedby="passwordChangeMismatch ? 'password-change-mismatch' : undefined"
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="password-change-confirm">{{ t("auth.confirmPassword") }}</label>
+          <input
+            id="password-change-confirm"
+            v-model="passwordChangeForm.confirmPassword"
+            type="password"
+            autocomplete="new-password"
+            :aria-invalid="passwordChangeMismatch ? 'true' : 'false'"
+            :aria-describedby="passwordChangeMismatch ? 'password-change-mismatch' : undefined"
+          />
+        </div>
+
+        <p
+          v-if="passwordChangeMismatch"
+          id="password-change-mismatch"
+          class="login-error"
+          role="alert"
+        >
+          {{ t("auth.passwordMismatch") }}
+        </p>
+
+        <div class="policy-hints">
+          <p class="policy-heading">{{ t("auth.passwordPolicy.title") }}</p>
+          <ul class="policy-list">
+            <li v-for="hint in passwordPolicyHints" :key="hint">{{ hint }}</li>
+          </ul>
+        </div>
+
+        <p v-if="passwordChangeError" class="login-error" role="alert">
+          {{ passwordChangeError }}
+        </p>
+      </div>
+    </ConfirmDialog>
   </div>
 </template>
 
@@ -408,5 +584,29 @@ async function handleLogin() {
   border-radius: var(--border-radius);
   text-align: center;
   font-size: var(--font-size-sm);
+}
+
+.password-change-grid {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.policy-hints {
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg-tertiary);
+  padding: var(--space-sm);
+}
+
+.policy-heading {
+  margin: 0 0 var(--space-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+}
+
+.policy-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--color-text-secondary);
 }
 </style>

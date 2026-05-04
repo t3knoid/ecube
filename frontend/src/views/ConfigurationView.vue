@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import { getConfiguration, restartConfigurationService, updateConfiguration } from '@/api/configuration.js'
+import { getPasswordPolicy, updatePasswordPolicy } from '@/api/admin.js'
 import { useToast } from '@/composables/useToast.js'
 
 const { t } = useI18n()
@@ -53,6 +54,18 @@ const form = ref({
   clear_callback_hmac_secret: false,
 })
 const originalForm = ref({ ...form.value })
+const passwordPolicyForm = ref({
+  minlen: 14,
+  minclass: 3,
+  maxrepeat: 3,
+  maxsequence: 4,
+  maxclassrepeat: 0,
+  dictcheck: 1,
+  usercheck: 1,
+  difok: 5,
+  retry: 3,
+})
+const originalPasswordPolicyForm = ref({ ...passwordPolicyForm.value })
 
 const fieldOrder = [
   'log_level',
@@ -96,6 +109,9 @@ const hasChanges = computed(() => {
 
   const nextSecret = String(form.value.callback_hmac_secret || '').trim()
   if (nextSecret) {
+    return true
+  }
+  if (Object.keys(passwordPolicyForm.value).some((key) => passwordPolicyForm.value[key] !== originalPasswordPolicyForm.value[key])) {
     return true
   }
   return !!(form.value.clear_callback_hmac_secret && originalForm.value.callback_hmac_secret_configured)
@@ -178,6 +194,22 @@ function normalizeForm(data) {
   originalForm.value = { ...next }
 }
 
+function normalizePasswordPolicy(data) {
+  const next = {
+    minlen: Number(data?.minlen ?? 14),
+    minclass: Number(data?.minclass ?? 3),
+    maxrepeat: Number(data?.maxrepeat ?? 3),
+    maxsequence: Number(data?.maxsequence ?? 4),
+    maxclassrepeat: Number(data?.maxclassrepeat ?? 0),
+    dictcheck: Number(data?.dictcheck ?? 1),
+    usercheck: Number(data?.usercheck ?? 1),
+    difok: Number(data?.difok ?? 5),
+    retry: Number(data?.retry ?? 3),
+  }
+  passwordPolicyForm.value = next
+  originalPasswordPolicyForm.value = { ...next }
+}
+
 function effectiveLogFileValue(currentEnabled, currentValue) {
   if (!currentEnabled) return ''
   const trimmed = String(currentValue || '').trim()
@@ -243,14 +275,29 @@ function resetForm() {
     clear_callback_hmac_secret: false,
   }
   logFileEnabled.value = originalLogFileEnabled.value
+  passwordPolicyForm.value = { ...originalPasswordPolicyForm.value }
+}
+
+function buildPasswordPolicyPayload() {
+  const payload = {}
+  for (const key of Object.keys(passwordPolicyForm.value)) {
+    if (passwordPolicyForm.value[key] !== originalPasswordPolicyForm.value[key]) {
+      payload[key] = passwordPolicyForm.value[key]
+    }
+  }
+  return payload
 }
 
 async function loadConfiguration() {
   loading.value = true
   error.value = ''
   try {
-    const response = await getConfiguration()
-    normalizeForm(response)
+    const [configurationResponse, passwordPolicyResponse] = await Promise.all([
+      getConfiguration(),
+      getPasswordPolicy(),
+    ])
+    normalizeForm(configurationResponse)
+    normalizePasswordPolicy(passwordPolicyResponse)
   } catch (err) {
     error.value = getConfigurationErrorMessage(err, 'load')
   } finally {
@@ -266,33 +313,40 @@ async function saveConfiguration() {
     error.value = err instanceof Error ? err.message : t('common.errors.validationFailed')
     return
   }
-  if (Object.keys(payload).length === 0) return
+  const passwordPolicyPayload = buildPasswordPolicyPayload()
+  if (Object.keys(payload).length === 0 && Object.keys(passwordPolicyPayload).length === 0) return
 
   saving.value = true
   error.value = ''
   try {
-    const result = await updateConfiguration(payload)
-    form.value.log_file = effectiveLogFileValue(logFileEnabled.value, form.value.log_file) || DEFAULT_LOG_FILE_PATH
-    if (payload.callback_hmac_secret) {
-      form.value.callback_hmac_secret_configured = true
+    if (Object.keys(passwordPolicyPayload).length) {
+      const nextPasswordPolicy = await updatePasswordPolicy(passwordPolicyPayload)
+      normalizePasswordPolicy(nextPasswordPolicy)
     }
-    if (payload.clear_callback_hmac_secret) {
-      form.value.callback_hmac_secret_configured = false
-    }
-    form.value.callback_hmac_secret = ''
-    form.value.clear_callback_hmac_secret = false
-    originalForm.value = { ...form.value }
-    originalLogFileEnabled.value = logFileEnabled.value
 
-    pendingRestartSettings.value = result.restart_required_settings || []
-    restartPending.value = !!result.restart_required
+    if (Object.keys(payload).length) {
+      const result = await updateConfiguration(payload)
+      form.value.log_file = effectiveLogFileValue(logFileEnabled.value, form.value.log_file) || DEFAULT_LOG_FILE_PATH
+      if (payload.callback_hmac_secret) {
+        form.value.callback_hmac_secret_configured = true
+      }
+      if (payload.clear_callback_hmac_secret) {
+        form.value.callback_hmac_secret_configured = false
+      }
+      form.value.callback_hmac_secret = ''
+      form.value.clear_callback_hmac_secret = false
+      originalForm.value = { ...form.value }
+      originalLogFileEnabled.value = logFileEnabled.value
 
-    if (result.applied_immediately?.length) {
-      toast.success(t('configuration.toasts.saved'))
+      pendingRestartSettings.value = result.restart_required_settings || []
+      restartPending.value = !!result.restart_required
+
+      if (result.restart_required) {
+        toast.warning(t('configuration.toasts.pendingRestart'))
+      }
     }
-    if (result.restart_required) {
-      toast.warning(t('configuration.toasts.pendingRestart'))
-    }
+
+    toast.success(t('configuration.toasts.saved'))
   } catch (err) {
     error.value = getConfigurationErrorMessage(err, 'save')
   } finally {
@@ -384,6 +438,45 @@ onMounted(loadConfiguration)
         <input id="cfg-db-pool-recycle" v-model.number="form.db_pool_recycle_seconds" type="number" min="-1" />
         <p class="field-help">{{ t('configuration.fields.db_pool_recycle_seconds.help') }}</p>
         <p class="restart-chip">{{ t('configuration.restartRequiredField') }}</p>
+      </article>
+
+      <article class="panel">
+        <h2>{{ t('configuration.sections.passwordPolicy') }}</h2>
+
+        <label for="cfg-policy-minlen">{{ t('configuration.passwordPolicy.minlen') }}</label>
+        <input id="cfg-policy-minlen" v-model.number="passwordPolicyForm.minlen" type="number" min="12" max="128" />
+
+        <label for="cfg-policy-minclass">{{ t('configuration.passwordPolicy.minclass') }}</label>
+        <input id="cfg-policy-minclass" v-model.number="passwordPolicyForm.minclass" type="number" min="0" max="4" />
+
+        <label for="cfg-policy-maxrepeat">{{ t('configuration.passwordPolicy.maxrepeat') }}</label>
+        <input id="cfg-policy-maxrepeat" v-model.number="passwordPolicyForm.maxrepeat" type="number" min="0" />
+
+        <label for="cfg-policy-maxsequence">{{ t('configuration.passwordPolicy.maxsequence') }}</label>
+        <input id="cfg-policy-maxsequence" v-model.number="passwordPolicyForm.maxsequence" type="number" min="0" />
+
+        <label for="cfg-policy-maxclassrepeat">{{ t('configuration.passwordPolicy.maxclassrepeat') }}</label>
+        <input id="cfg-policy-maxclassrepeat" v-model.number="passwordPolicyForm.maxclassrepeat" type="number" min="0" />
+
+        <label for="cfg-policy-dictcheck">{{ t('configuration.passwordPolicy.dictcheck') }}</label>
+        <select id="cfg-policy-dictcheck" v-model.number="passwordPolicyForm.dictcheck">
+          <option :value="1">{{ t('common.labels.enabled') }}</option>
+          <option :value="0">{{ t('common.labels.disabled') }}</option>
+        </select>
+
+        <label for="cfg-policy-usercheck">{{ t('configuration.passwordPolicy.usercheck') }}</label>
+        <select id="cfg-policy-usercheck" v-model.number="passwordPolicyForm.usercheck">
+          <option :value="1">{{ t('common.labels.enabled') }}</option>
+          <option :value="0">{{ t('common.labels.disabled') }}</option>
+        </select>
+
+        <label for="cfg-policy-difok">{{ t('configuration.passwordPolicy.difok') }}</label>
+        <input id="cfg-policy-difok" v-model.number="passwordPolicyForm.difok" type="number" min="0" max="255" />
+
+        <label for="cfg-policy-retry">{{ t('configuration.passwordPolicy.retry') }}</label>
+        <input id="cfg-policy-retry" v-model.number="passwordPolicyForm.retry" type="number" min="1" max="10" />
+
+        <p class="field-help">{{ t('configuration.passwordPolicy.enforceForRoot') }}</p>
       </article>
 
       <article class="panel">

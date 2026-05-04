@@ -212,6 +212,8 @@ The login page includes:
 - Session-expired banner when you were redirected after token expiry
 - Error banner for invalid credentials or connectivity failures
 
+If your local account password has expired, ECUBE opens a required password-change dialog instead of leaving you on a generic login failure. Re-enter your current password, enter and confirm a new password, and submit the change to continue into the application. If the host rejects the new password, ECUBE keeps the dialog open and shows the policy failure message so you can correct it without restarting the login flow.
+
 If login fails:
 
 - Re-enter username and password carefully
@@ -298,6 +300,8 @@ Typical information shown:
 - Number of active jobs
 - Drive state summary (`DISCONNECTED`, `DISABLED`, `AVAILABLE`, `IN_USE`)
 - Table of active jobs
+
+If your password is nearing expiration, the dashboard shows a dismissible warning banner with the remaining days. Dismissing the banner hides it only for the current browser session.
 
 Use the dashboard when you need a quick answer to questions such as:
 
@@ -1068,6 +1072,7 @@ What this page is for:
 
 - Adjusting logging behavior (level, format, and file logging options)
 - Adjusting selected database pool settings exposed by the UI
+- Updating the active password policy for locally managed PAM accounts
 - Tuning startup-analysis batch size to balance peak memory use against database round trips during large source-tree scans
 - Setting or clearing the system-wide `Default Callback URL` used for job webhooks when a job does not supply its own callback URL
 - Setting or clearing the write-only webhook signing secret used for the `X-ECUBE-Signature` header
@@ -1095,6 +1100,8 @@ Important operational notes:
 
 - Restart actions are never automatic from this page and always require explicit confirmation.
 - Restarting the application service can interrupt active operations. Prefer using a maintenance window or an idle period.
+- The `Password Policy` panel applies to locally managed OS accounts authenticated through PAM. New passwords, password resets, and expired-password recovery all use the active policy immediately.
+- `enforce_for_root` remains enabled and is not editable from the UI.
 - `Startup Analysis Batch Size` accepts values from `1` to `5000`. Lower values reduce peak memory use during startup analysis; higher values reduce database round trips.
 - `exFAT Cluster Size` controls the allocation unit ECUBE uses when formatting drives as exFAT. `4K` is recommended for most situations. Use larger values only for drives that will store very large files only and no small files.
 - The `Default Callback URL` must be a valid `https://` URL and is overridden by any job-specific `Webhook callback URL` entered on the Jobs page or Job Detail edit dialog.
