@@ -6,6 +6,10 @@ export function postLogin(username, password) {
   return toData(apiClient.post(`${API_BASE}/auth/token`, { username, password }))
 }
 
+export function postChangePassword(payload) {
+  return toData(apiClient.post(`${API_BASE}/auth/change-password`, payload))
+}
+
 export function getPublicAuthConfig() {
   return toData(apiClient.get(`${API_BASE}/auth/public-config`))
 }

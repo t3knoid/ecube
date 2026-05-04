@@ -115,6 +115,8 @@
         - usbutils
         - util-linux
         - exfatprogs
+        - passwd
+        - libpam-pwquality
         - nfs-common
         - cifs-utils
         - smbclient
@@ -262,6 +264,14 @@
       mode: "0600"
 
   # --- sudoers for OS user management ---------------------------------------
+  - name: Install password policy writer helper
+    copy:
+      src: "{{ playbook_dir }}/../../deploy/ecube-write-pwquality-conf"
+      dest: /usr/local/bin/ecube-write-pwquality-conf
+      owner: root
+      group: root
+      mode: "0755"
+
   - name: Install ecube sudoers file
     copy:
       src: "{{ playbook_dir }}/../../deploy/ecube-sudoers"

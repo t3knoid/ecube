@@ -354,6 +354,15 @@ class Settings(BaseSettings):
     #: Path to the ``chpasswd`` binary (must match sudoers whitelist).
     chpasswd_binary_path: str = "/usr/sbin/chpasswd"
 
+    #: Path to the ``chage`` binary (must match sudoers whitelist).
+    chage_binary_path: str = "/usr/bin/chage"
+
+    #: Path to the host ``pwquality.conf`` file.
+    pwquality_conf_path: str = "/etc/security/pwquality.conf"
+
+    #: Root-owned helper used for atomic ``pwquality.conf`` writes.
+    password_policy_writer_path: str = "/usr/local/bin/ecube-write-pwquality-conf"
+
     #: PAM service name used for local credential validation (``/auth/token``)
     #: via python-pam. Defaults to ``ecube``, a dedicated PAM config installed
     #: by the ECUBE installer (``/etc/pam.d/ecube``) that handles both local

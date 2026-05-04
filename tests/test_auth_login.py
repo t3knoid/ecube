@@ -11,7 +11,7 @@ import pytest
 from app.config import settings
 from app.main import app as fastapi_app
 from app.models.users import UserRole
-from app.routers.auth import _get_pam
+from app.routers.auth import _get_os_user, _get_pam, _get_password_policy
 
 
 # ---------------------------------------------------------------------------
@@ -55,6 +55,32 @@ def test_login_success_returns_token(unauthenticated_client, db):
     assert "iat" in claims
 
 
+def test_login_success_includes_password_expiry_warning_metadata(unauthenticated_client, db):
+    db.add(UserRole(username="warnuser", role="processor"))
+    db.commit()
+
+    mock_pam = MagicMock()
+    mock_pam.authenticate.return_value = True
+    mock_pam.get_user_groups.return_value = ["evidence-team"]
+
+    mock_policy = MagicMock()
+    mock_policy.get_password_expiration_info.return_value = MagicMock(
+        warning_active=True,
+        days_until_expiration=7,
+    )
+
+    fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
+    fastapi_app.dependency_overrides[_get_password_policy] = lambda: mock_policy
+
+    resp = unauthenticated_client.post(
+        "/auth/token",
+        json={"username": "warnuser", "password": "secret"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["password_expiration_warning_days"] == 7
+
+
 def test_login_success_token_is_usable(unauthenticated_client, db):
     """A token obtained from /auth/token can authenticate subsequent requests."""
     db.add(UserRole(username="admin-user", role="admin"))
@@ -93,6 +119,42 @@ def test_login_invalid_credentials_returns_401(unauthenticated_client):
 
     assert resp.status_code == 401
     assert "invalid" in resp.json()["message"].lower()
+
+
+def test_login_password_expired_returns_structured_401(unauthenticated_client):
+    mock_pam = MagicMock()
+    mock_pam.authenticate.return_value = False
+    mock_pam.code = 12
+    mock_pam.reason = "Authentication token is no longer valid; new one required"
+    fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
+
+    resp = unauthenticated_client.post(
+        "/auth/token",
+        json={"username": "expireduser", "password": "wrong"},
+    )
+
+    assert resp.status_code == 401
+    body = resp.json()
+    assert body["reason"] == "password_expired"
+    assert "expired" in body["message"].lower()
+
+
+def test_login_account_expired_returns_structured_401(unauthenticated_client):
+    mock_pam = MagicMock()
+    mock_pam.authenticate.return_value = False
+    mock_pam.code = 13
+    mock_pam.reason = "User account has expired"
+    fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
+
+    resp = unauthenticated_client.post(
+        "/auth/token",
+        json={"username": "lockedout", "password": "wrong"},
+    )
+
+    assert resp.status_code == 401
+    body = resp.json()
+    assert body["reason"] == "account_expired"
+    assert "account" in body["message"].lower()
 
 
 def test_login_without_roles_returns_403(unauthenticated_client):
@@ -284,6 +346,106 @@ def test_login_failure_creates_audit_log(unauthenticated_client, db):
     router_log = [l for l in logs if l.user == "baduser"]
     assert len(router_log) >= 1
     assert "reason" in router_log[0].details
+
+
+def test_change_password_accepts_expired_password_and_returns_token(unauthenticated_client, db):
+    from app.models.audit import AuditLog
+
+    db.add(UserRole(username="expireduser", role="processor"))
+    db.commit()
+
+    mock_pam = MagicMock()
+    mock_pam.authenticate.return_value = False
+    mock_pam.code = 12
+    mock_pam.reason = "Authentication token is no longer valid; new one required"
+    mock_pam.get_user_groups.return_value = ["ecube-processors"]
+
+    mock_provider = MagicMock()
+    mock_provider.reset_password.return_value = None
+
+    mock_policy = MagicMock()
+    mock_policy.get_password_expiration_info.return_value = None
+
+    fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
+    fastapi_app.dependency_overrides[_get_os_user] = lambda: mock_provider
+    fastapi_app.dependency_overrides[_get_password_policy] = lambda: mock_policy
+
+    resp = unauthenticated_client.post(
+        "/auth/change-password",
+        json={
+            "username": "expireduser",
+            "current_password": "Old#123456",
+            "new_password": "NewStrong#123456",
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["token_type"] == "bearer"
+    mock_provider.reset_password.assert_called_once_with("expireduser", "NewStrong#123456")
+
+    logs = db.query(AuditLog).filter(AuditLog.action == "PASSWORD_CHANGED").all()
+    assert any(log.user == "expireduser" for log in logs)
+
+
+def test_change_password_rejects_invalid_current_password(unauthenticated_client):
+    mock_pam = MagicMock()
+    mock_pam.authenticate.return_value = False
+    mock_pam.code = None
+    mock_pam.reason = "Authentication failure"
+
+    mock_provider = MagicMock()
+    mock_policy = MagicMock()
+    mock_policy.get_password_expiration_info.return_value = None
+
+    fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
+    fastapi_app.dependency_overrides[_get_os_user] = lambda: mock_provider
+    fastapi_app.dependency_overrides[_get_password_policy] = lambda: mock_policy
+
+    resp = unauthenticated_client.post(
+        "/auth/change-password",
+        json={
+            "username": "expireduser",
+            "current_password": "wrong",
+            "new_password": "NewStrong#123456",
+        },
+    )
+
+    assert resp.status_code == 401
+    assert "invalid" in resp.json()["message"].lower()
+    mock_provider.reset_password.assert_not_called()
+
+
+def test_change_password_returns_422_for_pam_policy_violation(unauthenticated_client):
+    from app.infrastructure.os_user_protocol import OSUserError
+
+    mock_pam = MagicMock()
+    mock_pam.authenticate.return_value = False
+    mock_pam.code = 12
+    mock_pam.reason = "Authentication token is no longer valid; new one required"
+
+    mock_provider = MagicMock()
+    mock_provider.reset_password.side_effect = OSUserError(
+        "Command failed (exit 1): chpasswd: PAM: BAD PASSWORD: The password fails the dictionary check"
+    )
+
+    mock_policy = MagicMock()
+    mock_policy.get_password_expiration_info.return_value = None
+
+    fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
+    fastapi_app.dependency_overrides[_get_os_user] = lambda: mock_provider
+    fastapi_app.dependency_overrides[_get_password_policy] = lambda: mock_policy
+
+    resp = unauthenticated_client.post(
+        "/auth/change-password",
+        json={
+            "username": "expireduser",
+            "current_password": "Old#123456",
+            "new_password": "password",
+        },
+    )
+
+    assert resp.status_code == 422
+    assert resp.json()["message"] == "New password does not satisfy the active password policy."
 
 
 # ---------------------------------------------------------------------------

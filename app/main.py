@@ -27,7 +27,7 @@ from app.utils.sanitize import is_encoding_error, sanitize_error_message
 from app.logging_config import configure_logging
 from app.models.network import NetworkMount
 from app.openapi import build_ecube_openapi_schema, tags_metadata
-from app.routers import admin, audit, auth, browse, configuration, database_setup, drives, files, introspection, jobs, mounts, setup, telemetry, users
+from app.routers import admin, audit, auth, browse, configuration, database_setup, drives, files, introspection, jobs, mounts, password_policy, setup, telemetry, users
 from app.schemas.errors import ErrorResponse
 from app.schemas.introspection import HealthLiveResponse, HealthNotReadyResponse, HealthReadyResponse, HealthResponse, VersionResponse
 from app.session import close_session_backend, init_session_backend, mount_session_middleware
@@ -847,12 +847,20 @@ app.include_router(introspection.router, dependencies=[Depends(get_current_user)
 app.include_router(audit.router, dependencies=[Depends(get_current_user)])
 app.include_router(admin.router, dependencies=[Depends(get_current_user)])
 app.include_router(configuration.router, dependencies=[Depends(get_current_user)])
+app.include_router(password_policy.router, dependencies=[Depends(get_current_user)])
 app.include_router(telemetry.router, dependencies=[Depends(get_current_user)])
 app.include_router(users.router, dependencies=[Depends(get_current_user)])
 
 
-def _error_response(status_code: int, code: str, message: str, trace_id: str) -> JSONResponse:
-    body = ErrorResponse(code=code, message=message, trace_id=trace_id)
+def _error_response(
+    status_code: int,
+    code: str,
+    message: str,
+    trace_id: str,
+    *,
+    reason: str | None = None,
+) -> JSONResponse:
+    body = ErrorResponse(code=code, message=message, trace_id=trace_id, reason=reason)
     response = JSONResponse(status_code=status_code, content=body.model_dump())
     # Surface trace IDs in headers so middleware can avoid duplicate fallback logs.
     response.headers["X-Trace-Id"] = trace_id
@@ -944,7 +952,7 @@ async def authentication_error_handler(request: Request, exc: AuthenticationErro
     )
     logger.warning("401 %s trace_id=%s path=%s", exc.code, trace_id, request.url.path)
     _try_log_auth_failure(request, reason=exc.message, trace_id=trace_id)
-    return _error_response(401, exc.code, exc.message, trace_id)
+    return _error_response(401, exc.code, exc.message, trace_id, reason=exc.reason)
 
 
 @app.exception_handler(AuthorizationError)

@@ -26,6 +26,16 @@ class AuthenticationError(ECUBEException):
     default_code = "UNAUTHORIZED"
     default_message = "Authentication credentials are missing or invalid."
 
+    def __init__(
+        self,
+        message: str | None = None,
+        code: str | None = None,
+        *,
+        reason: str | None = None,
+    ) -> None:
+        super().__init__(message=message, code=code)
+        self.reason = reason
+
 
 class AuthorizationError(ECUBEException):
     """Raised when an authenticated user lacks the required role/permission (HTTP 403)."""

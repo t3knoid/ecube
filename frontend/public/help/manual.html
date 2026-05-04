@@ -365,6 +365,7 @@ Drive state summary (<code>DISCONNECTED</code>, <code>DISABLED</code>, <code>AVA
 </li><li>
 Table of active jobs
 </li></ul>
+<p>If your password is nearing expiration, the dashboard shows a dismissible warning banner with the remaining days. Dismissing the banner hides it only for the current browser session.</p>
 <p>Use the dashboard when you need a quick answer to questions such as:</p>
 <ul><li>
 Is the system healthy?
@@ -1189,6 +1190,8 @@ Adjusting logging behavior (level, format, and file logging options)
 </li><li>
 Adjusting selected database pool settings exposed by the UI
 </li><li>
+Updating the active password policy for locally managed PAM accounts
+</li><li>
 Tuning startup-analysis batch size to balance peak memory use against database round trips during large source-tree scans
 </li><li>
 Setting or clearing the system-wide <code>Default Callback URL</code> used for job webhooks when a job does not supply its own callback URL
@@ -1230,6 +1233,10 @@ If you select cancel, no restart is triggered and the service keeps running.
 Restart actions are never automatic from this page and always require explicit confirmation.
 </li><li>
 Restarting the application service can interrupt active operations. Prefer using a maintenance window or an idle period.
+</li><li>
+The <code>Password Policy</code> panel applies to locally managed OS accounts authenticated through PAM. New passwords, password resets, and expired-password recovery all use the active policy immediately.
+</li><li>
+<code>enforce_for_root</code> remains enabled and is not editable from the UI.
 </li><li>
 <code>Startup Analysis Batch Size</code> accepts values from <code>1</code> to <code>5000</code>. Lower values reduce peak memory use during startup analysis; higher values reduce database round trips.
 </li><li>
