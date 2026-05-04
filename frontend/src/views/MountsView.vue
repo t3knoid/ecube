@@ -596,11 +596,6 @@ function closeRowActionsMenu(event) {
   }
 }
 
-function handleMenuDetails(mount, event) {
-  closeRowActionsMenu(event)
-  openMountDetails(mount.id)
-}
-
 function handleMenuBrowse(mount, event) {
   closeRowActionsMenu(event)
   void toggleBrowse(mount.id)
@@ -708,6 +703,11 @@ onBeforeUnmount(() => {
     <input v-model="search" type="text" :placeholder="t('mounts.searchPlaceholder')" :aria-label="t('mounts.searchPlaceholder')" />
 
     <DataTable :columns="columns" :rows="paged" :empty-text="t('mounts.empty')">
+      <template #cell-id="{ row }">
+        <button class="cell-link mount-id-link" type="button" @click="openMountDetails(row.id)">
+          {{ row.id }}
+        </button>
+      </template>
       <template #cell-project_id="{ row }">{{ formatProjectId(row.project_id) }}</template>
       <template #cell-current_project_job_id="{ row }">
         <button
@@ -736,7 +736,6 @@ onBeforeUnmount(() => {
       <template #cell-last_checked_at="{ row }">{{ toIso(row.last_checked_at) }}</template>
       <template #cell-actions="{ row }">
         <div class="row-actions">
-          <button class="btn" @click="openMountDetails(row.id)">{{ t('mounts.details') }}</button>
           <button
             class="btn"
             :disabled="row.status !== 'MOUNTED'"
@@ -757,12 +756,6 @@ onBeforeUnmount(() => {
             </span>
           </summary>
           <div class="row-actions-popover">
-            <button
-              class="btn row-action-menu-details"
-              @click="handleMenuDetails(row, $event)"
-            >
-              {{ t('mounts.details') }}
-            </button>
             <button
               class="btn row-action-menu-browse"
               :disabled="row.status !== 'MOUNTED'"
