@@ -308,6 +308,7 @@
   },
   "browse": {
     "browseContents": "Browse Drive Contents",
+    "browseDriveContentsTitle": "Browse {device} Contents",
     "browseMountContents": "Browse Mount Contents",
     "loadError": "Failed to load directory listing. Please try again.",
     "empty": "This directory is empty.",

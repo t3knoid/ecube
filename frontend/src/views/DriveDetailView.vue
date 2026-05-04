@@ -143,6 +143,11 @@ function formatBytes(value) {
   return `${next.toFixed(next >= 10 ? 0 : 1)} ${units[unit]}`
 }
 
+function driveBrowseTitle(record) {
+  if (!record) return t('browse.browseContents')
+  return t('browse.browseDriveContentsTitle', { device: formatDriveIdentity(record) })
+}
+
 function protectedValue(value) {
   return value ? t('common.labels.protected') : '-'
 }
@@ -625,10 +630,10 @@ onBeforeUnmount(() => {
 
     <section v-if="browseExpanded && drive?.mount_path" class="browse-panel">
       <header class="browse-panel-header">
-        <h2>{{ t('browse.browseContents') }}</h2>
+        <h2>{{ driveBrowseTitle(drive) }}</h2>
         <button class="btn" @click="browseExpanded = false">{{ t('common.actions.close') }}</button>
       </header>
-      <DirectoryBrowser :mount-path="drive.mount_path" />
+      <DirectoryBrowser :mount-path="drive.mount_path" root-label="" />
     </section>
 
     <div v-if="showActiveJobWarning" class="warn-banner active-job-warning" role="alert" aria-live="assertive">

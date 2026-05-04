@@ -40,6 +40,15 @@ const breadcrumbs = computed(() => {
   return parts
 })
 
+const showRootCrumb = computed(() => Boolean(props.rootLabel) || breadcrumbs.value.length > 0)
+
+const rootCrumbLabel = computed(() => {
+  if (props.rootLabel) {
+    return displayedRootLabel.value
+  }
+  return '/'
+})
+
 // --- Sorting ---
 const sortKey = ref('name')
 const sortDir = ref('asc')
@@ -173,9 +182,9 @@ function goToNextPage() {
   <div class="directory-browser">
     <!-- Breadcrumb trail -->
     <nav class="breadcrumb" aria-label="breadcrumb">
-      <button class="crumb-btn" @click="navigateToCrumb(-1)">{{ displayedRootLabel }}</button>
+      <button v-if="showRootCrumb" class="crumb-btn" @click="navigateToCrumb(-1)">{{ rootCrumbLabel }}</button>
       <template v-for="(crumb, index) in breadcrumbs" :key="index">
-        <span class="crumb-sep" aria-hidden="true">/</span>
+        <span v-if="props.rootLabel || index > 0" class="crumb-sep" aria-hidden="true">/</span>
         <span
           v-if="index === breadcrumbs.length - 1"
           class="crumb-btn crumb-current"

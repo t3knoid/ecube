@@ -321,7 +321,7 @@ test('drives list and drive detail admin flows', async ({ page }) => {
   await expectNoCriticalA11yViolations(page)
 })
 
-test('drives mobile overflow menu stays visible without expanding the row', async ({ page }) => {
+test('drives mobile mounted rows browse from the device label without expanding the row', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await setupAuthenticatedPage(page, ['admin'])
 
@@ -344,6 +344,12 @@ test('drives mobile overflow menu stays visible without expanding the row', asyn
 
   await routeJson(page, '**/api/drives', () => [drive])
   await routeJson(page, '**/api/jobs**', [])
+  await routeJson(page, '**/api/browse**', {
+    entries: [
+      { name: 'DCIM', type: 'directory', size_bytes: null, modified_at: '2026-05-03T12:00:00Z' },
+    ],
+    has_more: false,
+  })
 
   await page.goto('/drives')
   await expect(page.getByRole('heading', { name: 'Drives' })).toBeVisible()
@@ -351,21 +357,18 @@ test('drives mobile overflow menu stays visible without expanding the row', asyn
   const row = page.locator('tbody tr').first()
   const rowBoxBefore = await row.boundingBox()
 
-  const toggle = page.getByLabel('SanDisk Ultra - Port 1 drive actions')
-  await toggle.click()
+  await page.getByRole('row').filter({ has: page.getByText('SanDisk Ultra - Port 1') }).getByRole('button', { name: 'SanDisk Ultra - Port 1' }).click()
 
-  const popover = page.locator('.row-actions-popover').first()
-  await expect(popover).toBeVisible()
-  const popoverBox = await popover.boundingBox()
+  await expect(page.getByRole('heading', { name: 'Browse SanDisk Ultra - Port 1 Contents' })).toBeVisible()
+  await expect(page.locator('.breadcrumb')).not.toContainText('/mnt/ecube/1')
+
+  await page.getByRole('button', { name: 'DCIM' }).click()
+  await expect(page.locator('.breadcrumb')).toContainText('/DCIM')
+  await expect(page.locator('.breadcrumb')).not.toContainText('//')
 
   const rowBoxAfter = await row.boundingBox()
 
   expect(rowBoxBefore).not.toBeNull()
-  expect(popoverBox).not.toBeNull()
   expect(rowBoxAfter).not.toBeNull()
-  expect(popoverBox.x).toBeGreaterThanOrEqual(0)
-  expect(popoverBox.y).toBeGreaterThanOrEqual(0)
-  expect(popoverBox.x + popoverBox.width).toBeLessThanOrEqual(391)
-  expect(popoverBox.y + popoverBox.height).toBeLessThanOrEqual(845)
   expect(Math.abs(rowBoxAfter.height - rowBoxBefore.height)).toBeLessThanOrEqual(1)
 })
