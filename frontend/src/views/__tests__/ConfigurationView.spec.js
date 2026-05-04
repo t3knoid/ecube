@@ -158,6 +158,35 @@ describe('ConfigurationView logging defaults', () => {
     expect(mocks.updatePasswordPolicy).toHaveBeenCalledWith({ minlen: 18, retry: 5 })
   })
 
+  it('keeps the configuration page available when password policy loading fails', async () => {
+    mocks.getConfiguration.mockResolvedValue(buildResponse({ log_level: 'DEBUG' }))
+    mocks.getPasswordPolicy.mockRejectedValue({
+      response: {
+        status: 503,
+        data: { code: 'HTTP_503' },
+      },
+    })
+    mocks.updateConfiguration.mockResolvedValue({
+      settings: [],
+      applied_immediately: ['job_detail_files_page_size'],
+      restart_required: false,
+      restart_required_settings: [],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('configuration.errors.loadFailed'))
+    expect(wrapper.find('#cfg-policy-minlen').element.disabled).toBe(true)
+
+    await wrapper.find('#cfg-job-detail-files-page-size').setValue('80')
+    await wrapper.find('.action-row .btn.btn-primary').trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateConfiguration).toHaveBeenCalledWith({ job_detail_files_page_size: 80 })
+    expect(mocks.updatePasswordPolicy).not.toHaveBeenCalled()
+  })
+
   it('loads and saves the startup analysis batch size', async () => {
     mocks.getConfiguration.mockResolvedValue(buildResponse({ startup_analysis_batch_size: 250 }))
     mocks.updateConfiguration.mockResolvedValue({
