@@ -822,7 +822,7 @@ def introspection_version():
 
 def custom_openapi():
     """Generate OpenAPI schema with security scheme definitions."""
-    return build_ecube_openapi_schema(app)
+    return build_ecube_openapi_schema(app, root_path_override=settings.api_root_path)
 
 
 app.openapi = custom_openapi

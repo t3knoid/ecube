@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import Depends, FastAPI
 from fastapi.openapi.utils import get_openapi
@@ -97,9 +97,15 @@ _CONDITIONAL_AUTH_PATHS = {
 }
 
 
-def build_ecube_openapi_schema(app: FastAPI) -> dict[str, Any]:
+def build_ecube_openapi_schema(
+    app: FastAPI,
+    *,
+    root_path_override: Optional[str] = None,
+) -> dict[str, Any]:
     if app.openapi_schema:
         return app.openapi_schema
+
+    root_path = root_path_override if root_path_override is not None else settings.api_root_path
 
     openapi_schema = get_openapi(
         title=app.title,
@@ -109,7 +115,7 @@ def build_ecube_openapi_schema(app: FastAPI) -> dict[str, Any]:
         license_info=app.license_info,
         tags=app.openapi_tags,
         routes=app.routes,
-        servers=[{"url": settings.api_root_path}] if settings.api_root_path else None,
+        servers=[{"url": root_path}] if root_path else None,
     )
 
     openapi_schema.setdefault("components", {}).setdefault("securitySchemes", {}).update({
