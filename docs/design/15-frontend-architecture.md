@@ -197,7 +197,7 @@ The authenticated layout uses a persistent `AppShell` component wrapping all pos
 | `/users` | UsersView | Yes | admin | Screen 8 |
 | `/system` | SystemView | Yes | All | Screen 9 |
 
-¹ Setup route is accessible only when the system is not yet initialized; the app redirects to `/setup` automatically if `GET /setup/status` indicates first-run.
+¹ Setup route is accessible only when the system is not yet initialized; the app redirects to `/setup` automatically if `GET /setup/status` indicates first-run, and the shared API client also returns the browser to `/setup` if a normal API call later receives the backend setup-required `503` error envelope.
 
 ### 4.3 Navigation Guards
 

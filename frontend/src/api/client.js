@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { LOGIN_PATH } from '@/constants/routes.js'
+import { LOGIN_PATH, SETUP_PATH } from '@/constants/routes.js'
 import { STORAGE_TOKEN_KEY } from '@/constants/storage.js'
 import { AUTH_RESET_EVENT, EXPIRED_QUERY_KEY, EXPIRED_QUERY_VALUE } from '@/constants/auth.js'
 import { useToast } from '@/composables/useToast.js'
@@ -56,6 +56,15 @@ export function isUnauthorizedAuthPayload(data) {
   return code === 'UNAUTHORIZED' && message === 'missing authentication token'
 }
 
+export function isDatabaseNotConfiguredPayload(status, data) {
+  if (status !== 503 || !data || typeof data !== 'object') return false
+
+  const code = typeof data.code === 'string' ? data.code.trim().toUpperCase() : ''
+  const message = normalizeErrorMessage(data, '').trim().toLowerCase()
+
+  return code === 'HTTP_503' && message === 'database is not configured yet. complete setup first.'
+}
+
 function resetAuthAndRedirect(data) {
   sessionStorage.removeItem(STORAGE_TOKEN_KEY)
   window.dispatchEvent(new Event(AUTH_RESET_EVENT))
@@ -63,6 +72,12 @@ function resetAuthAndRedirect(data) {
   if (window.location.pathname !== LOGIN_PATH) {
     const isExpired = isExpiredAuthPayload(data)
     window.location.href = isExpired ? `${LOGIN_PATH}?${EXPIRED_QUERY_KEY}=${EXPIRED_QUERY_VALUE}` : LOGIN_PATH
+  }
+}
+
+function redirectToSetup() {
+  if (window.location.pathname !== SETUP_PATH) {
+    window.location.href = SETUP_PATH
   }
 }
 
@@ -111,6 +126,8 @@ apiClient.interceptors.response.use(
       }
     } else if (status === 422) {
       warning(normalizeErrorMessage(data, i18n.global.t('common.errors.validationFailed')))
+    } else if (isDatabaseNotConfiguredPayload(status, data)) {
+      redirectToSetup()
     } else if (status >= 500 && status < 600) {
       toastError(normalizeErrorMessage(data, i18n.global.t('common.errors.serverErrorGeneric')), { traceId: data.trace_id || null })
     }
