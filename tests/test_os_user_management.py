@@ -1844,6 +1844,80 @@ class TestSetupEndpoints:
     @patch("app.services.os_user_service.subprocess.run")
     @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
+    def test_initialize_returns_422_for_password_policy_violation_during_admin_creation(
+        self,
+        mock_pwd,
+        mock_grp,
+        mock_subprocess,
+        unauthenticated_client,
+        _mock_trust_proxy_persistence,
+    ):
+        mock_grp.getgrnam.side_effect = [
+            KeyError("no such group"),
+            KeyError("no such group"),
+            KeyError("no such group"),
+            KeyError("no such group"),
+            _make_grp(name="ecube-admins"),
+        ]
+        mock_grp.getgrall.return_value = []
+        mock_pwd.getpwnam.side_effect = [
+            KeyError("no such user"),
+        ]
+        mock_subprocess.side_effect = [
+            _ok_result(),
+            _ok_result(),
+            _ok_result(),
+            _ok_result(),
+            _ok_result(),
+            _fail_result(
+                stderr=(
+                    "BAD PASSWORD: The password is shorter than 14 characters\n"
+                    "chpasswd: (user admin1) pam_chauthtok() failed, error: Have exhausted maximum number of retries for service\n"
+                    "chpasswd: (line 1, user admin1) password not changed"
+                )
+            ),
+            _ok_result(),
+        ]
+
+        resp = unauthenticated_client.post("/setup/initialize", json={
+            "username": "admin1",
+            "password": "short",
+        })
+
+        assert resp.status_code == 422
+        body = resp.json()
+        assert body["code"] == "HTTP_422"
+        assert body["message"] == "New password does not satisfy the active password policy."
+
+    @patch("app.routers.setup.get_os_user_provider")
+    def test_initialize_returns_422_for_password_policy_violation_when_existing_user_recovery_fails(
+        self,
+        mock_get_provider,
+        unauthenticated_client,
+        _mock_trust_proxy_persistence,
+    ):
+        provider = MagicMock()
+        provider.ensure_ecube_groups.return_value = []
+        provider.create_user.side_effect = OSUserError("User 'admin1' already exists")
+        provider.add_user_to_groups.return_value = None
+        provider.reset_password.side_effect = OSUserError(
+            "Password has been already used. Choose another. passwd: password unchanged"
+        )
+        mock_get_provider.return_value = provider
+
+        resp = unauthenticated_client.post("/setup/initialize", json={
+            "username": "admin1",
+            "password": "StrongPass#123",
+        })
+
+        assert resp.status_code == 422
+        body = resp.json()
+        assert body["code"] == "HTTP_422"
+        assert body["message"] == "New password does not satisfy the active password policy."
+
+    @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
     def test_initialize_conflict_when_already_set_up(
         self,
         mock_pwd,
