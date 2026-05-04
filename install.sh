@@ -1722,6 +1722,10 @@ _ensure_common_password_stack() {
   ' "$common_password_path" > "$common_password_tmp"
 
   mv -f "$common_password_tmp" "$common_password_path"
+  chmod 0644 "$common_password_path"
+  if [[ "$(id -u)" == "0" ]]; then
+    chown root:root "$common_password_path"
+  fi
 }
 
 _ensure_host_password_policy_defaults() {
