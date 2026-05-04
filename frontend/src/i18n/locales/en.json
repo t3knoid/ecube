@@ -26,6 +26,8 @@
     "loggingIn": "Logging in…",
     "username": "Username",
     "password": "Password",
+    "confirmPassword": "Confirm Password",
+    "passwordMismatch": "Passwords do not match",
     "sessionExpired": "Session Expired",
     "sessionExpiredMessage": "Your session has expired. Please log in again to continue.",
     "demoAccess": "Demo Access",
