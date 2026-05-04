@@ -43,7 +43,8 @@ test('setup wizard full step flow on uninitialized system', async ({ page }) => 
   await expect(page.getByLabel('Trust reverse-proxy client IP headers')).not.toBeChecked()
   await page.getByRole('button', { name: 'Next' }).click()
 
-  await page.getByLabel('Password').fill('AdminPass123!')
+  await page.getByLabel('Password', { exact: true }).fill('AdminPass123!')
+  await page.getByLabel('Confirm Password').fill('AdminPass123!')
   await page.getByRole('button', { name: 'Create Admin User' }).click()
   await expect(page.getByText('Admin user created successfully. Continue to the next step.')).toBeVisible()
   await page.getByRole('button', { name: 'Next' }).click()
