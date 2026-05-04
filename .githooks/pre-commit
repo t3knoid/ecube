@@ -24,7 +24,11 @@ HELP_HTML_FILE="frontend/public/help/manual.html"
 HELP_BUILD_SCRIPT="scripts/build-help.mjs"
 HELP_PACKAGE_FILE="frontend/package.json"
 DBML_FILE="docs/database/ecube-schema.dbml"
+POSTMAN_COLLECTION_FILE="postman/ecube-postman-collection.json"
+POSTMAN_CHECK_SCRIPT="scripts/check_postman_collection.py"
+POSTMAN_SYNC_SCRIPT="scripts/sync_postman_collection.py"
 SCHEMA_MODEL_GLOB='^app/models/'
+API_SURFACE_GLOB='^app/(main\.py|routers/|schemas/|auth\.py|dependencies\.py)'
 
 # Only run when either file is staged
 if git diff --cached --name-only | grep -qE "(${MD_FILE}|${XLSX_FILE})"; then
@@ -58,6 +62,19 @@ if git diff --cached --name-only | grep -qE "(${DBML_FILE})|${SCHEMA_MODEL_GLOB}
         echo "ERROR: DBML schema reference is out of sync with the latest schema changes."
         echo "Run:  $PYTHON_BIN scripts/generate_dbml_schema.py"
         echo "then stage docs/database/ecube-schema.dbml and commit again."
+        exit 1
+    fi
+fi
+
+# Only run when the Postman collection or API contract surfaces are staged
+if git diff --cached --name-only | grep -qE "(${POSTMAN_COLLECTION_FILE}|${POSTMAN_CHECK_SCRIPT}|${POSTMAN_SYNC_SCRIPT})|${API_SURFACE_GLOB}"; then
+    echo "pre-commit: checking Postman collection route sync..."
+    if ! "$PYTHON_BIN" scripts/check_postman_collection.py; then
+        echo ""
+        echo "ERROR: Postman collection requests are out of sync with the current ECUBE API routes."
+        echo "Run:  $PYTHON_BIN scripts/sync_postman_collection.py"
+        echo "then review and stage $POSTMAN_COLLECTION_FILE"
+        echo "then stage the collection and commit again."
         exit 1
     fi
 fi

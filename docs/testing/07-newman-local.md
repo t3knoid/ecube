@@ -20,6 +20,12 @@ The script is aligned with the Schemathesis runner and will:
 - Run smoke requests from the Postman collection.
 - Tear down containers on exit.
 
+If you change ECUBE routes or the collection itself, refresh the generated OpenAPI sync section first:
+
+```bash
+python3 scripts/sync_postman_collection.py
+```
+
 ---
 
 ## Quick Start
@@ -34,6 +40,8 @@ This runs authenticated smoke folders from `postman/ecube-postman-collection.jso
 - Health & Version
 - Introspection
 - Audit
+
+The collection also contains a generated `OpenAPI Route Sync (Generated)` folder that is maintained by `scripts/sync_postman_collection.py` so the repo can detect route drift during pre-commit.
 
 ---
 
