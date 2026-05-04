@@ -457,7 +457,7 @@ You can typically:
 
 - Refresh the mount list
 - Add a new mount definition
-- Open Mount Detail for an existing mount definition
+- Open Mount Detail for an existing mount definition from the clickable mount ID
 
 `admin` and `manager` users can also edit or remove a mount from Mount Detail. `processor` and `auditor` users can open Mount Detail and browse mounted shares, but they do not see `Edit` or `Remove` actions and sensitive path fields remain redacted.
 
@@ -490,7 +490,7 @@ If share browsing is unavailable because the ECUBE host is missing a required di
 
 ### 8.1.1 Editing a Mount
 
-Use `Details` on an existing mount row to open Mount Detail, then use `Edit` from the detail action row to reopen the edit dialog in place.
+Use the clickable mount ID on an existing mount row to open Mount Detail, then use `Edit` from the detail action row to reopen the edit dialog in place.
 
 - The dialog pre-fills the current type, remote path, and project ID.
 - Mount Detail shows Type, Project, NFS Client version, Last Checked, Job ID, and Status before you open the dialog. `admin` and `manager` users also see the raw Remote Path and Local Mount Point values there; read-only roles see those path fields redacted.
@@ -512,7 +512,7 @@ From Mount Detail, `admin` and `manager` users can remove the mount definition w
 
 Remove a mount only if it is no longer needed. If existing workflows depend on it, removing the definition can interrupt job creation or repeatability.
 
-![Mounts page with Details and Browse actions (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/mounts-default-chromium-linux.png)
+![Mounts page with ID link and Browse action (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/mounts-default-chromium-linux.png)
 
 ---
 

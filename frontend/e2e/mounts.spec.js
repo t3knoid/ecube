@@ -143,7 +143,7 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
     },
   ])
 
-  await page.getByRole('button', { name: 'Details' }).nth(1).click()
+  await page.getByRole('row').filter({ has: page.getByText('CASE-2026-001') }).getByRole('button', { name: '11' }).click()
   await expect(page).toHaveURL(/\/mounts\/11$/)
   await expect(page.getByRole('heading', { name: 'Mount Detail #11' })).toBeVisible()
 

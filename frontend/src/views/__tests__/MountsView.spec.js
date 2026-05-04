@@ -83,6 +83,7 @@ function mountView() {
             <div>
               <div class="column-labels">{{ (columns || []).map((column) => column.label).join('|') }}</div>
               <div v-for="row in rows" :key="row.id" class="row-stub">
+                <span class="row-id"><slot name="cell-id" :row="row" /></span>
                 <span class="row-project">{{ row.project_id || '-' }}</span>
                 <span class="row-job-id">{{ row.current_project_job_id || '-' }}</span>
                 <slot name="cell-project_id" :row="row" />
@@ -180,16 +181,17 @@ describe('MountsView removal flow', () => {
     })
   })
 
-  it('opens the mount detail page from the desktop details action', async () => {
+  it('links the mount ID value to the mount detail page', async () => {
     mocks.getMounts.mockResolvedValueOnce([buildMount({ status: 'UNMOUNTED' })])
 
     const wrapper = mountView()
     await flushPromises()
 
-    const detailButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.details'))
-    expect(detailButton).toBeTruthy()
+    const detailButton = wrapper.findAll('.mount-id-link')
+    expect(detailButton).toHaveLength(1)
+    expect(detailButton[0].text()).toBe('11')
 
-    await detailButton.trigger('click')
+    await detailButton[0].trigger('click')
     await flushPromises()
 
     expect(mocks.push).toHaveBeenCalledWith({ name: 'mount-detail', params: { id: 11 } })
@@ -202,25 +204,19 @@ describe('MountsView removal flow', () => {
     await flushPromises()
 
     const labels = wrapper.findAll('button').map((node) => node.text())
-    expect(labels).toContain(i18n.global.t('mounts.details'))
     expect(labels).toContain(i18n.global.t('mounts.browse'))
+    expect(labels).not.toContain(i18n.global.t('mounts.details'))
     expect(labels).not.toContain(i18n.global.t('common.actions.edit'))
     expect(labels).not.toContain(i18n.global.t('mounts.remove'))
   })
 
-  it('forwards compact row action menu buttons to the details and browse handlers', async () => {
+  it('forwards compact row action menu browse button without a separate details action', async () => {
     mocks.getMounts.mockResolvedValueOnce([buildMount({ status: 'MOUNTED', local_mount_point: '/smb/demo-case-002' })])
 
     const wrapper = mountView()
     await flushPromises()
 
-    const detailButton = wrapper.find('.row-action-menu-details')
-    expect(detailButton.exists()).toBe(true)
-
-    await detailButton.trigger('click')
-    await flushPromises()
-
-    expect(mocks.push).toHaveBeenCalledWith({ name: 'mount-detail', params: { id: 11 } })
+    expect(wrapper.find('.row-action-menu-details').exists()).toBe(false)
 
     const browseButton = wrapper.find('.row-action-menu-browse')
     expect(browseButton.exists()).toBe(true)
@@ -259,9 +255,11 @@ describe('MountsView removal flow', () => {
     expect(labels).toContain(i18n.global.t('dashboard.project'))
     expect(labels).toContain(i18n.global.t('jobs.jobId'))
 
-    const jobButton = wrapper.find('.cell-link')
-    expect(jobButton.exists()).toBe(true)
-    expect(jobButton.text()).toBe('27')
+    const jobButton = wrapper
+      .findAll('.cell-link')
+      .find((node) => node.text() === '27')
+
+    expect(jobButton).toBeTruthy()
 
     await jobButton.trigger('click')
     await flushPromises()
@@ -689,7 +687,8 @@ describe('MountsView removal flow', () => {
     expect(buttonTexts).not.toContain(i18n.global.t('mounts.test'))
     expect(buttonTexts).not.toContain(i18n.global.t('common.actions.edit'))
     expect(buttonTexts).not.toContain(i18n.global.t('mounts.remove'))
-    expect(buttonTexts).toContain(i18n.global.t('mounts.details'))
+    expect(buttonTexts).not.toContain(i18n.global.t('mounts.details'))
+    expect(buttonTexts).toContain('11')
   })
 
   it('clears the test success banner when the add dialog is cancelled', async () => {

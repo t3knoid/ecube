@@ -527,7 +527,7 @@ Refresh the mount list
 </li><li>
 Add a new mount definition
 </li><li>
-Open Mount Detail for an existing mount definition
+Open Mount Detail for an existing mount definition from the clickable mount ID
 </li></ul>
 <p><code>admin</code> and <code>manager</code> users can also edit or remove a mount from Mount Detail. <code>processor</code> and <code>auditor</code> users can open Mount Detail and browse mounted shares, but they do not see <code>Edit</code> or <code>Remove</code> actions and sensitive path fields remain redacted.</p>
 <h2 id="5-1-adding-a-mount">5.1 Adding a Mount</h2>
@@ -554,7 +554,7 @@ Credentials file
 <p>The exact credential fields required depend on the mount type and your environment.</p>
 <p>If share browsing is unavailable because the ECUBE host is missing a required discovery tool, the dialog now shows an actionable message telling the operator which host package to install before retrying. The browse control is hidden entirely when ECUBE is running in demo mode.</p>
 <h3 id="5-1-1-editing-a-mount">5.1.1 Editing a Mount</h3>
-<p>Use <code>Details</code> on an existing mount row to open Mount Detail, then use <code>Edit</code> from the detail action row to reopen the edit dialog in place.</p>
+<p>Use the clickable mount ID on an existing mount row to open Mount Detail, then use <code>Edit</code> from the detail action row to reopen the edit dialog in place.</p>
 <ul><li>
 The dialog pre-fills the current type, remote path, and project ID.
 </li><li>

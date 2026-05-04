@@ -694,6 +694,7 @@ Use a pending job with a mounted source and eligible destination drive.
 - Start and complete the job after a successful analyze run, then verify the startup-analysis summary remains visible in Job Detail even though the reusable startup-analysis entry snapshot has been cleared.
 
 - On the Drives page, verify the `Drive ID` value navigates to Drive Detail, verify the related `Job ID` still navigates to Job Detail when present, and verify mounted rows no longer show a separate `Details` action in either the desktop row actions or the compact overflow menu.
+- On the Mounts page, verify the mount ID value navigates to Mount Detail, verify the related `Job ID` still navigates to Job Detail when present, and verify mounted rows no longer show a separate `Details` action in either the desktop row actions or the compact overflow menu.
 
 #### 11.4d Responsive Mobile Workflow Checks
 
@@ -702,6 +703,7 @@ At a narrow viewport (for example `<= 768px` wide), verify the responsive operat
 - The shell sidebar is hidden by default, opens from the header navigation toggle, and closes again when the operator taps the backdrop or chooses a navigation link.
 - Drives, Mounts, and Jobs hide lower-priority columns on smaller screens, keep the most important identifiers visible, and move row actions into an overflow menu instead of forcing horizontal page expansion.
 - On mobile Drives rows, the visible `Drive ID` remains the path into Drive Detail, while the overflow menu omits a separate `Details` action and keeps only the remaining row-specific actions such as `Browse` when available.
+- On mobile Mounts rows, the visible mount ID remains the path into Mount Detail, while the overflow menu omits a separate `Details` action and keeps only the remaining row-specific actions such as `Browse` when available.
 - Mobile Jobs, Drives, and Mounts rows render compact status indicators that still expose accessible labels or tooltips for the underlying state.
 - Job Detail keeps the highest-priority lifecycle actions visible on mobile and moves the remaining actions into an overflow menu without changing role-based availability.
 - In the Job Detail Files panel, selecting a file path opens the hash viewer popup, the compare workflow is available inside the same popup, and mobile pagination uses a shorter page-number window than desktop.
