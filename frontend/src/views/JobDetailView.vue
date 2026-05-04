@@ -576,6 +576,7 @@ const liveTransferSummary = computed(() => {
     : null
 
   return {
+    startedAt: formatTimestamp(job.value.started_at),
     duration: formatDuration(durationSeconds),
     copyRate: formatCopyRate(copiedBytes, durationSeconds),
     timeRemaining: formatDuration(remainingSeconds),
@@ -609,6 +610,11 @@ const completionSummary = computed(() => {
 const completionSummaryHasFailures = computed(() => {
   if (!completionSummary.value) return false
   return completionSummary.value.filesFailed > 0 || completionSummary.value.filesTimedOut > 0
+})
+
+const overflowAssignments = computed(() => {
+  if (!Array.isArray(job.value?.overflow_assignments)) return []
+  return job.value.overflow_assignments
 })
 
 const manifestSummary = computed(() => {
@@ -709,6 +715,19 @@ function formatCopyRate(bytesValue, totalSeconds) {
 
 function formatDriveLabel(drive) {
   return formatDriveIdentity(drive)
+}
+
+function overflowAssignmentStateLabel(state) {
+  const normalized = String(state || 'RESERVED').toUpperCase()
+  return t(`jobs.overflowAssignmentStates.${normalized}`)
+}
+
+function overflowAssignmentDriveLabel(assignment) {
+  if (assignment?.drive) {
+    return formatDriveLabel(assignment.drive)
+  }
+  const driveId = Number(assignment?.drive_id || 0)
+  return driveId > 0 ? `#${driveId}` : '-'
 }
 
 function formatMountLabel(mount) {
@@ -1732,8 +1751,24 @@ onUnmounted(() => {
 
       <div class="hash-grid">
         <span>{{ t('jobs.destinationGroup') }}</span><strong class="mono wrap-anywhere">{{ resolveJobDestinationLabel(job) }}</strong>
+        <span>{{ t('jobs.sourcePath') }}</span><strong class="mono wrap-anywhere">{{ job.source_path || '-' }}</strong>
         <span>{{ t('drives.availableSpace') }}</span><strong>{{ formatBytes(job.drive?.available_bytes) }}</strong>
         <span>{{ t('jobs.callbackUrl') }}</span><strong class="mono wrap-anywhere">{{ job.callback_url || '-' }}</strong>
+      </div>
+
+      <div v-if="job.notes" class="detail-notes">
+        <strong>{{ t('audit.notes') }}</strong>
+        <p class="wrap-anywhere">{{ job.notes }}</p>
+      </div>
+
+      <div v-if="overflowAssignments.length" class="completion-summary" aria-live="polite">
+        <strong>{{ t('jobs.overflowPanelTitle') }}</strong>
+        <div v-for="assignment in overflowAssignments" :key="assignment.id" class="detail-overflow-assignment">
+          <div class="hash-grid">
+            <span>{{ t('jobs.destinationGroup') }}</span><strong class="mono wrap-anywhere">{{ overflowAssignmentDriveLabel(assignment) }}</strong>
+            <span>{{ t('common.labels.status') }}</span><strong>{{ overflowAssignmentStateLabel(assignment.state) }}</strong>
+          </div>
+        </div>
       </div>
 
       <ProgressBar
@@ -1749,6 +1784,7 @@ onUnmounted(() => {
       <div v-if="liveTransferSummary" class="completion-summary" aria-live="polite">
         <strong>{{ t('jobs.liveCopySummary') }}</strong>
         <div class="hash-grid">
+          <span>{{ t('jobs.startedAt') }}</span><strong>{{ liveTransferSummary.startedAt }}</strong>
           <span>{{ t('jobs.duration') }}</span><strong>{{ liveTransferSummary.duration }}</strong>
           <span>{{ t('jobs.copyRate') }}</span><strong>{{ liveTransferSummary.copyRate }}</strong>
           <span>{{ t('jobs.timeRemaining') }}</span><strong>{{ liveTransferSummary.timeRemaining }}</strong>
@@ -2738,6 +2774,18 @@ select {
 .log-entry-block {
   display: grid;
   gap: var(--space-xs);
+}
+
+.detail-notes {
+  margin-top: 1rem;
+}
+
+.detail-notes p {
+  margin: 0.5rem 0 0;
+}
+
+.detail-overflow-assignment + .detail-overflow-assignment {
+  margin-top: 0.75rem;
 }
 
 .log-entry-text {

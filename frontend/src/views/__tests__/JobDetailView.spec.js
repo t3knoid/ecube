@@ -1705,6 +1705,8 @@ describe('JobDetailView start action', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('Live copy summary')
+    expect(wrapper.text()).toContain('Started at')
+    expect(wrapper.text()).toContain(new Date('2026-04-24T15:00:00Z').toLocaleString())
     expect(wrapper.text()).toContain('Duration')
     expect(wrapper.text()).toContain('1m 0s')
     expect(wrapper.text()).toContain('Copy rate')
@@ -1715,6 +1717,59 @@ describe('JobDetailView start action', () => {
 
     wrapper.unmount()
     vi.useRealTimers()
+  })
+
+  it('shows source path notes and overflow assignments on job detail', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'RUNNING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      notes: 'Operator handoff note',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 60 * 1024 * 1024,
+      total_bytes: 120 * 1024 * 1024,
+      file_count: 4,
+      files_succeeded: 2,
+      files_failed: 0,
+      started_at: '2026-04-24T15:00:00Z',
+      active_duration_seconds: 0,
+      overflow_assignments: [
+        {
+          id: 22,
+          drive_id: 2,
+          state: 'RESERVED',
+          drive: {
+            id: 2,
+            display_device_label: 'Reserved Overflow Device',
+          },
+        },
+        {
+          id: 23,
+          drive_id: 3,
+          state: 'ACTIVE',
+          drive: {
+            id: 3,
+            display_device_label: 'Active Overflow Device',
+          },
+        },
+      ],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Source path')
+    expect(wrapper.text()).toContain('/nfs/project-001/evidence')
+    expect(wrapper.text()).toContain('Notes')
+    expect(wrapper.text()).toContain('Operator handoff note')
+    expect(wrapper.text()).toContain('Overflow drives')
+    expect(wrapper.text()).toContain('Reserved Overflow Device')
+    expect(wrapper.text()).toContain('Active Overflow Device')
+    expect(wrapper.text()).toContain('Reserved')
+    expect(wrapper.text()).toContain('Active')
   })
 
   it('does not show live copy summary while the job is verifying', async () => {
