@@ -52,6 +52,8 @@ class LinuxPamAuthenticator:
 
     def __init__(self) -> None:
         _require_posix()
+        self.code: int | None = None
+        self.reason: str | None = None
 
     def authenticate(self, username: str, password: str) -> bool:
         import pam as _pam  # type: ignore[import-untyped]
@@ -67,14 +69,27 @@ class LinuxPamAuthenticator:
 
         for service in service_chain:
             ok = bool(p.authenticate(username, password, service=service))
+            self.code = getattr(p, "code", None)
+            self.reason = getattr(p, "reason", None)
             if ok:
                 return True
-            logger.warning(
-                "PAM authentication failed for user '%s' via service '%s' (code=%s, reason=%s)",
-                username,
-                service,
-                getattr(p, "code", "unknown"),
-                getattr(p, "reason", "unknown"),
+            logger.info(
+                "PAM authentication failed",
+                extra={
+                    "auth_surface": "pam",
+                    "failure_category": "authentication_failed",
+                    "pam_service": service,
+                    "pam_code": self.code,
+                },
+            )
+            logger.debug(
+                "PAM authentication diagnostic",
+                extra={
+                    "username": username,
+                    "pam_service": service,
+                    "pam_code": self.code,
+                    "pam_reason": self.reason,
+                },
             )
 
         return False

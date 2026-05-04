@@ -72,6 +72,8 @@ Add the following manual checks when a release includes the archived-job workflo
 
 Install a fresh Ubuntu 22.04 LTS on the machine and make sure you have `sudo` access.
 
+For releases that include PAM password-policy management or expired-password recovery, complete the password-policy package steps in section 2 before executing the authentication and admin-password test cases below.
+
 ---
 
 ## 2. Install System Packages
@@ -85,6 +87,8 @@ sudo apt install -y \
   python3-pip \
   postgresql \
   postgresql-contrib \
+  passwd \
+  libpam-pwquality \
   nfs-common \
   cifs-utils \
   smbclient \
@@ -1012,6 +1016,26 @@ curl -sk -X POST https://localhost:8443/admin/configuration/restart \
 ---
 
 ## 12. QA Test Cases
+
+### Password Expiration and Recovery
+
+| Scenario | Steps | Expected |
+|---|---|---|
+| Login returns forced password-change flow for expired local password | Expire a QA local user password with `sudo chage -d 0 qa-processor`, open `Login`, and sign in with the old password | The login page opens the non-dismissible `Password Change Required` dialog instead of routing to the dashboard or showing a generic invalid-credentials banner |
+| Forced change requires matching confirmation | In the expired-password dialog, enter different values for `New Password` and `Confirm Password` | The confirm action stays disabled and the mismatch message remains visible until the values match |
+| Forced change accepts policy-compliant password and logs the user in | In the same dialog, submit a new password that satisfies the current policy | The dialog closes, the user is logged in, and the dashboard loads |
+| Forced change surfaces PAM policy rejection inline | Submit a password that violates the active host policy, such as a short dictionary word | The dialog remains open and shows the backend rejection message returned from `POST /auth/change-password` |
+| Dashboard warning banner reflects warning-window login | Set a QA user's warning window with `sudo chage -W 14 qa-processor` and expiration date inside that window, then log in successfully | The dashboard shows the password-expiry warning banner with the remaining day count, and dismissing it hides it only for the current browser session |
+
+### Admin Password Policy
+
+| Scenario | Steps | Expected |
+|---|---|---|
+| Admin can load current password policy | Sign in as `admin` and open `Configuration` | A `Password Policy` panel is visible and populated with the current values from `/admin/password-policy` |
+| Non-admins cannot manage password policy | Sign in as `manager`, `processor`, or `auditor` | The `Configuration` navigation item is absent and direct API calls to `/admin/password-policy` return `403` |
+| Admin can save allowlisted password policy values | Change one or more fields in the `Password Policy` panel and click `Save` | The values persist, a success toast appears, and a `PASSWORD_POLICY_UPDATED` audit entry is created |
+| `enforce_for_root` cannot be disabled | Attempt to set `enforce_for_root` to `0` through direct API use | The API returns `422` and leaves the persisted policy unchanged |
+| Admin password reset respects the active host policy | As `admin`, reset a user's password to a value that violates the active policy | The UI or API returns `422` with the PAM rejection reason instead of a generic server error |
 
 > **Tracking spreadsheet:** A trackable version of these test cases with columns for Status, Tester, Date, and Notes is available in [`ecube-qa-test-cases.xlsx`](ecube-qa-test-cases.xlsx) in this directory.
 

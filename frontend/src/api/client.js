@@ -42,6 +42,11 @@ function isAlreadyProvisionedConflict(status, data, requestUrl = '') {
   return url.includes('/api/setup/database/provision') && detail.includes('already provisioned')
 }
 
+function isInlineAuthFlowRequest(requestUrl = '') {
+  const url = String(requestUrl || '')
+  return url.includes('/api/auth/token') || url.includes('/api/auth/change-password')
+}
+
 export function isExpiredAuthPayload(data) {
   const message = normalizeErrorMessage(data, '').toLowerCase()
   return message.includes('expired')
@@ -125,6 +130,9 @@ apiClient.interceptors.response.use(
         warning(normalizeErrorMessage(data, i18n.global.t('common.errors.requestConflict')))
       }
     } else if (status === 422) {
+      if (isInlineAuthFlowRequest(requestUrl)) {
+        return Promise.reject(error)
+      }
       warning(normalizeErrorMessage(data, i18n.global.t('common.errors.validationFailed')))
     } else if (isDatabaseNotConfiguredPayload(status, data)) {
       redirectToSetup()

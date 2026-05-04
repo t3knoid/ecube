@@ -23,8 +23,10 @@ RUN apt-get update && apt-get -y upgrade && apt-get install -y --no-install-reco
     curl \
     exfatprogs \
     iproute2 \
+    libpam-pwquality \
     mount \
     nfs-common \
+    passwd \
     cifs-utils \
     smbclient \
     openssl \
@@ -61,6 +63,11 @@ RUN touch /opt/ecube/.env && chmod 600 /opt/ecube/.env
 COPY --from=frontend-build /opt/ecube/frontend/dist /opt/ecube/www
 
 ENV SERVE_FRONTEND_PATH=/opt/ecube/www
+
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=5 \
+    CMD curl -fsk -m5 https://localhost:${ECUBE_PORT:-8443}/health/live 2>/dev/null || curl -fs -m5 http://localhost:${ECUBE_PORT:-8443}/health/live 2>/dev/null || exit 1
+
+USER root
 
 EXPOSE 8000 8443
 

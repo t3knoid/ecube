@@ -141,7 +141,7 @@ For native development (recommended), interactive API docs are available at:
 
 If you run the Docker stack, docs are available at `https://localhost:8443/docs`.
 
-All endpoints except the public routes (`/health`, `/health/live`, `/health/ready`, `/auth/token`, `/setup/status`, `/setup/initialize`, `/introspection/version`, `/setup/database/system-info`) and documentation routes (`/docs`, `/redoc`, `/openapi.json`) require authentication via JWT bearer tokens. During initial setup, `/setup/database/test-connection`, `/setup/database/provision`, and `/setup/database/provision-status` also allow unauthenticated access; after setup, these endpoints require an `admin` token. See the [REST API Design](docs/design/06-rest-api-design.md) and [Security & Access Control](docs/design/10-security-and-access-control.md) for details.
+All endpoints except the public routes (`/health`, `/health/live`, `/health/ready`, `/auth/token`, `/auth/change-password`, `/setup/status`, `/setup/initialize`, `/introspection/version`, `/setup/database/system-info`) and documentation routes (`/docs`, `/redoc`, `/openapi.json`) require authentication via JWT bearer tokens. During initial setup, `/setup/database/test-connection`, `/setup/database/provision`, and `/setup/database/provision-status` also allow unauthenticated access; after setup, these endpoints require an `admin` token. See the [REST API Design](docs/design/06-rest-api-design.md) and [Security & Access Control](docs/design/10-security-and-access-control.md) for details.
 
 A [Postman collection](postman/ecube-postman-collection.json) is also available for testing and exploring the API.
 

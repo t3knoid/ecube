@@ -27,6 +27,7 @@ from app.infrastructure.drive_mount import DriveMountProvider
 from app.infrastructure.mount_protocol import MountProvider
 from app.infrastructure.os_user_protocol import OsUserProvider
 from app.infrastructure.pam_protocol import PamAuthenticator
+from app.infrastructure.password_policy_protocol import PasswordPolicyProvider
 
 __all__ = [
     "FilesystemDetector",
@@ -40,6 +41,7 @@ __all__ = [
     "MountProvider",
     "OsUserProvider",
     "PamAuthenticator",
+    "PasswordPolicyProvider",
     "get_filesystem_detector",
     "get_drive_formatter",
     "get_drive_space_probe",
@@ -49,6 +51,7 @@ __all__ = [
     "get_mount_provider",
     "get_os_user_provider",
     "get_authenticator",
+    "get_password_policy_provider",
     "validate_device_path",
 ]
 
@@ -95,6 +98,11 @@ def _linux_pam_authenticator() -> type[PamAuthenticator]:
     return LinuxPamAuthenticator
 
 
+def _linux_password_policy_provider() -> type[PasswordPolicyProvider]:
+    from app.services.password_policy_service import LinuxPasswordPolicyProvider
+    return LinuxPasswordPolicyProvider
+
+
 _FILESYSTEM_DETECTOR_REGISTRY: dict[str, Callable[[], type[FilesystemDetector]]] = {
     "linux": _linux_filesystem_detector,
 }
@@ -129,6 +137,10 @@ _OS_USER_PROVIDER_REGISTRY: dict[str, Callable[[], type[OsUserProvider]]] = {
 
 _PAM_AUTHENTICATOR_REGISTRY: dict[str, Callable[[], type[PamAuthenticator]]] = {
     "linux": _linux_pam_authenticator,
+}
+
+_PASSWORD_POLICY_PROVIDER_REGISTRY: dict[str, Callable[[], type[PasswordPolicyProvider]]] = {
+    "linux": _linux_password_policy_provider,
 }
 
 
@@ -183,3 +195,8 @@ def get_os_user_provider() -> OsUserProvider:
 def get_authenticator() -> PamAuthenticator:
     """Return the platform-appropriate :class:`PamAuthenticator`."""
     return _resolve(_PAM_AUTHENTICATOR_REGISTRY, "PamAuthenticator")
+
+
+def get_password_policy_provider() -> PasswordPolicyProvider:
+    """Return the platform-appropriate :class:`PasswordPolicyProvider`."""
+    return _resolve(_PASSWORD_POLICY_PROVIDER_REGISTRY, "PasswordPolicyProvider")
