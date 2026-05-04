@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.exceptions import ConflictError, ECUBEException, EncodingError
+from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, Manifest, StartupAnalysisEntry, StartupAnalysisStatus
 from app.models.network import MountStatus
@@ -970,6 +971,8 @@ def create_job(
         }
         if body.notes:
             audit_details["processor_notes"] = body.notes
+        if body.overflow_drive_ids:
+            audit_details["overflow_drive_ids"] = [int(drive_id) for drive_id in body.overflow_drive_ids]
         audit_repo.add(
             action="JOB_CREATED",
             user=actor,
@@ -1063,6 +1066,122 @@ def get_job(job_id: int, db: Session) -> ExportJob:
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
+
+
+def get_job_notes(job_id: int, db: Session) -> Optional[str]:
+    event = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.action == "JOB_CREATED",
+            AuditLog.job_id == job_id,
+        )
+        .order_by(AuditLog.timestamp.desc(), AuditLog.id.desc())
+        .first()
+    )
+    if event is None or not isinstance(event.details, dict):
+        return None
+
+    notes = event.details.get("processor_notes") or event.details.get("notes")
+    if not isinstance(notes, str):
+        return None
+
+    normalized = notes.strip()
+    return normalized or None
+
+
+def _get_job_created_details(job_id: int, db: Session) -> Optional[dict[str, Any]]:
+    event = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.action == "JOB_CREATED",
+            AuditLog.job_id == job_id,
+        )
+        .order_by(AuditLog.timestamp.desc(), AuditLog.id.desc())
+        .first()
+    )
+    if event is None or not isinstance(event.details, dict):
+        return None
+    return event.details
+
+
+def _normalize_audit_int_list(value: Any) -> set[int]:
+    if not isinstance(value, list):
+        return set()
+
+    normalized: set[int] = set()
+    for item in value:
+        try:
+            normalized.add(int(item))
+        except (TypeError, ValueError):
+            continue
+    return normalized
+
+
+def _get_overflow_continuation_drive_ids(job_id: int, db: Session) -> set[int]:
+    events = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.action == "JOB_OVERFLOW_CONTINUATION_STARTED",
+            AuditLog.job_id == job_id,
+        )
+        .order_by(AuditLog.timestamp.asc(), AuditLog.id.asc())
+        .all()
+    )
+
+    drive_ids: set[int] = set()
+    for event in events:
+        if not isinstance(event.details, dict):
+            continue
+        try:
+            drive_ids.add(int(event.details.get("drive_id")))
+        except (TypeError, ValueError):
+            continue
+    return drive_ids
+
+
+def list_job_overflow_assignments(job_id: int, db: Session) -> list[dict[str, Any]]:
+    assignments = DriveAssignmentRepository(db).list_for_job(job_id)
+    if len(assignments) <= 1:
+        return []
+
+    created_details = _get_job_created_details(job_id, db) or {}
+    created_overflow_drive_ids = _normalize_audit_int_list(created_details.get("overflow_drive_ids"))
+    reserved_overflow_drive_ids = {
+        int(assignment.drive_id)
+        for assignment in assignments
+        if assignment.activated_at is None and assignment.released_at is None
+    }
+    continuation_drive_ids = _get_overflow_continuation_drive_ids(job_id, db)
+    overflow_drive_ids = created_overflow_drive_ids | reserved_overflow_drive_ids | continuation_drive_ids
+    if not overflow_drive_ids:
+        return []
+
+    overflow_assignments: list[dict[str, Any]] = []
+    for assignment in assignments:
+        if int(assignment.drive_id) not in overflow_drive_ids:
+            continue
+
+        state = "RESERVED"
+        if assignment.released_at is not None:
+            state = "RELEASED"
+        elif assignment.activated_at is not None:
+            state = "ACTIVE"
+
+        overflow_assignments.append(
+            {
+                "id": assignment.id,
+                "drive_id": assignment.drive_id,
+                "file_count": int(assignment.file_count or 0),
+                "copied_bytes": int(assignment.copied_bytes or 0),
+                "assigned_at": assignment.assigned_at,
+                "activated_at": assignment.activated_at,
+                "released_at": assignment.released_at,
+                "state": state,
+                "drive": assignment.drive,
+            }
+        )
+
+    return overflow_assignments
 
 
 def _clear_job_startup_analysis_cache(job_row: Any) -> dict[str, int]:
@@ -1501,9 +1620,21 @@ def update_job(
                 previous_drive_id = cast(int, previous_drive_row.id)
                 if _other_active_assignments_for_drive(db, previous_drive_id, exclude_job_id=job_id) == 0:
                     previous_drive_row.current_state = DriveState.AVAILABLE
-        db.add(DriveAssignment(drive_id=int(requested_drive_id), job_id=job_id))
+        db.add(
+            DriveAssignment(
+                drive_id=int(requested_drive_id),
+                job_id=job_id,
+                activated_at=datetime.now(timezone.utc),
+            )
+        )
     elif assignment_row is None:
-        db.add(DriveAssignment(drive_id=int(requested_drive_id), job_id=job_id))
+        db.add(
+            DriveAssignment(
+                drive_id=int(requested_drive_id),
+                job_id=job_id,
+                activated_at=datetime.now(timezone.utc),
+            )
+        )
 
     drive_row.current_state = DriveState.IN_USE
     source_path_changed = cast(Optional[str], job_row.source_path) != validated_source_path

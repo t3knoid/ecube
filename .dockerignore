@@ -26,9 +26,13 @@ frontend/test-results
 tests
 
 # Documentation and support files
-docs
+docs/*
+!docs/operations/
+docs/operations/*
+!docs/operations/13-user-manual.md
 postman
-scripts
+scripts/*
+!scripts/build-help.mjs
 deploy/ansible
 
 # IDE and editor files

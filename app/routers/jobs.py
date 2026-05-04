@@ -24,6 +24,8 @@ from app.schemas.jobs import (
     JobCreate,
     JobDeleteResponse,
     JobFilesResponse,
+    JobOverflowDriveSchema,
+    JobOverflowAssignmentSchema,
     JobOverflowContinueRequest,
     JobStart,
     JobStartupAnalysisClearRequest,
@@ -215,6 +217,28 @@ def _redact_ip(job, user: CurrentUser, db: Session) -> ExportJobSchema:
         request_available_space_refresh_for_drive(active.drive)
         schema.drive = DriveInfoSchema.model_validate(active.drive)
         schema.drive.is_mounted = bool(getattr(active.drive, "mount_path", None))
+
+    schema.notes = job_service.get_job_notes(job.id, db)
+    schema.overflow_assignments = []
+    for assignment in job_service.list_job_overflow_assignments(job.id, db):
+        drive = assignment.get("drive")
+        drive_schema = None
+        if drive is not None:
+            drive_schema = JobOverflowDriveSchema.model_validate(drive)
+            drive_schema.is_mounted = bool(getattr(drive, "mount_path", None))
+        schema.overflow_assignments.append(
+            JobOverflowAssignmentSchema(
+                id=int(assignment["id"]),
+                drive_id=int(assignment["drive_id"]),
+                file_count=int(assignment.get("file_count") or 0),
+                copied_bytes=int(assignment.get("copied_bytes") or 0),
+                assigned_at=assignment.get("assigned_at"),
+                activated_at=assignment.get("activated_at"),
+                released_at=assignment.get("released_at"),
+                state=str(assignment.get("state") or "RESERVED"),
+                drive=drive_schema,
+            )
+        )
 
     return schema
 

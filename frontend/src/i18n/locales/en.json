@@ -142,6 +142,11 @@
     "chooseDrive": "Choose a device",
     "overflowPanelTitle": "Overflow drives",
     "overflowPanelHelp": "Reserve additional mounted drives in the order they should receive overflow data. Reserved drives stay in use so they cannot be assigned elsewhere.",
+    "overflowAssignmentStates": {
+      "RESERVED": "Reserved",
+      "ACTIVE": "Active",
+      "RELEASED": "Released"
+    },
     "noEligibleOverflowDrives": "No additional mounted USB drives are available to reserve for overflow.",
     "selectMount": "Select mount source",
     "chooseMount": "Choose a mount",

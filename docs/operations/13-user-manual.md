@@ -633,7 +633,7 @@ Archived jobs remain readable from Job Detail, but they are intentionally treate
 
 The job detail page provides deeper inspection and follow-up controls.
 
-Near the top of the page, Job Detail also shows the selected destination, the last known available space for the related drive when ECUBE has one, and the current job-specific webhook callback URL.
+Near the top of the page, Job Detail also shows the selected destination, the trusted source path, the last known available space for the related drive when ECUBE has one, the current job-specific webhook callback URL, any operator notes captured when the job was created, and the current reserved or active overflow drive assignments for that job.
 
 Typical functions include:
 
@@ -673,7 +673,7 @@ Use them when appropriate:
 
 When a pause is requested, the Jobs list and Job Detail page can show a `Pause in progress` dialog while ECUBE waits for active copy threads to drain. The Start action remains unavailable during `PAUSING` and becomes available again once the job reaches `PAUSED`.
 
-While a job is actively copying, Job Detail shows a live `Duration` field that reflects cumulative active runtime only. The displayed value continues updating while the job is `RUNNING`, does not add paused time while the job is `PAUSED`, and resumes from the previously stored active runtime after a later restart instead of resetting to zero.
+While a job is actively copying, Job Detail shows a live summary with the current run `Started at` timestamp and a `Duration` field that reflects cumulative active runtime only. The displayed duration continues updating while the job is `RUNNING`, does not add paused time while the job is `PAUSED`, and resumes from the previously stored active runtime after a later restart instead of resetting to zero.
 
 Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner for the latest refreshed `manifest.json` file and immediately starts a browser download of that generated manifest without an extra confirmation step. For jobs that used overflow media, ECUBE refreshes a separate `manifest.json` on each drive that received successful copies, and each file lists only the files written to that specific drive.
 

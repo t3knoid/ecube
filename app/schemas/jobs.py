@@ -248,6 +248,36 @@ class DriveInfoSchema(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class JobOverflowDriveSchema(BaseModel):
+    """Redacted drive metadata embedded in overflow-assignment responses."""
+
+    id: int = Field(..., description="Unique identifier for the drive")
+    manufacturer: Optional[str] = Field(default=None, description="USB manufacturer string when available")
+    product_name: Optional[str] = Field(default=None, description="USB product string when available")
+    display_device_label: str = Field(..., description="Operator-friendly drive label built from safe USB metadata")
+    available_bytes: Optional[int] = Field(default=None, description="Last known available space in bytes for the mounted drive")
+    filesystem_type: Optional[str] = Field(default=None, description="Detected filesystem label (e.g. ext4, exfat)")
+    current_state: DriveState = Field(..., description="Current drive state (DISCONNECTED, DISABLED, AVAILABLE, IN_USE)")
+    is_mounted: bool = Field(default=False, description="Whether the drive is still mounted on the host")
+    current_project_id: Optional[str] = Field(default=None, description="Bound project ID if IN_USE")
+
+    model_config = {"from_attributes": True}
+
+
+class JobOverflowAssignmentSchema(BaseModel):
+    id: int = Field(..., description="Unique identifier for the drive-assignment record")
+    drive_id: int = Field(..., description="Drive ID assigned for overflow continuation")
+    file_count: int = Field(default=0, description="Number of files copied to this assignment so far")
+    copied_bytes: int = Field(default=0, description="Number of bytes copied to this assignment so far")
+    assigned_at: Optional[datetime] = Field(default=None, description="When this overflow drive was reserved for the job")
+    activated_at: Optional[datetime] = Field(default=None, description="When this overflow drive became the active destination")
+    released_at: Optional[datetime] = Field(default=None, description="When this overflow drive stopped being the active destination")
+    state: str = Field(..., description="Operator-safe overflow assignment state (RESERVED, ACTIVE, RELEASED)")
+    drive: Optional[JobOverflowDriveSchema] = Field(default=None, description="Assigned overflow drive metadata when available")
+
+    model_config = {"from_attributes": True}
+
+
 class ExportJobSchema(BaseModel):
     id: int = Field(..., description="Unique identifier for the job")
     project_id: str = Field(..., description="Project ID for audit and isolation")
@@ -267,6 +297,7 @@ class ExportJobSchema(BaseModel):
     active_duration_seconds: int = Field(default=0, ge=0, description="Total active copy duration across all run/resume cycles in seconds")
     created_by: Optional[str] = Field(default=None, description="Username of the job creator")
     started_by: Optional[str] = Field(default=None, description="Username of the user who started the job")
+    notes: Optional[str] = Field(default=None, description="Optional operator notes captured when the job was created")
     callback_url: Optional[str] = Field(default=None, description="HTTPS callback URL (null if none was provided)")
     created_at: Optional[datetime] = Field(default=None, description="When the job was created")
     started_at: Optional[datetime] = Field(default=None, description="When the copy was started")
@@ -287,5 +318,6 @@ class ExportJobSchema(BaseModel):
     startup_analysis_cached: bool = Field(default=False, description="Whether a persisted startup-analysis cache is available for restart reuse")
     startup_analysis_ready: bool = Field(default=False, description="Whether a persisted startup-analysis result is ready for Start to reuse")
     client_ip: Optional[str] = Field(default=None, description="IP address of the client that created the job (null for background tasks or when redacted; 'unknown' when the client address could not be resolved)")
+    overflow_assignments: list[JobOverflowAssignmentSchema] = Field(default_factory=list, description="Overflow drive assignments for this job, excluding the primary destination assignment")
 
     model_config = {"from_attributes": True}

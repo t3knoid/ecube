@@ -175,10 +175,17 @@ class DriveAssignment(Base):
     file_count = Column(Integer, default=0, nullable=False)
     copied_bytes = Column(BigInteger, default=0, nullable=False)
     assigned_at = Column(DateTime(timezone=True), server_default=func.now())
-    activated_at = Column(DateTime(timezone=True), nullable=True, default=lambda: datetime.now(timezone.utc))
+    activated_at = Column(DateTime(timezone=True), nullable=True)
     released_at = Column(DateTime(timezone=True))
     drive = relationship("UsbDrive", back_populates="assignments")
     job = relationship("ExportJob", back_populates="assignments")
+
+
+@event.listens_for(DriveAssignment, "init", propagate=True)
+def _default_drive_assignment_activation(target, args, kwargs):
+    if "activated_at" in kwargs:
+        return
+    target.activated_at = datetime.now(timezone.utc)
 
 
 class JobChainOfCustodySnapshot(Base):
