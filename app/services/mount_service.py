@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.network import MountStatus, MountType, NetworkMount
+from app.infrastructure.mount_namespace import shares_host_mount_namespace
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.mount_repository import MountRepository
 from app.schemas.network import MountCreate, MountShareDiscoveryItem, MountShareDiscoveryRequest, MountShareDiscoveryResponse, MountUpdate, NetworkMountSchema
@@ -469,21 +470,13 @@ def _with_mount_namespace_flag(cmd: list[str]) -> Optional[list[str]]:
 
 
 def _in_host_mount_namespace() -> bool:
-    try:
-        current_ns = os.readlink("/proc/self/ns/mnt")
-    except Exception:
-        # If we cannot read our own namespace, keep existing behavior.
-        return True
-
-    try:
-        host_ns = os.readlink("/proc/1/ns/mnt")
-    except Exception:
-        # If host namespace cannot be read (for example hidepid restrictions),
-        # force host-namespace command path via nsenter.
-        logger.warning("Unable to read host mount namespace; assuming namespace differs")
-        return False
-
-    return current_ns == host_ns
+    return shares_host_mount_namespace(
+        on_self_read_error=True,
+        on_host_read_error=False,
+        on_host_read_error_callback=lambda _exc: logger.warning(
+            "Unable to read host mount namespace; assuming namespace differs"
+        ),
+    )
 
 
 def _with_host_mount_namespace(cmd: list[str]) -> list[str]:

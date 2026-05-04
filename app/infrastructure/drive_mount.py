@@ -17,6 +17,7 @@ from app.config import settings
 from app.infrastructure.device_path import validate_device_path
 from app.infrastructure.filesystem_detection import LinuxFilesystemDetector
 from app.infrastructure.mount_info import find_device_mount_point
+from app.infrastructure.mount_namespace import shares_host_mount_namespace
 from app.utils.sanitize import sanitize_error_message
 
 logger = logging.getLogger(__name__)
@@ -128,18 +129,13 @@ def _with_mount_namespace_flag(cmd: list[str]) -> list[str] | None:
 
 
 def _in_host_mount_namespace() -> bool:
-    try:
-        current_ns = os.readlink("/proc/self/ns/mnt")
-    except Exception:
-        return True
-
-    try:
-        host_ns = os.readlink("/proc/1/ns/mnt")
-    except Exception:
-        logger.warning("Unable to read host mount namespace; assuming namespace differs")
-        return False
-
-    return current_ns == host_ns
+    return shares_host_mount_namespace(
+        on_self_read_error=True,
+        on_host_read_error=False,
+        on_host_read_error_callback=lambda _exc: logger.warning(
+            "Unable to read host mount namespace; assuming namespace differs"
+        ),
+    )
 
 
 def _with_host_mount_namespace(cmd: list[str]) -> list[str]:
