@@ -268,6 +268,7 @@ def list_directory(
     subdir: str,
     page: int,
     page_size: int,
+    directories_only: bool,
     db: Session,
     actor: Optional[str] = None,
     client_ip: Optional[str] = None,
@@ -288,6 +289,9 @@ def list_directory(
         1-based page number.
     page_size:
         Number of entries per page (max enforced by caller).
+    directories_only:
+        Whether to return only directory entries while preserving pagination
+        for matching directories.
     db:
         Active SQLAlchemy session.
     actor:
@@ -345,6 +349,7 @@ def list_directory(
         try:
             start = (page - 1) * page_size
             page_names: list[str] = []
+            matching_entries = 0
             seen_entries = 0
             has_more = False
             with os.scandir(real_target) as it:
@@ -359,10 +364,15 @@ def list_directory(
                                 f"Use a more specific subdir."
                             ),
                         )
-                    if seen_entries <= start:
+                    if directories_only and not entry.is_dir(follow_symlinks=False):
+                        continue
+
+                    if matching_entries < start:
+                        matching_entries += 1
                         continue
                     if len(page_names) < page_size:
                         page_names.append(entry.name)
+                        matching_entries += 1
                         continue
                     has_more = True
                     break
@@ -454,6 +464,7 @@ def list_directory(
                 "resolved_path": real_target,
                 "page": page,
                 "page_size": page_size,
+                "directories_only": directories_only,
                 "entry_count": len(entries),
                 "has_more": has_more,
             },
@@ -481,6 +492,7 @@ def list_directory(
                     "path": requested_root,
                     "mount_id": mount_id,
                     "subdir": subdir,
+                    "directories_only": directories_only,
                     "real_root": real_root,
                     "resolved_path": real_target,
                     "reason": reason,

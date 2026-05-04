@@ -105,6 +105,16 @@ function mountView() {
           props: ['status', 'label'],
           template: '<span>{{ label || status }}</span>',
         },
+        DirectoryBrowser: {
+          props: ['mountId', 'rootLabel', 'showRootCrumbAtRoot', 'directoriesOnly', 'currentDirectory', 'showBreadcrumb', 'showParentEntry'],
+          emits: ['update:currentDirectory'],
+          template: `
+            <div class="directory-browser-stub">
+              {{ mountId }}|{{ rootLabel }}|{{ currentDirectory }}|{{ directoriesOnly }}|{{ showBreadcrumb }}|{{ showParentEntry }}
+              <button class="directory-browser-path-btn" @click="$emit('update:currentDirectory', '/folder/subfolder')">path</button>
+            </div>
+          `,
+        },
       },
     },
   })
@@ -499,6 +509,34 @@ describe('JobsView grouped create dialog', () => {
       thread_count: 4,
       notes: undefined,
     })
+  })
+
+  it('lets the operator choose the source path from the mounted folder browser', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const createButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.create'))
+    await createButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#job-project').setValue('PROJ-001')
+    await flushPromises()
+    await wrapper.find('#job-mount').setValue('11')
+    await flushPromises()
+
+    const browseButton = wrapper.find('#job-source-browse-toggle')
+    expect(browseButton.attributes('disabled')).toBeUndefined()
+
+    await browseButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.directory-browser-stub').text()).toContain('11||/|true|false|true')
+
+    await wrapper.find('.directory-browser-path-btn').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('#job-source-path').element.value).toBe('/folder/subfolder')
+    expect(wrapper.find('.directory-browser-stub').exists()).toBe(true)
   })
 
   it('treats slash-only source input as the selected mount root', async () => {

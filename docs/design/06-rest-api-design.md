@@ -2071,6 +2071,7 @@ Return a paginated directory listing for an active USB drive mount path or a tru
 | `subdir` | string | `""` | `StrictSafeStr` | Relative subdirectory within the mount root. |
 | `page` | integer | `1` | `≥ 1` | Page number (1-based). |
 | `page_size` | integer | `100` | `1 ≤ page_size ≤ 500` | Entries per page. |
+| `directories_only` | boolean | `false` | optional | When `true`, `GET /browse` paginates only matching directories instead of mixed filesystem entries. This is used by the Create Job source-folder browser so directory-only pages do not appear empty just because earlier raw entries on the page were files. |
 
 **Security model:**
 
@@ -2079,7 +2080,7 @@ Return a paginated directory listing for an active USB drive mount path or a tru
 3. The resolved path must start with one of the configured `BROWSE_ALLOWED_PREFIXES`.
 4. Every call is audit-logged with action `BROWSE_DIRECTORY`.
 
-**Response:** `200 OK` — `BrowseResponse` object containing `entries` (array of `{name, type, size, modified_at}`), `page`, `page_size`, `has_more`, `path`, and `subdir`.
+**Response:** `200 OK` — `BrowseResponse` object containing `entries` (array of `{name, type, size, modified_at}`), `page`, `page_size`, `has_more`, `path`, and `subdir`. When `directories_only=true`, `entries` contains only `type: "directory"` rows and `has_more` is calculated against the remaining matching directories rather than all raw filesystem entries.
 
 Entry `type` values: `"file"`, `"directory"`, `"symlink"`. Symlinks are listed but not followed.
 

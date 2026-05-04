@@ -73,6 +73,10 @@ def browse_directory(
         le=_MAX_PAGE_SIZE,
         description=f"Number of entries per page. Maximum: {_MAX_PAGE_SIZE}.",
     ),
+    directories_only: bool = Query(
+        default=False,
+        description="When true, return only directory entries while preserving pagination semantics for matching directories.",
+    ),
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ALL_ROLES),
 ):
@@ -103,6 +107,7 @@ def browse_directory(
         subdir=subdir,
         page=page,
         page_size=page_size,
+        directories_only=directories_only,
         db=db,
         actor=current_user.username,
         client_ip=get_client_ip(request),
