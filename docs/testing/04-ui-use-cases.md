@@ -51,7 +51,7 @@
 | UC-2.4 | Log out / end session | Authenticated user | any |
 | UC-2.5 | Handle expired token (re-authenticate prompt) | Authenticated user | any |
 
-**UI Implication:** Login page supports credential-based sign-in and session-expiry handling. Session state is enforced by router guards with redirects to `/login` (expired/auth-required) and `/setup` (uninitialized systems).
+**UI Implication:** Login page supports credential-based sign-in and session-expiry handling. Session state is enforced by router guards with redirects to `/login` (expired/auth-required) and `/setup` (uninitialized systems). If a normal API call later returns the backend setup-required `503` contract, the shared frontend client also returns the browser to `/setup` instead of leaving the operator on a generic server-error dead end.
 
 ---
 
