@@ -872,6 +872,369 @@ def test_run_copy_job_automatically_continues_overflow_on_next_project_drive(db,
     assert target_full_audit.details["selected_drive_id"] == second_drive.id
 
 
+def test_run_copy_job_automatically_continues_overflow_with_mixed_incomplete_backlog(db, tmp_path):
+    first_target = tmp_path / "target-1"
+    second_target = tmp_path / "target-2"
+    first_target.mkdir()
+    second_target.mkdir()
+
+    first_drive = UsbDrive(
+        device_identifier="USB-AUTO-MIXED-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-MIXED-001",
+        mount_path=str(first_target),
+    )
+    second_drive = UsbDrive(
+        device_identifier="USB-AUTO-MIXED-002",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-MIXED-001",
+        mount_path=str(second_target),
+        available_bytes=50_000,
+    )
+    db.add_all([first_drive, second_drive])
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-MIXED-001",
+        evidence_number="EV-AUTO-MIXED-001",
+        source_path="/data/mixed-overflow-001",
+        target_mount_path=str(first_target),
+        status=JobStatus.RUNNING,
+        thread_count=4,
+        max_file_retries=0,
+        retry_delay_seconds=0,
+        startup_analysis_total_bytes=4096,
+        startup_analysis_file_count=4,
+        startup_analysis_status=StartupAnalysisStatus.READY,
+        startup_analysis_cache_present=True,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=first_drive.id, job_id=job.id))
+    _reserve_assignment(db, drive_id=second_drive.id, job_id=job.id)
+    db.add_all(
+        [
+            ExportFile(
+                job_id=job.id,
+                relative_path="file-error.txt",
+                status=FileStatus.ERROR,
+                error_message="Target storage is full",
+            ),
+            ExportFile(
+                job_id=job.id,
+                relative_path="file-pending.txt",
+                status=FileStatus.PENDING,
+            ),
+            ExportFile(
+                job_id=job.id,
+                relative_path="file-copying.txt",
+                status=FileStatus.COPYING,
+            ),
+            ExportFile(
+                job_id=job.id,
+                relative_path="file-done.txt",
+                status=FileStatus.DONE,
+            ),
+        ]
+    )
+    db.commit()
+
+    class _Probe:
+        def probe_available_bytes(self, mount_path: str) -> int | None:
+            if mount_path == str(second_target):
+                return 50_000
+            return 1
+
+    outcome, decision = copy_engine._resolve_target_full_outcome(db, job.id, probe=_Probe())
+
+    db.expire_all()
+    db.refresh(job)
+    assignments = (
+        db.query(DriveAssignment)
+        .filter(DriveAssignment.job_id == job.id)
+        .order_by(DriveAssignment.id)
+        .all()
+    )
+    files = (
+        db.query(ExportFile)
+        .filter(ExportFile.job_id == job.id)
+        .order_by(ExportFile.id)
+        .all()
+    )
+    files_by_path = {file.relative_path: file for file in files}
+    overflow_audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_OVERFLOW_CONTINUATION_STARTED", AuditLog.job_id == job.id)
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+    target_full_audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_TARGET_FULL_DECISION", AuditLog.job_id == job.id)
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+
+    assert outcome == "continued"
+    assert job.status == JobStatus.RUNNING
+    assert job.target_mount_path == str(second_target)
+    assert len(assignments) == 2
+    assert assignments[0].released_at is not None
+    assert assignments[1].activated_at is not None
+    assert files_by_path["file-error.txt"].status == FileStatus.PENDING
+    assert files_by_path["file-error.txt"].error_message is None
+    assert files_by_path["file-pending.txt"].status == FileStatus.PENDING
+    assert files_by_path["file-copying.txt"].status == FileStatus.COPYING
+    assert overflow_audit is not None
+    assert overflow_audit.details["automatic"] is True
+    assert overflow_audit.details["retry_file_count"] == 1
+    assert target_full_audit is not None
+    assert target_full_audit.details["decision"] == "continued"
+    assert target_full_audit.details["selected_drive_id"] == second_drive.id
+    assert target_full_audit.details["retry_file_count"] == 1
+    assert decision["decision"] == "continued"
+
+
+def test_run_copy_job_does_not_auto_continue_overflow_with_mixed_failure_classes(db, tmp_path):
+    first_target = tmp_path / "target-1"
+    second_target = tmp_path / "target-2"
+    first_target.mkdir()
+    second_target.mkdir()
+
+    first_drive = UsbDrive(
+        device_identifier="USB-AUTO-MIXED-ERR-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-MIXED-ERR-001",
+        mount_path=str(first_target),
+    )
+    second_drive = UsbDrive(
+        device_identifier="USB-AUTO-MIXED-ERR-002",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-MIXED-ERR-001",
+        mount_path=str(second_target),
+        available_bytes=50_000,
+    )
+    db.add_all([first_drive, second_drive])
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-MIXED-ERR-001",
+        evidence_number="EV-AUTO-MIXED-ERR-001",
+        source_path="/data/mixed-overflow-errors-001",
+        target_mount_path=str(first_target),
+        status=JobStatus.RUNNING,
+        thread_count=4,
+        max_file_retries=0,
+        retry_delay_seconds=0,
+        startup_analysis_total_bytes=4096,
+        startup_analysis_file_count=4,
+        startup_analysis_status=StartupAnalysisStatus.READY,
+        startup_analysis_cache_present=True,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=first_drive.id, job_id=job.id))
+    _reserve_assignment(db, drive_id=second_drive.id, job_id=job.id)
+    db.add_all(
+        [
+            ExportFile(
+                job_id=job.id,
+                relative_path="file-target-full.txt",
+                status=FileStatus.ERROR,
+                error_message="Target storage is full",
+            ),
+            ExportFile(
+                job_id=job.id,
+                relative_path="file-checksum.txt",
+                status=FileStatus.ERROR,
+                error_message="Checksum verification failed",
+            ),
+            ExportFile(
+                job_id=job.id,
+                relative_path="file-pending.txt",
+                status=FileStatus.PENDING,
+            ),
+            ExportFile(
+                job_id=job.id,
+                relative_path="file-done.txt",
+                status=FileStatus.DONE,
+            ),
+        ]
+    )
+    db.commit()
+
+    class _Probe:
+        def probe_available_bytes(self, mount_path: str) -> int | None:
+            if mount_path == str(second_target):
+                return 50_000
+            return 1
+
+    outcome, decision = copy_engine._resolve_target_full_outcome(db, job.id, probe=_Probe())
+
+    db.expire_all()
+    db.refresh(job)
+    assignments = (
+        db.query(DriveAssignment)
+        .filter(DriveAssignment.job_id == job.id)
+        .order_by(DriveAssignment.id)
+        .all()
+    )
+    files = (
+        db.query(ExportFile)
+        .filter(ExportFile.job_id == job.id)
+        .order_by(ExportFile.id)
+        .all()
+    )
+    files_by_path = {file.relative_path: file for file in files}
+    overflow_audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_OVERFLOW_CONTINUATION_STARTED", AuditLog.job_id == job.id)
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+    target_full_audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_TARGET_FULL_DECISION", AuditLog.job_id == job.id)
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+
+    assert outcome == "not_applicable"
+    assert decision == {}
+    assert job.status == JobStatus.RUNNING
+    assert job.target_mount_path == str(first_target)
+    assert len(assignments) == 2
+    assert assignments[0].released_at is None
+    assert assignments[1].activated_at is None
+    assert files_by_path["file-target-full.txt"].status == FileStatus.ERROR
+    assert files_by_path["file-target-full.txt"].error_message == "Target storage is full"
+    assert files_by_path["file-checksum.txt"].status == FileStatus.ERROR
+    assert files_by_path["file-checksum.txt"].error_message == "Checksum verification failed"
+    assert overflow_audit is None
+    assert target_full_audit is None
+
+
+def test_run_copy_job_continues_processing_when_target_full_coexists_with_other_failure_classes(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "checksum.txt").write_bytes(b"checksum")
+    (source_dir / "target-full.txt").write_bytes(b"target-full")
+    (source_dir / "normal.txt").write_bytes(b"normal")
+
+    first_target = tmp_path / "target-1"
+    second_target = tmp_path / "target-2"
+    first_target.mkdir()
+    second_target.mkdir()
+
+    first_drive = UsbDrive(
+        device_identifier="USB-AUTO-RUN-MIXED-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-RUN-MIXED-001",
+        mount_path=str(first_target),
+    )
+    second_drive = UsbDrive(
+        device_identifier="USB-AUTO-RUN-MIXED-002",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-RUN-MIXED-001",
+        mount_path=str(second_target),
+        available_bytes=50_000,
+    )
+    db.add_all([first_drive, second_drive])
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-RUN-MIXED-001",
+        evidence_number="EV-AUTO-RUN-MIXED-001",
+        source_path=str(source_dir),
+        target_mount_path=str(first_target),
+        status=JobStatus.PENDING,
+        thread_count=1,
+        max_file_retries=0,
+        retry_delay_seconds=0,
+        startup_analysis_total_bytes=len(b"checksum") + len(b"target-full") + len(b"normal"),
+        startup_analysis_file_count=3,
+        startup_analysis_status=StartupAnalysisStatus.READY,
+        startup_analysis_cache_present=True,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=first_drive.id, job_id=job.id))
+    _reserve_assignment(db, drive_id=second_drive.id, job_id=job.id)
+    db.add_all(
+        [
+            ExportFile(job_id=job.id, relative_path="checksum.txt", status=FileStatus.PENDING),
+            ExportFile(job_id=job.id, relative_path="target-full.txt", status=FileStatus.PENDING),
+            ExportFile(job_id=job.id, relative_path="normal.txt", status=FileStatus.PENDING),
+        ]
+    )
+    db.commit()
+
+    original_copy_file = copy_engine.copy_file
+
+    class _Probe:
+        def probe_available_bytes(self, mount_path: str) -> int | None:
+            if mount_path == str(second_target):
+                return 50_000
+            return 1
+
+    def _copy_with_mixed_failures(src, dst, **kwargs):
+        file_name = Path(src).name
+        if file_name == "checksum.txt":
+            return False, None, "checksum mismatch"
+        if file_name == "target-full.txt":
+            return False, None, f"disk full on {first_target}"
+        return original_copy_file(src, dst, **kwargs)
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine.prepare_job_startup_analysis", return_value={
+            "file_count": 3,
+            "total_bytes": len(b"checksum") + len(b"target-full") + len(b"normal"),
+            "reused_cached_analysis": True,
+        }):
+            with patch("app.services.copy_engine.copy_file", side_effect=_copy_with_mixed_failures):
+                with patch("app.services.copy_engine.get_drive_space_probe", return_value=_Probe()):
+                    copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+    files = (
+        db.query(ExportFile)
+        .filter(ExportFile.job_id == job.id)
+        .order_by(ExportFile.id)
+        .all()
+    )
+    files_by_path = {file.relative_path: file for file in files}
+    overflow_audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_OVERFLOW_CONTINUATION_STARTED", AuditLog.job_id == job.id)
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+    target_full_audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_TARGET_FULL_DECISION", AuditLog.job_id == job.id)
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+    failed_audit = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_FAILED", AuditLog.job_id == job.id)
+        .order_by(AuditLog.id.desc())
+        .first()
+    )
+
+    assert job.status == JobStatus.COMPLETED
+    assert job.target_mount_path == str(first_target)
+    assert files_by_path["checksum.txt"].status == FileStatus.ERROR
+    assert files_by_path["checksum.txt"].error_message == "Checksum verification failed"
+    assert files_by_path["target-full.txt"].status == FileStatus.ERROR
+    assert files_by_path["target-full.txt"].error_message == "Target storage is full"
+    assert files_by_path["normal.txt"].status == FileStatus.DONE
+    assert overflow_audit is None
+    assert target_full_audit is None
+    assert failed_audit is None
+
+
 def test_run_copy_job_fails_when_target_full_has_no_other_assigned_drive(db, tmp_path, caplog):
     source_dir = tmp_path / "source"
     source_dir.mkdir()
