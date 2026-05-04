@@ -1172,11 +1172,13 @@ textarea {
   display: grid;
   gap: var(--space-md);
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
 }
 
 .dialog-group {
   display: grid;
   gap: var(--space-xs);
+  align-content: start;
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius);
   padding: var(--space-md);
