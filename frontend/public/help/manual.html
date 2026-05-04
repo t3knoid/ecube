@@ -383,11 +383,11 @@ How many drives are ready for use?
 <p>The <code>Drives</code> page shows detected USB drives and their current state.</p>
 <p>Typical drive fields include:</p>
 <ul><li>
+Drive ID
+</li><li>
 Device (port-based identifier such as <code>2-1</code>)
 </li><li>
 Project when the drive has a related job association
-</li><li>
-Capacity
 </li><li>
 Related job ID when the drive is currently tied to a job
 </li><li>
@@ -446,6 +446,7 @@ Filter by drive state
 Sort results
 </li></ul>
 <p>When ECUBE can correlate a drive to a related job, the <code>Job ID</code> value on the Drives page acts as a direct link into that job's detail view. Drives without a related job keep the current placeholder behavior instead of showing a stale or guessed job ID.</p>
+<p>The <code>Drive ID</code> value on the Drives page also acts as the direct navigation entry point into Drive Detail. The list no longer shows a separate <code>Details</code> row action, so list-level actions stay focused on row-specific operations such as <code>Browse</code> when the drive has a managed mount path.</p>
 <h2 id="4-3-drive-detail-page">4.3 Drive Detail Page</h2>
 <p>Selecting a drive opens a detail view showing:</p>
 <ul><li>

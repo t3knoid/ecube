@@ -299,7 +299,7 @@ test('drives list and drive detail admin flows', async ({ page }) => {
   await expect(page.getByRole('table').getByText('Project')).toBeVisible()
   await expect(page.getByRole('table').getByText('Job ID')).toBeVisible()
   await expect(page.getByText('SanDisk Ultra - Port 1')).toBeVisible()
-  await page.getByRole('button', { name: 'Details' }).click()
+  await page.getByRole('row').filter({ has: page.getByText('SanDisk Ultra - Port 1') }).getByRole('button', { name: '1' }).click()
 
   await expect(page).toHaveURL(/\/drives\/1$/)
   await page.getByRole('button', { name: 'Format' }).click()
