@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "ecube-api-collection",
 		"name": "ECUBE API",
-		"description": "Evidence Copying & USB Based Export \u2014 Full API Collection.\n\nSet the `base_url` variable (default: http://localhost:8000) and authenticate via the Auth > Login request to populate the `token` variable automatically.\n\n**Prerequisites:** The ECUBE OS groups (`ecube-admins`, `ecube-managers`, `ecube-processors`, `ecube-auditors`) must exist on the host before running the Admin \u2014 OS Users / OS Groups folders. Run `/setup/initialize` first, or create them manually (`sudo groupadd ecube-admins` etc.). If groups are missing, those requests will return 422 (Unprocessable Entity).",
+		"description": "Evidence Copying & USB Based Export — Full API Collection.\n\nSet the `base_url` variable (default: http://localhost:8000) and authenticate via the Auth > Login request to populate the `token` variable automatically.\n\n**Prerequisites:** The ECUBE OS groups (`ecube-admins`, `ecube-managers`, `ecube-processors`, `ecube-auditors`) must exist on the host before running the Admin — OS Users / OS Groups folders. Run `/setup/initialize` first, or create them manually (`sudo groupadd ecube-admins` etc.). If groups are missing, those requests will return 422 (Unprocessable Entity).",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"event": [
@@ -109,6 +109,11 @@
 		{
 			"key": "log_source",
 			"value": "app",
+			"type": "string"
+		},
+		{
+			"key": "name",
+			"value": "sample-name",
 			"type": "string"
 		}
 	],
@@ -314,7 +319,7 @@
 									"// When a token is already injected (CI via --env-var), skip login assertions.",
 									"// pm.variables.get checks all scopes: environment, collection, and global.",
 									"if (pm.variables.get('token')) {",
-									"    pm.test('Login skipped \u2014 token already injected', function () {",
+									"    pm.test('Login skipped — token already injected', function () {",
 									"        pm.expect(true).to.be.true;",
 									"    });",
 									"} else {",
@@ -1023,7 +1028,7 @@
 								"jobs"
 							]
 						},
-						"description": "Create an export job without drive_id to auto-assign a drive. If exactly one AVAILABLE drive is bound to the project, it is selected (409 if the drive is temporarily unavailable \u2014 retry). If none are bound, an unbound AVAILABLE drive is used and the project is assigned to it. Returns 409 if multiple project-bound drives exist (specify drive_id) or if no usable drive can be acquired for the requested project. Optional callback_url (HTTPS only) receives a POST when the job reaches COMPLETED or FAILED. Roles: admin, manager, processor."
+						"description": "Create an export job without drive_id to auto-assign a drive. If exactly one AVAILABLE drive is bound to the project, it is selected (409 if the drive is temporarily unavailable — retry). If none are bound, an unbound AVAILABLE drive is used and the project is assigned to it. Returns 409 if multiple project-bound drives exist (specify drive_id) or if no usable drive can be acquired for the requested project. Optional callback_url (HTTPS only) receives a POST when the job reaches COMPLETED or FAILED. Roles: admin, manager, processor."
 					}
 				},
 				{
@@ -1220,7 +1225,7 @@
 								}
 							]
 						},
-						"description": "Verify copied data integrity (hash comparison). State: VERIFYING \u2192 COMPLETED or FAILED. Response includes files_succeeded, files_failed, and error_summary. Roles: admin, manager, processor."
+						"description": "Verify copied data integrity (hash comparison). State: VERIFYING → COMPLETED or FAILED. Response includes files_succeeded, files_failed, and error_summary. Roles: admin, manager, processor."
 					}
 				},
 				{
@@ -1435,33 +1440,6 @@
 						},
 						"description": "Check database and job engine health. Roles: all authenticated."
 					}
-				},
-				{
-					"name": "Job Debug",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/introspection/jobs/{{job_id}}/debug",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"introspection",
-								"jobs",
-								"{{job_id}}",
-								"debug"
-							],
-							"variable": [
-								{
-									"key": "job_id",
-									"value": "1",
-									"description": "ID of the job to debug"
-								}
-							]
-						},
-						"description": "Detailed debug info for job troubleshooting. Roles: admin, auditor."
-					}
 				}
 			]
 		},
@@ -1647,7 +1625,7 @@
 			]
 		},
 		{
-			"name": "Admin \u2014 Logs",
+			"name": "Admin — Logs",
 			"item": [
 				{
 					"name": "List Log Files",
@@ -1744,7 +1722,7 @@
 			]
 		},
 		{
-			"name": "Admin \u2014 Ports",
+			"name": "Admin — Ports",
 			"item": [
 				{
 					"name": "List Ports",
@@ -1838,7 +1816,7 @@
 			]
 		},
 		{
-			"name": "Admin \u2014 Hubs",
+			"name": "Admin — Hubs",
 			"item": [
 				{
 					"name": "List Hubs",
@@ -1896,7 +1874,7 @@
 			]
 		},
 		{
-			"name": "Admin \u2014 OS Users",
+			"name": "Admin — OS Users",
 			"item": [
 				{
 					"name": "List OS Users",
@@ -2080,7 +2058,7 @@
 			]
 		},
 		{
-			"name": "Admin \u2014 OS Groups",
+			"name": "Admin — OS Groups",
 			"item": [
 				{
 					"name": "List OS Groups",
@@ -2265,7 +2243,7 @@
 			]
 		},
 		{
-			"name": "Admin \u2014 Configuration",
+			"name": "Admin — Configuration",
 			"item": [
 				{
 					"name": "Get Configuration",
@@ -2371,6 +2349,1688 @@
 						},
 						"description": "Ingest frontend navigation telemetry events for troubleshooting."
 					}
+				}
+			]
+		},
+		{
+			"name": "OpenAPI Route Sync (Generated)",
+			"description": "Auto-generated from the ECUBE OpenAPI schema by scripts/sync_postman_collection.py. Do not edit manually.",
+			"item": [
+				{
+					"name": "GET /admin/configuration",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/configuration",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"configuration"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Get Configuration\n\noperationId: get_configuration_admin_configuration_get"
+					},
+					"response": []
+				},
+				{
+					"name": "PUT /admin/configuration",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/configuration",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"configuration"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Update Configuration\n\noperationId: update_configuration_admin_configuration_put"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /admin/configuration/restart",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/configuration/restart",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"configuration",
+								"restart"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Restart Application Service\n\noperationId: restart_application_service_admin_configuration_restart_post"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /admin/hubs",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/hubs",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"hubs"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: List Hubs\n\noperationId: list_hubs_admin_hubs_get"
+					},
+					"response": []
+				},
+				{
+					"name": "PATCH /admin/hubs/{hub_id}",
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/hubs/{{hub_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"hubs",
+								"{{hub_id}}"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Update Hub Label\n\noperationId: update_hub_label_admin_hubs__hub_id__patch"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /admin/logs",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/logs",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"logs"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: List Log Files\n\noperationId: list_log_files_admin_logs_get"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /admin/logs/view",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/logs/view",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"logs",
+								"view"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: View Log Lines\n\noperationId: view_log_lines_admin_logs_view_get"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /admin/logs/{filename}",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/logs/{{filename}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"logs",
+								"{{filename}}"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Download Log File\n\noperationId: download_log_file_admin_logs__filename__get"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /admin/os-groups",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/os-groups",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"os-groups"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: List Os Groups\n\noperationId: list_os_groups_admin_os_groups_get"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /admin/os-groups",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/os-groups",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"os-groups"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Create Os Group\n\noperationId: create_os_group_admin_os_groups_post"
+					},
+					"response": []
+				},
+				{
+					"name": "DELETE /admin/os-groups/{name}",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/os-groups/{{name}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"os-groups",
+								"{{name}}"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Delete Os Group\n\noperationId: delete_os_group_admin_os_groups__name__delete"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /admin/os-users",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/os-users",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"os-users"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: List Os Users\n\noperationId: list_os_users_admin_os_users_get"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /admin/os-users",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/os-users",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"os-users"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Create Os User\n\noperationId: create_os_user_admin_os_users_post"
+					},
+					"response": []
+				},
+				{
+					"name": "DELETE /admin/os-users/{username}",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/os-users/{{username}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"os-users",
+								"{{username}}"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Delete Os User\n\noperationId: delete_os_user_admin_os_users__username__delete"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /admin/os-users/{username}/groups",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/os-users/{{username}}/groups",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"os-users",
+								"{{username}}",
+								"groups"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Add Os User Groups\n\noperationId: add_os_user_groups_admin_os_users__username__groups_post"
+					},
+					"response": []
+				},
+				{
+					"name": "PUT /admin/os-users/{username}/groups",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/os-users/{{username}}/groups",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"os-users",
+								"{{username}}",
+								"groups"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Set Os User Groups\n\noperationId: set_os_user_groups_admin_os_users__username__groups_put"
+					},
+					"response": []
+				},
+				{
+					"name": "PUT /admin/os-users/{username}/password",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/os-users/{{username}}/password",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"os-users",
+								"{{username}}",
+								"password"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Reset Os User Password\n\noperationId: reset_os_user_password_admin_os_users__username__password_put"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /admin/ports",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/ports",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"ports"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: List Ports\n\noperationId: list_ports_admin_ports_get"
+					},
+					"response": []
+				},
+				{
+					"name": "PATCH /admin/ports/{port_id}",
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/ports/{{port_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"ports",
+								"{{port_id}}"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Toggle Port Enabled\n\noperationId: toggle_port_enabled_admin_ports__port_id__patch"
+					},
+					"response": []
+				},
+				{
+					"name": "PATCH /admin/ports/{port_id}/label",
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/ports/{{port_id}}/label",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"admin",
+								"ports",
+								"{{port_id}}",
+								"label"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Update Port Label\n\noperationId: update_port_label_admin_ports__port_id__label_patch"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /audit",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/audit",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"audit"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: List Audit Logs\n\noperationId: list_audit_logs_audit_get"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /audit/chain-of-custody",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/audit/chain-of-custody",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"audit",
+								"chain-of-custody"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Get Chain Of Custody\n\noperationId: get_chain_of_custody_audit_chain_of_custody_get"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /audit/chain-of-custody/handoff",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/audit/chain-of-custody/handoff",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"audit",
+								"chain-of-custody",
+								"handoff"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Confirm Chain Of Custody Handoff\n\noperationId: confirm_chain_of_custody_handoff_audit_chain_of_custody_handoff_post"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /audit/options",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/audit/options",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"audit",
+								"options"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Get Audit Filter Options\n\noperationId: get_audit_filter_options_audit_options_get"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /auth/public-config",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/auth/public-config",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"public-config"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Public Auth Config\n\noperationId: public_auth_config_auth_public_config_get"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /auth/token",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/auth/token",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"token"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Login\n\noperationId: login_auth_token_post"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /browse",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/browse",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"browse"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Browse Directory\n\noperationId: browse_directory_browse_get"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /drives",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/drives",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"drives"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: List Drives\n\noperationId: list_drives_drives_get"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /drives/refresh",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/drives/refresh",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"drives",
+								"refresh"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Refresh Drives\n\noperationId: refresh_drives_drives_refresh_post"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /drives/{drive_id}/format",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/drives/{{drive_id}}/format",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"drives",
+								"{{drive_id}}",
+								"format"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Format Drive\n\noperationId: format_drive_drives__drive_id__format_post"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /drives/{drive_id}/initialize",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/drives/{{drive_id}}/initialize",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"drives",
+								"{{drive_id}}",
+								"initialize"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Initialize Drive\n\noperationId: initialize_drive_drives__drive_id__initialize_post"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /drives/{drive_id}/mount",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/drives/{{drive_id}}/mount",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"drives",
+								"{{drive_id}}",
+								"mount"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Mount Drive\n\noperationId: mount_drive_drives__drive_id__mount_post"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /drives/{drive_id}/prepare-eject",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/drives/{{drive_id}}/prepare-eject",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"drives",
+								"{{drive_id}}",
+								"prepare-eject"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Prepare Eject\n\noperationId: prepare_eject_drives__drive_id__prepare_eject_post"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /files/compare",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/files/compare",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"files",
+								"compare"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Compare Files\n\noperationId: compare_files_files_compare_post"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /files/{file_id}/hashes",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/files/{{file_id}}/hashes",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"files",
+								"{{file_id}}",
+								"hashes"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Get File Hashes\n\noperationId: get_file_hashes_files__file_id__hashes_get"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"health"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Health\n\noperationId: health_health_get"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /health/live",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health/live",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"health",
+								"live"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Health Live\n\noperationId: health_live_health_live_get"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /health/ready",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health/ready",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"health",
+								"ready"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Health Ready\n\noperationId: health_ready_health_ready_get"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /introspection/block-devices",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/introspection/block-devices",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"introspection",
+								"block-devices"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Block Devices\n\noperationId: block_devices_introspection_block_devices_get"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /introspection/drives",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/introspection/drives",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"introspection",
+								"drives"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Drives Inventory\n\noperationId: drives_inventory_introspection_drives_get"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /introspection/mounts",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/introspection/mounts",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"introspection",
+								"mounts"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: System Mounts\n\noperationId: system_mounts_introspection_mounts_get"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /introspection/reconcile-managed-mounts",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/introspection/reconcile-managed-mounts",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"introspection",
+								"reconcile-managed-mounts"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Reconcile Managed Mounts\n\noperationId: reconcile_managed_mounts_introspection_reconcile_managed_mounts_post"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /introspection/system-health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/introspection/system-health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"introspection",
+								"system-health"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: System Health\n\noperationId: system_health_introspection_system_health_get"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /introspection/usb/topology",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/introspection/usb/topology",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"introspection",
+								"usb",
+								"topology"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Usb Topology\n\noperationId: usb_topology_introspection_usb_topology_get"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /introspection/version",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/introspection/version",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"introspection",
+								"version"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Introspection Version\n\noperationId: introspection_version_introspection_version_get"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /jobs",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: List Jobs\n\noperationId: list_jobs_jobs_get"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /jobs",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Create Job\n\noperationId: create_job_jobs_post"
+					},
+					"response": []
+				},
+				{
+					"name": "DELETE /jobs/{job_id}",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/{{job_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Delete Job\n\noperationId: delete_job_jobs__job_id__delete"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /jobs/{job_id}",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/{{job_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Get Job\n\noperationId: get_job_jobs__job_id__get"
+					},
+					"response": []
+				},
+				{
+					"name": "PUT /jobs/{job_id}",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/{{job_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Update Job\n\noperationId: update_job_jobs__job_id__put"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /jobs/{job_id}/analyze",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/{{job_id}}/analyze",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}",
+								"analyze"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Analyze Job\n\noperationId: analyze_job_jobs__job_id__analyze_post"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /jobs/{job_id}/archive",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/{{job_id}}/archive",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}",
+								"archive"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Archive Job\n\noperationId: archive_job_jobs__job_id__archive_post"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /jobs/{job_id}/chain-of-custody",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/{{job_id}}/chain-of-custody",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}",
+								"chain-of-custody"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Get Job Chain Of Custody\n\noperationId: get_job_chain_of_custody_jobs__job_id__chain_of_custody_get"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /jobs/{job_id}/chain-of-custody/handoff",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/{{job_id}}/chain-of-custody/handoff",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}",
+								"chain-of-custody",
+								"handoff"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Confirm Job Chain Of Custody Handoff\n\noperationId: confirm_job_chain_of_custody_handoff_jobs__job_id__chain_of_custody_handoff_post"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /jobs/{job_id}/chain-of-custody/refresh",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/{{job_id}}/chain-of-custody/refresh",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}",
+								"chain-of-custody",
+								"refresh"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Refresh Job Chain Of Custody\n\noperationId: refresh_job_chain_of_custody_jobs__job_id__chain_of_custody_refresh_post"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /jobs/{job_id}/complete",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/{{job_id}}/complete",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}",
+								"complete"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Complete Job\n\noperationId: complete_job_jobs__job_id__complete_post"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /jobs/{job_id}/files",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/{{job_id}}/files",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}",
+								"files"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Get Job Files\n\noperationId: get_job_files_jobs__job_id__files_get"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /jobs/{job_id}/manifest",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/{{job_id}}/manifest",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}",
+								"manifest"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Create Manifest\n\noperationId: create_manifest_jobs__job_id__manifest_post"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /jobs/{job_id}/manifest/download",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/{{job_id}}/manifest/download",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}",
+								"manifest",
+								"download"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Download Manifest\n\noperationId: download_manifest_jobs__job_id__manifest_download_get"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /jobs/{job_id}/overflow",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/{{job_id}}/overflow",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}",
+								"overflow"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Continue Job Overflow\n\noperationId: continue_job_overflow_jobs__job_id__overflow_post"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /jobs/{job_id}/pause",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/{{job_id}}/pause",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}",
+								"pause"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Pause Job\n\noperationId: pause_job_jobs__job_id__pause_post"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /jobs/{job_id}/retry-failed",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/{{job_id}}/retry-failed",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}",
+								"retry-failed"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Retry Failed Files\n\noperationId: retry_failed_files_jobs__job_id__retry_failed_post"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /jobs/{job_id}/start",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/{{job_id}}/start",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}",
+								"start"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Start Job\n\noperationId: start_job_jobs__job_id__start_post"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /jobs/{job_id}/startup-analysis/clear",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/{{job_id}}/startup-analysis/clear",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}",
+								"startup-analysis",
+								"clear"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Clear Startup Analysis Cache\n\noperationId: clear_startup_analysis_cache_jobs__job_id__startup_analysis_clear_post"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /jobs/{job_id}/verify",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/{{job_id}}/verify",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}",
+								"verify"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Verify Job\n\noperationId: verify_job_jobs__job_id__verify_post"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /mounts",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/mounts",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mounts"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: List Mounts\n\noperationId: list_mounts_mounts_get"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /mounts",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/mounts",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mounts"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Add Mount\n\noperationId: add_mount_mounts_post"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /mounts/discover",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/mounts/discover",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mounts",
+								"discover"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Discover Mount Shares\n\noperationId: discover_mount_shares_mounts_discover_post"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /mounts/test",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/mounts/test",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mounts",
+								"test"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Validate Mount Candidate\n\noperationId: validate_mount_candidate_mounts_test_post"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /mounts/validate",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/mounts/validate",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mounts",
+								"validate"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Validate All Mounts\n\noperationId: validate_all_mounts_mounts_validate_post"
+					},
+					"response": []
+				},
+				{
+					"name": "DELETE /mounts/{mount_id}",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/mounts/{{mount_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mounts",
+								"{{mount_id}}"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Remove Mount\n\noperationId: remove_mount_mounts__mount_id__delete"
+					},
+					"response": []
+				},
+				{
+					"name": "PATCH /mounts/{mount_id}",
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/mounts/{{mount_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mounts",
+								"{{mount_id}}"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Update Mount\n\noperationId: update_mount_mounts__mount_id__patch"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /mounts/{mount_id}/validate",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/mounts/{{mount_id}}/validate",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mounts",
+								"{{mount_id}}",
+								"validate"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Validate Mount\n\noperationId: validate_mount_mounts__mount_id__validate_post"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /setup/database/provision",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/setup/database/provision",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"setup",
+								"database",
+								"provision"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Provision Database\n\noperationId: provision_database_setup_database_provision_post"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /setup/database/provision-status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/setup/database/provision-status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"setup",
+								"database",
+								"provision-status"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Get Database Provision Status\n\noperationId: get_database_provision_status_setup_database_provision_status_get"
+					},
+					"response": []
+				},
+				{
+					"name": "PUT /setup/database/settings",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/setup/database/settings",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"setup",
+								"database",
+								"settings"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Update Database Settings\n\noperationId: update_database_settings_setup_database_settings_put"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /setup/database/status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/setup/database/status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"setup",
+								"database",
+								"status"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Get Database Status\n\noperationId: get_database_status_setup_database_status_get"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /setup/database/system-info",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/setup/database/system-info",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"setup",
+								"database",
+								"system-info"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Get System Info\n\noperationId: get_system_info_setup_database_system_info_get"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /setup/database/test-connection",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/setup/database/test-connection",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"setup",
+								"database",
+								"test-connection"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Test Database Connection\n\noperationId: test_database_connection_setup_database_test_connection_post"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /setup/initialize",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/setup/initialize",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"setup",
+								"initialize"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Initialize System\n\noperationId: initialize_system_setup_initialize_post"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /setup/status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/setup/status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"setup",
+								"status"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Get Setup Status\n\noperationId: get_setup_status_setup_status_get"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /telemetry/ui-navigation",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/telemetry/ui-navigation",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"telemetry",
+								"ui-navigation"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Ingest Ui Navigation Telemetry\n\noperationId: ingest_ui_navigation_telemetry_telemetry_ui_navigation_post"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /users",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/users",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: List Users\n\noperationId: list_users_users_get"
+					},
+					"response": []
+				},
+				{
+					"name": "DELETE /users/{username}/roles",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/users/{{username}}/roles",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"{{username}}",
+								"roles"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Delete User Roles\n\noperationId: delete_user_roles_users__username__roles_delete"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /users/{username}/roles",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/users/{{username}}/roles",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"{{username}}",
+								"roles"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Get User Roles\n\noperationId: get_user_roles_users__username__roles_get"
+					},
+					"response": []
+				},
+				{
+					"name": "PUT /users/{username}/roles",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/users/{{username}}/roles",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"{{username}}",
+								"roles"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Set User Roles\n\noperationId: set_user_roles_users__username__roles_put"
+					},
+					"response": []
 				}
 			]
 		}

@@ -233,6 +233,8 @@ When staged changes touch [docs/operations/13-user-manual.md](../operations/13-u
 
 When staged changes touch [app/models](../../app/models) or [docs/database/ecube-schema.dbml](../../docs/database/ecube-schema.dbml), the hook runs `python3 scripts/generate_dbml_schema.py --check` and blocks the commit until you regenerate and stage the DBML file. Release-migration text and generator-script changes alone do not trigger this check because the DBML file is generated from SQLAlchemy model metadata, not directly from Alembic modules.
 
+When staged changes touch [postman/ecube-postman-collection.json](../../postman/ecube-postman-collection.json), [scripts/check_postman_collection.py](../../scripts/check_postman_collection.py), [scripts/sync_postman_collection.py](../../scripts/sync_postman_collection.py), or API contract surfaces under [app/routers](../../app/routers), [app/schemas](../../app/schemas), [app/main.py](../../app/main.py), [app/auth.py](../../app/auth.py), or [app/dependencies.py](../../app/dependencies.py), the hook runs `python3 scripts/check_postman_collection.py` and blocks the commit if the collection references a method or route that no longer exists in the generated OpenAPI schema or if the generated OpenAPI sync folder is stale. Refresh it with `python3 scripts/sync_postman_collection.py`, then restage the collection.
+
 ---
 
 ## Repository Layout
@@ -278,6 +280,8 @@ tests/
 scripts/
   run_schemathesis.sh    # One-command Schemathesis API fuzz testing
   sync_qa_test_cases.py  # QA spreadsheet ↔ markdown sync tool
+  check_postman_collection.py  # Postman collection ↔ OpenAPI route drift check
+  sync_postman_collection.py  # Regenerate Postman OpenAPI sync entries
 docs/
   design/              # Architecture and design specifications
   development/         # This folder — developer documentation
