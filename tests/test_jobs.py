@@ -23,7 +23,13 @@ def _create_assigned_job(db, *, drive, project_id, evidence_number, source_path,
     )
     db.add(job)
     db.flush()
-    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.add(
+        DriveAssignment(
+            drive_id=drive.id,
+            job_id=job.id,
+            activated_at=datetime.now(timezone.utc),
+        )
+    )
     db.commit()
     db.refresh(job)
     return job
@@ -228,7 +234,13 @@ def test_update_job_rejects_notes_field(client, db):
     )
     db.add(job)
     db.flush()
-    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.add(
+        DriveAssignment(
+            drive_id=drive.id,
+            job_id=job.id,
+            activated_at=datetime.now(timezone.utc),
+        )
+    )
     db.commit()
 
     response = client.put(
@@ -3459,7 +3471,13 @@ def test_update_pending_job_reassigns_drive_and_updates_fields(client, db):
     )
     db.add(job)
     db.flush()
-    db.add(DriveAssignment(drive_id=drive_one.id, job_id=job.id))
+    db.add(
+        DriveAssignment(
+            drive_id=drive_one.id,
+            job_id=job.id,
+            activated_at=datetime.now(timezone.utc),
+        )
+    )
     db.commit()
 
     response = client.put(
@@ -3482,6 +3500,7 @@ def test_update_pending_job_reassigns_drive_and_updates_fields(client, db):
     assert data["source_path"] == "/nfs/project-001/updated/folder"
     assert data["target_mount_path"] == "/mnt/ecube/edit-002"
     assert data["thread_count"] == 6
+    assert data["overflow_assignments"] == []
     db.refresh(job)
     db.refresh(drive_one)
     db.refresh(drive_two)
@@ -4996,6 +5015,117 @@ def test_get_job_details_includes_timed_out_count(client, db):
     assert data["files_succeeded"] == 1
     assert data["files_failed"] == 1
     assert data["files_timed_out"] == 1
+
+
+def test_get_job_details_include_notes_and_overflow_assignments(client, db):
+    primary_drive = UsbDrive(
+        device_identifier="USB-DETAIL-PRIMARY-001",
+        manufacturer="Primary",
+        product_name="Device",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-DETAIL-OVERFLOW-001",
+        mount_path="/mnt/ecube/detail-primary-001",
+    )
+    reserved_drive = UsbDrive(
+        device_identifier="USB-DETAIL-RESERVED-001",
+        manufacturer="Reserved Overflow",
+        product_name="Device",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-DETAIL-OVERFLOW-001",
+        mount_path="/mnt/ecube/detail-reserved-001",
+    )
+    active_overflow_drive = UsbDrive(
+        device_identifier="USB-DETAIL-ACTIVE-001",
+        manufacturer="Active Overflow",
+        product_name="Device",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-DETAIL-OVERFLOW-001",
+        mount_path="/mnt/ecube/detail-active-001",
+    )
+    db.add_all([primary_drive, reserved_drive, active_overflow_drive])
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-DETAIL-OVERFLOW-001",
+        evidence_number="EV-DETAIL-OVERFLOW-001",
+        source_path="/nfs/project-001/evidence",
+        target_mount_path="/mnt/ecube/detail-active-001",
+        status=JobStatus.RUNNING,
+        started_at=datetime(2026, 5, 4, 12, 0, tzinfo=timezone.utc),
+    )
+    db.add(job)
+    db.flush()
+
+    db.add_all([
+        DriveAssignment(
+            drive_id=primary_drive.id,
+            job_id=job.id,
+            assigned_at=datetime(2026, 5, 4, 11, 55, tzinfo=timezone.utc),
+            activated_at=datetime(2026, 5, 4, 12, 0, tzinfo=timezone.utc),
+        ),
+        DriveAssignment(
+            drive_id=reserved_drive.id,
+            job_id=job.id,
+            assigned_at=datetime(2026, 5, 4, 12, 1, tzinfo=timezone.utc),
+            activated_at=None,
+        ),
+        DriveAssignment(
+            drive_id=active_overflow_drive.id,
+            job_id=job.id,
+            assigned_at=datetime(2026, 5, 4, 12, 2, tzinfo=timezone.utc),
+            activated_at=datetime(2026, 5, 4, 12, 3, tzinfo=timezone.utc),
+            file_count=4,
+            copied_bytes=4096,
+        ),
+    ])
+    db.add(
+        AuditLog(
+            action="JOB_CREATED",
+            user="test-user",
+            job_id=job.id,
+            project_id=job.project_id,
+            details={
+                "project_id": job.project_id,
+                "evidence_number": job.evidence_number,
+                "processor_notes": "Operator handoff note",
+                "overflow_drive_ids": [reserved_drive.id],
+            },
+        )
+    )
+    db.add(
+        AuditLog(
+            action="JOB_OVERFLOW_CONTINUATION_STARTED",
+            user="test-user",
+            job_id=job.id,
+            project_id=job.project_id,
+            drive_id=active_overflow_drive.id,
+            details={
+                "project_id": job.project_id,
+                "previous_drive_id": primary_drive.id,
+                "drive_id": active_overflow_drive.id,
+                "drive_assignment_id": 3,
+                "retry_file_count": 1,
+            },
+        )
+    )
+    db.commit()
+
+    response = client.get(f"/jobs/{job.id}")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["source_path"] == "/nfs/project-001/evidence"
+    assert data["started_at"] == "2026-05-04T12:00:00"
+    assert data["notes"] == "Operator handoff note"
+    assert [item["drive"]["display_device_label"] for item in data["overflow_assignments"]] == [
+        "Reserved Overflow Device",
+        "Active Overflow Device",
+    ]
+    assert [item["state"] for item in data["overflow_assignments"]] == ["RESERVED", "ACTIVE"]
+    assert "filesystem_path" not in data["overflow_assignments"][0]["drive"]
+    assert "device_identifier" not in data["overflow_assignments"][0]["drive"]
+    assert "port_system_path" not in data["overflow_assignments"][0]["drive"]
+    assert data["drive"]["display_device_label"] == "Active Overflow Device"
 
 
 def test_list_jobs_includes_error_summary_for_failed_jobs(client, db):

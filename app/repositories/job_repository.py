@@ -761,6 +761,15 @@ class DriveAssignmentRepository:
             .first()
         )
 
+    def list_for_job(self, job_id: int) -> List[DriveAssignment]:
+        return (
+            self.db.query(DriveAssignment)
+            .options(joinedload(DriveAssignment.drive).joinedload(UsbDrive.port))
+            .filter(DriveAssignment.job_id == job_id)
+            .order_by(DriveAssignment.assigned_at.asc(), DriveAssignment.id.asc())
+            .all()
+        )
+
     def bulk_get_active_for_jobs(
         self, job_ids: List[int]
     ) -> Dict[int, DriveAssignment]:
