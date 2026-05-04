@@ -28,6 +28,20 @@ class AuditLogSchema(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class AuditLogListResponse(BaseModel):
+    entries: List[AuditLogSchema] = Field(..., description="Paginated audit log entries")
+    limit: int = Field(..., description="Maximum number of returned entries")
+    offset: int = Field(..., description="Number of matching entries skipped before this page")
+    total: Optional[int] = Field(default=None, description="Exact total number of matching audit log entries when requested")
+    has_more: bool = Field(..., description="Whether another page of matching entries exists after this one")
+
+
+class AuditLogFilterOptionsResponse(BaseModel):
+    actions: List[str] = Field(default_factory=list, description="Distinct audit action values")
+    users: List[str] = Field(default_factory=list, description="Distinct usernames present in audit logs")
+    job_ids: List[int] = Field(default_factory=list, description="Distinct job IDs present in audit logs")
+
+
 class ChainOfCustodyEventSchema(BaseModel):
     event_id: int = Field(..., description="Audit event ID")
     event_type: str = Field(..., description="Audit action code")

@@ -4,7 +4,7 @@
 |---|---|
 | Title | API Quick Reference |
 | Purpose | Provides a quick-reference guide to ECUBE API endpoints, authentication, and common request examples for operators and developers. |
-| Updated on | 04/25/26 |
+| Updated on | 05/04/26 |
 | Audience | Developers, operators, IT staff. |
 
 ## Table of Contents
@@ -203,7 +203,8 @@ Compatibility note: To support project-to-source-path policy, use project source
 
 | Method | Endpoint | Role | Description |
 | ------ | -------- | -------- | ----------------------- |
-| GET | `/audit` | auditor+ | Query audit logs with filters |
+| GET | `/audit` | auditor+ | Query audit logs with server-backed pagination, filters, and free-text search |
+| GET | `/audit/options` | auditor+ | Return distinct action, user, and job filter options for the Audit UI |
 
 **Filters:**
 
@@ -212,14 +213,28 @@ Compatibility note: To support project-to-source-path policy, use project source
 - `job_id=5` — Filter by job
 - `since=2026-03-01T00:00:00Z` — Start timestamp (ISO 8601)
 - `until=2026-03-06T23:59:59Z` — End timestamp (ISO 8601)
+- `search=griffin` — Case-insensitive substring search across visible audit fields
+- `include_total=false` — Skip the exact total count and rely on `has_more` for forward paging
 - `limit=100` — Max results (default 100, max 1000)
 - `offset=0` — Skip N results
+
+**Response notes:**
+
+- `GET /audit` returns a paged object with `entries`, `limit`, `offset`, `total`, and `has_more`
+- When `include_total=false`, `total` is `null` and `has_more` remains the forward-pagination signal
+- `search` is intended for operator-safe substring matching across audit content; `client_ip` participates only for roles that are already allowed to view it
+- `GET /audit/options` returns `actions`, `users`, and `job_ids` arrays for distinct filter values
 
 **Example:**
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
-  'https://localhost:8443/audit?action=JOB_STARTED&user=griffin&limit=50&offset=0'
+  'https://localhost:8443/audit?action=JOB_STARTED&user=griffin&search=PRJ-001&limit=50&offset=0'
+```
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  'https://localhost:8443/audit/options'
 ```
 
 ---

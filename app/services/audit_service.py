@@ -14,6 +14,9 @@ from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
 from app.repositories.job_repository import JobChainOfCustodySnapshotRepository, JobRepository
 from app.schemas.audit import (
+    AuditLogFilterOptionsResponse,
+    AuditLogListResponse,
+    AuditLogSchema,
     ChainOfCustodyDriveReportSchema,
     ChainOfCustodyEventSchema,
     ChainOfCustodyHandoffRequest,
@@ -25,6 +28,84 @@ from app.services.callback_service import deliver_callback
 from app.utils.drive_identity import device_identifier_matches
 
 logger = logging.getLogger(__name__)
+
+_IP_VISIBLE_ROLES = {"admin", "auditor"}
+
+
+def _redact_ip(entry: AuditLog, roles: List[str]) -> AuditLogSchema:
+    schema = AuditLogSchema.model_validate(entry)
+    if not _IP_VISIBLE_ROLES.intersection(roles):
+        schema.client_ip = None
+    return schema
+
+
+def list_audit_logs(
+    db: Session,
+    *,
+    roles: List[str],
+    user: Optional[str] = None,
+    action: Optional[str] = None,
+    project_id: Optional[str] = None,
+    drive_id: Optional[int] = None,
+    job_id: Optional[int] = None,
+    since: Optional[datetime] = None,
+    until: Optional[datetime] = None,
+    search: Optional[str] = None,
+    include_total: bool = True,
+    limit: int,
+    offset: int,
+) -> AuditLogListResponse:
+    include_client_ip_in_search = bool(_IP_VISIBLE_ROLES.intersection(roles))
+    repo = AuditRepository(db)
+    page_limit = limit + 1 if not include_total else limit
+    entries = repo.query(
+        user=user,
+        action=action,
+        project_id=project_id,
+        drive_id=drive_id,
+        job_id=job_id,
+        since=since,
+        until=until,
+        search=search,
+        include_client_ip_in_search=include_client_ip_in_search,
+        limit=page_limit,
+        offset=offset,
+    )
+    has_more = False
+    if not include_total and len(entries) > limit:
+        has_more = True
+        entries = entries[:limit]
+
+    total = None
+    if include_total:
+        total = repo.count(
+            user=user,
+            action=action,
+            project_id=project_id,
+            drive_id=drive_id,
+            job_id=job_id,
+            since=since,
+            until=until,
+            search=search,
+            include_client_ip_in_search=include_client_ip_in_search,
+        )
+
+    serialized = [_redact_ip(entry, roles) for entry in entries]
+    if include_total and total is not None:
+        has_more = offset + len(serialized) < total
+
+    return AuditLogListResponse(
+        entries=serialized,
+        limit=limit,
+        offset=offset,
+        total=total,
+        has_more=has_more,
+    )
+
+
+def get_audit_filter_options(db: Session) -> AuditLogFilterOptionsResponse:
+    options = AuditRepository(db).filter_options()
+    return AuditLogFilterOptionsResponse(**options)
 
 
 def _emit_job_lifecycle_callback(

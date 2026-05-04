@@ -18,6 +18,7 @@ describe('Pagination', () => {
     expect(wrapper.findAll('.page-number-btn').map((node) => node.text())).toEqual([
       '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
     ])
+    expect(wrapper.find('.page-window-next').attributes('aria-label')).toBe('Next 10 pages')
 
     await wrapper.find('.page-window-next').trigger('click')
 
@@ -40,5 +41,29 @@ describe('Pagination', () => {
     ])
     expect(wrapper.find('.page-number-btn--active').text()).toBe('12')
     expect(wrapper.find('.page-number-btn--active').attributes('aria-current')).toBe('page')
+  })
+
+  it('supports a 5-page shortcut window', async () => {
+    const wrapper = mount(Pagination, {
+      props: {
+        page: 1,
+        pageSize: 40,
+        total: 480,
+        showPageWindow: true,
+        windowSize: 5,
+        jumpSize: 5,
+      },
+      global: { plugins: [i18n] },
+    })
+
+    expect(wrapper.findAll('.page-number-btn').map((node) => node.text())).toEqual([
+      '1', '2', '3', '4', '5',
+    ])
+    expect(wrapper.find('.page-window-prev').attributes('aria-label')).toBe('Previous 5 pages')
+    expect(wrapper.find('.page-window-next').attributes('aria-label')).toBe('Next 5 pages')
+
+    await wrapper.find('.page-window-next').trigger('click')
+
+    expect(wrapper.emitted('update:page')?.[0]).toEqual([6])
   })
 })

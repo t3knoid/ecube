@@ -98,8 +98,28 @@ test('keyboard navigation: DataTable pagination controls are keyboard-reachable'
     details: {},
   }))
 
+  await routeJson(page, '**/api/audit/options', {
+    actions: ['LOGIN'],
+    users: logs.map((entry) => entry.user),
+    job_ids: [],
+  })
+
   await page.route(/\/api\/audit(?!\/)/, async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(logs) })
+    const requestUrl = new URL(route.request().url())
+    const limit = Number(requestUrl.searchParams.get('limit') || 20)
+    const offset = Number(requestUrl.searchParams.get('offset') || 0)
+    const entries = logs.slice(offset, offset + limit)
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        entries,
+        total: logs.length,
+        limit,
+        offset,
+        has_more: offset + entries.length < logs.length,
+      }),
+    })
   })
   await routeJson(page, '**/api/drives', [])
 
@@ -108,11 +128,13 @@ test('keyboard navigation: DataTable pagination controls are keyboard-reachable'
   const pagination = page.locator('.pagination-wrap')
   await expect(pagination).toBeVisible()
 
-  // The Next-page button must be focusable and activatable with the keyboard
-  const nextBtn = pagination.getByRole('button').last()
+  // An enabled page shortcut must be focusable and activatable with the keyboard
+  const nextBtn = pagination.getByRole('button', { name: '2' })
   await nextBtn.focus()
   await expect(nextBtn).toBeFocused()
   await page.keyboard.press('Enter')
+
+  await expect(page.locator('tbody').getByText('user20')).toBeVisible()
 
   // After keyboard activation the pagination region remains visible/functional
   await expect(pagination).toBeVisible()
