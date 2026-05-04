@@ -4,6 +4,7 @@ import shutil
 import os
 import posixpath
 import re
+import tempfile
 import pwd
 import grp
 from datetime import datetime, timezone
@@ -164,6 +165,7 @@ class LinuxMountProvider:
                  *, credentials_file: Optional[str] = None, username: Optional[str] = None, password: Optional[str] = None,
                  nfs_client_version: Optional[str] = None) -> Tuple[bool, Optional[str]]:
         resolved_nfs_client_version: Optional[str] = None
+        temporary_credentials_file: Optional[str] = None
         if mount_type == MountType.NFS:
             resolved_nfs_client_version = _resolve_nfs_client_version(nfs_client_version)
             cmd = [settings.mount_binary_path, "-t", "nfs", "-o", f"vers={resolved_nfs_client_version}", remote_path, local_mount_point]
@@ -171,16 +173,30 @@ class LinuxMountProvider:
             cmd = [settings.mount_binary_path, "-t", "cifs", remote_path, local_mount_point]
             if credentials_file:
                 cmd += ["-o", f"credentials={credentials_file}"]
+            elif username is not None or password is not None:
+                mount_label = _redacted_mount_label(local_mount_point)
+                try:
+                    temporary_credentials_file = _prepare_temporary_smb_credentials_file(
+                        username=username,
+                        password=password,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Temporary SMB credentials preparation failed for mount_label=%s reason=%s",
+                        mount_label,
+                        sanitize_error_message(exc, "Temporary SMB credentials preparation failed"),
+                    )
+                    logger.debug(
+                        "Temporary SMB credentials preparation details: mount_label=%s local_mount_point=%s remote_path=%s raw_error=%s",
+                        mount_label,
+                        local_mount_point,
+                        remote_path,
+                        str(exc),
+                    )
+                    return False, str(exc)
+                cmd += ["-o", f"credentials={temporary_credentials_file}"]
             else:
-                options: list[str] = []
-                if username:
-                    options.append(f"username={username}")
-                if password:
-                    options.append(f"password={password}")
-                if not options:
-                    options.append("guest")
-                if options:
-                    cmd += ["-o", ",".join(options)]
+                cmd += ["-o", "guest"]
 
         cmd = _with_host_mount_namespace(cmd)
         mount_label = _redacted_mount_label(local_mount_point)
@@ -218,129 +234,128 @@ class LinuxMountProvider:
                 raw_error=exc,
             )
             return False, str(exc)
-        if result.returncode == 0:
-            mounted = self.check_mounted(local_mount_point)
-            if mounted is True:
-                logger.info(
-                    "Mount command succeeded: type=%s mount_label=%s command_path=%s",
+        try:
+            if result.returncode == 0:
+                mounted = self.check_mounted(local_mount_point)
+                if mounted is True:
+                    logger.info(
+                        "Mount command succeeded: type=%s mount_label=%s command_path=%s",
+                        mount_type.value,
+                        mount_label,
+                        command_path,
+                    )
+                    return True, None
+                error = "mount command reported success but mountpoint is not active"
+                logger.warning("Mount command verification failed for mount_label=%s", mount_label)
+                logger.debug(
+                    "Mount command verification details: type=%s mount_label=%s remote_path=%s local_mount_point=%s command_path=%s mounted=%s",
                     mount_type.value,
                     mount_label,
+                    remote_path,
+                    local_mount_point,
                     command_path,
+                    mounted,
                 )
-                return True, None
-            error = "mount command reported success but mountpoint is not active"
-            logger.warning("Mount command verification failed for mount_label=%s", mount_label)
-            logger.debug(
-                "Mount command verification details: type=%s mount_label=%s remote_path=%s local_mount_point=%s command_path=%s mounted=%s",
+                return False, error
+
+            error = (result.stderr or result.stdout or "").strip() or "mount failed"
+            logger.warning(
+                "Mount command failed: type=%s mount_label=%s returncode=%s reason=%s",
                 mount_type.value,
                 mount_label,
-                remote_path,
-                local_mount_point,
-                command_path,
-                mounted,
+                result.returncode,
+                sanitize_error_message(error, "Mount command failed"),
             )
-            return False, error
+            _log_mount_debug_failure(
+                "Mount command raw error",
+                mount_type=mount_type,
+                remote_path=remote_path,
+                local_mount_point=local_mount_point,
+                returncode=result.returncode,
+                raw_error=error,
+            )
 
-        error = (result.stderr or result.stdout or "").strip() or "mount failed"
-        logger.warning(
-            "Mount command failed: type=%s mount_label=%s returncode=%s reason=%s",
-            mount_type.value,
-            mount_label,
-            result.returncode,
-            sanitize_error_message(error, "Mount command failed"),
-        )
-        _log_mount_debug_failure(
-            "Mount command raw error",
-            mount_type=mount_type,
-            remote_path=remote_path,
-            local_mount_point=local_mount_point,
-            returncode=result.returncode,
-            raw_error=error,
-        )
+            if "failed to apply fstab options" in error.lower():
+                retry_error = error
 
-        # Some environments have /etc/fstab entries for the target path with options
-        # that conflict with on-demand API mounts.
-        if "failed to apply fstab options" in error.lower():
-            retry_error = error
-
-            # On some hosts, mount(8) continues to apply local policies for NFS
-            # paths. Try mount.nfs directly to bypass mount(8) option handling.
-            if mount_type == MountType.NFS:
-                nfs_bin = _resolve_mount_nfs_binary()
-                if nfs_bin:
-                    direct_cmd = [nfs_bin, remote_path, local_mount_point]
-                    direct_cmd = _with_host_mount_namespace(direct_cmd)
-                    direct_command_path = _mount_command_path(direct_cmd)
-                    logger.info(
-                        "Retrying direct NFS helper for mount_label=%s command_path=%s",
-                        mount_label,
-                        direct_command_path,
-                    )
-                    logger.debug(
-                        "Direct NFS helper context: mount_label=%s helper=%s remote_path=%s local_mount_point=%s command_path=%s",
-                        mount_label,
-                        nfs_bin,
-                        remote_path,
-                        local_mount_point,
-                        direct_command_path,
-                    )
-                    try:
-                        direct_result = subprocess.run(
-                            direct_cmd,
-                            capture_output=True,
-                            text=True,
-                            timeout=settings.subprocess_timeout_seconds,
-                        )
-                    except subprocess.TimeoutExpired as exc:
-                        logger.warning(
-                            "Direct NFS helper mount timed out: mount_label=%s reason=%s",
-                            mount_label,
-                            sanitize_error_message(exc, "Direct NFS helper mount timed out"),
-                        )
-                        _log_mount_debug_failure(
-                            "Direct NFS helper timeout details",
-                            mount_type=mount_type,
-                            remote_path=remote_path,
-                            local_mount_point=local_mount_point,
-                            raw_error=exc,
-                        )
-                        return False, str(exc)
-                    if direct_result.returncode == 0:
+                if mount_type == MountType.NFS:
+                    nfs_bin = _resolve_mount_nfs_binary()
+                    if nfs_bin:
+                        direct_cmd = [nfs_bin, remote_path, local_mount_point]
+                        direct_cmd = _with_host_mount_namespace(direct_cmd)
+                        direct_command_path = _mount_command_path(direct_cmd)
                         logger.info(
-                            "Direct NFS helper mount succeeded for mount_label=%s command_path=%s",
+                            "Retrying direct NFS helper for mount_label=%s command_path=%s",
                             mount_label,
                             direct_command_path,
                         )
-                        return True, None
-                    direct_error = (direct_result.stderr or direct_result.stdout or "").strip() or "mount failed"
+                        logger.debug(
+                            "Direct NFS helper context: mount_label=%s helper=%s remote_path=%s local_mount_point=%s command_path=%s",
+                            mount_label,
+                            nfs_bin,
+                            remote_path,
+                            local_mount_point,
+                            direct_command_path,
+                        )
+                        try:
+                            direct_result = subprocess.run(
+                                direct_cmd,
+                                capture_output=True,
+                                text=True,
+                                timeout=settings.subprocess_timeout_seconds,
+                            )
+                        except subprocess.TimeoutExpired as exc:
+                            logger.warning(
+                                "Direct NFS helper mount timed out: mount_label=%s reason=%s",
+                                mount_label,
+                                sanitize_error_message(exc, "Direct NFS helper mount timed out"),
+                            )
+                            _log_mount_debug_failure(
+                                "Direct NFS helper timeout details",
+                                mount_type=mount_type,
+                                remote_path=remote_path,
+                                local_mount_point=local_mount_point,
+                                raw_error=exc,
+                            )
+                            return False, str(exc)
+                        if direct_result.returncode == 0:
+                            logger.info(
+                                "Direct NFS helper mount succeeded for mount_label=%s command_path=%s",
+                                mount_label,
+                                direct_command_path,
+                            )
+                            return True, None
+                        direct_error = (direct_result.stderr or direct_result.stdout or "").strip() or "mount failed"
+                        logger.warning(
+                            "Direct NFS helper mount failed: mount_label=%s returncode=%s reason=%s",
+                            mount_label,
+                            direct_result.returncode,
+                            sanitize_error_message(direct_error, "Direct NFS helper mount failed"),
+                        )
+                        _log_mount_debug_failure(
+                            "Direct NFS helper raw error",
+                            mount_type=mount_type,
+                            remote_path=remote_path,
+                            local_mount_point=local_mount_point,
+                            returncode=direct_result.returncode,
+                            raw_error=direct_error,
+                        )
+                        retry_error = direct_error
+
+                mounted = self.check_mounted(local_mount_point)
+                if mounted is True:
                     logger.warning(
-                        "Direct NFS helper mount failed: mount_label=%s returncode=%s reason=%s",
+                        "Mount commands reported failure but the target is active; treating as mounted for mount_label=%s",
                         mount_label,
-                        direct_result.returncode,
-                        sanitize_error_message(direct_error, "Direct NFS helper mount failed"),
                     )
-                    _log_mount_debug_failure(
-                        "Direct NFS helper raw error",
-                        mount_type=mount_type,
-                        remote_path=remote_path,
-                        local_mount_point=local_mount_point,
-                        returncode=direct_result.returncode,
-                        raw_error=direct_error,
-                    )
-                    retry_error = direct_error
+                    return True, None
 
-            # If command flow reports failure but mountpoint is active, treat as success.
-            mounted = self.check_mounted(local_mount_point)
-            if mounted is True:
-                logger.warning(
-                    "Mount commands reported failure but the target is active; treating as mounted for mount_label=%s",
-                    mount_label,
-                )
-                return True, None
+                return False, retry_error
 
-            return False, retry_error
-
-        return False, error
+            return False, error
+        finally:
+            if temporary_credentials_file:
+                _cleanup_temporary_smb_credentials_file(temporary_credentials_file)
 
     def os_unmount(self, local_mount_point: str) -> Tuple[bool, Optional[str]]:
         try:
@@ -449,6 +464,78 @@ def _resolve_smbclient_binary() -> Optional[str]:
         if resolved:
             return resolved
     return None
+
+
+def _cleanup_temporary_smb_credentials_file(credentials_path: str) -> None:
+    try:
+        if settings.use_sudo and os.geteuid() != 0:
+            subprocess.run(
+                _with_sudo(["rm", "-f", credentials_path]),
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=settings.subprocess_timeout_seconds,
+            )
+            return
+        os.remove(credentials_path)
+    except FileNotFoundError:
+        return
+    except subprocess.CalledProcessError as exc:
+        error = (exc.stderr or exc.stdout or "").strip() or str(exc)
+        logger.warning(
+            "Temporary SMB credentials cleanup failed: reason=%s",
+            sanitize_error_message(error, "Temporary SMB credentials cleanup failed"),
+        )
+        logger.debug(
+            "Temporary SMB credentials cleanup details: credentials_file=%s raw_error=%s",
+            credentials_path,
+            error,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Temporary SMB credentials cleanup failed: reason=%s",
+            sanitize_error_message(exc, "Temporary SMB credentials cleanup failed"),
+        )
+        logger.debug(
+            "Temporary SMB credentials cleanup details: credentials_file=%s raw_error=%s",
+            credentials_path,
+            str(exc),
+        )
+
+
+def _prepare_temporary_smb_credentials_file(
+    *,
+    username: Optional[str],
+    password: Optional[str],
+) -> str:
+    fd, credentials_path = tempfile.mkstemp(prefix="ecube-smb-", suffix=".cred")
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            if username is not None:
+                handle.write(f"username={username}\n")
+            if password is not None:
+                handle.write(f"password={password}\n")
+
+        if os.geteuid() == 0:
+            os.chown(credentials_path, 0, 0)
+        elif settings.use_sudo:
+            subprocess.run(
+                _with_sudo(["chown", "root:root", credentials_path]),
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=settings.subprocess_timeout_seconds,
+            )
+
+        return credentials_path
+    except Exception:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        _cleanup_temporary_smb_credentials_file(credentials_path)
+        raise
 
 
 def _with_sudo(cmd: list[str]) -> list[str]:

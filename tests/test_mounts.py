@@ -1,3 +1,5 @@
+import os
+import stat
 import subprocess
 from unittest.mock import MagicMock, patch
 
@@ -1704,6 +1706,89 @@ def test_linux_mount_provider_uses_guest_option_for_credentialless_smb_mount(mon
     assert cmd[:2] == ["sudo", "-n"]
     assert "-o" in cmd
     assert "guest" in cmd
+
+
+def test_linux_mount_provider_uses_temporary_credentials_file_for_direct_smb_credentials(monkeypatch):
+    provider = LinuxMountProvider()
+    captured = {"credentials_path": None}
+
+    monkeypatch.setattr("app.services.mount_service.settings.use_sudo", True)
+    monkeypatch.setattr("app.services.mount_service.os.geteuid", lambda: 1000)
+
+    def fake_run(cmd, *args, **kwargs):
+        if cmd[:3] == ["sudo", "-n", "chown"]:
+            credentials_path = cmd[-1]
+            captured["credentials_path"] = credentials_path
+            assert os.path.exists(credentials_path)
+            assert stat.S_IMODE(os.stat(credentials_path).st_mode) == 0o600
+            with open(credentials_path, encoding="utf-8") as handle:
+                assert handle.read() == "username=svc-reader\npassword=top-secret\n"
+            return MagicMock(returncode=0, stderr="", stdout="")
+        if cmd[:3] == ["sudo", "-n", "rm"]:
+            assert cmd[-1] == captured["credentials_path"]
+            assert os.path.exists(cmd[-1])
+            os.remove(cmd[-1])
+            return MagicMock(returncode=0, stderr="", stdout="")
+
+        rendered_cmd = " ".join(cmd)
+        assert "password=top-secret" not in rendered_cmd
+        assert "username=svc-reader" not in rendered_cmd
+        assert f"credentials={captured['credentials_path']}" in rendered_cmd
+        return MagicMock(returncode=0, stderr="", stdout="")
+
+    with patch("app.services.mount_service._in_host_mount_namespace", return_value=True), \
+         patch("subprocess.run", side_effect=fake_run) as mock_run, \
+         patch.object(provider, "check_mounted", return_value=True):
+        ok, err = provider.os_mount(
+            MountType.SMB,
+            "//192.168.2.250/demo-case-001",
+            "/smb/demo-case-001",
+            username="svc-reader",
+            password="top-secret",
+        )
+
+    assert ok is True
+    assert err is None
+    assert captured["credentials_path"] is not None
+    assert not os.path.exists(captured["credentials_path"])
+    assert mock_run.call_count == 3
+
+
+def test_linux_mount_provider_cleans_up_temporary_credentials_file_and_keeps_password_out_of_logs(monkeypatch, caplog):
+    provider = LinuxMountProvider()
+    captured = {"credentials_path": None}
+
+    monkeypatch.setattr("app.services.mount_service.settings.use_sudo", True)
+    monkeypatch.setattr("app.services.mount_service.os.geteuid", lambda: 1000)
+
+    def fake_run(cmd, *args, **kwargs):
+        if cmd[:3] == ["sudo", "-n", "chown"]:
+            captured["credentials_path"] = cmd[-1]
+            return MagicMock(returncode=0, stderr="", stdout="")
+        if cmd[:3] == ["sudo", "-n", "rm"]:
+            assert cmd[-1] == captured["credentials_path"]
+            if os.path.exists(cmd[-1]):
+                os.remove(cmd[-1])
+            return MagicMock(returncode=0, stderr="", stdout="")
+        return MagicMock(returncode=13, stderr="mount error(13): Permission denied", stdout="")
+
+    with patch("app.services.mount_service._in_host_mount_namespace", return_value=True), \
+         patch("subprocess.run", side_effect=fake_run):
+        with caplog.at_level("DEBUG"):
+            ok, err = provider.os_mount(
+                MountType.SMB,
+                "//192.168.2.250/demo-case-001",
+                "/smb/demo-case-001",
+                username="svc-reader",
+                password="top-secret",
+            )
+
+    assert ok is False
+    assert err == "mount error(13): Permission denied"
+    assert captured["credentials_path"] is not None
+    assert not os.path.exists(captured["credentials_path"])
+    messages = [record.getMessage() for record in caplog.records]
+    assert not any("top-secret" in message for message in messages)
 
 
 def test_linux_mount_provider_treats_returncode_zero_with_inactive_mountpoint_as_failure(caplog):
