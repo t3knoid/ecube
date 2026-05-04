@@ -57,7 +57,7 @@ All OS-specific operations are isolated behind abstract interfaces in `app/infra
 | `PamAuthenticator` | Validate local credentials | PAM via `python-pam` |
 | `OSUserManager` | Create/delete OS users and groups | `useradd`, `userdel`, `groupadd` via sudo |
 
-Concrete implementations live alongside the interface in `app/infrastructure/` (e.g. `linux_discovery.py`, `linux_formatter.py`).  Settings expose configurable binary paths and filesystem paths so even the Linux implementation is not hardcoded to default locations.
+Concrete implementations live alongside the interface in `app/infrastructure/` (e.g. `linux_discovery.py`, `linux_formatter.py`). Settings expose configurable binary paths and filesystem paths so even the Linux implementation is not hardcoded to default locations. Mount namespace detection is centralized in `app/infrastructure/mount_namespace.py` and reused by mount-table readers plus mount/unmount providers so host-namespace fallback decisions stay aligned while each caller keeps its own read-error policy.
 
 ### Selection Strategy
 
