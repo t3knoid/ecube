@@ -13,6 +13,7 @@ import re
 from typing import Optional
 
 from app.config import settings
+from app.infrastructure.mount_namespace import shares_host_mount_namespace
 
 logger = logging.getLogger(__name__)
 
@@ -20,20 +21,10 @@ _DEFAULT_PROCFS_MOUNTS_PATH = "/proc/mounts"
 _HOST_PROCFS_MOUNTS_PATH = "/proc/1/mounts"
 
 
-def _same_host_mount_namespace() -> bool:
-    """Return whether the current process shares PID 1's mount namespace."""
-    try:
-        current_ns = os.readlink("/proc/self/ns/mnt")
-        host_ns = os.readlink("/proc/1/ns/mnt")
-    except OSError:
-        return True
-    return current_ns == host_ns
-
-
 def _mounts_path_for_current_context() -> str:
     """Return the authoritative mount table path for the current runtime."""
     mounts_path = settings.procfs_mounts_path
-    if mounts_path == _DEFAULT_PROCFS_MOUNTS_PATH and not _same_host_mount_namespace():
+    if mounts_path == _DEFAULT_PROCFS_MOUNTS_PATH and not shares_host_mount_namespace():
         return _HOST_PROCFS_MOUNTS_PATH
     return mounts_path
 
