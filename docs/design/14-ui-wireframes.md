@@ -748,7 +748,7 @@ Accessible from the Drive Management screen via a "Manage Hubs" button. Visible 
 │              │  │    │           │              │           │ 12.4 GB      │ │
 │              │  └────┴───────────┴──────────────┴───────────┴──────────────┘ │
 │              │                                                               │
-│              │  Use the Details action to view job details, files, and actions. │
+│              │  Use the Job ID to view job details, files, and actions.        │
 │              │                                                               │
 └──────────────┴───────────────────────────────────────────────────────────────┘
 ```

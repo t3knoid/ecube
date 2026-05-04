@@ -726,6 +726,11 @@ onBeforeUnmount(() => {
     </div>
 
     <DataTable :columns="columns" :rows="paged" :empty-text="t('jobs.empty')">
+      <template #cell-id="{ row }">
+        <button class="cell-link job-id-link" type="button" @click="openJobDetails(row)">
+          {{ row.id }}
+        </button>
+      </template>
       <template #cell-project_id="{ row }">{{ formatProjectId(row.project_id) }}</template>
       <template #cell-device="{ row }">{{ formatJobDevice(row) }}</template>
       <template #cell-status="{ row }">
@@ -744,9 +749,6 @@ onBeforeUnmount(() => {
       <template #cell-progress="{ row }">{{ progressLabel(row) }}</template>
       <template #cell-actions="{ row }">
         <div v-if="!isMobileViewport" class="row-actions">
-          <button class="btn" @click="openJobDetails(row)">
-            {{ t('jobs.details') }}
-          </button>
           <button class="btn" :disabled="!canStartJob(row) || isRowActionBusy(row)" @click="runJobAction(row, 'start')">
             {{ t('jobs.start') }}
           </button>
@@ -931,6 +933,21 @@ onBeforeUnmount(() => {
 :deep(.data-table th .sort-button),
 :deep(.data-table th .sort-button > span) {
   font-weight: var(--font-weight-bold);
+}
+
+.cell-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-link);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
+.cell-link:hover,
+.cell-link:focus-visible {
+  text-decoration-thickness: 2px;
 }
 
 .row-actions {
