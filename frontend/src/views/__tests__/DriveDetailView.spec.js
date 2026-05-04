@@ -57,6 +57,10 @@ function buildDrive(overrides = {}) {
   return {
     id: 7,
     device_identifier: 'USB-DETAIL-007',
+    display_device_label: 'General USB Flash Disk - Port 2',
+    manufacturer: 'General USB',
+    product_name: 'Flash Disk',
+    port_number: 2,
     filesystem_path: '/dev/sdb1',
     filesystem_type: 'ext4',
     mount_path: null,
@@ -88,7 +92,8 @@ function mountView() {
           `,
         },
         DirectoryBrowser: {
-          template: '<div class="directory-browser-stub" />',
+          props: ['mountPath', 'rootLabel'],
+          template: '<div class="directory-browser-stub">{{ rootLabel }}|{{ mountPath }}</div>',
         },
         StatusBadge: {
           props: ['label'],
@@ -251,7 +256,8 @@ describe('DriveDetailView mount workflow', () => {
     await browseButton.trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain(i18n.global.t('browse.browseContents'))
+    expect(wrapper.text()).toContain('Browse General USB Flash Disk - Port 2 Contents')
+    expect(wrapper.find('.directory-browser-stub').text()).toBe('|/mnt/ecube/7')
   })
 
   it('shows the evidence number for the drive assigned job when multiple drives share a project', async () => {

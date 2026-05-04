@@ -693,7 +693,7 @@ Use a pending job with a mounted source and eligible destination drive.
 - After analysis reaches `READY` or `STALE`, verify the blocked actions become available again according to the normal role and job-state rules.
 - Start and complete the job after a successful analyze run, then verify the startup-analysis summary remains visible in Job Detail even though the reusable startup-analysis entry snapshot has been cleared.
 
-- On the Drives page, verify the `Drive ID` value navigates to Drive Detail, verify the related `Job ID` still navigates to Job Detail when present, and verify mounted rows no longer show a separate `Details` action in either the desktop row actions or the compact overflow menu.
+- On the Drives page, verify the `Drive ID` value navigates to Drive Detail, verify the related `Job ID` still navigates to Job Detail when present, verify mounted rows use the visible `Device` identifier to open browsing, verify the browse panel title uses that same visible device identifier, verify the browser starts at the USB root, and verify the breadcrumb does not expose the mounted host path.
 - On the Mounts page, verify the mount ID value navigates to Mount Detail, verify the related `Job ID` still navigates to Job Detail when present, and verify mounted rows no longer show a separate `Details` action in either the desktop row actions or the compact overflow menu.
 
 #### 11.4d Responsive Mobile Workflow Checks
@@ -701,8 +701,8 @@ Use a pending job with a mounted source and eligible destination drive.
 At a narrow viewport (for example `<= 768px` wide), verify the responsive operator workflows behave as follows:
 
 - The shell sidebar is hidden by default, opens from the header navigation toggle, and closes again when the operator taps the backdrop or chooses a navigation link.
-- Drives, Mounts, and Jobs hide lower-priority columns on smaller screens, keep the most important identifiers visible, and move row actions into an overflow menu instead of forcing horizontal page expansion.
-- On mobile Drives rows, the visible `Drive ID` remains the path into Drive Detail, while the overflow menu omits a separate `Details` action and keeps only the remaining row-specific actions such as `Browse` when available.
+- Drives, Mounts, and Jobs hide lower-priority columns on smaller screens and keep the most important identifiers visible. Where list actions remain necessary, Mounts and Jobs move them into an overflow menu instead of forcing horizontal page expansion.
+- On mobile Drives rows, the visible `Drive ID` remains the path into Drive Detail, and mounted rows still use the visible `Device` identifier rather than any overflow action to open browse.
 - On mobile Mounts rows, the visible mount ID remains the path into Mount Detail, while the overflow menu omits a separate `Details` action and keeps only the remaining row-specific actions such as `Browse` when available.
 - Mobile Jobs, Drives, and Mounts rows render compact status indicators that still expose accessible labels or tooltips for the underlying state.
 - Job Detail keeps the highest-priority lifecycle actions visible on mobile and moves the remaining actions into an overflow menu without changing role-based availability.

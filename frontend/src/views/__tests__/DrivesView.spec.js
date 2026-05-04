@@ -60,11 +60,10 @@ function mountView() {
               <div class="column-labels">{{ (columns || []).map((column) => column.label).join(' ') }}</div>
               <div v-for="row in rows" :key="row.id" class="row-stub">
                 <span class="row-id"><slot name="cell-id" :row="row" /></span>
-                <span class="row-device">{{ row.display_device_label || row.port_system_path || '-' }}</span>
+                <span class="row-device"><slot name="cell-display_device_label" :row="row">{{ row.display_device_label || row.port_system_path || '-' }}</slot></span>
                 <span class="row-project"><slot name="cell-current_project_id" :row="row" /></span>
                 <span class="row-job-id"><slot name="cell-current_project_job_id" :row="row" /></span>
                 <slot name="cell-current_state" :row="row" />
-                <slot name="cell-actions" :row="row" />
               </div>
               <div class="rows-count">{{ rows.length }}</div>
             </div>
@@ -75,7 +74,10 @@ function mountView() {
           props: ['label'],
           template: '<span>{{ label }}</span>',
         },
-        DirectoryBrowser: true,
+        DirectoryBrowser: {
+          props: ['mountPath', 'rootLabel'],
+          template: '<div class="directory-browser-stub">{{ rootLabel }}|{{ mountPath }}</div>',
+        },
       },
     },
   })
@@ -215,15 +217,21 @@ describe('DrivesView rescan and filter loading', () => {
     expect(wrapper.find('.rows-count').text()).toBe('1')
   })
 
-  it('shows the Browse action for a mounted available drive', async () => {
+  it('uses the device label as the browse entry point for a mounted drive', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'AVAILABLE', mount_path: '/mnt/ecube/1' })])
 
     const wrapper = mountView()
     await flushPromises()
 
-    const labels = wrapper.findAll('button').map((node) => node.text())
-    expect(labels).toContain(i18n.global.t('drives.browse'))
-    expect(labels).not.toContain(i18n.global.t('drives.details'))
+    const deviceButton = wrapper.find('.drive-device-link')
+    expect(deviceButton.exists()).toBe(true)
+    expect(deviceButton.text()).toContain('SanDisk Ultra - Port 1')
+
+    await deviceButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Browse SanDisk Ultra - Port 1 Contents')
+    expect(wrapper.find('.directory-browser-stub').text()).toBe('|/mnt/ecube/1')
   })
 
   it('links the drive ID value to the drive detail page', async () => {
@@ -242,24 +250,17 @@ describe('DrivesView rescan and filter loading', () => {
     expect(mocks.push).toHaveBeenCalledWith({ name: 'drive-detail', params: { id: 1 } })
   })
 
-  it('routes compact row action menu browse button without a separate details action', async () => {
+  it('does not render a separate browse action button when the device label is clickable', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/1' })])
 
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.find('.row-action-menu-details').exists()).toBe(false)
-
-    const browseButton = wrapper.find('.row-action-menu-browse')
-    expect(browseButton.exists()).toBe(true)
-
-    await browseButton.trigger('click')
-    await flushPromises()
-
-    expect(wrapper.text()).toContain(i18n.global.t('browse.browseContents'))
+    expect(wrapper.text()).not.toContain(i18n.global.t('drives.browse'))
+    expect(wrapper.find('.drive-device-link').exists()).toBe(true)
   })
 
-  it('keeps the size column absent in mobile view while preserving compact status and row action controls', async () => {
+  it('keeps the size column absent in mobile view while preserving compact status and device-label browsing', async () => {
     viewportState.mobile = true
     installMatchMediaMock()
     mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/1' })])
@@ -271,7 +272,7 @@ describe('DrivesView rescan and filter loading', () => {
     expect(labels).not.toContain(i18n.global.t('drives.filesystem'))
     expect(labels).not.toContain(i18n.global.t('common.labels.size'))
     expect(wrapper.find('.drive-status-icon').attributes('aria-label')).toBe(i18n.global.t('drives.states.available'))
-    expect(wrapper.find('.row-actions-toggle-dots').exists()).toBe(true)
+    expect(wrapper.find('.drive-device-link').exists()).toBe(true)
   })
 
   it('shows project and job ID columns while keeping filesystem and evidence absent from the list', async () => {

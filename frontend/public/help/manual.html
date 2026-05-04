@@ -446,7 +446,7 @@ Filter by drive state
 Sort results
 </li></ul>
 <p>When ECUBE can correlate a drive to a related job, the <code>Job ID</code> value on the Drives page acts as a direct link into that job's detail view. Drives without a related job keep the current placeholder behavior instead of showing a stale or guessed job ID.</p>
-<p>The <code>Drive ID</code> value on the Drives page also acts as the direct navigation entry point into Drive Detail. The list no longer shows a separate <code>Details</code> row action, so list-level actions stay focused on row-specific operations such as <code>Browse</code> when the drive has a managed mount path.</p>
+<p>The <code>Drive ID</code> value on the Drives page also acts as the direct navigation entry point into Drive Detail. When a drive has a managed mount path, the visible <code>Device</code> identifier acts as the browse entry point into that mounted content instead of a separate <code>Browse</code> row action. The browse panel title uses that same visible drive identifier, and the directory browser starts at the USB root without exposing the host mount path in the breadcrumb.</p>
 <h2 id="4-3-drive-detail-page">4.3 Drive Detail Page</h2>
 <p>Selecting a drive opens a detail view showing:</p>
 <ul><li>
@@ -459,7 +459,7 @@ Current status badge
 Available actions such as format, initialize, and prepare eject
 </li></ul>
 <p>If ECUBE does not yet have a current mounted-drive free-space reading for that drive, the available-space field shows <code>-</code> instead of blocking the page.</p>
-<p>If a related job exists, the <code>Job ID</code> value on Drive Detail uses the same direct Job Detail navigation pattern as the clickable job context on the Drives page.</p>
+<p>If a related job exists, the <code>Job ID</code> value on Drive Detail uses the same direct Job Detail navigation pattern as the clickable job context on the Drives page. When you open browse from Drive Detail, the panel title also uses the visible device identifier and the breadcrumb stays root-relative instead of showing the host mount path.</p>
 <p>Reference screen:</p>
 <h2 id="4-4-formatting-a-drive">4.4 Formatting a Drive</h2>
 <p>If your role allows it, you can format a drive from the detail page.</p>
