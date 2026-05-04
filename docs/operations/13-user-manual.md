@@ -576,7 +576,7 @@ Common statuses include:
 - `COMPLETED`
 - `FAILED`
 
-The jobs table also exposes row-level `Details`, `Start`, and `Pause` actions for authorized operators. `PAUSING` means ECUBE is waiting for in-flight copy threads to finish their current work before the job becomes fully `PAUSED`.
+The `Job ID` value on the Jobs page acts as the direct navigation entry point into Job Detail. On desktop, authorized rows keep `Start` and `Pause` actions with state-aware availability instead of a separate `Details` button. `PAUSING` means ECUBE is waiting for in-flight copy threads to finish their current work before the job becomes fully `PAUSED`.
 
 ### 9.2 Creating a Job
 

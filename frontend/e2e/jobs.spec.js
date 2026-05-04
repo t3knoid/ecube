@@ -436,7 +436,7 @@ test('jobs surfaces preparing labels during startup analysis', async ({ page }) 
   await page.goto('/jobs')
   await expect(page.getByText('Preparing...', { exact: true }).first()).toBeVisible()
 
-  await page.getByRole('button', { name: 'Details' }).click()
+  await page.getByRole('row').filter({ has: page.getByText('EV-92') }).getByRole('button', { name: '92' }).click()
   await expect(page).toHaveURL(/\/jobs\/92$/)
   await expect(page.getByText('Preparing copy...', { exact: true })).toBeVisible()
   await expect(page.getByText('Scanning source files and calculating totals before copy work begins. This can take time for large evidence sets.')).toBeVisible()
