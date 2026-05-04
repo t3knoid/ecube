@@ -664,7 +664,7 @@ For the current Jobs page UI, verify the grouped `Create Job` dialog behaves as 
 - If no matching project, mount, or drive exists, the dialog shows the corresponding helper message instead of an empty or generic failure state.
 - If `Run job immediately` is checked, the created job transitions directly into the start flow after successful creation.
 - If the selected drive or mount becomes unavailable, the operator sees a specific conflict or availability message instead of a generic validation error.
-- Authorized rows expose `Details`, `Start`, and `Pause` actions with state-aware enablement.
+- The visible `Job ID` value navigates to Job Detail, and desktop row actions expose `Start` and `Pause` with state-aware enablement.
 - A newly started job can show `Preparing...` in the Jobs list before a numeric percentage is available.
 - Opening Job Detail during that startup phase shows `Preparing copy...` together with explanatory text that ECUBE is still scanning the source files and calculating totals.
 - If a manual analyze run finishes while the Jobs page stays open, verify the page shows a completion banner identifying the job and final startup-analysis state.

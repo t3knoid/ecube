@@ -46,7 +46,7 @@ Use screenshots that show the product as an operational system, not a generic ad
 Capture or refresh these polished screenshots from the live product:
 
 - Dashboard with active jobs and drive counts
-- Jobs list with progress and Details action
+- Jobs list with progress and clickable Job ID navigation
 - Job detail with completion summary, including the partial-success red summary state, and progress panel
 - Drives view showing role-aware operations
 - Mounts view showing mounted-share management

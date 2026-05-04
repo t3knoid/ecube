@@ -825,7 +825,7 @@ describe('JobsView grouped create dialog', () => {
     expect(wrapper.find('.row-progress-stub').text()).not.toContain('100%')
   })
 
-  it('uses Details as the row action label', async () => {
+  it('links the job ID value to Job Detail and removes the desktop Details action', async () => {
     mocks.listJobs.mockResolvedValue([
       {
         id: 44,
@@ -851,7 +851,13 @@ describe('JobsView grouped create dialog', () => {
     ])
     expect(wrapper.find('.row-values-stub').text()).toContain('2-1')
     expect(wrapper.find('.row-values-stub').text()).not.toContain('USB-001')
-    expect(wrapper.text()).toContain('Details')
+    const detailButton = wrapper.findAll('.job-id-link')
+    expect(detailButton).toHaveLength(1)
+    expect(detailButton[0].text()).toBe('44')
+    await detailButton[0].trigger('click')
+    await flushPromises()
+    expect(mocks.push).toHaveBeenCalledWith({ name: 'job-detail', params: { id: 44 } })
+    expect(wrapper.find('.row-actions-stub').text()).not.toContain('Details')
     expect(wrapper.text()).not.toContain('Open')
   })
 
@@ -951,25 +957,25 @@ describe('JobsView grouped create dialog', () => {
     const rowActions = wrapper.findAll('.row-actions-stub')
 
     const pendingButtons = rowActions[0].findAll('button')
-    expect(pendingButtons.map((button) => button.text())).toEqual(['Details', 'Start', 'Pause'])
-    expect(pendingButtons[1].attributes('disabled')).toBeUndefined()
-    expect(pendingButtons[2].attributes('disabled')).toBeDefined()
+    expect(pendingButtons.map((button) => button.text())).toEqual(['Start', 'Pause'])
+    expect(pendingButtons[0].attributes('disabled')).toBeUndefined()
+    expect(pendingButtons[1].attributes('disabled')).toBeDefined()
 
     const runningButtons = rowActions[1].findAll('button')
-    expect(runningButtons[1].attributes('disabled')).toBeDefined()
-    expect(runningButtons[2].attributes('disabled')).toBeUndefined()
+    expect(runningButtons[0].attributes('disabled')).toBeDefined()
+    expect(runningButtons[1].attributes('disabled')).toBeUndefined()
 
     const pausingButtons = rowActions[2].findAll('button')
+    expect(pausingButtons[0].attributes('disabled')).toBeDefined()
     expect(pausingButtons[1].attributes('disabled')).toBeDefined()
-    expect(pausingButtons[2].attributes('disabled')).toBeDefined()
 
     const pausedButtons = rowActions[3].findAll('button')
-    expect(pausedButtons[1].attributes('disabled')).toBeUndefined()
-    expect(pausedButtons[2].attributes('disabled')).toBeDefined()
+    expect(pausedButtons[0].attributes('disabled')).toBeUndefined()
+    expect(pausedButtons[1].attributes('disabled')).toBeDefined()
 
     const completedButtons = rowActions[4].findAll('button')
+    expect(completedButtons[0].attributes('disabled')).toBeDefined()
     expect(completedButtons[1].attributes('disabled')).toBeDefined()
-    expect(completedButtons[2].attributes('disabled')).toBeDefined()
   })
 
   it('shows a waiting dialog while a pause request is completing', async () => {
@@ -985,7 +991,7 @@ describe('JobsView grouped create dialog', () => {
     await flushPromises()
 
     const runningButtons = wrapper.findAll('.row-actions-stub')[0].findAll('button')
-    await runningButtons[2].trigger('click')
+    await runningButtons[1].trigger('click')
     await flushPromises()
 
     expect(mocks.pauseJob).toHaveBeenCalledWith(45)
@@ -993,8 +999,8 @@ describe('JobsView grouped create dialog', () => {
     expect(wrapper.text()).toContain('Waiting for active copy threads to finish')
 
     const refreshedButtons = wrapper.findAll('.row-actions-stub')[0].findAll('button')
+    expect(refreshedButtons[0].attributes('disabled')).toBeDefined()
     expect(refreshedButtons[1].attributes('disabled')).toBeDefined()
-    expect(refreshedButtons[2].attributes('disabled')).toBeDefined()
   })
 
   it('starts and pauses a selected job from the list', async () => {
@@ -1010,11 +1016,11 @@ describe('JobsView grouped create dialog', () => {
     const pendingButtons = rowActions[0].findAll('button')
     const runningButtons = rowActions[1].findAll('button')
 
-    await pendingButtons[1].trigger('click')
+    await pendingButtons[0].trigger('click')
     await flushPromises()
     expect(mocks.startJob).toHaveBeenCalledWith(44, { thread_count: 4 })
 
-    await runningButtons[2].trigger('click')
+    await runningButtons[1].trigger('click')
     await flushPromises()
     expect(mocks.pauseJob).toHaveBeenCalledWith(45)
     expect(mocks.listJobs).toHaveBeenCalledTimes(3)
