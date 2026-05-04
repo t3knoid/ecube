@@ -1242,6 +1242,12 @@ The <code>Password Policy</code> panel applies to locally managed OS accounts au
 </li><li>
 <code>exFAT Cluster Size</code> controls the allocation unit ECUBE uses when formatting drives as exFAT. <code>4K</code> is recommended for most situations. Use larger values only for drives that will store very large files only and no small files.
 </li><li>
+<code>Drive Format Timeout (seconds)</code> controls how long ECUBE allows a drive format command to run before treating it as failed. Increase it for large removable media that legitimately need extended exFAT formatting time.
+</li><li>
+<code>Drive Mount Timeout (seconds)</code> controls how long ECUBE allows a drive mount command to run before treating it as failed. Increase it for large removable media or slower USB links that need extra time to mount.
+</li><li>
+Drive formatting now keeps the browser request open without the prior UI-side 30-second timeout. If a format still fails, review the server log for <code>Drive format timed out</code> or <code>Drive format command failed</code> and adjust the Configuration values rather than treating the failure as a browser connectivity problem.
+</li><li>
 The <code>Default Callback URL</code> must be a valid <code>https://</code> URL and is overridden by any job-specific <code>Webhook callback URL</code> entered on the Jobs page or Job Detail edit dialog.
 </li><li>
 The <code>Outbound Callback Proxy URL</code> must be a valid <code>http://</code> or <code>https://</code> URL and must not contain embedded credentials.

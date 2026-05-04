@@ -45,6 +45,8 @@ const form = ref({
   db_pool_recycle_seconds: -1,
   startup_analysis_batch_size: 500,
   mkfs_exfat_cluster_size: '4K',
+  drive_format_timeout_seconds: 900,
+  drive_mount_timeout_seconds: 120,
   copy_job_timeout: 3600,
   job_detail_files_page_size: 40,
   callback_default_url: '',
@@ -81,6 +83,8 @@ const fieldOrder = [
   'db_pool_recycle_seconds',
   'startup_analysis_batch_size',
   'mkfs_exfat_cluster_size',
+  'drive_format_timeout_seconds',
+  'drive_mount_timeout_seconds',
   'copy_job_timeout',
   'job_detail_files_page_size',
   'callback_default_url',
@@ -513,6 +517,24 @@ onMounted(loadConfiguration)
           <option v-for="option in exfatClusterSizeOptions" :key="option" :value="option">{{ option }}</option>
         </select>
         <p class="field-help">{{ t('configuration.fields.mkfs_exfat_cluster_size.help') }}</p>
+
+        <label for="cfg-drive-format-timeout-seconds">{{ t('configuration.fields.drive_format_timeout_seconds.label') }}</label>
+        <input
+          id="cfg-drive-format-timeout-seconds"
+          v-model.number="form.drive_format_timeout_seconds"
+          type="number"
+          min="1"
+        />
+        <p class="field-help">{{ t('configuration.fields.drive_format_timeout_seconds.help') }}</p>
+
+        <label for="cfg-drive-mount-timeout-seconds">{{ t('configuration.fields.drive_mount_timeout_seconds.label') }}</label>
+        <input
+          id="cfg-drive-mount-timeout-seconds"
+          v-model.number="form.drive_mount_timeout_seconds"
+          type="number"
+          min="1"
+        />
+        <p class="field-help">{{ t('configuration.fields.drive_mount_timeout_seconds.help') }}</p>
 
         <label for="cfg-job-detail-files-page-size">{{ t('configuration.fields.job_detail_files_page_size.label') }}</label>
         <input

@@ -13,6 +13,7 @@ from typing import Optional, Protocol
 
 from app.config import settings
 from app.infrastructure.device_path import validate_device_path
+from app.utils.sanitize import sanitize_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -59,21 +60,118 @@ class LinuxDriveFormatter:
         if filesystem_type == "exfat":
             mkfs_cmd = [mkfs_binary, "-c", settings.mkfs_exfat_cluster_size, device_path]
 
+        cmd = _with_sudo(mkfs_cmd)
+        timeout_seconds = settings.drive_format_timeout_seconds
+        logger.info(
+            "Starting drive format",
+            extra={
+                "context": {
+                    "filesystem_type": filesystem_type,
+                    "timeout_seconds": timeout_seconds,
+                }
+            },
+        )
+        logger.debug(
+            "Drive format command details",
+            extra={
+                "context": {
+                    "filesystem_path": device_path,
+                    "filesystem_type": filesystem_type,
+                    "timeout_seconds": timeout_seconds,
+                    "command": cmd,
+                }
+            },
+        )
+
         try:
             subprocess.run(
-                _with_sudo(mkfs_cmd),
+                cmd,
                 check=True,
                 capture_output=True,
-                timeout=settings.subprocess_timeout_seconds,
+                timeout=timeout_seconds,
             )
-        except subprocess.TimeoutExpired:
+            logger.info(
+                "Drive format completed",
+                extra={
+                    "context": {
+                        "filesystem_type": filesystem_type,
+                        "timeout_seconds": timeout_seconds,
+                    }
+                },
+            )
+        except subprocess.TimeoutExpired as exc:
+            logger.warning(
+                "Drive format timed out",
+                extra={
+                    "context": {
+                        "filesystem_type": filesystem_type,
+                        "timeout_seconds": timeout_seconds,
+                        "failure_category": "drive_format_timeout",
+                    }
+                },
+            )
+            logger.debug(
+                "Drive format timeout details",
+                extra={
+                    "context": {
+                        "filesystem_path": device_path,
+                        "filesystem_type": filesystem_type,
+                        "timeout_seconds": timeout_seconds,
+                        "command": cmd,
+                        "raw_error": str(exc),
+                    }
+                },
+            )
             raise RuntimeError(
-                f"Format timed out after {settings.subprocess_timeout_seconds}s"
+                f"Format timed out after {timeout_seconds}s"
             )
         except subprocess.CalledProcessError as exc:
             stderr = (exc.stderr or b"").decode(errors="replace").strip()
+            logger.warning(
+                "Drive format command failed",
+                extra={
+                    "context": {
+                        "filesystem_type": filesystem_type,
+                        "failure_category": "drive_format_command",
+                        "reason": sanitize_error_message(stderr or "mkfs failed", "Drive format command failed"),
+                    }
+                },
+            )
+            logger.debug(
+                "Drive format command failure details",
+                extra={
+                    "context": {
+                        "filesystem_path": device_path,
+                        "filesystem_type": filesystem_type,
+                        "command": cmd,
+                        "returncode": exc.returncode,
+                        "raw_error": stderr or str(exc),
+                    }
+                },
+            )
             raise RuntimeError(f"mkfs failed: {stderr}" if stderr else "mkfs failed")
         except OSError as exc:
+            logger.warning(
+                "Drive format command could not start",
+                extra={
+                    "context": {
+                        "filesystem_type": filesystem_type,
+                        "failure_category": "drive_format_command",
+                        "reason": sanitize_error_message(exc, "Drive format command could not start"),
+                    }
+                },
+            )
+            logger.debug(
+                "Drive format command startup details",
+                extra={
+                    "context": {
+                        "filesystem_path": device_path,
+                        "filesystem_type": filesystem_type,
+                        "command": cmd,
+                        "raw_error": str(exc),
+                    }
+                },
+            )
             raise RuntimeError(f"mkfs error: {exc}")
 
     def is_mounted(self, device_path: str) -> bool:

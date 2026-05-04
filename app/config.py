@@ -286,6 +286,15 @@ class Settings(BaseSettings):
     #: Timeout in seconds for subprocess calls (mount, umount, sync, etc.).
     subprocess_timeout_seconds: int = 30
 
+    #: Timeout in seconds for drive formatting subprocesses. Large media can
+    #: legitimately take much longer than the generic subprocess timeout.
+    drive_format_timeout_seconds: int = 900
+
+    #: Timeout in seconds for drive mount subprocesses. Large removable media,
+    #: especially exFAT volumes on slower links, can legitimately exceed the
+    #: generic subprocess timeout during mount.
+    drive_mount_timeout_seconds: int = 120
+
     #: Default NFS client protocol version requested for network mounts.
     nfs_client_version: Literal["4.2", "4.1", "4.0", "3"] = "4.1"
 

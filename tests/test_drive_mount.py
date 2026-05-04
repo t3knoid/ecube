@@ -28,6 +28,7 @@ def _mount(mount_point: str) -> tuple[bool, str | None]:
         mock_settings.mount_binary_path = "/bin/mount"
         mock_settings.use_sudo = False
         mock_settings.subprocess_timeout_seconds = 10
+        mock_settings.drive_mount_timeout_seconds = 45
         mock_settings.procfs_mounts_path = "/proc/mounts"
         # realpath of _BASE is itself (no symlinks in test)
         with patch("os.path.realpath", side_effect=lambda p: p):
@@ -105,6 +106,7 @@ def test_mount_drive_uses_service_uid_gid_options_for_exfat_media():
         mock_settings.mount_binary_path = "/bin/mount"
         mock_settings.use_sudo = False
         mock_settings.subprocess_timeout_seconds = 10
+        mock_settings.drive_mount_timeout_seconds = 45
         mock_settings.procfs_mounts_path = "/proc/mounts"
         with patch("os.path.realpath", side_effect=lambda p: p):
             with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
@@ -134,6 +136,7 @@ def test_mount_drive_uses_nsenter_when_mount_namespace_differs():
         mock_settings.mount_binary_path = "/bin/mount"
         mock_settings.use_sudo = True
         mock_settings.subprocess_timeout_seconds = 10
+        mock_settings.drive_mount_timeout_seconds = 45
         mock_settings.procfs_mounts_path = "/proc/mounts"
         with patch("os.path.realpath", side_effect=lambda p: p):
             with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
@@ -161,6 +164,7 @@ def test_mount_drive_uses_mount_namespace_flag_when_nsenter_is_unavailable():
         mock_settings.mount_binary_path = "/bin/mount"
         mock_settings.use_sudo = True
         mock_settings.subprocess_timeout_seconds = 10
+        mock_settings.drive_mount_timeout_seconds = 45
         mock_settings.procfs_mounts_path = "/proc/mounts"
         with patch("os.path.realpath", side_effect=lambda p: p):
             with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
@@ -236,6 +240,7 @@ def test_mount_drive_repairs_mount_point_access_for_service_user():
         mock_settings.mount_binary_path = "/bin/mount"
         mock_settings.use_sudo = True
         mock_settings.subprocess_timeout_seconds = 10
+        mock_settings.drive_mount_timeout_seconds = 45
         mock_settings.procfs_mounts_path = "/proc/mounts"
         with patch("os.path.realpath", side_effect=lambda p: p):
             with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
@@ -264,6 +269,7 @@ def test_mount_drive_fails_when_mount_point_remains_unwritable():
         mock_settings.mount_binary_path = "/bin/mount"
         mock_settings.use_sudo = True
         mock_settings.subprocess_timeout_seconds = 10
+        mock_settings.drive_mount_timeout_seconds = 45
         mock_settings.procfs_mounts_path = "/proc/mounts"
         with patch("os.path.realpath", side_effect=lambda p: p):
             with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
@@ -287,6 +293,7 @@ def test_mount_drive_logs_raw_debug_error(caplog):
         mock_settings.mount_binary_path = "/bin/mount"
         mock_settings.use_sudo = False
         mock_settings.subprocess_timeout_seconds = 10
+        mock_settings.drive_mount_timeout_seconds = 45
         mock_settings.procfs_mounts_path = "/proc/mounts"
         with patch("os.path.realpath", side_effect=lambda p: p):
             with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
@@ -331,6 +338,7 @@ def test_mount_drive_logs_managed_mount_root_failure_with_safe_warning(caplog):
         mock_settings.mount_binary_path = "/bin/mount"
         mock_settings.use_sudo = False
         mock_settings.subprocess_timeout_seconds = 10
+        mock_settings.drive_mount_timeout_seconds = 45
         mock_settings.procfs_mounts_path = "/proc/mounts"
         with patch("os.path.realpath", side_effect=lambda p: p):
             with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
@@ -358,6 +366,7 @@ def test_mount_drive_logs_access_repair_failure_with_safe_warning(caplog):
         mock_settings.mount_binary_path = "/bin/mount"
         mock_settings.use_sudo = True
         mock_settings.subprocess_timeout_seconds = 10
+        mock_settings.drive_mount_timeout_seconds = 45
         mock_settings.procfs_mounts_path = "/proc/mounts"
         with patch("os.path.realpath", side_effect=lambda p: p):
             with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
@@ -377,3 +386,28 @@ def test_mount_drive_logs_access_repair_failure_with_safe_warning(caplog):
     assert any(record.getMessage() == "Drive mount access repair failed" for record in warning_records)
     assert any(getattr(record, "failure_category", None) == "post_mount_access_repair_failure" for record in warning_records)
     assert any("Drive mount access repair details" in message and "/mnt/ecube/7" in message for message in debug_messages)
+
+
+def test_mount_drive_uses_dedicated_mount_timeout():
+    dm = LinuxDriveMount()
+    with patch("app.infrastructure.drive_mount.settings") as mock_settings:
+        mock_settings.usb_mount_base_path = _BASE
+        mock_settings.sysfs_block_path = "/sys/block"
+        mock_settings.mount_binary_path = "/bin/mount"
+        mock_settings.use_sudo = False
+        mock_settings.subprocess_timeout_seconds = 10
+        mock_settings.drive_mount_timeout_seconds = 45
+        mock_settings.procfs_mounts_path = "/proc/mounts"
+        with patch("os.path.realpath", side_effect=lambda p: p):
+            with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
+                with patch("app.infrastructure.drive_mount.LinuxFilesystemDetector.detect", return_value="exfat"):
+                    with patch("os.makedirs"):
+                        with patch("os.access", return_value=True):
+                            with patch(
+                                "subprocess.run",
+                                side_effect=subprocess.TimeoutExpired(cmd=["/bin/mount"], timeout=45),
+                            ):
+                                ok, err = dm.mount_drive(_VALID_DEVICE, f"{_BASE}/7")
+
+    assert ok is False
+    assert err == "mount timed out after 45s"

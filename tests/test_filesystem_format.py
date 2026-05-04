@@ -7,6 +7,7 @@ conftest.py.
 from __future__ import annotations
 
 import logging
+import subprocess
 from unittest.mock import patch
 
 import pytest
@@ -104,6 +105,38 @@ def test_linux_drive_formatter_passes_explicit_cluster_size_for_exfat(monkeypatc
 
     cmd = mock_run.call_args.args[0]
     assert cmd == ["/sbin/mkfs.exfat", "-c", "4K", "/dev/sdb"]
+
+
+def test_linux_drive_formatter_uses_dedicated_format_timeout(monkeypatch):
+    formatter = LinuxDriveFormatter()
+
+    monkeypatch.setattr("app.infrastructure.drive_format.settings.use_sudo", False)
+    monkeypatch.setattr("app.infrastructure.drive_format.settings.drive_format_timeout_seconds", 900)
+
+    with patch("app.infrastructure.drive_format.subprocess.run") as mock_run:
+        formatter.format("/dev/sdb", "exfat")
+
+    assert mock_run.call_args.kwargs["timeout"] == 900
+
+
+def test_linux_drive_formatter_logs_timeout(monkeypatch, caplog):
+    formatter = LinuxDriveFormatter()
+
+    monkeypatch.setattr("app.infrastructure.drive_format.settings.use_sudo", False)
+    monkeypatch.setattr("app.infrastructure.drive_format.settings.drive_format_timeout_seconds", 900)
+
+    with patch(
+        "app.infrastructure.drive_format.subprocess.run",
+        side_effect=subprocess.TimeoutExpired(cmd=["/sbin/mkfs.exfat", "/dev/sdb"], timeout=900),
+    ):
+        with caplog.at_level(logging.WARNING):
+            with pytest.raises(RuntimeError, match="Format timed out after 900s"):
+                formatter.format("/dev/sdb", "exfat")
+
+    timeout_records = [record for record in caplog.records if record.message == "Drive format timed out"]
+    assert timeout_records
+    assert timeout_records[0].context["filesystem_type"] == "exfat"
+    assert timeout_records[0].context["timeout_seconds"] == 900
 
 
 # ---------------------------------------------------------------------------

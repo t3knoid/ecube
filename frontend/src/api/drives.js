@@ -14,8 +14,12 @@ export function initializeDrive(driveId, payload) {
   return toData(apiClient.post(`${API_BASE}/drives/${driveId}/initialize`, payload))
 }
 
-export function formatDrive(driveId, payload = {}) {
-  return toData(apiClient.post(`${API_BASE}/drives/${driveId}/format`, payload))
+export function formatDrive(driveId, payload = {}, { timeout } = {}) {
+  const config = {}
+  if (timeout != null) {
+    config.timeout = timeout
+  }
+  return toData(apiClient.post(`${API_BASE}/drives/${driveId}/format`, payload, config))
 }
 
 export function mountDrive(driveId) {
