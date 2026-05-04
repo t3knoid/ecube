@@ -117,6 +117,17 @@ async function mockCoreApis(page) {
       { key: 'db_pool_recycle_seconds', value: -1, requires_restart: true },
     ],
   })
+  await routeJson(page, '**/api/admin/password-policy', {
+    minlen: 14,
+    minclass: 3,
+    maxrepeat: 3,
+    maxsequence: 4,
+    maxclassrepeat: 0,
+    dictcheck: 1,
+    usercheck: 1,
+    difok: 5,
+    retry: 3,
+  })
   await routeJson(page, '**/api/jobs/55', { id: 55, project_id: 'PRJ', evidence_number: 'EV', status: 'RUNNING', copied_bytes: 20, total_bytes: 100, drive: { id: 1, port_system_path: '2-1', device_identifier: '/dev/sdb' } })
   await routeJson(page, '**/api/jobs/55/files', { files: [] })
   await routeJson(page, '**/api/jobs/55/chain-of-custody', {
