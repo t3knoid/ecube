@@ -12,7 +12,6 @@ from typing import Any, Generator
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -27,6 +26,7 @@ from app.exceptions import AuthenticationError, AuthorizationError, ConflictErro
 from app.utils.sanitize import is_encoding_error, sanitize_error_message
 from app.logging_config import configure_logging
 from app.models.network import NetworkMount
+from app.openapi import build_ecube_openapi_schema, tags_metadata
 from app.routers import admin, audit, auth, browse, configuration, database_setup, drives, files, introspection, jobs, mounts, setup, telemetry, users
 from app.schemas.errors import ErrorResponse
 from app.schemas.introspection import HealthLiveResponse, HealthNotReadyResponse, HealthReadyResponse, HealthResponse, VersionResponse
@@ -291,55 +291,6 @@ def _resolve_readiness_mount_timeout(remaining_budget: float | None) -> float:
     if remaining_budget is not None:
         return min(configured_timeout, remaining_budget)
     return configured_timeout
-
-# OpenAPI tags with descriptions for organizing endpoints
-tags_metadata = [
-    {
-        "name": "auth",
-        "description": "Authentication — local login and token issuance.",
-    },
-    {
-        "name": "drives",
-        "description": "USB drive lifecycle management — initialization, state transitions, and eject preparation.",
-    },
-    {
-        "name": "jobs",
-        "description": "Export job creation, execution, and monitoring — file copying, verification, and manifest generation.",
-    },
-    {
-        "name": "mounts",
-        "description": "Network mount management — NFS/SMB mount lifecycle and validation.",
-    },
-    {
-        "name": "audit",
-        "description": "Audit log access and filtering — immutable records of all system operations.",
-    },
-    {
-        "name": "introspection",
-        "description": "System introspection — USB topology, configuration state, and diagnostic information.",
-    },
-    {
-        "name": "files",
-        "description": "File audit operations — hash computation and file comparison.",
-    },
-    {
-        "name": "users",
-        "description": "User role management — assign, update, and remove ECUBE role assignments.",
-    },
-    {
-        "name": "admin",
-        "description": "Administration — log file access, OS user and group management.",
-    },
-    {
-        "name": "browse",
-        "description": "Directory browsing — paginated listing of files and folders within active mount points.",
-    },
-    {
-        "name": "setup",
-        "description": "First-run setup wizard — system initialization and status check.",
-    },
-]
-
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
@@ -871,56 +822,7 @@ def introspection_version():
 
 def custom_openapi():
     """Generate OpenAPI schema with security scheme definitions."""
-    if app.openapi_schema:
-        return app.openapi_schema
-
-    openapi_schema = get_openapi(
-        title=app.title,
-        version=app.version,
-        description=app.description,
-        contact=app.contact,
-        license_info=app.license_info,
-        tags=app.openapi_tags,
-        routes=app.routes,
-        servers=[{"url": settings.api_root_path}] if settings.api_root_path else None,
-    )
-
-    # Define security schemes (merge, don't overwrite)
-    openapi_schema.setdefault("components", {}).setdefault("securitySchemes", {}).update({
-        "HTTPBearer": {
-            "type": "http",
-            "scheme": "bearer",
-            "bearerFormat": "JWT",
-            "description": "JWT token for authentication. Include in Authorization header as 'Bearer <token>'.",
-        }
-    })
-
-    # Apply security requirement to all endpoints except unauthenticated routes
-    _unauthenticated_paths = {
-        "/health", "/auth/token", "/setup/status", "/setup/initialize",
-        "/introspection/version", "/setup/database/system-info", "/health/ready", "/health/live",
-    }
-    # Endpoints that accept an optional bearer token (unauthenticated during
-    # initial setup, admin-required after the first admin user is created).
-    _conditional_auth_paths = {
-        "/setup/database/test-connection", "/setup/database/provision",
-        "/setup/database/provision-status",
-    }
-    for path, path_item in openapi_schema["paths"].items():
-        if path in _unauthenticated_paths:
-            continue
-        for operation in path_item.values():
-            if isinstance(operation, dict) and "responses" in operation:
-                if path in _conditional_auth_paths:
-                    # Optional bearer: allow unauthenticated OR authenticated.
-                    # Set unconditionally — FastAPI may pre-populate security
-                    # from the HTTPBearer dependency on these routes.
-                    operation["security"] = [{"HTTPBearer": []}, {}]
-                elif "security" not in operation:
-                    operation["security"] = [{"HTTPBearer": []}]
-
-    app.openapi_schema = openapi_schema
-    return app.openapi_schema
+    return build_ecube_openapi_schema(app)
 
 
 app.openapi = custom_openapi
