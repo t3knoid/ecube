@@ -402,6 +402,26 @@ class FileRepository:
         )
         return int(updated or 0)
 
+    def reset_target_full_failed_for_retry(self, job_id: int) -> int:
+        """Reset target-full failed files to ``PENDING`` for *job_id*."""
+        updated = (
+            self.db.query(ExportFile)
+            .filter(
+                ExportFile.job_id == job_id,
+                ExportFile.status == FileStatus.ERROR,
+                ExportFile.error_message == "Target storage is full",
+            )
+            .update(
+                {
+                    ExportFile.status: FileStatus.PENDING,
+                    ExportFile.retry_attempts: 0,
+                    ExportFile.error_message: None,
+                },
+                synchronize_session=False,
+            )
+        )
+        return int(updated or 0)
+
     def list_error_messages(
         self, job_id: int, *, limit: int = 5
     ) -> List[Tuple[str, str]]:

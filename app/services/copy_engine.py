@@ -316,6 +316,33 @@ def _is_overflow_retryable_file(export_file: ExportFile) -> bool:
     return export_file.status == FileStatus.ERROR and export_file.error_message == "Target storage is full"
 
 
+def _is_target_full_continuation_compatible_file(export_file: ExportFile) -> bool:
+    return export_file.status in (FileStatus.PENDING, FileStatus.COPYING, FileStatus.RETRYING) or _is_overflow_retryable_file(export_file)
+
+
+def _should_attempt_target_full_continuation(incomplete_files: list[ExportFile]) -> bool:
+    return bool(incomplete_files) and any(
+        _is_overflow_retryable_file(export_file) for export_file in incomplete_files
+    ) and all(
+        _is_target_full_continuation_compatible_file(export_file) for export_file in incomplete_files
+    )
+
+
+def _read_copy_job_runtime_state(db: Session, job_id: int) -> tuple[Optional[JobStatus], Optional[datetime], bool]:
+    read_db = Session(bind=db.get_bind())
+    try:
+        latest_job = JobRepository(read_db).get(job_id)
+        latest_status = latest_job.status if latest_job else None
+        latest_started_at = latest_job.started_at if latest_job else None
+        should_attempt_target_full = False
+        if latest_job is not None:
+            incomplete_files = FileRepository(read_db).list_incomplete_by_job(job_id)
+            should_attempt_target_full = _should_attempt_target_full_continuation(incomplete_files)
+        return latest_status, latest_started_at, should_attempt_target_full
+    finally:
+        read_db.close()
+
+
 def _remaining_estimated_bytes(job: ExportJob) -> int:
     return max(0, int(job.startup_analysis_total_bytes or 0) - int(job.copied_bytes or 0))
 
@@ -457,7 +484,11 @@ def _resolve_target_full_outcome(
     incomplete_files = file_repo.list_incomplete_by_job(job_id)
     if not incomplete_files:
         return "not_applicable", {}
-    if not all(_is_overflow_retryable_file(export_file) for export_file in incomplete_files):
+
+    retryable_files = [
+        export_file for export_file in incomplete_files if _is_overflow_retryable_file(export_file)
+    ]
+    if not _should_attempt_target_full_continuation(incomplete_files):
         return "not_applicable", {}
 
     active_assignment = assignment_repo.get_active_for_job(job_id)
@@ -473,7 +504,7 @@ def _resolve_target_full_outcome(
         decision_details.update(
             {
                 "previous_drive_id": int(active_assignment.drive_id),
-                "retry_file_count": len(incomplete_files),
+                "retry_file_count": len(retryable_files),
                 "failure_reason": "Destination capacity exhausted and no assigned drive can continue this copy",
             }
         )
@@ -484,7 +515,7 @@ def _resolve_target_full_outcome(
         decision_details.update(
             {
                 "previous_drive_id": int(active_assignment.drive_id),
-                "retry_file_count": len(incomplete_files),
+                "retry_file_count": len(retryable_files),
                 "failure_reason": "Destination capacity exhausted and no assigned drive can continue this copy",
             }
         )
@@ -501,7 +532,7 @@ def _resolve_target_full_outcome(
     job.completed_at = None
     job.failure_reason = None
     next_drive.current_state = DriveState.IN_USE
-    file_repo.reset_failed_for_retry(job_id)
+    file_repo.reset_target_full_failed_for_retry(job_id)
 
     try:
         job_repo.save(job)
@@ -529,7 +560,7 @@ def _resolve_target_full_outcome(
             "previous_drive_id": int(active_assignment.drive_id),
             "selected_drive_id": int(next_drive.id),
             "drive_assignment_id": int(next_assignment.id),
-            "retry_file_count": len(incomplete_files),
+            "retry_file_count": len(retryable_files),
         }
     )
 
@@ -558,7 +589,7 @@ def _resolve_target_full_outcome(
                 "previous_drive_id": int(active_assignment.drive_id),
                 "drive_id": int(next_drive.id),
                 "drive_assignment_id": int(next_assignment.id),
-                "retry_file_count": len(incomplete_files),
+                "retry_file_count": len(retryable_files),
                 "automatic": True,
             },
         )
@@ -1882,6 +1913,7 @@ def run_copy_job(job_id: int) -> None:
                 retry_delay = float(job.retry_delay_seconds) if job.retry_delay_seconds is not None else settings.copy_default_retry_delay_seconds
 
                 pause_requested = False
+                stop_for_target_full = False
 
                 executor = ThreadPoolExecutor(
                     max_workers=job.thread_count or settings.copy_default_thread_count,
@@ -1918,12 +1950,9 @@ def run_copy_job(job_id: int) -> None:
                                 # unexpected exceptions are caught here to let other workers finish.
                                 pass
 
-                            db.expire_all()
-                            latest_job = job_repo.get(job_id)
-                            latest_started_at_key = _normalize_started_at(
-                                latest_job.started_at if latest_job else None
-                            )
-                            if latest_job and latest_started_at_key and latest_started_at_key != run_started_at_key:
+                            latest_status, latest_started_at, should_attempt_target_full = _read_copy_job_runtime_state(db, job_id)
+                            latest_started_at_key = _normalize_started_at(latest_started_at)
+                            if latest_status is not None and latest_started_at_key and latest_started_at_key != run_started_at_key:
                                 for pending in futures:
                                     if not pending.done():
                                         pending.cancel()
@@ -1932,13 +1961,21 @@ def run_copy_job(job_id: int) -> None:
                                     extra={"job_id": job_id, "started_at": str(run_started_at)},
                                 )
                                 return
-                            if latest_job and latest_job.status in (JobStatus.PAUSING, JobStatus.PAUSED):
+                            if latest_status in (JobStatus.PAUSING, JobStatus.PAUSED):
                                 pause_requested = True
                                 for pending in futures:
                                     if not pending.done():
                                         pending.cancel()
                                 break
+                            if should_attempt_target_full:
+                                stop_for_target_full = True
+                                for pending in futures:
+                                    if not pending.done():
+                                        pending.cancel()
+                                break
                         if pause_requested:
+                            break
+                        if stop_for_target_full:
                             break
 
                 finally:
