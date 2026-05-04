@@ -6,6 +6,8 @@ import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
+from app import database as db_module
+from app.main import app as main_app
 from app.spa import add_strip_api_prefix_middleware, mount_spa_frontend
 
 
@@ -282,6 +284,35 @@ class TestSpaFrontendServing:
         resp = client.get("/api/health")
         assert resp.status_code == 200
         assert resp.json() == {"status": "ok"}
+
+
+class TestMainAppSetupRedirect(TestSpaFrontendServing):
+    """Browser reloads of SPA routes must redirect to setup before API routing."""
+
+    def test_browser_navigation_to_spa_route_redirects_to_setup_when_db_unconfigured(self, monkeypatch):
+        monkeypatch.setattr(db_module, "is_database_configured", lambda: False)
+
+        with TestClient(main_app) as client:
+            response = client.get(
+                "/jobs/1",
+                headers={"accept": "text/html,application/xhtml+xml"},
+                follow_redirects=False,
+            )
+
+        assert response.status_code == 307
+        assert response.headers["location"] == "/setup"
+
+    def test_api_request_keeps_json_503_when_db_unconfigured(self, monkeypatch):
+        monkeypatch.setattr(db_module, "is_database_configured", lambda: False)
+
+        with TestClient(main_app) as client:
+            response = client.get(
+                "/jobs/1",
+                headers={"accept": "application/json"},
+            )
+
+        assert response.status_code == 503
+        assert response.json()["message"] == "Database is not configured yet. Complete setup first."
 
     def test_non_api_spa_route_still_serves_index(self, tmp_path):
         """Non-API paths must still get index.html even with strip middleware."""
