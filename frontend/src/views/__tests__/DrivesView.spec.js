@@ -59,6 +59,7 @@ function mountView() {
             <div>
               <div class="column-labels">{{ (columns || []).map((column) => column.label).join(' ') }}</div>
               <div v-for="row in rows" :key="row.id" class="row-stub">
+                <span class="row-id"><slot name="cell-id" :row="row" /></span>
                 <span class="row-device">{{ row.display_device_label || row.port_system_path || '-' }}</span>
                 <span class="row-project"><slot name="cell-current_project_id" :row="row" /></span>
                 <span class="row-job-id"><slot name="cell-current_project_job_id" :row="row" /></span>
@@ -222,21 +223,32 @@ describe('DrivesView rescan and filter loading', () => {
 
     const labels = wrapper.findAll('button').map((node) => node.text())
     expect(labels).toContain(i18n.global.t('drives.browse'))
+    expect(labels).not.toContain(i18n.global.t('drives.details'))
   })
 
-  it('routes compact row action menu buttons to details and browse behavior', async () => {
+  it('links the drive ID value to the drive detail page', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/1' })])
 
     const wrapper = mountView()
     await flushPromises()
 
-    const detailsButton = wrapper.find('.row-action-menu-details')
-    expect(detailsButton.exists()).toBe(true)
+    const linkedCells = wrapper.findAll('.drive-id-link')
+    expect(linkedCells).toHaveLength(1)
+    expect(linkedCells[0].text()).toBe('1')
 
-    await detailsButton.trigger('click')
+    await linkedCells[0].trigger('click')
     await flushPromises()
 
     expect(mocks.push).toHaveBeenCalledWith({ name: 'drive-detail', params: { id: 1 } })
+  })
+
+  it('routes compact row action menu browse button without a separate details action', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/1' })])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('.row-action-menu-details').exists()).toBe(false)
 
     const browseButton = wrapper.find('.row-action-menu-browse')
     expect(browseButton.exists()).toBe(true)
@@ -301,7 +313,7 @@ describe('DrivesView rescan and filter loading', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const linkedCells = wrapper.findAll('.cell-link')
+    const linkedCells = wrapper.findAll('.row-job-id .cell-link')
     expect(linkedCells).toHaveLength(1)
     expect(linkedCells[0].text()).toBe('44')
 
@@ -325,8 +337,8 @@ describe('DrivesView rescan and filter loading', () => {
     await flushPromises()
 
     const rows = wrapper.findAll('.row-stub')
-    const driveOneLinks = rows[0].findAll('.cell-link')
-    const driveTwoLinks = rows[1].findAll('.cell-link')
+    const driveOneLinks = rows[0].findAll('.row-job-id .cell-link')
+    const driveTwoLinks = rows[1].findAll('.row-job-id .cell-link')
 
     expect(driveOneLinks.map((node) => node.text())).toEqual(['7'])
     expect(driveTwoLinks.map((node) => node.text())).toEqual(['4'])
@@ -347,7 +359,7 @@ describe('DrivesView rescan and filter loading', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const linkedCells = wrapper.findAll('.cell-link')
+    const linkedCells = wrapper.findAll('.row-job-id .cell-link')
     expect(linkedCells.map((node) => node.text())).toEqual(['4'])
   })
 
@@ -362,7 +374,7 @@ describe('DrivesView rescan and filter loading', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const linkedCells = wrapper.findAll('.cell-link')
+    const linkedCells = wrapper.findAll('.row-job-id .cell-link')
     expect(linkedCells).toHaveLength(1)
     expect(wrapper.find('.row-project').text()).toBe('PROJ-007')
     expect(linkedCells[0].text()).toBe('44')
@@ -384,7 +396,7 @@ describe('DrivesView rescan and filter loading', () => {
 
     expect(wrapper.find('.row-project').text()).toBe('-')
     expect(wrapper.find('.row-job-id').text()).toBe('-')
-    expect(wrapper.find('.cell-link').exists()).toBe(false)
+    expect(wrapper.find('.row-job-id .cell-link').exists()).toBe(false)
   })
 
   it('sorts by related job ID in ascending and descending order and keeps that sort after refresh', async () => {
