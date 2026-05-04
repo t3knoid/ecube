@@ -10,3 +10,4 @@ export const API_BASE = _explicit
   : `${BASE}/api`
 
 export const LOGIN_PATH = `${BASE}/login`
+export const SETUP_PATH = `${BASE}/setup`

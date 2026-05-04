@@ -173,7 +173,7 @@ Common role effects in the UI:
 > **Page visibility:** Unauthenticated users are redirected here only when the ECUBE system has not yet been initialized.
 > **Intended operator:** Administrator or installer owner responsible for first-run setup.
 
-If the system has not yet been initialized, ECUBE opens the setup wizard instead of the login page. This is typically completed by an administrator.
+If the system has not yet been initialized, ECUBE opens the setup wizard instead of the login page. This is typically completed by an administrator. If the backend later reports during normal UI use that the database is still not configured, ECUBE returns the browser to `/setup` instead of leaving the operator on a generic server-error dead end.
 
 The setup wizard walks through:
 

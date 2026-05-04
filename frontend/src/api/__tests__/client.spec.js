@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AUTH_RESET_EVENT, EXPIRED_QUERY_KEY, EXPIRED_QUERY_VALUE } from '@/constants/auth.js'
-import { LOGIN_PATH } from '@/constants/routes.js'
+import { LOGIN_PATH, SETUP_PATH } from '@/constants/routes.js'
 import { STORAGE_TOKEN_KEY } from '@/constants/storage.js'
 
 vi.mock('axios', () => {
@@ -116,6 +116,23 @@ describe('api/client interceptors', () => {
     ).toBe(false)
   })
 
+  it('detects the database-not-configured setup payload shape', async () => {
+    const { isDatabaseNotConfiguredPayload } = await import('@/api/client.js')
+
+    expect(
+      isDatabaseNotConfiguredPayload(503, {
+        code: 'HTTP_503',
+        message: 'Database is not configured yet. Complete setup first.',
+      }),
+    ).toBe(true)
+    expect(
+      isDatabaseNotConfiguredPayload(503, {
+        code: 'INTERNAL_ERROR',
+        message: 'Database is not configured yet. Complete setup first.',
+      }),
+    ).toBe(false)
+  })
+
   it('redirects to login when backend unauthorized payload is returned outside the 401 branch', async () => {
     sessionStorage.setItem(STORAGE_TOKEN_KEY, 'abc123')
     const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
@@ -183,6 +200,34 @@ describe('api/client interceptors', () => {
     expect(warning).toHaveBeenCalledWith('Conflict details')
   })
 
+  it('redirects to setup for the database-not-configured 503 contract without showing a generic server toast', async () => {
+    const originalLocation = window.location
+    delete window.location
+    window.location = { href: '', pathname: '/jobs' }
+
+    const { default: apiClient } = await import('@/api/client.js')
+    const responseInterceptor = apiClient._responseHandlers[0].failure
+
+    await expect(
+      responseInterceptor({
+        response: {
+          status: 503,
+          data: {
+            code: 'HTTP_503',
+            message: 'Database is not configured yet. Complete setup first.',
+            trace_id: 'trace-setup-123',
+          },
+        },
+      }),
+    ).rejects.toBeTruthy()
+
+    expect(window.location.href).toBe(SETUP_PATH)
+    expect(error).not.toHaveBeenCalled()
+    expect(warning).not.toHaveBeenCalled()
+
+    window.location = originalLocation
+  })
+
   it('handles 422 FastAPI validation array', async () => {
     const { default: apiClient } = await import('@/api/client.js')
     const responseInterceptor = apiClient._responseHandlers[0].failure
@@ -236,6 +281,26 @@ describe('api/client interceptors', () => {
     ).rejects.toBeTruthy()
 
     expect(error).toHaveBeenCalledWith('Server exploded', { traceId: 'trace-123' })
+  })
+
+  it('keeps unrelated 503 responses on the generic server-error toast path', async () => {
+    const { default: apiClient } = await import('@/api/client.js')
+    const responseInterceptor = apiClient._responseHandlers[0].failure
+
+    await expect(
+      responseInterceptor({
+        response: {
+          status: 503,
+          data: {
+            code: 'HTTP_503',
+            message: 'Service temporarily unavailable.',
+            trace_id: 'trace-503-generic',
+          },
+        },
+      }),
+    ).rejects.toBeTruthy()
+
+    expect(error).toHaveBeenCalledWith('Service temporarily unavailable.', { traceId: 'trace-503-generic' })
   })
 
   it('handles missing response with network error toast', async () => {
