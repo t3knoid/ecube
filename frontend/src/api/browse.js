@@ -9,13 +9,15 @@ import { API_BASE } from '@/constants/routes.js'
  * @param {string} [subdir]   - Relative subdirectory within the mount root (default: root).
  * @param {number} [page]     - Page number, 1-based (default: 1).
  * @param {number} [pageSize] - Entries per page (default: 100, max: 500).
+ * @param {boolean} [directoriesOnly] - When true, only directory entries are returned.
  * @returns {Promise<BrowseResponse>}
  */
-export function getDirectory(path, subdir = '', page = 1, pageSize = 100) {
+export function getDirectory(path, subdir = '', page = 1, pageSize = 100, directoriesOnly = false) {
   const params = new URLSearchParams({ path })
   if (subdir) params.set('subdir', subdir)
   params.set('page', String(page))
   params.set('page_size', String(pageSize))
+  if (directoriesOnly) params.set('directories_only', 'true')
   return toData(apiClient.get(`${API_BASE}/browse?${params.toString()}`))
 }
 
@@ -26,12 +28,14 @@ export function getDirectory(path, subdir = '', page = 1, pageSize = 100) {
  * @param {string} [subdir]   - Relative subdirectory within the mount root (default: root).
  * @param {number} [page]     - Page number, 1-based (default: 1).
  * @param {number} [pageSize] - Entries per page (default: 100, max: 500).
+ * @param {boolean} [directoriesOnly] - When true, only directory entries are returned.
  * @returns {Promise<BrowseResponse>}
  */
-export function getDirectoryByMountId(mountId, subdir = '', page = 1, pageSize = 100) {
+export function getDirectoryByMountId(mountId, subdir = '', page = 1, pageSize = 100, directoriesOnly = false) {
   const params = new URLSearchParams({ mount_id: String(mountId) })
   if (subdir) params.set('subdir', subdir)
   params.set('page', String(page))
   params.set('page_size', String(pageSize))
+  if (directoriesOnly) params.set('directories_only', 'true')
   return toData(apiClient.get(`${API_BASE}/browse?${params.toString()}`))
 }

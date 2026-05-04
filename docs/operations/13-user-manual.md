@@ -587,7 +587,7 @@ The current job-creation flow uses a grouped dialog instead of a four-step wizar
 The dialog is organized into four sections:
 
 1. `Job details` — project, evidence number, optional notes, and thread count
-2. `Source` — the mounted project source and source path
+2. `Source` — the mounted project source, a trusted source path field, and a folder browser for the selected mount
 3. `Destination` — the eligible mounted USB device for the selected project
 4. `Execution` — the optional `Run job immediately` checkbox
 
@@ -611,7 +611,7 @@ Before creating a job, confirm:
 
 For `thread count`, start with the default value unless your administrator has given you a different recommendation. If you need to change it, a good rule is to choose a value no higher than the number of CPUs visible to the operating system and reduce it again if the host becomes sluggish or copy speed does not improve.
 
-The source path is interpreted inside the selected mounted share. Entering only / uses the root of that share, and attempts to navigate outside the selected share are rejected before the job is created.
+The source path is interpreted inside the selected mounted share. Entering only / uses the root of that share, and attempts to navigate outside the selected share are rejected before the job is created. If you prefer not to type the path manually, use `Browse folders` in the `Source` section after selecting a mount. As you move through the mounted share, ECUBE updates the existing `Source path` field live, and the browser shows a `..` row whenever you can move back up to the parent folder.
 
 ### 9.3 Opening a Job
 
@@ -1341,11 +1341,12 @@ Notes:
 3. Open `Jobs`.
 4. Click `Create Job` to open the grouped dialog.
 5. Select the project first.
-6. Choose the filtered source mount and primary destination drive, then use the `Overflow drives` panel to reserve any additional mounted destination drives in the order ECUBE should use them if the job overflows.
-7. Create the job, or enable `Run job immediately` if you want it to start as soon as creation succeeds.
-8. Open the job detail page.
-9. Monitor progress until completion.
-10. Run verification and generate a manifest if required by your workflow.
+6. Choose the filtered source mount. Enter the source path manually, or click `Browse folders`, navigate inside the mounted share while the `Source path` field updates live, and use `..` when you need to move to the parent folder.
+7. Choose the primary destination drive, then use the `Overflow drives` panel to reserve any additional mounted destination drives in the order ECUBE should use them if the job overflows.
+8. Create the job, or enable `Run job immediately` if you want it to start as soon as creation succeeds.
+9. Open the job detail page.
+10. Monitor progress until completion.
+11. Run verification and generate a manifest if required by your workflow.
 
 If the job should notify an external case-management or orchestration system when it completes, enter the destination `Webhook callback URL` during job creation. Leave the field blank if the job should use the administrator-configured system default instead.
 

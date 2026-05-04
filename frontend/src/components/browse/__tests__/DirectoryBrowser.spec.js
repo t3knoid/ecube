@@ -83,7 +83,7 @@ describe('DirectoryBrowser', () => {
 
     expect(wrapper.find('.crumb-current').exists()).toBe(false)
     expect(wrapper.findAll('.breadcrumb > button.crumb-btn')).toHaveLength(0)
-    expect(mocks.getDirectory).toHaveBeenLastCalledWith('/mnt/ecube/1', '', 1, 100)
+    expect(mocks.getDirectory).toHaveBeenLastCalledWith('/mnt/ecube/1', '', 1, 100, false)
   })
 
   it('renders a single leading slash in breadcrumbs for mount-id browsing with a blank root label', async () => {
@@ -125,5 +125,47 @@ describe('DirectoryBrowser', () => {
     const breadcrumbText = wrapper.find('.breadcrumb').text()
     expect(breadcrumbText.startsWith('//')).toBe(false)
     expect(breadcrumbText).toBe('/ev1/VOL1')
+  })
+
+  it('filters to directories when directory-only mode is enabled', async () => {
+    const wrapper = mountView({ directoriesOnly: true })
+    await flushPromises()
+
+    expect(mocks.getDirectory).toHaveBeenLastCalledWith('/mnt/ecube/1', '', 1, 100, true)
+    expect(wrapper.text()).not.toContain('IMG_0001.JPG')
+  })
+
+  it('uses a parent row and emits controlled path updates without rendering breadcrumbs', async () => {
+    const wrapper = mountView({
+      currentDirectory: '/DCIM',
+      showBreadcrumb: false,
+      showParentEntry: true,
+    })
+    await flushPromises()
+
+    expect(wrapper.find('.breadcrumb').exists()).toBe(false)
+    expect(wrapper.find('.entry-nav-btn--parent').text()).toBe('..')
+  expect(wrapper.find('.entry-nav-btn--parent').attributes('aria-label')).toBe('Parent directory')
+    expect(mocks.getDirectory).toHaveBeenLastCalledWith('/mnt/ecube/1', 'DCIM', 1, 100, false)
+
+    await wrapper.find('.entry-nav-btn--parent').trigger('click')
+
+    expect(wrapper.emitted('update:currentDirectory')).toEqual([['/']])
+  })
+
+  it('falls back to the mount root when a controlled directory path is invalid', async () => {
+    mocks.getDirectory.mockRejectedValueOnce({ response: { status: 404 } })
+    mocks.getDirectory.mockResolvedValue({
+      entries: [
+        { name: 'DCIM', type: 'directory', size_bytes: null, modified_at: '2026-05-03T12:00:00Z' },
+      ],
+      has_more: false,
+    })
+
+    const wrapper = mountView({ currentDirectory: '/missing-folder' })
+    await flushPromises()
+
+    expect(wrapper.emitted('update:currentDirectory')).toEqual([['/']])
+    expect(wrapper.text()).not.toContain('Failed to load directory listing. Please try again.')
   })
 })

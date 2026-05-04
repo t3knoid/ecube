@@ -22,14 +22,33 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  directoriesOnly: {
+    type: Boolean,
+    default: false,
+  },
+  currentDirectory: {
+    type: String,
+    default: null,
+  },
+  showBreadcrumb: {
+    type: Boolean,
+    default: true,
+  },
+  showParentEntry: {
+    type: Boolean,
+    default: false,
+  },
 })
+
+const emit = defineEmits(['update:currentDirectory'])
 
 const { t } = useI18n()
 
 const displayedRootLabel = computed(() => props.rootLabel || props.mountPath)
 
 // --- State ---
-const subdir = ref('')
+const internalCurrentDirectory = ref('/')
+const lastInvalidControlledPath = ref('')
 const page = ref(1)
 const pageSize = ref(100)
 
@@ -39,6 +58,29 @@ const loading = ref(false)
 const error = ref('')
 
 // --- Breadcrumbs ---
+function normalizeDirectoryPath(path) {
+  const trimmed = String(path ?? '').trim()
+  if (!trimmed || trimmed === '/') {
+    return '/'
+  }
+
+  const normalized = trimmed
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '')
+    .replace(/\/+/g, '/')
+    .replace(/\/+$/, '')
+
+  return normalized ? `/${normalized}` : '/'
+}
+
+const currentDirectoryPath = computed(() => normalizeDirectoryPath(
+  props.currentDirectory != null ? props.currentDirectory : internalCurrentDirectory.value,
+))
+
+const subdir = computed(() => (
+  currentDirectoryPath.value === '/' ? '' : currentDirectoryPath.value.slice(1)
+))
+
 const breadcrumbs = computed(() => {
   const parts = subdir.value ? subdir.value.split('/').filter(Boolean) : []
   return parts
@@ -52,6 +94,8 @@ const rootCrumbLabel = computed(() => {
   }
   return '/'
 })
+
+const canNavigateToParent = computed(() => props.showParentEntry && currentDirectoryPath.value !== '/')
 
 // --- Sorting ---
 const sortKey = ref('name')
@@ -88,19 +132,46 @@ const sortedEntries = computed(() => {
   return sorted
 })
 
+const displayedEntries = computed(() => (
+  props.directoriesOnly
+    ? sortedEntries.value.filter((entry) => entry.type === 'directory')
+    : sortedEntries.value
+))
+
+function setCurrentDirectory(path) {
+  const normalized = normalizeDirectoryPath(path)
+  if (props.currentDirectory != null) {
+    emit('update:currentDirectory', normalized)
+    return
+  }
+  internalCurrentDirectory.value = normalized
+}
+
 // --- Navigation ---
 function navigateInto(dirName) {
-  subdir.value = subdir.value ? `${subdir.value}/${dirName}` : dirName
+  const nextPath = currentDirectoryPath.value === '/'
+    ? `/${dirName}`
+    : `${currentDirectoryPath.value}/${dirName}`
+  setCurrentDirectory(nextPath)
+  page.value = 1
+}
+
+function navigateToParent() {
+  if (currentDirectoryPath.value === '/') return
+
+  const parts = subdir.value.split('/').filter(Boolean)
+  const nextPath = parts.length <= 1 ? '/' : `/${parts.slice(0, -1).join('/')}`
+  setCurrentDirectory(nextPath)
   page.value = 1
 }
 
 function navigateToCrumb(index) {
   // index -1 = root
   if (index < 0) {
-    subdir.value = ''
+    setCurrentDirectory('/')
   } else {
     const parts = subdir.value.split('/').filter(Boolean)
-    subdir.value = parts.slice(0, index + 1).join('/')
+    setCurrentDirectory(`/${parts.slice(0, index + 1).join('/')}`)
   }
   page.value = 1
 }
@@ -111,11 +182,24 @@ async function loadEntries() {
   error.value = ''
   try {
     const result = props.mountId != null
-      ? await getDirectoryByMountId(props.mountId, subdir.value, page.value, pageSize.value)
-      : await getDirectory(props.mountPath, subdir.value, page.value, pageSize.value)
+      ? await getDirectoryByMountId(props.mountId, subdir.value, page.value, pageSize.value, props.directoriesOnly)
+      : await getDirectory(props.mountPath, subdir.value, page.value, pageSize.value, props.directoriesOnly)
     entries.value = result.entries
     hasMore.value = Boolean(result.has_more)
+    lastInvalidControlledPath.value = ''
   } catch (err) {
+    const status = Number(err?.response?.status || 0)
+    if (
+      props.currentDirectory != null
+      && currentDirectoryPath.value !== '/'
+      && (status === 400 || status === 404)
+      && lastInvalidControlledPath.value !== currentDirectoryPath.value
+    ) {
+      lastInvalidControlledPath.value = currentDirectoryPath.value
+      setCurrentDirectory('/')
+      return
+    }
+
     logger.error('[DirectoryBrowser] Failed to load directory listing:', err)
     error.value = t('browse.loadError')
   } finally {
@@ -126,7 +210,9 @@ async function loadEntries() {
 watch(
   () => [props.mountPath, props.mountId],
   () => {
-    subdir.value = ''
+    if (props.currentDirectory == null) {
+      internalCurrentDirectory.value = '/'
+    }
     page.value = 1
     loadEntries()
   },
@@ -185,7 +271,7 @@ function goToNextPage() {
 <template>
   <div class="directory-browser">
     <!-- Breadcrumb trail -->
-    <nav class="breadcrumb" aria-label="breadcrumb">
+    <nav v-if="showBreadcrumb" class="breadcrumb" aria-label="breadcrumb">
       <button v-if="showRootCrumb" class="crumb-btn" @click="navigateToCrumb(-1)">{{ rootCrumbLabel }}</button>
       <template v-for="(crumb, index) in breadcrumbs" :key="index">
         <span v-if="props.rootLabel || index > 0" class="crumb-sep" aria-hidden="true">/</span>
@@ -268,11 +354,27 @@ function goToNextPage() {
         </tr>
       </thead>
       <tbody>
-        <tr v-if="sortedEntries.length === 0">
+        <tr v-if="displayedEntries.length === 0">
           <td colspan="4" class="empty-row muted">{{ t('browse.empty') }}</td>
         </tr>
+        <tr v-if="canNavigateToParent" class="dir-row dir-row--navigable dir-row--parent">
+          <td class="col-name">
+            <span class="entry-icon" aria-hidden="true">↩</span>
+            <button
+              class="entry-nav-btn entry-nav-btn--parent"
+              type="button"
+              :aria-label="t('browse.parentDirectory')"
+              @click="navigateToParent"
+              @keydown.arrow-down="onRowArrowKey($event)"
+              @keydown.arrow-up="onRowArrowKey($event)"
+            >..</button>
+          </td>
+          <td class="col-type muted">{{ t('browse.parentDirectory') }}</td>
+          <td class="col-size">—</td>
+          <td class="col-modified">—</td>
+        </tr>
         <tr
-          v-for="entry in sortedEntries"
+          v-for="entry in displayedEntries"
           :key="entry.name"
           :class="['dir-row', { 'dir-row--navigable': isNavigable(entry) }]"
         >
