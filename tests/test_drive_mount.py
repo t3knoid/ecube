@@ -126,8 +126,7 @@ def test_mount_drive_uses_service_uid_gid_options_for_exfat_media():
     assert "umask=022" in options
 
 
-def test_mount_drive_repairs_mount_point_access_for_service_user():
-    """Successful mounts should repair access so the service account can write to the target."""
+def test_mount_drive_uses_nsenter_when_mount_namespace_differs():
     dm = LinuxDriveMount()
     with patch("app.infrastructure.drive_mount.settings") as mock_settings:
         mock_settings.usb_mount_base_path = _BASE
@@ -138,12 +137,115 @@ def test_mount_drive_repairs_mount_point_access_for_service_user():
         mock_settings.procfs_mounts_path = "/proc/mounts"
         with patch("os.path.realpath", side_effect=lambda p: p):
             with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
-                with patch("os.makedirs"):
-                    with patch("os.geteuid", return_value=1234):
-                        with patch("os.getegid", return_value=5678):
-                            with patch("os.access", side_effect=[False, True]):
-                                with patch("subprocess.run") as mock_run:
-                                    ok, err = dm.mount_drive(_VALID_DEVICE, f"{_BASE}/7")
+                with patch("app.infrastructure.drive_mount.LinuxFilesystemDetector.detect", return_value="ext4"):
+                    with patch("os.readlink", side_effect=["mnt:[2]", "mnt:[1]"]):
+                        with patch("app.infrastructure.drive_mount.shutil.which", return_value="/usr/bin/nsenter"):
+                            with patch("os.makedirs"):
+                                with patch("os.geteuid", return_value=1000):
+                                    with patch("os.access", return_value=True):
+                                        with patch("subprocess.run") as mock_run:
+                                            ok, err = dm.mount_drive(_VALID_DEVICE, f"{_BASE}/7")
+
+    assert ok is True
+    assert err is None
+    mount_call = mock_run.call_args_list[0].args[0]
+    assert mount_call[:6] == ["sudo", "-n", "/usr/bin/nsenter", "-t", "1", "-m"]
+    assert "-N" not in mount_call
+
+
+def test_mount_drive_uses_mount_namespace_flag_when_nsenter_is_unavailable():
+    dm = LinuxDriveMount()
+    with patch("app.infrastructure.drive_mount.settings") as mock_settings:
+        mock_settings.usb_mount_base_path = _BASE
+        mock_settings.sysfs_block_path = "/sys/block"
+        mock_settings.mount_binary_path = "/bin/mount"
+        mock_settings.use_sudo = True
+        mock_settings.subprocess_timeout_seconds = 10
+        mock_settings.procfs_mounts_path = "/proc/mounts"
+        with patch("os.path.realpath", side_effect=lambda p: p):
+            with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
+                with patch("app.infrastructure.drive_mount.LinuxFilesystemDetector.detect", return_value="ext4"):
+                    with patch("os.readlink", side_effect=["mnt:[2]", "mnt:[1]"]):
+                        with patch("app.infrastructure.drive_mount.shutil.which", return_value=None):
+                            with patch("os.makedirs"):
+                                with patch("os.geteuid", return_value=1000):
+                                    with patch("os.access", return_value=True):
+                                        with patch("subprocess.run") as mock_run:
+                                            ok, err = dm.mount_drive(_VALID_DEVICE, f"{_BASE}/7")
+
+    assert ok is True
+    assert err is None
+    mount_call = mock_run.call_args_list[0].args[0]
+    assert mount_call[:5] == ["sudo", "-n", "/bin/mount", "-N", "/proc/1/ns/mnt"]
+
+
+def test_unmount_drive_uses_nsenter_when_mount_namespace_differs():
+    dm = LinuxDriveMount()
+    with patch("app.infrastructure.drive_mount.settings") as mock_settings:
+        mock_settings.usb_mount_base_path = _BASE
+        mock_settings.umount_binary_path = "/bin/umount"
+        mock_settings.use_sudo = True
+        mock_settings.subprocess_timeout_seconds = 10
+        with patch("os.path.realpath", side_effect=lambda p: p):
+            with patch("os.readlink", side_effect=["mnt:[2]", "mnt:[1]"]):
+                with patch("app.infrastructure.drive_mount.shutil.which", return_value="/usr/bin/nsenter"):
+                    with patch("os.geteuid", return_value=1000):
+                        with patch("subprocess.run") as mock_run:
+                            ok, err = dm.unmount_drive(f"{_BASE}/7")
+
+    assert ok is True
+    assert err is None
+    mount_call = mock_run.call_args_list[0].args[0]
+    assert mount_call[:6] == ["sudo", "-n", "/usr/bin/nsenter", "-t", "1", "-m"]
+    assert "-N" not in mount_call
+
+
+def test_unmount_drive_uses_mount_namespace_flag_when_nsenter_is_unavailable():
+    dm = LinuxDriveMount()
+    with patch("app.infrastructure.drive_mount.settings") as mock_settings:
+        mock_settings.usb_mount_base_path = _BASE
+        mock_settings.umount_binary_path = "/bin/umount"
+        mock_settings.use_sudo = True
+        mock_settings.subprocess_timeout_seconds = 10
+        with patch("os.path.realpath", side_effect=lambda p: p):
+            with patch("os.readlink", side_effect=["mnt:[2]", "mnt:[1]"]):
+                with patch("app.infrastructure.drive_mount.shutil.which", return_value=None):
+                    with patch("os.geteuid", return_value=1000):
+                        with patch("subprocess.run") as mock_run:
+                            ok, err = dm.unmount_drive(f"{_BASE}/7")
+
+    assert ok is True
+    assert err is None
+    mount_call = mock_run.call_args_list[0].args[0]
+    assert mount_call[:5] == ["sudo", "-n", "/bin/umount", "-N", "/proc/1/ns/mnt"]
+
+
+def test_mount_drive_repairs_mount_point_access_for_service_user():
+    """Successful mounts should repair access so the service account can write to the target."""
+    dm = LinuxDriveMount()
+    access_results = iter([False, True])
+
+    def fake_access(path, mode):
+        if path == f"{_BASE}/7" and mode == 3:
+            return next(access_results)
+        return True
+
+    with patch("app.infrastructure.drive_mount.settings") as mock_settings:
+        mock_settings.usb_mount_base_path = _BASE
+        mock_settings.sysfs_block_path = "/sys/block"
+        mock_settings.mount_binary_path = "/bin/mount"
+        mock_settings.use_sudo = True
+        mock_settings.subprocess_timeout_seconds = 10
+        mock_settings.procfs_mounts_path = "/proc/mounts"
+        with patch("os.path.realpath", side_effect=lambda p: p):
+            with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
+                with patch("app.infrastructure.drive_mount.LinuxFilesystemDetector.detect", return_value="ext4"):
+                    with patch("os.makedirs"):
+                        with patch("os.geteuid", return_value=1234):
+                            with patch("os.getegid", return_value=5678):
+                                with patch("os.access", side_effect=fake_access):
+                                    with patch("subprocess.run") as mock_run:
+                                        ok, err = dm.mount_drive(_VALID_DEVICE, f"{_BASE}/7")
 
     assert ok is True
     assert err is None
