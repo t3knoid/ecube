@@ -9,6 +9,7 @@ import grp
 import logging
 import os
 import pwd
+import shutil
 import subprocess
 from typing import Protocol
 
@@ -114,6 +115,54 @@ def _with_sudo(cmd: list[str]) -> list[str]:
     if settings.use_sudo and os.geteuid() != 0:
         return ["sudo", "-n", *cmd]
     return cmd
+
+
+def _with_mount_namespace_flag(cmd: list[str]) -> list[str] | None:
+    if not cmd:
+        return None
+
+    binary = os.path.basename(cmd[0])
+    if binary in ("mount", "umount"):
+        return [cmd[0], "-N", "/proc/1/ns/mnt", *cmd[1:]]
+    return None
+
+
+def _in_host_mount_namespace() -> bool:
+    try:
+        current_ns = os.readlink("/proc/self/ns/mnt")
+    except Exception:
+        return True
+
+    try:
+        host_ns = os.readlink("/proc/1/ns/mnt")
+    except Exception:
+        logger.warning("Unable to read host mount namespace; assuming namespace differs")
+        return False
+
+    return current_ns == host_ns
+
+
+def _with_host_mount_namespace(cmd: list[str]) -> list[str]:
+    if _in_host_mount_namespace():
+        return _with_sudo(cmd)
+
+    nsenter = shutil.which("nsenter")
+    if nsenter:
+        if os.geteuid() != 0:
+            if not settings.use_sudo:
+                logger.warning("Mount namespace differs from host but sudo is disabled; using current namespace")
+                return cmd
+            return ["sudo", "-n", nsenter, "-t", "1", "-m", *cmd]
+
+        return [nsenter, "-t", "1", "-m", *cmd]
+
+    ns_flag_cmd = _with_mount_namespace_flag(cmd)
+    if ns_flag_cmd is not None:
+        logger.warning("Mount namespace differs from host and nsenter is unavailable; falling back to util-linux namespace flag")
+        return _with_sudo(ns_flag_cmd)
+
+    logger.warning("Mount namespace differs from host but no namespace helper is available; using current namespace")
+    return _with_sudo(cmd)
 
 
 def _find_mountable_device(device_path: str) -> str:
@@ -284,7 +333,7 @@ class LinuxDriveMount:
 
         try:
             subprocess.run(
-                _with_sudo(mount_command),
+                _with_host_mount_namespace(mount_command),
                 check=True,
                 capture_output=True,
                 timeout=settings.subprocess_timeout_seconds,
@@ -390,7 +439,7 @@ class LinuxDriveMount:
 
         try:
             subprocess.run(
-                _with_sudo([settings.umount_binary_path, mount_point]),
+                _with_host_mount_namespace([settings.umount_binary_path, mount_point]),
                 check=True,
                 capture_output=True,
                 timeout=settings.subprocess_timeout_seconds,
