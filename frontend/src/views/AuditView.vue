@@ -1,7 +1,7 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getAudit } from '@/api/audit.js'
+import { getAudit, getAuditOptions } from '@/api/audit.js'
 import { useSettingsStore } from '@/stores/settings.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
@@ -12,18 +12,30 @@ const settingsStore = useSettingsStore()
 
 const logs = ref([])
 const loading = ref(false)
+const exportBusy = ref(false)
 const error = ref('')
 const expanded = ref(new Set())
+const filterOptions = ref({
+  actions: [],
+  users: [],
+  job_ids: [],
+})
 
 const filters = ref({
   user: '',
   action: '',
+  job_id: '',
+  search: '',
   since: '',
   until: '',
 })
 
 const page = ref(1)
 const pageSize = ref(20)
+const total = ref(0)
+const isMobileViewport = ref(false)
+const includeTotalOnNextPageChange = ref(false)
+let mobileViewportQuery = null
 
 const columns = computed(() => [
   { key: 'timestamp', label: t('common.labels.date') },
@@ -34,10 +46,7 @@ const columns = computed(() => [
   { key: 'details', label: t('audit.details') },
 ])
 
-const paged = computed(() => {
-  const start = (page.value - 1) * pageSize.value
-  return logs.value.slice(start, start + pageSize.value)
-})
+const paginationWindowSize = computed(() => (isMobileViewport.value ? 5 : 10))
 
 function toggleDetails(id) {
   if (expanded.value.has(id)) {
@@ -59,19 +68,31 @@ function toIsoDate(value) {
   return value ? new Date(value).toISOString() : undefined
 }
 
-async function loadAudit() {
+function buildAuditParams(overrides = {}) {
+  return {
+    user: filters.value.user || undefined,
+    action: filters.value.action || undefined,
+    job_id: filters.value.job_id ? Number(filters.value.job_id) : undefined,
+    search: filters.value.search.trim() || undefined,
+    since: toIsoDate(filters.value.since),
+    until: toIsoDate(filters.value.until),
+    limit: overrides.limit ?? pageSize.value,
+    offset: overrides.offset ?? (page.value - 1) * pageSize.value,
+  }
+}
+
+async function loadAudit({ includeTotal = false } = {}) {
   loading.value = true
   error.value = ''
   try {
-    logs.value = await getAudit({
-      user: filters.value.user || undefined,
-      action: filters.value.action || undefined,
-      since: toIsoDate(filters.value.since),
-      until: toIsoDate(filters.value.until),
-      limit: 500,
-      offset: 0,
+    const response = await getAudit({
+      ...buildAuditParams(),
+      include_total: includeTotal,
     })
-    page.value = 1
+    logs.value = response.entries || []
+    if (typeof response.total === 'number') {
+      total.value = response.total
+    }
   } catch {
     error.value = t('common.errors.networkError')
   } finally {
@@ -79,34 +100,108 @@ async function loadAudit() {
   }
 }
 
-function exportCsv() {
-  const rows = logs.value.map((entry) => ({
-    timestamp: entry.timestamp || '',
-    user: entry.user || '',
-    action: entry.action || '',
-    job_id: entry.job_id || '',
-    client_ip: entry.client_ip || '',
-    details: JSON.stringify(entry.details || {}),
-  }))
-
-  const header = Object.keys(rows[0] || { timestamp: '', user: '', action: '', job_id: '', client_ip: '', details: '' })
-  const lines = [
-    header.join(','),
-    ...rows.map((row) => header.map((key) => `"${String(row[key]).replace(/"/g, '""')}"`).join(',')),
-  ]
-
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
-  anchor.download = `${settingsStore.auditExportFilename}-${timestamp}.csv`
-  anchor.click()
-  setTimeout(() => URL.revokeObjectURL(url), settingsStore.downloadRevokeDelayMs)
+async function loadFilterOptions() {
+  try {
+    filterOptions.value = await getAuditOptions()
+  } catch {
+    error.value = t('common.errors.networkError')
+  }
 }
 
-onMounted(() => {
-  loadAudit()
+async function refreshAudit() {
+  expanded.value = new Set()
+  await loadFilterOptions()
+  await loadAudit({ includeTotal: true })
+}
+
+async function applyFilters() {
+  expanded.value = new Set()
+  if (page.value !== 1) {
+    includeTotalOnNextPageChange.value = true
+    page.value = 1
+    return
+  }
+  await loadAudit({ includeTotal: true })
+}
+
+async function exportCsv() {
+  exportBusy.value = true
+  error.value = ''
+  try {
+    const rows = []
+    let offset = 0
+    let hasMore = true
+
+    while (hasMore) {
+      const response = await getAudit(buildAuditParams({ limit: 500, offset }))
+      const entries = response.entries || []
+      rows.push(
+        ...entries.map((entry) => ({
+          timestamp: entry.timestamp || '',
+          user: entry.user || '',
+          action: entry.action || '',
+          job_id: entry.job_id || '',
+          client_ip: entry.client_ip || '',
+          details: JSON.stringify(entry.details || {}),
+        })),
+      )
+      hasMore = Boolean(response.has_more)
+      if (!entries.length) break
+      offset += entries.length
+    }
+
+    const header = Object.keys(rows[0] || { timestamp: '', user: '', action: '', job_id: '', client_ip: '', details: '' })
+    const lines = [
+      header.join(','),
+      ...rows.map((row) => header.map((key) => `"${String(row[key]).replace(/"/g, '""')}"`).join(',')),
+    ]
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+    anchor.download = `${settingsStore.auditExportFilename}-${timestamp}.csv`
+    anchor.click()
+    setTimeout(() => URL.revokeObjectURL(url), settingsStore.downloadRevokeDelayMs)
+  } catch {
+    error.value = t('common.errors.networkError')
+  } finally {
+    exportBusy.value = false
+  }
+}
+
+function syncViewportState(event) {
+  isMobileViewport.value = Boolean(event?.matches)
+}
+
+watch(page, () => {
+  const includeTotal = includeTotalOnNextPageChange.value
+  includeTotalOnNextPageChange.value = false
+  void loadAudit({ includeTotal })
+})
+
+onMounted(async () => {
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    mobileViewportQuery = window.matchMedia('(max-width: 768px)')
+    syncViewportState(mobileViewportQuery)
+    if (typeof mobileViewportQuery.addEventListener === 'function') {
+      mobileViewportQuery.addEventListener('change', syncViewportState)
+    } else if (typeof mobileViewportQuery.addListener === 'function') {
+      mobileViewportQuery.addListener(syncViewportState)
+    }
+  }
+  await loadFilterOptions()
+  await loadAudit({ includeTotal: true })
+})
+
+onUnmounted(() => {
+  if (!mobileViewportQuery) return
+  if (typeof mobileViewportQuery.removeEventListener === 'function') {
+    mobileViewportQuery.removeEventListener('change', syncViewportState)
+  } else if (typeof mobileViewportQuery.removeListener === 'function') {
+    mobileViewportQuery.removeListener(syncViewportState)
+  }
 })
 </script>
 
@@ -115,14 +210,31 @@ onMounted(() => {
     <header class="header-row">
       <h1>{{ t('audit.title') }}</h1>
       <div class="actions audit-toolbar">
-        <button class="btn" @click="loadAudit">{{ t('common.actions.refresh') }}</button>
-        <button class="btn btn-primary" @click="exportCsv">{{ t('audit.exportAuditCsv') }}</button>
+        <button class="btn" :disabled="loading || exportBusy" @click="refreshAudit">{{ t('common.actions.refresh') }}</button>
+        <button class="btn btn-primary" :disabled="loading || exportBusy" @click="exportCsv">{{ t('audit.exportAuditCsv') }}</button>
       </div>
     </header>
 
     <div class="filters">
-      <input v-model="filters.user" type="text" :placeholder="t('audit.userFilter')" :aria-label="t('audit.userFilter')" />
-      <input v-model="filters.action" type="text" :placeholder="t('audit.actionFilter')" :aria-label="t('audit.actionFilter')" />
+      <select v-model="filters.user" :aria-label="t('audit.userFilter')">
+        <option value="">{{ t('audit.anyUser') }}</option>
+        <option v-for="userOption in filterOptions.users" :key="userOption" :value="userOption">{{ userOption }}</option>
+      </select>
+      <select v-model="filters.action" :aria-label="t('audit.actionFilter')">
+        <option value="">{{ t('audit.anyAction') }}</option>
+        <option v-for="actionOption in filterOptions.actions" :key="actionOption" :value="actionOption">{{ actionOption }}</option>
+      </select>
+      <select v-model="filters.job_id" :aria-label="t('audit.jobIdFilter')">
+        <option value="">{{ t('audit.anyJob') }}</option>
+        <option v-for="jobIdOption in filterOptions.job_ids" :key="jobIdOption" :value="String(jobIdOption)">#{{ jobIdOption }}</option>
+      </select>
+      <input
+        v-model="filters.search"
+        type="text"
+        :placeholder="t('audit.searchFilter')"
+        :aria-label="t('audit.searchFilter')"
+        @keydown.enter.prevent="applyFilters"
+      />
       <input
         v-model="filters.since"
         type="datetime-local"
@@ -133,14 +245,14 @@ onMounted(() => {
         type="datetime-local"
         :aria-label="t('audit.dateTo')"
       />
-      <button class="btn" @click="loadAudit">{{ t('audit.applyFilters') }}</button>
+      <button class="btn" :disabled="loading || exportBusy" @click="applyFilters">{{ t('audit.applyFilters') }}</button>
     </div>
 
     <section class="audit-log-section">
       <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
       <p v-if="error" class="error-banner">{{ error }}</p>
 
-      <DataTable :columns="columns" :rows="paged" :empty-text="t('audit.empty')">
+      <DataTable :columns="columns" :rows="logs" :empty-text="t('audit.empty')">
         <template #cell-timestamp="{ row }">{{ asLocalDate(row.timestamp) }}</template>
         <template #cell-action="{ row }"><StatusBadge :status="row.action" /></template>
         <template #cell-details="{ row }">
@@ -153,7 +265,14 @@ onMounted(() => {
         </template>
       </DataTable>
 
-      <Pagination v-model:page="page" :page-size="pageSize" :total="logs.length" />
+      <Pagination
+        v-model:page="page"
+        :page-size="pageSize"
+        :total="total"
+        :show-page-window="true"
+        :window-size="paginationWindowSize"
+        :jump-size="paginationWindowSize"
+      />
     </section>
   </section>
 </template>
@@ -187,7 +306,8 @@ onMounted(() => {
   font-weight: var(--font-weight-bold);
 }
 
-input {
+input,
+select {
   border: 1px solid var(--color-border);
   background: var(--color-bg-input);
   color: var(--color-text-primary);

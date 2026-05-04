@@ -4,7 +4,7 @@
 |---|---|
 | Title | QA Testing Guide |
 | Purpose | Guides QA personnel through manual hands-on ECUBE UI and functional testing in a Linux-based test environment. |
-| Updated on | 04/20/26 |
+| Updated on | 05/04/26 |
 | Audience | QA personnel. |
 
 ## Table of Contents
@@ -27,6 +27,19 @@
 16. [Version Compatibility](#16-version-compatibility)
 
 This guide covers manual QA execution driven by UI behavior and functional test cases. Automated test execution is documented separately and is out of scope here.
+
+## Manual Verification Additions for Audit Filtering and Pagination
+
+Add the following manual checks when a release includes Audit page pagination, distinct filter options, and free-text search.
+
+| Scenario | Steps | Expected |
+|---|---|---|
+| Distinct filter options load from the backend | Sign in as `admin`, `manager`, or `auditor` and open `Audit` | User, action, and job filters populate with stored distinct values instead of requiring free-text entry |
+| Audit filters apply across the full result set | Choose a user, action, or job filter that is known to match records beyond the first page, then click `Apply` | Matching rows are returned from the server and pagination reflects the filtered total rather than a fixed client-side subset |
+| Free-text search matches visible audit content | Enter a known project ID, action fragment, or detail substring in the Audit search field and click `Apply` | The table narrows to matching audit rows and no unrelated rows remain visible |
+| Pagination requests later result pages | Apply filters that produce more than one page of results and move to a later page | The table updates to the requested page, row order remains newest-first, and the total count remains stable for the same filter set |
+| Pagination window shortcuts adapt to screen size | Open `Audit` on a wider screen and verify the numbered page window, then repeat on a smaller screen width | Wider screens expose shortcuts for the current 10-page window with jump controls for the next or previous 10 pages; smaller screens reduce the shortcut window to 5 pages |
+| CSV export includes the full filtered result set | Apply a filter that spans multiple pages and click `Export Audit CSV` | The downloaded CSV includes rows from all matching pages, not only the rows visible on the current page |
 
 ## Manual Verification Additions for Archived Jobs
 

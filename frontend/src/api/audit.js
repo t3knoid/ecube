@@ -6,6 +6,10 @@ export function getAudit(params = {}) {
   return toData(apiClient.get(`${API_BASE}/audit`, { params }))
 }
 
+export function getAuditOptions() {
+  return toData(apiClient.get(`${API_BASE}/audit/options`))
+}
+
 export function getChainOfCustody(params = {}) {
   return toData(apiClient.get(`${API_BASE}/audit/chain-of-custody`, { params }))
 }

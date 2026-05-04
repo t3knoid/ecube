@@ -36,6 +36,10 @@ def _user_created_entries(entries):
     return [entry for entry in entries if entry.get("user") != "system"]
 
 
+def _audit_entries(response):
+    return response.json()["entries"]
+
+
 # ---------------------------------------------------------------------------
 # Basic listing
 # ---------------------------------------------------------------------------
@@ -45,7 +49,7 @@ class TestAuditListBasic:
     def test_empty_db_returns_empty_list(self, admin_client):
         response = admin_client.get("/audit")
         assert response.status_code == 200
-        data = response.json()
+        data = _audit_entries(response)
         user_entries = _user_created_entries(data)
         assert user_entries == []
 
@@ -59,7 +63,7 @@ class TestAuditListBasic:
         )
         response = admin_client.get("/audit")
         assert response.status_code == 200
-        data = response.json()
+        data = _audit_entries(response)
         data = _user_created_entries(data)
         assert len(data) == 2
         actions = {d["action"] for d in data}
@@ -69,7 +73,7 @@ class TestAuditListBasic:
         _seed_entries(db, [{"action": "TEST_ACTION", "user": "user1", "details": {"k": "v"}}])
         response = admin_client.get("/audit")
         assert response.status_code == 200
-        entry = response.json()[0]
+        entry = _audit_entries(response)[0]
         assert "id" in entry
         assert "action" in entry
         assert "user" in entry
@@ -97,7 +101,7 @@ class TestAuditFilters:
         )
         response = admin_client.get("/audit?user=griffin")
         assert response.status_code == 200
-        data = response.json()
+        data = _audit_entries(response)
         assert len(data) == 2
         assert all(d["user"] == "griffin" for d in data)
 
@@ -112,7 +116,7 @@ class TestAuditFilters:
         )
         response = admin_client.get("/audit?action=JOB_CREATED")
         assert response.status_code == 200
-        data = response.json()
+        data = _audit_entries(response)
         assert len(data) == 2
         assert all(d["action"] == "JOB_CREATED" for d in data)
 
@@ -127,7 +131,7 @@ class TestAuditFilters:
         )
         response = admin_client.get("/audit?job_id=1")
         assert response.status_code == 200
-        data = response.json()
+        data = _audit_entries(response)
         assert len(data) == 2
         assert all(d["job_id"] == 1 for d in data)
 
@@ -142,7 +146,7 @@ class TestAuditFilters:
         )
         response = admin_client.get("/audit?project_id=PRJ-1")
         assert response.status_code == 200
-        data = response.json()
+        data = _audit_entries(response)
         assert len(data) == 2
         assert all(d["project_id"] == "PRJ-1" for d in data)
 
@@ -159,7 +163,7 @@ class TestAuditFilters:
         response = admin_client.get("/audit", params={"project_id": " prj-1 "})
 
         assert response.status_code == 200
-        data = response.json()
+        data = _audit_entries(response)
         assert len(data) == 2
         assert all(d["project_id"] == "PRJ-1" for d in data)
 
@@ -173,7 +177,7 @@ class TestAuditFilters:
         )
         response = admin_client.get("/audit", params={"project_id": "PRJ-1\x00"})
         assert response.status_code == 200
-        data = response.json()
+        data = _audit_entries(response)
         assert len(data) == 1
         assert data[0]["project_id"] == "PRJ-1"
 
@@ -199,7 +203,7 @@ class TestAuditFilters:
         )
         response = admin_client.get(f"/audit?drive_id={drive_1.id}")
         assert response.status_code == 200
-        data = response.json()
+        data = _audit_entries(response)
         assert len(data) == 2
         assert all(d["drive_id"] == drive_1.id for d in data)
 
@@ -231,7 +235,7 @@ class TestAuditFilters:
 
         response = admin_client.get("/audit?since=2023-01-01T00:00:00")
         assert response.status_code == 200
-        data = response.json()
+        data = _audit_entries(response)
         actions = {d["action"] for d in data}
         assert "LATE" in actions
         assert "EARLY" not in actions
@@ -261,7 +265,7 @@ class TestAuditFilters:
 
         response = admin_client.get("/audit?until=2021-01-01T00:00:00")
         assert response.status_code == 200
-        data = response.json()
+        data = _audit_entries(response)
         actions = {d["action"] for d in data}
         assert "EARLY" in actions
         assert "LATE" not in actions
@@ -277,7 +281,7 @@ class TestAuditFilters:
         )
         response = admin_client.get("/audit?user=griffin&action=JOB_CREATED")
         assert response.status_code == 200
-        data = response.json()
+        data = _audit_entries(response)
         assert len(data) == 1
         assert data[0]["user"] == "griffin"
         assert data[0]["action"] == "JOB_CREATED"
@@ -286,7 +290,99 @@ class TestAuditFilters:
         _seed_entries(db, [{"action": "JOB_CREATED", "user": "griffin", "details": {}}])
         response = admin_client.get("/audit?user=nobody")
         assert response.status_code == 200
-        assert response.json() == []
+        assert response.json()["entries"] == []
+
+    def test_search_matches_visible_audit_fields(self, admin_client, db):
+        _seed_entries(
+            db,
+            [
+                {"action": "JOB_CREATED", "user": "griffin", "project_id": "PRJ-100", "job_id": 41, "details": {"safe_note": "Export created"}},
+                {"action": "DRIVE_INITIALIZED", "user": "alba", "project_id": "PRJ-200", "job_id": 52, "details": {"safe_note": "Drive prepared"}},
+            ],
+        )
+
+        response = admin_client.get("/audit", params={"search": "griff"})
+
+        assert response.status_code == 200
+        entries = response.json()["entries"]
+        assert len(entries) == 1
+        assert entries[0]["user"] == "griffin"
+
+    def test_search_matches_client_ip_for_admin(self, admin_client, db):
+        _seed_entries(
+            db,
+            [
+                {"action": "LOGIN", "user": "griffin", "client_ip": "10.88.88.88", "details": {}},
+                {"action": "LOGIN", "user": "alba", "client_ip": "10.77.77.77", "details": {}},
+            ],
+        )
+
+        response = admin_client.get("/audit", params={"search": "10.88.88.88"})
+
+        assert response.status_code == 200
+        entries = response.json()["entries"]
+        assert len(entries) == 1
+        assert entries[0]["user"] == "griffin"
+        assert entries[0]["client_ip"] == "10.88.88.88"
+
+    def test_search_does_not_match_client_ip_for_manager(self, manager_client, db):
+        _seed_entries(
+            db,
+            [
+                {"action": "LOGIN", "user": "griffin", "client_ip": "10.88.88.88", "details": {}},
+            ],
+        )
+
+        response = manager_client.get("/audit", params={"search": "10.88.88.88"})
+
+        assert response.status_code == 200
+        assert response.json()["entries"] == []
+
+
+class TestAuditFilterOptions:
+    def test_returns_distinct_action_user_and_job_options(self, admin_client, db):
+        _seed_entries(
+            db,
+            [
+                {"action": "JOB_CREATED", "user": "griffin", "job_id": 41, "details": {}},
+                {"action": "JOB_CREATED", "user": "griffin", "job_id": 41, "details": {}},
+                {"action": "JOB_COMPLETED", "user": "alba", "job_id": 52, "details": {}},
+            ],
+        )
+
+        response = admin_client.get("/audit/options")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert "JOB_COMPLETED" in body["actions"]
+        assert "JOB_CREATED" in body["actions"]
+        assert body["actions"].count("JOB_CREATED") == 1
+        assert "alba" in body["users"]
+        assert "griffin" in body["users"]
+        assert body["users"].count("griffin") == 1
+        assert 41 in body["job_ids"]
+        assert 52 in body["job_ids"]
+        assert body["job_ids"].count(41) == 1
+
+    def test_manager_can_access_filter_options(self, manager_client, db):
+        response = manager_client.get("/audit/options")
+
+        assert response.status_code == 200
+
+    def test_auditor_can_access_filter_options(self, auditor_client, db):
+        response = auditor_client.get("/audit/options")
+
+        assert response.status_code == 200
+
+    def test_processor_cannot_access_filter_options(self, client, db):
+        response = client.get("/audit/options")
+
+        assert response.status_code == 403
+
+    def test_unauthenticated_cannot_access_filter_options(self, unauthenticated_client, db):
+        response = unauthenticated_client.get("/audit/options")
+
+        assert response.status_code == 401
 
 
 # ---------------------------------------------------------------------------
@@ -299,15 +395,20 @@ class TestAuditPagination:
         _seed_entries(db, [{"action": f"ACT_{i}", "user": "u", "details": {}} for i in range(5)])
         response = admin_client.get("/audit?limit=3")
         assert response.status_code == 200
-        assert len(response.json()) == 3
+        body = response.json()
+        assert len(body["entries"]) == 3
+        assert body["limit"] == 3
+        assert body["offset"] == 0
+        assert body["total"] >= 5
+        assert body["has_more"] is True
 
     def test_offset(self, admin_client, db):
         _seed_entries(db, [{"action": f"ACT_{i}", "user": "u", "details": {}} for i in range(5)])
         response_all = admin_client.get("/audit?limit=1000")
-        all_ids = [d["id"] for d in response_all.json()]
+        all_ids = [d["id"] for d in _audit_entries(response_all)]
 
         response_offset = admin_client.get("/audit?offset=2&limit=1000")
-        offset_ids = [d["id"] for d in response_offset.json()]
+        offset_ids = [d["id"] for d in _audit_entries(response_offset)]
 
         assert offset_ids == all_ids[2:]
 
@@ -315,7 +416,21 @@ class TestAuditPagination:
         _seed_entries(db, [{"action": f"ACT_{i}", "user": "u", "details": {}} for i in range(10)])
         response = admin_client.get("/audit?limit=3&offset=2")
         assert response.status_code == 200
-        assert len(response.json()) == 3
+        body = response.json()
+        assert len(body["entries"]) == 3
+        assert body["offset"] == 2
+        assert body["has_more"] is True
+
+    def test_include_total_false_skips_exact_total_but_keeps_has_more(self, admin_client, db):
+        _seed_entries(db, [{"action": f"ACT_{i}", "user": "u", "details": {}} for i in range(5)])
+
+        response = admin_client.get("/audit?limit=2&include_total=false")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["entries"]) == 2
+        assert body["total"] is None
+        assert body["has_more"] is True
 
 
 # ---------------------------------------------------------------------------
