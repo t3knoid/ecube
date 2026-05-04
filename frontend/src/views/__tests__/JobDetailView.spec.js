@@ -2170,6 +2170,125 @@ describe('JobDetailView start action', () => {
     expect(mocks.getJobFiles).toHaveBeenCalledTimes(2)
   })
 
+  it('reloads files while polling when the files panel is open and job progress changes', async () => {
+    mocks.getJob
+      .mockResolvedValueOnce({
+        id: 6,
+        status: 'RUNNING',
+        project_id: 'PROJ-001',
+        evidence_number: 'EV-006',
+        source_path: '/nfs/project-001/evidence',
+        target_mount_path: '/mnt/ecube/1',
+        thread_count: 4,
+        copied_bytes: 50,
+        total_bytes: 100,
+        file_count: 2,
+        files_succeeded: 0,
+        files_failed: 0,
+        files_timed_out: 0,
+      })
+      .mockResolvedValueOnce({
+        id: 6,
+        status: 'RUNNING',
+        project_id: 'PROJ-001',
+        evidence_number: 'EV-006',
+        source_path: '/nfs/project-001/evidence',
+        target_mount_path: '/mnt/ecube/1',
+        thread_count: 4,
+        copied_bytes: 75,
+        total_bytes: 100,
+        file_count: 2,
+        files_succeeded: 1,
+        files_failed: 0,
+        files_timed_out: 0,
+      })
+
+    mocks.getJobFiles
+      .mockResolvedValueOnce({ files: [], total_files: 0, returned_files: 0, page: 1, page_size: 40 })
+      .mockResolvedValueOnce({
+        files: [{ id: 9, relative_path: 'doc.txt', status: 'DONE', checksum: 'abc' }],
+        total_files: 1,
+        returned_files: 1,
+        page: 1,
+        page_size: 40,
+      })
+      .mockResolvedValueOnce({
+        files: [{ id: 9, relative_path: 'doc.txt', status: 'DONE', checksum: 'abc' }],
+        total_files: 1,
+        returned_files: 1,
+        page: 1,
+        page_size: 40,
+      })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(mocks.getJobFiles).toHaveBeenCalledTimes(1)
+
+    await wrapper.find('.files-panel-toggle').trigger('click')
+    await flushPromises()
+
+    expect(mocks.getJobFiles).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('doc.txt')
+
+    await mocks.pollerTick()
+    await flushPromises()
+
+    expect(mocks.getJobFiles).toHaveBeenCalledTimes(3)
+    expect(mocks.getJobFiles.mock.calls).toContainEqual([6, { page: 1 }])
+  })
+
+  it('keeps the latest files response when forced reloads overlap', async () => {
+    let resolveStaleRequest
+
+    mocks.getJobFiles
+      .mockResolvedValueOnce({
+        files: [{ id: 1, relative_path: 'initial.txt', status: 'DONE', checksum: 'init' }],
+        total_files: 1,
+        returned_files: 1,
+        page: 1,
+        page_size: 40,
+      })
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveStaleRequest = resolve
+      }))
+      .mockResolvedValueOnce({
+        files: [{ id: 2, relative_path: 'fresh.txt', status: 'DONE', checksum: 'fresh' }],
+        total_files: 1,
+        returned_files: 1,
+        page: 1,
+        page_size: 40,
+      })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.find('.files-panel-toggle').trigger('click')
+    await flushPromises()
+
+    expect(mocks.getJobFiles).toHaveBeenCalledTimes(2)
+
+    const refreshButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.refresh'))
+    expect(refreshButton).toBeTruthy()
+    await refreshButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.getJobFiles).toHaveBeenCalledTimes(3)
+    expect(wrapper.text()).toContain('fresh.txt')
+
+    resolveStaleRequest({
+      files: [{ id: 3, relative_path: 'stale.txt', status: 'DONE', checksum: 'stale' }],
+      total_files: 1,
+      returned_files: 1,
+      page: 1,
+      page_size: 40,
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('fresh.txt')
+    expect(wrapper.text()).not.toContain('stale.txt')
+  })
+
   it('shows a pause-in-progress dialog after pausing a running job', async () => {
     mocks.getJob.mockResolvedValue({
       id: 6,

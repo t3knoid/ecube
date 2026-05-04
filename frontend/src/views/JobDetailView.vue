@@ -36,6 +36,7 @@ const job = ref(null)
 const debug = ref({ files: [], total_files: 0, returned_files: 0, page: 1, page_size: DEFAULT_JOB_FILES_PAGE_SIZE })
 const loading = ref(false)
 const filesLoading = ref(false)
+let latestDebugRequestId = 0
 const acting = ref(false)
 const error = ref('')
 const infoMessage = ref('')
@@ -256,6 +257,13 @@ const fileColumns = computed(() => ([
 ]))
 
 const retryableFileCount = computed(() => Number(job.value?.files_failed || 0) + Number(job.value?.files_timed_out || 0))
+const fileListRefreshKey = computed(() => ([
+  Number(job.value?.file_count || 0),
+  Number(job.value?.files_succeeded || 0),
+  Number(job.value?.files_failed || 0),
+  Number(job.value?.files_timed_out || 0),
+  String(job.value?.status || '').toUpperCase(),
+].join(':')))
 
 const canContinueOverflow = computed(() => {
   const status = String(job.value?.status || '').toUpperCase()
@@ -1315,11 +1323,14 @@ async function loadDebug(force = false) {
   if (!jobId.value) return
   if (filesLoading.value && !force) return
 
+  const requestId = ++latestDebugRequestId
   filesLoading.value = true
   try {
     const response = await getJobFiles(jobId.value, {
       page: Number(debug.value.page || 1),
     })
+    if (requestId !== latestDebugRequestId) return
+
     const totalFiles = Number(response?.total_files || 0)
     const pageSize = Number(response?.page_size || DEFAULT_JOB_FILES_PAGE_SIZE)
     const page = Number(response?.page || debug.value.page || 1)
@@ -1338,11 +1349,14 @@ async function loadDebug(force = false) {
       page_size: pageSize,
     }
   } catch {
+    if (requestId !== latestDebugRequestId) return
     if (force) {
       debug.value = { files: [], total_files: 0, returned_files: 0, page: 1, page_size: DEFAULT_JOB_FILES_PAGE_SIZE }
     }
   } finally {
-    filesLoading.value = false
+    if (requestId === latestDebugRequestId) {
+      filesLoading.value = false
+    }
   }
 }
 
@@ -1401,6 +1415,17 @@ async function refreshAll() {
 
 watch(() => debug.value.page, (nextPage, previousPage) => {
   if (nextPage === previousPage) return
+  void loadDebug(true)
+})
+
+watch(filesPanelExpanded, (expanded) => {
+  if (!expanded) return
+  void loadDebug(true)
+})
+
+watch(fileListRefreshKey, (nextKey, previousKey) => {
+  if (!filesPanelExpanded.value) return
+  if (nextKey === previousKey) return
   void loadDebug(true)
 })
 
