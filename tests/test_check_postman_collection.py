@@ -1,4 +1,6 @@
 from pathlib import Path
+import sys
+import types
 
 from scripts import check_postman_collection
 
@@ -213,3 +215,32 @@ def test_main_reports_success_when_collection_matches(tmp_path, monkeypatch, cap
 
     assert exit_code == 0
     assert f"Postman collection routes are in sync: {collection_path}" in capsys.readouterr().out
+
+
+def test_load_openapi_operations_uses_lightweight_openapi_module(monkeypatch):
+    fake_module = types.ModuleType("app.openapi")
+    fake_module.load_openapi_schema = lambda: {
+        "paths": {
+            "/health/live": {
+                "get": {
+                    "operationId": "health_live",
+                    "summary": "Health live",
+                }
+            }
+        }
+    }
+
+    monkeypatch.setitem(sys.modules, "app.openapi", fake_module)
+    monkeypatch.delitem(sys.modules, "app.main", raising=False)
+
+    operations = check_postman_collection.load_openapi_operations()
+
+    assert operations == [
+        check_postman_collection.OpenAPIOperation(
+            method="GET",
+            path="/health/live",
+            pattern=check_postman_collection._path_to_regex("/health/live"),
+            operation_id="health_live",
+            summary="Health live",
+        )
+    ]
