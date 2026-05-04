@@ -367,7 +367,7 @@ Use the page controls to:
 
 When ECUBE can correlate a drive to a related job, the `Job ID` value on the Drives page acts as a direct link into that job's detail view. Drives without a related job keep the current placeholder behavior instead of showing a stale or guessed job ID.
 
-The `Drive ID` value on the Drives page also acts as the direct navigation entry point into Drive Detail. The list no longer shows a separate `Details` row action, so list-level actions stay focused on row-specific operations such as `Browse` when the drive has a managed mount path.
+The `Drive ID` value on the Drives page also acts as the direct navigation entry point into Drive Detail. When a drive has a managed mount path, the visible `Device` identifier acts as the browse entry point into that mounted content instead of a separate `Browse` row action. The browse panel title uses that same visible drive identifier, and the directory browser starts at the USB root without exposing the host mount path in the breadcrumb.
 
 ### 7.3 Drive Detail Page
 
@@ -380,7 +380,7 @@ Selecting a drive opens a detail view showing:
 
 If ECUBE does not yet have a current mounted-drive free-space reading for that drive, the available-space field shows `-` instead of blocking the page.
 
-If a related job exists, the `Job ID` value on Drive Detail uses the same direct Job Detail navigation pattern as the clickable job context on the Drives page.
+If a related job exists, the `Job ID` value on Drive Detail uses the same direct Job Detail navigation pattern as the clickable job context on the Drives page. When you open browse from Drive Detail, the panel title also uses the visible device identifier and the breadcrumb stays root-relative instead of showing the host mount path.
 
 Reference screen:
 

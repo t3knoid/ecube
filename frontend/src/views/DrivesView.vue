@@ -49,7 +49,6 @@ const columns = computed(() => {
     { key: 'current_project_id', label: t('dashboard.project') },
     { key: 'current_state', label: t('common.labels.status') },
     { key: 'current_project_job_id', label: t('jobs.jobId'), align: 'right' },
-    { key: 'actions', label: '', align: 'center' },
   ]
 })
 
@@ -60,6 +59,11 @@ function isValidJobId(value) {
 
 function formatProjectId(value) {
   return normalizeProjectId(value) || '-'
+}
+
+function driveBrowseTitle(drive) {
+  if (!drive) return t('browse.browseContents')
+  return t('browse.browseDriveContentsTitle', { device: formatDriveIdentity(drive) })
 }
 
 function normalizeStatusValue(status) {
@@ -253,18 +257,6 @@ function openDriveById(driveId) {
   router.push({ name: 'drive-detail', params: { id: normalizedDriveId } })
 }
 
-function closeRowActionsMenu(event) {
-  const menu = event?.currentTarget instanceof HTMLElement ? event.currentTarget.closest('details') : null
-  if (menu instanceof HTMLDetailsElement) {
-    menu.removeAttribute('open')
-  }
-}
-
-function handleMenuBrowse(drive, event) {
-  closeRowActionsMenu(event)
-  void toggleBrowse(drive.id)
-}
-
 const browsePanelRef = ref(null)
 
 async function toggleBrowse(driveId) {
@@ -339,7 +331,15 @@ onBeforeUnmount(() => {
         </button>
       </template>
       <template #cell-display_device_label="{ row }">
-        {{ formatDriveIdentity(row) }}
+        <button
+          v-if="row.mount_path"
+          class="cell-link drive-device-link"
+          type="button"
+          @click="toggleBrowse(row.id)"
+        >
+          {{ formatDriveIdentity(row) }}
+        </button>
+        <span v-else>{{ formatDriveIdentity(row) }}</span>
       </template>
       <template #cell-current_project_id="{ row }">
         <span>{{ formatProjectId(row.current_project_id) }}</span>
@@ -368,35 +368,6 @@ onBeforeUnmount(() => {
         </span>
         <StatusBadge v-else :status="row.current_state" :label="driveStateLabel(row.current_state)" />
       </template>
-      <template #cell-actions="{ row }">
-        <div class="row-actions">
-          <button
-            v-if="row.mount_path"
-            class="btn"
-            @click="toggleBrowse(row.id)"
-          >
-            {{ t('drives.browse') }}
-          </button>
-        </div>
-        <details class="row-actions-menu">
-          <summary class="row-actions-toggle" :aria-label="`${formatDriveIdentity(row)} drive actions`">
-            <span class="row-actions-toggle-dots" aria-hidden="true">
-              <span class="row-actions-toggle-dot" />
-              <span class="row-actions-toggle-dot" />
-              <span class="row-actions-toggle-dot" />
-            </span>
-          </summary>
-          <div class="row-actions-popover">
-            <button
-              v-if="row.mount_path"
-              class="btn row-action-menu-browse"
-              @click="handleMenuBrowse(row, $event)"
-            >
-              {{ t('drives.browse') }}
-            </button>
-          </div>
-        </details>
-      </template>
     </DataTable>
 
     <section
@@ -405,12 +376,12 @@ onBeforeUnmount(() => {
       class="browse-panel"
     >
       <header class="browse-panel-header">
-        <h2>{{ t('browse.browseContents') }}</h2>
+        <h2>{{ driveBrowseTitle(activeBrowsedDrive) }}</h2>
         <button class="btn" @click="toggleBrowse(activeBrowsedDrive.id)">
           {{ t('common.actions.close') }}
         </button>
       </header>
-      <DirectoryBrowser :mount-path="activeBrowsedDrive.mount_path" />
+      <DirectoryBrowser :mount-path="activeBrowsedDrive.mount_path" root-label="" />
     </section>
 
     <Pagination v-model:page="page" :page-size="pageSize" :total="sorted.length" />
@@ -425,8 +396,7 @@ onBeforeUnmount(() => {
 
 .header-row,
 .actions,
-.filters,
-.row-actions {
+.filters {
   display: flex;
   gap: var(--space-sm);
 }
@@ -460,11 +430,6 @@ onBeforeUnmount(() => {
 .cell-link:hover,
 .cell-link:focus-visible {
   text-decoration-thickness: 2px;
-}
-
-.row-actions {
-  flex-wrap: wrap;
-  justify-content: center;
 }
 
 .drive-status-icon {
@@ -510,56 +475,6 @@ onBeforeUnmount(() => {
   color: var(--color-status-muted-text, #475569);
 }
 
-.row-actions-menu {
-  display: none;
-  position: relative;
-}
-
-.row-actions-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  list-style: none;
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius);
-  background: var(--color-bg-secondary);
-  color: var(--color-text-primary);
-  cursor: pointer;
-}
-
-.row-actions-toggle-dots {
-  display: inline-grid;
-  gap: 0.15rem;
-}
-
-.row-actions-toggle-dot {
-  width: 0.25rem;
-  height: 0.25rem;
-  border-radius: 9999px;
-  background: currentColor;
-}
-
-.row-actions-toggle::-webkit-details-marker {
-  display: none;
-}
-
-.row-actions-popover {
-  position: absolute;
-  top: calc(100% + var(--space-2xs));
-  right: 0;
-  z-index: 2;
-  min-width: 8.5rem;
-  display: grid;
-  gap: var(--space-2xs);
-  padding: var(--space-2xs);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius);
-  background: var(--color-bg-primary);
-  box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.12));
-}
-
 .browse-panel {
   display: grid;
   gap: var(--space-sm);
@@ -596,14 +511,6 @@ select {
 @media (max-width: 768px) {
   :deep(.table-scroll-wrapper) {
     overflow: visible;
-  }
-
-  .row-actions {
-    display: none;
-  }
-
-  .row-actions-menu {
-    display: inline-block;
   }
 }
 </style>
