@@ -247,21 +247,52 @@ def get_setup_status(
     """
     if db is None:
         # First-run install before any database connection has been configured.
+        logger.info(
+            "Setup status evaluated",
+            extra={
+                "operation_surface": "setup.status",
+                "initialized": False,
+                "state_source": "database_unconfigured",
+            },
+        )
         return SetupStatusResponse(initialized=False)
 
     repo = UserRoleRepository(db)
     try:
         if not repo.has_any_admin():
+            logger.info(
+                "Setup status evaluated",
+                extra={
+                    "operation_surface": "setup.status",
+                    "initialized": False,
+                    "state_source": "no_admin_role",
+                },
+            )
             return SetupStatusResponse(initialized=False)
-        return SetupStatusResponse(
-            initialized=_is_setup_initialized_by_os_state(
-                _get_admin_usernames(repo, db),
-            ),
+        initialized = _is_setup_initialized_by_os_state(
+            _get_admin_usernames(repo, db),
         )
+        logger.info(
+            "Setup status evaluated",
+            extra={
+                "operation_surface": "setup.status",
+                "initialized": initialized,
+                "state_source": "database_and_os_state",
+            },
+        )
+        return SetupStatusResponse(initialized=initialized)
     except ProgrammingError as exc:
         db.rollback()
         if _is_missing_table_error(exc):
             # Fresh install before /setup/database/provision has run.
+            logger.info(
+                "Setup status evaluated",
+                extra={
+                    "operation_surface": "setup.status",
+                    "initialized": False,
+                    "state_source": "schema_missing",
+                },
+            )
             return SetupStatusResponse(initialized=False)
         raise
 
@@ -289,10 +320,27 @@ def initialize_system(
     This endpoint is **unauthenticated** — it can only succeed once, before
     any admin exists.
     """
+    logger.info(
+        "Setup initialization requested",
+        extra={
+            "operation_surface": "setup.initialize",
+            "requested_username": body.username,
+            "trust_proxy_headers": body.trust_proxy_headers,
+        },
+    )
+
     repo = UserRoleRepository(db)
     already_initialized = _is_setup_initialized_with_auto_migrate(repo, db)
 
     if already_initialized:
+        logger.info(
+            "Setup initialization skipped",
+            extra={
+                "operation_surface": "setup.initialize",
+                "result": "already_initialized",
+                "requested_username": body.username,
+            },
+        )
         return SetupInitializeResponse(
             status="already_initialized",
             message=(
@@ -304,6 +352,14 @@ def initialize_system(
         )
 
     if not _init_lock.acquire(blocking=False):
+        logger.info(
+            "Setup initialization blocked",
+            extra={
+                "operation_surface": "setup.initialize",
+                "failure_category": "initialization_in_progress",
+                "requested_username": body.username,
+            },
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Initialization is already in progress.",
@@ -313,6 +369,14 @@ def initialize_system(
         already_initialized = _is_setup_initialized_with_auto_migrate(repo, db)
 
         if already_initialized:
+            logger.info(
+                "Setup initialization skipped",
+                extra={
+                    "operation_surface": "setup.initialize",
+                    "result": "already_initialized",
+                    "requested_username": body.username,
+                },
+            )
             return SetupInitializeResponse(
                 status="already_initialized",
                 message=(
@@ -338,6 +402,14 @@ def _do_initialize(
     db: Session,
     client_ip: Optional[str] = None,
 ) -> SetupInitializeResponse:
+    logger.info(
+        "Setup initialization starting",
+        extra={
+            "operation_surface": "setup.initialize",
+            "requested_username": body.username,
+            "trust_proxy_headers": body.trust_proxy_headers,
+        },
+    )
 
     # Step 1: Acquire the cross-process guard BEFORE any OS side-effects.
     # The single-row CHECK constraint ensures only one worker can succeed.
@@ -350,6 +422,14 @@ def _do_initialize(
         db.commit()
     except IntegrityError:
         db.rollback()
+        logger.info(
+            "Setup initialization blocked",
+            extra={
+                "operation_surface": "setup.initialize",
+                "failure_category": "cross_process_lock_conflict",
+                "requested_username": body.username,
+            },
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
@@ -367,6 +447,14 @@ def _do_initialize(
     try:
         groups_created, setup_status = _run_os_setup(body)
     except HTTPException as exc:
+        logger.info(
+            "Setup initialization failed",
+            extra={
+                "operation_surface": "setup.initialize",
+                "failure_category": f"http_{exc.status_code}",
+                "requested_username": body.username,
+            },
+        )
         if not _release_init_lock(db):
             exc.detail += _LOCK_STUCK_SUFFIX
         raise
@@ -442,6 +530,17 @@ def _do_initialize(
             "Setup complete. Existing OS admin user was reconciled, "
             "added to ecube-admins, and synced to ECUBE as an admin."
         )
+
+    logger.info(
+        message,
+        extra={
+            "operation_surface": "setup.initialize",
+            "result": setup_status,
+            "requested_username": body.username,
+            "groups_created_count": len(groups_created),
+            "trust_proxy_headers": body.trust_proxy_headers,
+        },
+    )
 
     return SetupInitializeResponse(
         status=setup_status,

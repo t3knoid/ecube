@@ -318,6 +318,16 @@ def test_database_connection(
     endpoint accepts unauthenticated requests.  Once the system is
     initialized, a valid admin JWT is required.
     """
+    logger.info(
+        "Database connection test requested",
+        extra={
+            "operation_surface": "setup.database.test_connection",
+            "host": body.host,
+            "port": body.port,
+            "authenticated": current_user is not None,
+        },
+    )
+
     username, password = _resolve_admin_credentials(
         body.admin_username, body.admin_password,
     )
@@ -338,6 +348,16 @@ def test_database_connection(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         )
+
+    logger.info(
+        "Database connection test succeeded",
+        extra={
+            "operation_surface": "setup.database.test_connection",
+            "host": body.host,
+            "port": body.port,
+            "authenticated": current_user is not None,
+        },
+    )
 
     # Best-effort audit (may fail if DB doesn't exist yet)
     try:
@@ -505,6 +525,16 @@ def get_system_info() -> SystemInfoResponse:
         settings.pg_superuser_name
         or settings.postgres_user
         or settings.setup_default_admin_username
+    )
+    logger.info(
+        "Setup system info requested",
+        extra={
+            "operation_surface": "setup.database.system_info",
+            "in_docker": in_docker,
+            "has_configured_credentials": bool(
+                settings.pg_superuser_name and settings.pg_superuser_pass
+            ),
+        },
     )
     return SystemInfoResponse(
         in_docker=in_docker,

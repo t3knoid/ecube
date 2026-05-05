@@ -11,6 +11,7 @@ Covers:
 
 from __future__ import annotations
 
+import logging
 import os
 import stat
 from unittest.mock import MagicMock, patch
@@ -484,6 +485,24 @@ class TestSystemInfoEndpoint:
         }
         mock_is_running_in_docker.assert_called_once_with()
 
+    @patch("app.routers.database_setup.is_running_in_docker", return_value=False)
+    def test_system_info_emits_info_log(
+        self, mock_is_running_in_docker, unauthenticated_client, caplog
+    ):
+        caplog.set_level(logging.INFO, logger="app.routers.database_setup")
+
+        with patch("app.routers.database_setup.settings.postgres_user", ""), \
+             patch("app.routers.database_setup.settings.pg_superuser_name", ""):
+            resp = unauthenticated_client.get("/setup/database/system-info")
+
+        assert resp.status_code == 200
+        records = [r for r in caplog.records if r.msg == "Setup system info requested"]
+        assert len(records) == 1
+        assert records[0].operation_surface == "setup.database.system_info"
+        assert records[0].in_docker is False
+        assert records[0].has_configured_credentials is False
+        mock_is_running_in_docker.assert_called_once_with()
+
     @patch("app.routers.database_setup.is_running_in_docker", return_value=True)
     def test_system_info_docker_uses_configured_host(
         self, mock_is_running_in_docker, unauthenticated_client
@@ -800,6 +819,131 @@ class TestProvisionStatusEndpoint:
         assert resp.status_code == 200
         assert resp.json() == {"provisioned": False}
         mock_is_provisioned.assert_not_called()
+
+
+class TestSetupWizardLogging:
+    """Focused logging checks for setup wizard routes."""
+
+    def test_setup_status_logs_uninitialized_state(self, unauthenticated_client, caplog):
+        caplog.set_level(logging.INFO, logger="app.routers.setup")
+
+        resp = unauthenticated_client.get("/setup/status")
+
+        assert resp.status_code == 200
+        assert resp.json() == {"initialized": False}
+        records = [r for r in caplog.records if r.msg == "Setup status evaluated"]
+        assert len(records) == 1
+        assert records[0].operation_surface == "setup.status"
+        assert records[0].initialized is False
+        assert records[0].state_source == "no_admin_role"
+
+    @patch("app.routers.database_setup.log_and_audit")
+    @patch("app.services.database_service.test_connection", return_value="14.9")
+    def test_test_connection_emits_request_and_success_logs(
+        self,
+        mock_test_connection,
+        mock_log_and_audit,
+        unauthenticated_client,
+        caplog,
+    ):
+        caplog.set_level(logging.INFO, logger="app.routers.database_setup")
+
+        resp = unauthenticated_client.post(
+            "/setup/database/test-connection",
+            json={
+                "host": "localhost",
+                "port": 5432,
+                "admin_username": "postgres",
+                "admin_password": "secret",
+            },
+        )
+
+        assert resp.status_code == 200
+        request_records = [r for r in caplog.records if r.msg == "Database connection test requested"]
+        success_records = [r for r in caplog.records if r.msg == "Database connection test succeeded"]
+        assert len(request_records) == 1
+        assert len(success_records) == 1
+        assert request_records[0].operation_surface == "setup.database.test_connection"
+        assert request_records[0].authenticated is False
+        assert success_records[0].operation_surface == "setup.database.test_connection"
+        assert success_records[0].authenticated is False
+        mock_test_connection.assert_called_once()
+        mock_log_and_audit.assert_called_once()
+
+    @patch("app.routers.setup.AuditRepository.add")
+    @patch("app.routers.setup.database_service.set_trust_proxy_headers")
+    @patch("app.routers.setup._run_os_setup", return_value=(["ecube-admins"], "created_admin_user"))
+    def test_initialize_emits_request_start_and_success_logs(
+        self,
+        mock_run_os_setup,
+        mock_set_trust_proxy_headers,
+        mock_audit_add,
+        unauthenticated_client,
+        caplog,
+    ):
+        caplog.set_level(logging.INFO, logger="app.routers.setup")
+
+        resp = unauthenticated_client.post(
+            "/setup/initialize",
+            json={
+                "username": "admin",
+                "password": "StrongPass#123",
+                "trust_proxy_headers": True,
+            },
+        )
+
+        assert resp.status_code == 200
+        request_records = [r for r in caplog.records if r.msg == "Setup initialization requested"]
+        start_records = [r for r in caplog.records if r.msg == "Setup initialization starting"]
+        success_records = [r for r in caplog.records if r.msg == "Setup complete"]
+        assert len(request_records) == 1
+        assert len(start_records) == 1
+        assert len(success_records) == 1
+        assert success_records[0].operation_surface == "setup.initialize"
+        assert success_records[0].result == "created_admin_user"
+        assert success_records[0].requested_username == "admin"
+        assert success_records[0].groups_created_count == 1
+        assert success_records[0].trust_proxy_headers is True
+        mock_run_os_setup.assert_called_once()
+        mock_set_trust_proxy_headers.assert_called_once_with(True)
+        mock_audit_add.assert_called_once()
+
+    @patch("app.routers.setup.AuditRepository.add")
+    @patch("app.routers.setup.database_service.set_trust_proxy_headers")
+    @patch("app.routers.setup._run_os_setup", return_value=([], "reconciled_existing_user"))
+    def test_initialize_logs_reconciled_user_message(
+        self,
+        mock_run_os_setup,
+        mock_set_trust_proxy_headers,
+        mock_audit_add,
+        unauthenticated_client,
+        caplog,
+    ):
+        caplog.set_level(logging.INFO, logger="app.routers.setup")
+
+        resp = unauthenticated_client.post(
+            "/setup/initialize",
+            json={
+                "username": "admin",
+                "password": "StrongPass#123",
+                "trust_proxy_headers": False,
+            },
+        )
+
+        assert resp.status_code == 200
+        success_records = [
+            r for r in caplog.records
+            if r.msg == "Setup complete. Existing OS admin user was reconciled, added to ecube-admins, and synced to ECUBE as an admin."
+        ]
+        assert len(success_records) == 1
+        assert success_records[0].operation_surface == "setup.initialize"
+        assert success_records[0].result == "reconciled_existing_user"
+        assert success_records[0].requested_username == "admin"
+        assert success_records[0].groups_created_count == 0
+        assert success_records[0].trust_proxy_headers is False
+        mock_run_os_setup.assert_called_once()
+        mock_set_trust_proxy_headers.assert_called_once_with(False)
+        mock_audit_add.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
