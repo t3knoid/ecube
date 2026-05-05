@@ -874,8 +874,10 @@ class TestSetupWizardLogging:
     @patch("app.routers.setup.seed_runtime_demo_environment")
     @patch("app.routers.setup.database_service.set_trust_proxy_headers")
     @patch("app.routers.setup._run_os_setup", return_value=(["ecube-admins"], "created_admin_user"))
+    @patch("app.routers.setup._is_setup_initialized_with_auto_migrate", side_effect=[False, False])
     def test_initialize_emits_request_start_and_success_logs(
         self,
+        mock_is_setup_initialized,
         mock_run_os_setup,
         mock_set_trust_proxy_headers,
         mock_seed_runtime_demo_environment,
@@ -886,14 +888,15 @@ class TestSetupWizardLogging:
         caplog.set_level(logging.INFO, logger="app.routers.setup")
         mock_seed_runtime_demo_environment.return_value = Mock(users_seeded=0, roles_seeded=0, jobs_seeded=0)
 
-        resp = unauthenticated_client.post(
-            "/setup/initialize",
-            json={
-                "username": "admin",
-                "password": "StrongPass#123",
-                "trust_proxy_headers": True,
-            },
-        )
+        with patch("app.config.Settings.is_demo_mode_enabled", return_value=False):
+            resp = unauthenticated_client.post(
+                "/setup/initialize",
+                json={
+                    "username": "admin",
+                    "password": "StrongPass#123",
+                    "trust_proxy_headers": True,
+                },
+            )
 
         assert resp.status_code == 200
         request_records = [r for r in caplog.records if r.msg == "Setup initialization requested"]
@@ -907,6 +910,7 @@ class TestSetupWizardLogging:
         assert success_records[0].requested_username == "admin"
         assert success_records[0].groups_created_count == 1
         assert success_records[0].trust_proxy_headers is True
+        assert mock_is_setup_initialized.call_count == 2
         mock_run_os_setup.assert_called_once()
         mock_set_trust_proxy_headers.assert_called_once_with(True)
         mock_seed_runtime_demo_environment.assert_not_called()
@@ -917,8 +921,10 @@ class TestSetupWizardLogging:
     @patch("app.routers.setup.seed_runtime_demo_environment")
     @patch("app.routers.setup.database_service.set_trust_proxy_headers")
     @patch("app.routers.setup._run_os_setup", return_value=([], "created_admin_user"))
+    @patch("app.routers.setup._is_setup_initialized_with_auto_migrate", side_effect=[False, False])
     def test_initialize_triggers_demo_runtime_seed_when_demo_mode_enabled(
         self,
+        mock_is_setup_initialized,
         mock_run_os_setup,
         mock_set_trust_proxy_headers,
         mock_seed_runtime_demo_environment,
@@ -930,8 +936,7 @@ class TestSetupWizardLogging:
         mock_get_os_user_provider.return_value = provider
         mock_seed_runtime_demo_environment.return_value = Mock(users_seeded=4, roles_seeded=4, jobs_seeded=0)
 
-        with patch("app.routers.setup.settings.is_demo_mode_enabled", return_value=True), \
-             patch("app.routers.setup.settings.role_resolver", "local"):
+        with patch("app.config.Settings.is_demo_mode_enabled", return_value=True):
             resp = unauthenticated_client.post(
                 "/setup/initialize",
                 json={
@@ -942,6 +947,7 @@ class TestSetupWizardLogging:
             )
 
         assert resp.status_code == 200
+        assert mock_is_setup_initialized.call_count == 2
         mock_run_os_setup.assert_called_once()
         mock_set_trust_proxy_headers.assert_called_once_with(False)
         mock_get_os_user_provider.assert_called_once()
