@@ -556,6 +556,18 @@ def _with_mount_namespace_flag(cmd: list[str]) -> Optional[list[str]]:
     return None
 
 
+def _with_nsenter_mount_namespace(cmd: list[str]) -> Optional[list[str]]:
+    """Wrap mount-related commands with nsenter when the host namespace differs."""
+    if not cmd:
+        return None
+
+    nsenter_bin = shutil.which("nsenter")
+    if not nsenter_bin:
+        return None
+
+    return [nsenter_bin, "-t", "1", "-m", *cmd]
+
+
 def _in_host_mount_namespace() -> bool:
     return shares_host_mount_namespace(
         on_self_read_error=True,
@@ -569,6 +581,11 @@ def _in_host_mount_namespace() -> bool:
 def _with_host_mount_namespace(cmd: list[str]) -> list[str]:
     if _in_host_mount_namespace():
         return _with_sudo(cmd)
+
+    nsenter_cmd = _with_nsenter_mount_namespace(cmd)
+    if nsenter_cmd is not None:
+        logger.warning("Mount namespace differs from host; using nsenter namespace helper")
+        return _with_sudo(nsenter_cmd)
 
     ns_flag_cmd = _with_mount_namespace_flag(cmd)
     if ns_flag_cmd is not None:

@@ -1866,6 +1866,7 @@ def test_linux_mount_provider_uses_mount_namespace_flag_when_host_namespace_read
     monkeypatch.setattr("app.services.mount_service.os.geteuid", lambda: 1000)
 
     with patch("app.services.mount_service.os.readlink", side_effect=["mnt:[2]", PermissionError("denied")]), \
+         patch("app.services.mount_service.shutil.which", return_value=None), \
          patch("subprocess.run") as mock_run, \
          patch.object(provider, "check_mounted", return_value=True):
         mock_run.return_value = MagicMock(returncode=0, stderr="", stdout="")
@@ -1880,6 +1881,30 @@ def test_linux_mount_provider_uses_mount_namespace_flag_when_host_namespace_read
     assert err is None
     cmd = mock_run.call_args_list[0].args[0]
     assert cmd[:5] == ["sudo", "-n", "/bin/mount", "-N", "/proc/1/ns/mnt"]
+
+
+def test_linux_mount_provider_prefers_nsenter_when_host_namespace_differs(monkeypatch):
+    provider = LinuxMountProvider()
+
+    monkeypatch.setattr("app.services.mount_service.settings.use_sudo", True)
+    monkeypatch.setattr("app.services.mount_service.os.geteuid", lambda: 1000)
+
+    with patch("app.services.mount_service.os.readlink", side_effect=["mnt:[2]", PermissionError("denied")]), \
+         patch("app.services.mount_service.shutil.which", return_value="/usr/bin/nsenter"), \
+         patch("subprocess.run") as mock_run, \
+         patch.object(provider, "check_mounted", return_value=True):
+        mock_run.return_value = MagicMock(returncode=0, stderr="", stdout="")
+
+        ok, err = provider.os_mount(
+            MountType.NFS,
+            "192.168.2.250:/mnt/Data/music",
+            "/mnt/music",
+        )
+
+    assert ok is True
+    assert err is None
+    cmd = mock_run.call_args_list[0].args[0]
+    assert cmd[:7] == ["sudo", "-n", "/usr/bin/nsenter", "-t", "1", "-m", "/bin/mount"]
 
 
 def test_linux_mount_provider_uses_direct_helper_on_fstab_option_failure():
