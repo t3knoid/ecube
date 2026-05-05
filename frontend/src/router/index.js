@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
+import { getPublicAuthConfig } from '@/api/auth.js'
 import { getSetupStatus } from '@/api/setup.js'
 import { AUDIT_ROLES, USERS_ROLES } from '@/constants/roles.js'
 import { EXPIRED_QUERY_KEY, EXPIRED_QUERY_VALUE } from '@/constants/auth.js'
@@ -140,6 +141,17 @@ router.beforeEach(async (to) => {
   }
 
   // Redirect to setup if system not initialized
+  if (!systemInitialized && to.name === 'login') {
+    try {
+      const publicConfig = await getPublicAuthConfig()
+      if (publicConfig?.demo_mode_enabled === true) {
+        return true
+      }
+    } catch {
+      // Keep the safe default below when public config is unavailable.
+    }
+  }
+
   if (!systemInitialized && to.name !== 'setup') {
     const currentTarget = to?.fullPath || to?.path || '(unknown)'
     emitRedirectTelemetry({
