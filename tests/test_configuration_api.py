@@ -322,6 +322,52 @@ class TestConfigurationEndpoints:
             settings.drive_mount_timeout_seconds = original_value
 
     @patch("app.services.configuration_service.database_service._write_env_settings")
+    def test_update_configuration_persists_network_mount_timeout_seconds(
+        self,
+        mock_write_env,
+        admin_client,
+    ):
+        original_value = settings.network_mount_timeout_seconds
+        try:
+            resp = admin_client.put(
+                "/admin/configuration",
+                json={"network_mount_timeout_seconds": 240},
+            )
+            assert resp.status_code == 200, resp.json()
+
+            payload = resp.json()
+            assert "network_mount_timeout_seconds" in payload["changed_settings"]
+            assert payload["restart_required"] is False
+
+            written = mock_write_env.call_args.args[0]
+            assert written.get("NETWORK_MOUNT_TIMEOUT_SECONDS") == "240"
+        finally:
+            settings.network_mount_timeout_seconds = original_value
+
+    @patch("app.services.configuration_service.database_service._write_env_settings")
+    def test_update_configuration_persists_mount_share_discovery_timeout_seconds(
+        self,
+        mock_write_env,
+        admin_client,
+    ):
+        original_value = settings.mount_share_discovery_timeout_seconds
+        try:
+            resp = admin_client.put(
+                "/admin/configuration",
+                json={"mount_share_discovery_timeout_seconds": 75},
+            )
+            assert resp.status_code == 200, resp.json()
+
+            payload = resp.json()
+            assert "mount_share_discovery_timeout_seconds" in payload["changed_settings"]
+            assert payload["restart_required"] is False
+
+            written = mock_write_env.call_args.args[0]
+            assert written.get("MOUNT_SHARE_DISCOVERY_TIMEOUT_SECONDS") == "75"
+        finally:
+            settings.mount_share_discovery_timeout_seconds = original_value
+
+    @patch("app.services.configuration_service.database_service._write_env_settings")
     def test_update_configuration_persists_callback_default_url(
         self,
         mock_write_env,

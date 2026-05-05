@@ -177,6 +177,8 @@ describe('MountsView removal flow', () => {
     mocks.getPublicAuthConfig.mockResolvedValue({
       demo_mode_enabled: false,
       default_nfs_client_version: '4.1',
+      network_mount_timeout_seconds: 180,
+      mount_share_discovery_timeout_seconds: 75,
       nfs_client_version_options: ['4.2', '4.1', '4.0', '3'],
     })
   })
@@ -323,7 +325,7 @@ describe('MountsView removal flow', () => {
       username: null,
       password: null,
       credentials_file: null,
-    })
+    }, { timeout: 180000 })
     expect(mocks.createMount).toHaveBeenCalledWith({
       type: 'SMB',
       remote_path: '//server/new-share',
@@ -331,7 +333,7 @@ describe('MountsView removal flow', () => {
       username: null,
       password: null,
       credentials_file: null,
-    })
+    }, { timeout: 180000 })
   })
 
   it('shows the configured NFS client version selector and submits the selected version for NFS mounts', async () => {
@@ -369,7 +371,7 @@ describe('MountsView removal flow', () => {
       username: null,
       password: null,
       credentials_file: null,
-    })
+    }, { timeout: 180000 })
     expect(mocks.createMount).toHaveBeenCalledWith({
       type: 'NFS',
       remote_path: '192.168.20.240:/volume1/demo-case-001',
@@ -378,7 +380,7 @@ describe('MountsView removal flow', () => {
       username: null,
       password: null,
       credentials_file: null,
-    })
+    }, { timeout: 180000 })
   })
 
   it('omits the per-mount NFS version when the dialog is left on the default option', async () => {
@@ -413,7 +415,7 @@ describe('MountsView removal flow', () => {
       username: null,
       password: null,
       credentials_file: null,
-    })
+    }, { timeout: 180000 })
     expect(mocks.createMount).toHaveBeenCalledWith({
       type: 'NFS',
       remote_path: '192.168.20.240:/volume1/default-share',
@@ -421,7 +423,7 @@ describe('MountsView removal flow', () => {
       username: null,
       password: null,
       credentials_file: null,
-    })
+    }, { timeout: 180000 })
   })
 
   it('moves focus into the add mount dialog and closes it on Escape', async () => {
@@ -589,7 +591,7 @@ describe('MountsView removal flow', () => {
       username: 'svc-reader',
       password: 'top-secret',
       credentials_file: null,
-    })
+    }, { timeout: 75000 })
     expect(wrapper.text()).toContain(i18n.global.t('mounts.browseSharesTitle'))
     expect(wrapper.find('.share-browser-panel').exists()).toBe(true)
     expect(wrapper.find('.share-discovery-scroll').exists()).toBe(true)

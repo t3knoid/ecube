@@ -87,7 +87,7 @@ Setup initialize behavior:
 
 Authentication response behavior:
 
-- `GET /auth/public-config` returns public-safe frontend runtime metadata. This includes demo/login metadata plus non-secret UI defaults such as `default_nfs_client_version` and `drive_mount_timeout_seconds`. When demo mode is enabled and `DEMO_SHARED_PASSWORD` is left empty, the `shared_password` field is derived from the active Password Policy settings rather than from a fixed built-in literal.
+- `GET /auth/public-config` returns public-safe frontend runtime metadata. This includes demo/login metadata plus non-secret UI defaults such as `default_nfs_client_version`, `drive_mount_timeout_seconds`, `network_mount_timeout_seconds`, and `mount_share_discovery_timeout_seconds`. When demo mode is enabled and `DEMO_SHARED_PASSWORD` is left empty, the `shared_password` field is derived from the active Password Policy settings rather than from a fixed built-in literal.
 - `POST /auth/token` returns `401` with `reason="password_expired"` when PAM requires an immediate password change, and `401` with `reason="account_expired"` when the account itself has expired.
 - Successful `POST /auth/token` responses can include `password_expiration_warning_days` when the account is inside the warning window.
 - `POST /auth/change-password` accepts `{ "username", "current_password", "new_password" }`, returns a fresh bearer token on success, and returns `422` when PAM rejects the proposed replacement password.

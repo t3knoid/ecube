@@ -619,6 +619,14 @@
         "label": "Default NFS Client Version",
         "help": "Preferred NFS protocol version used when a mount does not override it. Lower versions can avoid slow fallback on hosts that do not support NFS 4.2."
       },
+      "network_mount_timeout_seconds": {
+        "label": "Network Mount Timeout (seconds)",
+        "help": "Maximum time ECUBE allows SMB or NFS mount workflows to run before they are treated as failed. This setting also applies to related unmount and mount-state verification checks. Increase this for slow file servers, DNS resolution, or authentication handshakes."
+      },
+      "mount_share_discovery_timeout_seconds": {
+        "label": "Mount Share Discovery Timeout (seconds)",
+        "help": "Maximum time ECUBE allows SMB share or NFS export discovery to run before it is treated as failed. Increase this for slow file servers or networks."
+      },
       "db_pool_size": {
         "label": "DB Pool Size"
       },

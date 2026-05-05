@@ -48,6 +48,8 @@ class ConfigurationUpdateRequest(StrictIntMixin, BaseModel):
     mkfs_exfat_cluster_size: Optional[Literal["4K", "64K", "128K", "256K"]] = Field(default=None)
     drive_format_timeout_seconds: Optional[StrictInt] = Field(default=None, ge=1)
     drive_mount_timeout_seconds: Optional[StrictInt] = Field(default=None, ge=1)
+    network_mount_timeout_seconds: Optional[StrictInt] = Field(default=None, ge=1)
+    mount_share_discovery_timeout_seconds: Optional[StrictInt] = Field(default=None, ge=1)
     copy_job_timeout: Optional[StrictInt] = Field(default=None, ge=0)
     job_detail_files_page_size: Optional[StrictInt] = Field(default=None, ge=20, le=100)
     callback_default_url: Optional[StrictSafeStr] = Field(

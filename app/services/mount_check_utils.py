@@ -51,15 +51,21 @@ def _provider_supports_timeout_seconds(provider: MountProvider) -> bool:
     return supports
 
 
-def check_mounted_with_configured_timeout(provider: MountProvider, local_mount_point: str) -> Optional[bool]:
+def check_mounted_with_configured_timeout(
+    provider: MountProvider,
+    local_mount_point: str,
+    *,
+    timeout_seconds: Optional[float] = None,
+) -> Optional[bool]:
     """Invoke mount checks with configured timeout and support legacy provider signatures.
     
     Capability is cached per provider instance to avoid repeated expensive signature inspection.
     If signature inspection fails, provider is conservatively treated as not supporting timeout_seconds.
     """
     if _provider_supports_timeout_seconds(provider):
+        effective_timeout = settings.subprocess_timeout_seconds if timeout_seconds is None else timeout_seconds
         return provider.check_mounted(
             local_mount_point,
-            timeout_seconds=settings.subprocess_timeout_seconds,
+            timeout_seconds=effective_timeout,
         )
     return provider.check_mounted(local_mount_point)

@@ -49,6 +49,14 @@ _MOUNT_PATH_VIEWER_ROLES = frozenset({"admin", "manager"})
 _REDACTED_MOUNT_PATH_VALUE = "[REDACTED]"
 
 
+def _network_mount_timeout_seconds() -> int:
+    return int(getattr(settings, "network_mount_timeout_seconds", settings.subprocess_timeout_seconds) or settings.subprocess_timeout_seconds)
+
+
+def _mount_share_discovery_timeout_seconds() -> int:
+    return int(getattr(settings, "mount_share_discovery_timeout_seconds", settings.subprocess_timeout_seconds) or settings.subprocess_timeout_seconds)
+
+
 def _log_mount_debug_failure(
     message: str,
     *,
@@ -111,7 +119,7 @@ class LinuxMountProvider:
                 [showmount_bin, "-e", server],
                 capture_output=True,
                 text=True,
-                timeout=settings.subprocess_timeout_seconds,
+                timeout=_mount_share_discovery_timeout_seconds(),
             )
             if result.returncode != 0:
                 error = (result.stderr or result.stdout or "").strip() or "showmount failed"
@@ -144,7 +152,7 @@ class LinuxMountProvider:
             cmd,
             capture_output=True,
             text=True,
-            timeout=settings.subprocess_timeout_seconds,
+            timeout=_mount_share_discovery_timeout_seconds(),
         )
         if result.returncode != 0:
             error = (result.stderr or result.stdout or "").strip() or "smbclient failed"
@@ -218,7 +226,7 @@ class LinuxMountProvider:
             )
         logger.info("Executing mount command: type=%s mount_label=%s", mount_type.value, mount_label)
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=settings.subprocess_timeout_seconds)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=_network_mount_timeout_seconds())
         except subprocess.TimeoutExpired as exc:
             logger.warning(
                 "Mount command timed out: type=%s mount_label=%s reason=%s",
@@ -302,7 +310,7 @@ class LinuxMountProvider:
                                 direct_cmd,
                                 capture_output=True,
                                 text=True,
-                                timeout=settings.subprocess_timeout_seconds,
+                                timeout=_network_mount_timeout_seconds(),
                             )
                         except subprocess.TimeoutExpired as exc:
                             logger.warning(
@@ -365,7 +373,7 @@ class LinuxMountProvider:
             result = subprocess.run(
                 cmd,
                 capture_output=True, text=True,
-                timeout=settings.subprocess_timeout_seconds,
+                timeout=_network_mount_timeout_seconds(),
             )
             if result.returncode != 0:
                 error = (result.stderr or result.stdout or "").strip() or "umount failed"
@@ -399,7 +407,7 @@ class LinuxMountProvider:
 
     def check_mounted(self, local_mount_point: str, *, timeout_seconds: Optional[float] = None) -> Optional[bool]:
         try:
-            default_timeout = settings.subprocess_timeout_seconds
+            default_timeout = _network_mount_timeout_seconds()
             timeout = default_timeout if timeout_seconds is None or timeout_seconds <= 0 else timeout_seconds
             if not _in_host_mount_namespace():
                 local_path = os.path.normpath(local_mount_point)
@@ -1054,7 +1062,11 @@ def _restore_mount_after_candidate_validation(
     original_was_mounted: bool,
 ) -> Optional[str]:
     local_mount_point = str(mount.local_mount_point)
-    current_result = check_mounted_with_configured_timeout(provider, local_mount_point)
+    current_result = check_mounted_with_configured_timeout(
+        provider,
+        local_mount_point,
+        timeout_seconds=_network_mount_timeout_seconds(),
+    )
 
     if current_result is True:
         try:
@@ -1906,7 +1918,11 @@ def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None,
         original_status = mount.status
         original_mount_type = mount.type if isinstance(mount.type, MountType) else MountType(str(mount.type))
         original_remote_path = str(mount.remote_path)
-        original_mount_state = check_mounted_with_configured_timeout(provider, str(mount.local_mount_point))
+        original_mount_state = check_mounted_with_configured_timeout(
+            provider,
+            str(mount.local_mount_point),
+            timeout_seconds=_network_mount_timeout_seconds(),
+        )
         original_was_mounted = original_mount_state is True or original_status == MountStatus.MOUNTED
 
         candidate_status = MountStatus.ERROR
@@ -2017,7 +2033,11 @@ def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None,
             last_checked_at=checked_at,
         )
 
-    result = check_mounted_with_configured_timeout(provider, mount.local_mount_point)
+    result = check_mounted_with_configured_timeout(
+        provider,
+        mount.local_mount_point,
+        timeout_seconds=_network_mount_timeout_seconds(),
+    )
     if result is True:
         mount.status = MountStatus.MOUNTED
     else:

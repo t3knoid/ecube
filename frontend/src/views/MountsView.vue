@@ -79,6 +79,8 @@ const shareBrowserTitleId = 'mount-share-browser-title'
 const publicAuthConfig = ref({
   demo_mode_enabled: false,
   default_nfs_client_version: '4.1',
+  network_mount_timeout_seconds: 120,
+  mount_share_discovery_timeout_seconds: 60,
   nfs_client_version_options: ['4.2', '4.1', '4.0', '3'],
 })
 
@@ -111,6 +113,16 @@ const nfsClientVersionSelectOptions = computed(() => [
   },
   ...nfsClientVersionOptions.value.map((option) => ({ value: option, label: option })),
 ])
+
+function networkMountTimeoutMs() {
+  const seconds = Number(publicAuthConfig.value?.network_mount_timeout_seconds)
+  return (Number.isFinite(seconds) && seconds >= 1 ? seconds : 120) * 1000
+}
+
+function mountShareDiscoveryTimeoutMs() {
+  const seconds = Number(publicAuthConfig.value?.mount_share_discovery_timeout_seconds)
+  return (Number.isFinite(seconds) && seconds >= 1 ? seconds : 60) * 1000
+}
 
 const columns = computed(() => {
   const nextColumns = [
@@ -236,6 +248,8 @@ async function loadPublicAuthConfig() {
     publicAuthConfig.value = {
       demo_mode_enabled: Boolean(config?.demo_mode_enabled),
       default_nfs_client_version: String(config?.default_nfs_client_version || '4.1'),
+      network_mount_timeout_seconds: Number(config?.network_mount_timeout_seconds) || 120,
+      mount_share_discovery_timeout_seconds: Number(config?.mount_share_discovery_timeout_seconds) || 60,
       nfs_client_version_options: Array.isArray(config?.nfs_client_version_options) && config.nfs_client_version_options.length
         ? config.nfs_client_version_options.map((value) => String(value))
         : ['4.2', '4.1', '4.0', '3'],
@@ -244,6 +258,8 @@ async function loadPublicAuthConfig() {
     publicAuthConfig.value = {
       demo_mode_enabled: false,
       default_nfs_client_version: '4.1',
+      network_mount_timeout_seconds: 120,
+      mount_share_discovery_timeout_seconds: 60,
       nfs_client_version_options: ['4.2', '4.1', '4.0', '3'],
     }
   }
@@ -403,7 +419,7 @@ async function submitMountDialog() {
   try {
     const payload = buildMountPayload()
     if (isEditMode.value && editingMountId.value !== null) {
-      const updatedMount = await updateMount(editingMountId.value, payload)
+      const updatedMount = await updateMount(editingMountId.value, payload, { timeout: networkMountTimeoutMs() })
       replaceMount(updatedMount)
       if (updatedMount?.status === 'ERROR') {
         dialogError.value = t('mounts.updateFailed')
@@ -411,7 +427,7 @@ async function submitMountDialog() {
       }
       successMessage.value = t('mounts.updateSuccess')
     } else {
-      await createMount(payload)
+      await createMount(payload, { timeout: networkMountTimeoutMs() })
       successMessage.value = t('mounts.createSuccess')
     }
     showAddDialog.value = false
@@ -433,8 +449,8 @@ async function runDialogValidate() {
   try {
     const payload = buildMountPayload()
     const result = isEditMode.value && editingMountId.value !== null
-      ? await validateMount(editingMountId.value, payload)
-      : await validateMountCandidate(payload)
+      ? await validateMount(editingMountId.value, payload, { timeout: networkMountTimeoutMs() })
+      : await validateMountCandidate(payload, { timeout: networkMountTimeoutMs() })
     if (result?.status === 'MOUNTED') {
       dialogValidationPassed.value = true
       dialogSuccessMessage.value = t('mounts.testSuccess')
@@ -458,7 +474,7 @@ async function openShareBrowser(event) {
   discoveredShares.value = []
 
   try {
-    const result = await discoverMountShares(buildShareDiscoveryPayload())
+    const result = await discoverMountShares(buildShareDiscoveryPayload(), { timeout: mountShareDiscoveryTimeoutMs() })
     discoveredShares.value = Array.isArray(result?.shares) ? result.shares : []
   } catch (requestError) {
     shareBrowserError.value = normalizeErrorMessage(requestError?.response?.data, t('mounts.browseSharesFailed'))

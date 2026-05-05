@@ -47,6 +47,8 @@ function buildResponse(overrides = {}) {
     mkfs_exfat_cluster_size: '4K',
     drive_format_timeout_seconds: 900,
     drive_mount_timeout_seconds: 120,
+    network_mount_timeout_seconds: 120,
+    mount_share_discovery_timeout_seconds: 60,
     copy_job_timeout: 3600,
     job_detail_files_page_size: 40,
     callback_default_url: null,
@@ -272,6 +274,48 @@ describe('ConfigurationView logging defaults', () => {
     await flushPromises()
 
     expect(mocks.updateConfiguration).toHaveBeenCalledWith({ drive_mount_timeout_seconds: 480 })
+  })
+
+  it('loads and saves the network mount timeout', async () => {
+    mocks.getConfiguration.mockResolvedValue(buildResponse({ network_mount_timeout_seconds: 420 }))
+    mocks.updateConfiguration.mockResolvedValue({
+      restart_required: false,
+      restart_required_settings: [],
+      applied_immediately: ['network_mount_timeout_seconds'],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const timeoutInput = wrapper.find('#cfg-network-mount-timeout-seconds')
+    expect(timeoutInput.element.value).toBe('420')
+
+    await timeoutInput.setValue('600')
+    await wrapper.find('.action-row .btn.btn-primary').trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateConfiguration).toHaveBeenCalledWith({ network_mount_timeout_seconds: 600 })
+  })
+
+  it('loads and saves the mount share discovery timeout', async () => {
+    mocks.getConfiguration.mockResolvedValue(buildResponse({ mount_share_discovery_timeout_seconds: 90 }))
+    mocks.updateConfiguration.mockResolvedValue({
+      restart_required: false,
+      restart_required_settings: [],
+      applied_immediately: ['mount_share_discovery_timeout_seconds'],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const timeoutInput = wrapper.find('#cfg-mount-share-discovery-timeout-seconds')
+    expect(timeoutInput.element.value).toBe('90')
+
+    await timeoutInput.setValue('150')
+    await wrapper.find('.action-row .btn.btn-primary').trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateConfiguration).toHaveBeenCalledWith({ mount_share_discovery_timeout_seconds: 150 })
   })
 
   it('loads and saves the system-wide callback default URL', async () => {

@@ -116,6 +116,14 @@ class TestSettingsDefaults:
         s = Settings(database_url="sqlite://")
         assert s.drive_mount_timeout_seconds == 120
 
+    def test_network_mount_timeout_seconds_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.network_mount_timeout_seconds == 120
+
+    def test_mount_share_discovery_timeout_seconds_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.mount_share_discovery_timeout_seconds == 60
+
     def test_nfs_client_version_default(self):
         s = Settings(database_url="sqlite://")
         assert s.nfs_client_version == "4.1"
