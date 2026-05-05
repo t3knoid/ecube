@@ -74,6 +74,12 @@ Install a fresh Ubuntu 22.04 LTS on the machine and make sure you have `sudo` ac
 
 For releases that include PAM password-policy management or expired-password recovery, complete the password-policy package steps in section 2 before executing the authentication and admin-password test cases below.
 
+If a prior QA step disabled or manually edited the host password-quality PAM stack, restore the distro-managed baseline before continuing with setup, expired-password recovery, or admin password reset coverage:
+
+```bash
+sudo pam-auth-update
+```
+
 ---
 
 ## 2. Install System Packages
@@ -1019,6 +1025,8 @@ curl -sk -X POST https://localhost:8443/admin/configuration/restart \
 
 ### Password Expiration and Recovery
 
+If an earlier test temporarily disabled password-quality enforcement, run `sudo pam-auth-update` before this section so `POST /auth/change-password` is evaluated against the current host PAM stack rather than a manually bypassed configuration.
+
 | Scenario | Steps | Expected |
 |---|---|---|
 | Login returns forced password-change flow for expired local password | Expire a QA local user password with `sudo chage -d 0 qa-processor`, open `Login`, and sign in with the old password | The login page opens the non-dismissible `Password Change Required` dialog instead of routing to the dashboard or showing a generic invalid-credentials banner |
@@ -1574,6 +1582,8 @@ Run these checks when the tested build includes the in-app Help feature.
 ### 12.11 First-Run Setup
 
 Setup endpoints are unauthenticated during first-run.
+
+If password-quality coverage was disabled earlier on the test machine, run `sudo pam-auth-update` before executing the initialize scenarios below so setup exercises the managed host PAM policy instead of a locally bypassed `common-password` stack.
 
 | # | Test | How | Expected |
 |---|------|-----|----------|
