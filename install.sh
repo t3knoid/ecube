@@ -1016,6 +1016,58 @@ run() {
   fi
 }
 
+_cleanup_managed_role_group() {
+  local group_name="$1"
+  local members=""
+
+  if ! getent group "${group_name}" &>/dev/null; then
+    return 0
+  fi
+
+  members="$(getent group "${group_name}" 2>/dev/null | cut -d: -f4)"
+  if [[ -n "${members}" ]]; then
+    if command -v gpasswd &>/dev/null; then
+      local member
+      for member in ${members//,/ }; do
+        if [[ "${DRY_RUN}" == true ]]; then
+          echo -e "${C_YELLOW}[DRY-RUN]${C_RESET} gpasswd -d ${member} ${group_name}"
+        else
+          gpasswd -d "${member}" "${group_name}" >/dev/null 2>&1 || true
+        fi
+      done
+    else
+      warn "gpasswd not found — unable to deregister members from '${group_name}' before group deletion"
+    fi
+  fi
+
+  if command -v groupdel &>/dev/null; then
+    if [[ "${DRY_RUN}" == true ]]; then
+      echo -e "${C_YELLOW}[DRY-RUN]${C_RESET} groupdel ${group_name}"
+    elif groupdel "${group_name}" 2>/dev/null; then
+      ok "Group '${group_name}' removed"
+    else
+      warn "Could not remove managed role group '${group_name}' — remove manually: sudo groupdel ${group_name}"
+    fi
+  else
+    warn "groupdel not found — group '${group_name}' not removed; remove manually with: groupdel ${group_name}"
+  fi
+}
+
+_cleanup_managed_role_groups() {
+  local ecube_role_groups=(
+    "ecube-admins"
+    "ecube-managers"
+    "ecube-processors"
+    "ecube-auditors"
+  )
+  local group_name
+
+  info "Removing managed ECUBE role groups because --drop-database was requested..."
+  for group_name in "${ecube_role_groups[@]}"; do
+    _cleanup_managed_role_group "${group_name}"
+  done
+}
+
 _configured_usb_mount_base_path() {
   local env_file="${INSTALL_DIR}/.env"
   local configured_path=""
@@ -2482,6 +2534,7 @@ do_uninstall() {
     # Best-effort cleanup of the PostgreSQL superuser created for setup wizard
     # provisioning, resolved from persisted install state in .env.
     _cleanup_pg_superuser_role
+    _cleanup_managed_role_groups
   fi
 
   # Remove nginx ecube site (legacy; may exist from an earlier install)
