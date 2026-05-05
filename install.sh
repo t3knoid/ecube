@@ -1019,9 +1019,26 @@ run() {
 _cleanup_managed_role_group() {
   local group_name="$1"
   local members=""
+  local group_gid=""
+  local primary_group_users=""
 
   if ! getent group "${group_name}" &>/dev/null; then
     return 0
+  fi
+
+  group_gid="$(getent group "${group_name}" 2>/dev/null | cut -d: -f3)"
+  if [[ -n "${group_gid}" ]]; then
+    primary_group_users="$(getent passwd 2>/dev/null | awk -F: -v gid="${group_gid}" '$4 == gid { print $1 }')"
+    if [[ -n "${primary_group_users}" ]]; then
+      local primary_user
+      for primary_user in ${primary_group_users}; do
+        if [[ "${DRY_RUN}" == true ]]; then
+          echo -e "${C_YELLOW}[DRY-RUN]${C_RESET} userdel -r ${primary_user}"
+        else
+          userdel -r "${primary_user}" >/dev/null 2>&1 || true
+        fi
+      done
+    fi
   fi
 
   members="$(getent group "${group_name}" 2>/dev/null | cut -d: -f4)"
