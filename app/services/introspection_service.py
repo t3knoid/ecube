@@ -5,11 +5,13 @@ from __future__ import annotations
 import logging
 import os
 import time
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models.jobs import ExportJob, JobStatus
 from app.services.copy_worker_runtime import list_active_copy_workers
 from app.utils.sanitize import sanitize_error_message
@@ -20,6 +22,34 @@ logger = logging.getLogger(__name__)
 _PROCESS_CPU_SAMPLER: Any | None = None
 _PROCESS_CPU_SAMPLER_PID: int | None = None
 _PROCESS_CPU_SAMPLER_PRIMED = False
+
+
+def _build_cross_process_copy_worker_fallback(job: ExportJob) -> list[dict[str, Any]]:
+    configured_thread_count = int(job.thread_count or settings.copy_default_thread_count)
+    started_at = job.started_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z") if job.started_at else ""
+    elapsed_seconds: float | None = None
+    if job.started_at is not None:
+        started_at_utc = job.started_at.astimezone(timezone.utc)
+        elapsed_seconds = round(max((datetime.now(timezone.utc) - started_at_utc).total_seconds(), 0.0), 3)
+
+    return [
+        {
+            "job_id": int(job.id),
+            "project_id": job.project_id,
+            "job_status": job.status.value if job.status else None,
+            "configured_thread_count": configured_thread_count,
+            "worker_label": f"copy-job-{int(job.id)}_{index}",
+            "started_at": started_at,
+            "elapsed_seconds": elapsed_seconds,
+            "cpu_user_seconds": None,
+            "cpu_system_seconds": None,
+            "cpu_time_seconds": None,
+            "memory_bytes": None,
+            "metrics_available": False,
+            "metrics_note": "Active copy worker is running in another ECUBE worker process; showing configured copy threads from the running job.",
+        }
+        for index in range(configured_thread_count)
+    ]
 
 
 def _get_process_cpu_sampler(psutil_module: Any) -> Any | None:
@@ -146,6 +176,7 @@ def _build_ecube_process_metrics(
     global _PROCESS_CPU_SAMPLER_PRIMED
 
     active_workers = list_active_copy_workers()
+    running_jobs: list[ExportJob] = []
     process_cpu_percent: float | None = None
     process_cpu_time_seconds: float | None = None
     memory_rss_bytes: int | None = None
@@ -211,6 +242,21 @@ def _build_ecube_process_metrics(
                     exc_info=True,
                 )
 
+    if db_status == "connected" and not active_workers:
+        try:
+            running_jobs = (
+                db.query(ExportJob)
+                .filter(ExportJob.status == JobStatus.RUNNING)
+                .order_by(ExportJob.id.asc())
+                .all()
+            )
+        except Exception:
+            logger.info("System health could not load running jobs for cross-process copy worker fallback")
+            logger.debug(
+                "Cross-process active copy worker fallback query failed",
+                exc_info=True,
+            )
+
     active_copy_threads: list[dict[str, Any]] = []
     now_monotonic = time.monotonic()
     for worker in active_workers:
@@ -250,6 +296,10 @@ def _build_ecube_process_metrics(
                 "metrics_note": metrics_note,
             }
         )
+
+    if not active_copy_threads and running_jobs:
+        for job in running_jobs:
+            active_copy_threads.extend(_build_cross_process_copy_worker_fallback(job))
 
     active_copy_threads.sort(key=lambda item: (item["job_id"], item["worker_label"]))
 

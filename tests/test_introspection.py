@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, mock_open, patch
 
@@ -264,6 +265,43 @@ def test_system_health_degrades_safely_when_active_worker_job_correlation_fails(
     assert payload[0]["project_id"] is None
     assert payload[0]["job_status"] is None
     assert payload[0]["configured_thread_count"] is None
+
+
+def test_system_health_falls_back_to_running_jobs_when_active_workers_live_in_another_process(client, db):
+    from app.models.jobs import ExportJob, JobStatus
+
+    job = ExportJob(
+        project_id="PROJ-XPROC",
+        evidence_number="EV-XPROC",
+        source_path="/data/xproc",
+        status=JobStatus.RUNNING,
+        thread_count=3,
+        started_at=datetime(2026, 5, 4, 22, 0, 0, tzinfo=timezone.utc),
+    )
+    db.add(job)
+    db.commit()
+
+    with (
+        patch("app.routers.introspection._PSUTIL_AVAILABLE", False),
+        patch("app.services.introspection_service.list_active_copy_workers", return_value=[]),
+    ):
+        response = client.get("/introspection/system-health")
+
+    assert response.status_code == 200
+    ecube_process = response.json()["ecube_process"]
+    assert ecube_process["active_copy_thread_count"] == 3
+    assert len(ecube_process["active_copy_threads"]) == 3
+    assert [item["worker_label"] for item in ecube_process["active_copy_threads"]] == [
+        f"copy-job-{job.id}_0",
+        f"copy-job-{job.id}_1",
+        f"copy-job-{job.id}_2",
+    ]
+    assert all(item["job_id"] == job.id for item in ecube_process["active_copy_threads"])
+    assert all(item["project_id"] == "PROJ-XPROC" for item in ecube_process["active_copy_threads"])
+    assert all(item["job_status"] == "RUNNING" for item in ecube_process["active_copy_threads"])
+    assert all(item["configured_thread_count"] == 3 for item in ecube_process["active_copy_threads"])
+    assert all(item["metrics_available"] is False for item in ecube_process["active_copy_threads"])
+    assert all("another ECUBE worker process" in item["metrics_note"] for item in ecube_process["active_copy_threads"])
 
 
 def test_system_health_worker_queue_size(client, db):
