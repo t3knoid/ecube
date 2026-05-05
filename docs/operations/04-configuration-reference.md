@@ -76,17 +76,17 @@ These settings control the behaviour of the first-run setup wizard before the ap
 
 ## Demo Mode
 
-ECUBE demo mode is controlled by `.env` settings plus the install-root `demo-metadata.json` file. At runtime, ECUBE reads `demo-metadata.json` from the application root (for example `/opt/ecube/demo-metadata.json`) to derive demo login guidance, shared-password behavior, and demo account metadata.
+ECUBE demo mode is controlled by `.env` settings only at runtime. `demo-metadata.json` is install/bootstrap input for `install.sh --demo` and `ecube-demo-bootstrap`; the installer copies its demo settings into `.env` so the running application does not need to read metadata files.
 
 | Variable | Default | Description |
 | -------- | ------- | ----------- |
-| `DEMO_MODE` | `false` | Enables demo-mode restrictions and demo-aware login behavior. When a seeded `demo-metadata.json` is present, the runtime can remain in demo mode even if this flag is later set back to `false`. |
-| `DEMO_LOGIN_MESSAGE` | `Use the shared demo accounts below.` | Optional fallback login message when the metadata file does not provide one. |
-| `DEMO_SHARED_PASSWORD` | `demo` | Optional fallback shared password used for demo account seeding when the metadata file does not provide one. In demo mode it is exposed by the public auth payload and login screen so self-serve demo users can sign in. |
+| `DEMO_MODE` | `false` | Enables demo-mode restrictions and demo-aware login behavior. If this flag is `false`, runtime demo restrictions are disabled even if an installed `demo-metadata.json` file exists. |
+| `DEMO_LOGIN_MESSAGE` | `Use the shared demo accounts below.` | Login guidance shown in the public auth payload and login screen while demo mode is enabled. |
+| `DEMO_SHARED_PASSWORD` | generated from active password policy | Shared demo password exposed by the public auth payload and login screen for self-serve demo sign-in while demo mode is enabled. When this variable is left empty, ECUBE derives a policy-friendly default from the active Password Policy settings. Startup reconciliation also applies this password to configured demo OS accounts when demo mode is enabled, so the effective value must satisfy the active PAM password policy when host password-policy enforcement is enabled. |
 | `DEMO_DISABLE_PASSWORD_CHANGE` | `true` | Blocks password-change flows for demo accounts. The public auth payload exposes the inverse as `password_change_allowed`. |
-| `DEMO_ACCOUNTS` | built-in demo personas | Optional fallback JSON array of demo account definitions used only when no metadata file is present. |
+| `DEMO_ACCOUNTS` | built-in demo personas | JSON array of demo account definitions shown on the login screen while demo mode is enabled. Startup reconciliation also ensures these accounts exist as demo OS users and have the listed ECUBE roles. |
 
-The supported metadata contract now uses only `managed_by`, `generated_at`, and `demo_config`. Legacy `usb_seed`, `mount_seed`, `job_seed`, `projects`, and separate demo-data-root configuration are no longer part of the supported runtime configuration model.
+The supported metadata contract now uses only `managed_by`, `generated_at`, and `demo_config` for demo install/bootstrap input. Legacy `usb_seed`, `mount_seed`, `job_seed`, `projects`, and separate demo-data-root configuration are no longer part of the supported model.
 
 ---
 

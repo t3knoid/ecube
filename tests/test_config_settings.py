@@ -17,6 +17,7 @@ from pydantic import ValidationError
 
 from app.auth_providers import LdapGroupRoleResolver, get_role_resolver
 from app.config import Settings
+from app.utils.password_policy import DEFAULT_PASSWORD_POLICY_VALUES
 from app.models.audit import AuditLog
 from app.models.jobs import ExportFile, ExportJob, FileStatus, JobStatus
 from app.repositories.audit_repository import AuditRepository
@@ -259,6 +260,94 @@ class TestSettingsDefaults:
     def test_serve_frontend_path_root_rejected(self):
         with pytest.raises(ValueError, match="system root"):
             Settings(database_url="sqlite://", serve_frontend_path="/")
+
+
+class TestDemoRuntimeBehavior:
+    """Demo behavior is driven by runtime environment values only."""
+
+    def test_demo_runtime_helpers_use_env_values_only(self):
+        s = Settings(
+            database_url="sqlite://",
+            demo_mode=True,
+            demo_login_message="Use the shared demo accounts below.",
+            demo_shared_password="Demo#123456",
+            demo_accounts=[{"username": "demo_admin", "label": "Admin demo", "description": "Guided walkthrough"}],
+            demo_disable_password_change=False,
+        )
+
+        assert s.is_demo_mode_enabled() is True
+        assert s.get_demo_login_message() == "Use the shared demo accounts below."
+        assert s.get_demo_shared_password() == "Demo#123456"
+        assert s.get_demo_accounts() == [
+            {"username": "demo_admin", "label": "Admin demo", "description": "Guided walkthrough"}
+        ]
+        assert s.get_demo_disable_password_change() is False
+
+    def test_demo_runtime_helpers_fall_back_to_built_in_defaults(self):
+        s = Settings(
+            database_url="sqlite://",
+            demo_mode=True,
+            demo_login_message="",
+            demo_shared_password="",
+            demo_accounts=[],
+        )
+
+        assert s.is_demo_mode_enabled() is True
+        assert s.get_demo_login_message() == "Use the shared demo accounts below."
+        generated_password = s.get_demo_shared_password()
+        assert len(generated_password) >= DEFAULT_PASSWORD_POLICY_VALUES["minlen"]
+        assert any(ch.islower() for ch in generated_password)
+        assert any(ch.isupper() for ch in generated_password)
+        assert any(ch.isdigit() for ch in generated_password)
+        assert s.get_demo_accounts() == [
+            {
+                "username": "demo_admin",
+                "label": "Admin demo",
+                "description": "Full demo access for guided product walkthroughs.",
+                "roles": ["admin"],
+            },
+            {
+                "username": "demo_manager",
+                "label": "Manager demo",
+                "description": "Drive lifecycle, mounts, and job visibility.",
+                "roles": ["manager"],
+            },
+            {
+                "username": "demo_processor",
+                "label": "Processor demo",
+                "description": "Create and review sanitized export activity.",
+                "roles": ["processor"],
+            },
+            {
+                "username": "demo_auditor",
+                "label": "Auditor demo",
+                "description": "Read-only audit and verification review.",
+                "roles": ["auditor"],
+            },
+        ]
+        assert s.get_demo_disable_password_change() is True
+
+    def test_demo_runtime_shared_password_follows_active_password_policy(self, tmp_path):
+        policy_path = tmp_path / "pwquality.conf"
+        policy_path.write_text(
+            "minlen = 18\nminclass = 4\nmaxrepeat = 1\nmaxsequence = 2\nmaxclassrepeat = 1\n",
+            encoding="utf-8",
+        )
+
+        s = Settings(
+            database_url="sqlite://",
+            demo_mode=True,
+            demo_shared_password="",
+            pwquality_conf_path=str(policy_path),
+        )
+
+        generated_password = s.get_demo_shared_password()
+
+        assert len(generated_password) >= 18
+        assert any(ch.islower() for ch in generated_password)
+        assert any(ch.isupper() for ch in generated_password)
+        assert any(ch.isdigit() for ch in generated_password)
+        assert any(not ch.isalnum() for ch in generated_password)
 
     def test_serve_frontend_path_system_dir_rejected(self):
         for dangerous in ("/etc", "/var", "/tmp", "/usr", "/home"):

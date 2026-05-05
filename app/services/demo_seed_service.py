@@ -144,6 +144,50 @@ def reset_demo_environment(
     )
 
 
+def seed_runtime_demo_environment(
+    db: Session,
+    *,
+    provider: OsUserProvider | None = None,
+    actor: str = "system",
+) -> DemoSeedResult:
+    """Seed demo users and roles from runtime DEMO_* settings only."""
+    accounts = _normalized_demo_accounts(settings.get_demo_accounts(), include_defaults=True)
+    effective_shared_password = settings.get_demo_shared_password() or None
+
+    roles_removed = _delete_demo_roles(db, [account["username"] for account in accounts])
+    if roles_removed:
+        db.commit()
+
+    roles_seeded = 0
+    users_seeded = 0
+    if provider is not None:
+        provider.ensure_ecube_groups()
+
+    for account in accounts:
+        roles_seeded += _set_demo_roles(db, account["username"], account["roles"])
+        if provider is not None:
+            _reconcile_demo_os_user(provider, account, effective_shared_password)
+            users_seeded += 1
+
+    AuditRepository(db).add(
+        action="DEMO_RUNTIME_RECONCILED",
+        user=actor,
+        details={
+            "usernames": [account["username"] for account in accounts],
+            "roles_removed": roles_removed,
+            "jobs_removed": 0,
+            "jobs_seeded": 0,
+            "source": "runtime_env",
+        },
+    )
+
+    return DemoSeedResult(
+        users_seeded=users_seeded,
+        roles_seeded=roles_seeded,
+        jobs_seeded=0,
+    )
+
+
 def _load_seed_metadata(metadata_path: str | Path | None = None) -> dict[str, Any]:
     resolved_metadata_path: Path
     if metadata_path is not None:

@@ -13,32 +13,14 @@ from app.infrastructure.password_policy_protocol import (
     PasswordExpirationInfo,
     PasswordPolicyError,
 )
+from app.utils.password_policy import (
+    WRITABLE_PASSWORD_POLICY_KEYS,
+    parse_pwquality_policy_values,
+)
 
 logger = logging.getLogger(__name__)
 
 _SUBPROCESS_TIMEOUT = settings.subprocess_timeout_seconds
-_WRITABLE_KEYS = (
-    "minlen",
-    "minclass",
-    "maxrepeat",
-    "maxsequence",
-    "maxclassrepeat",
-    "dictcheck",
-    "usercheck",
-    "difok",
-    "retry",
-)
-_DEFAULT_POLICY: dict[str, int] = {
-    "minlen": 14,
-    "minclass": 3,
-    "maxrepeat": 3,
-    "maxsequence": 4,
-    "maxclassrepeat": 0,
-    "dictcheck": 1,
-    "usercheck": 1,
-    "difok": 5,
-    "retry": 3,
-}
 _ENFORCE_FOR_ROOT_LINE = "enforce_for_root = 1"
 
 
@@ -62,13 +44,6 @@ def _run_root_command(cmd: list[str], *, stdin_data: str | None = None) -> subpr
     return result
 
 
-def _parse_pwquality_value(raw_value: str) -> int | None:
-    try:
-        return int(raw_value.strip())
-    except ValueError:
-        return None
-
-
 def _read_pwquality_text() -> str:
     path = Path(settings.pwquality_conf_path)
     if not path.exists():
@@ -76,23 +51,8 @@ def _read_pwquality_text() -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _parse_policy_values(text: str) -> dict[str, int]:
-    values = dict(_DEFAULT_POLICY)
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, raw_value = [part.strip() for part in line.split("=", 1)]
-        if key not in _WRITABLE_KEYS:
-            continue
-        parsed = _parse_pwquality_value(raw_value)
-        if parsed is not None:
-            values[key] = parsed
-    return values
-
-
 def _render_updated_policy(existing_text: str, values: dict[str, int]) -> str:
-    remaining_keys = set(_WRITABLE_KEYS)
+    remaining_keys = set(WRITABLE_PASSWORD_POLICY_KEYS)
     enforce_written = False
     rendered_lines: list[str] = []
 
@@ -116,7 +76,7 @@ def _render_updated_policy(existing_text: str, values: dict[str, int]) -> str:
     if rendered_lines and rendered_lines[-1].strip():
         rendered_lines.append("")
 
-    for key in _WRITABLE_KEYS:
+    for key in WRITABLE_PASSWORD_POLICY_KEYS:
         if key in remaining_keys:
             rendered_lines.append(f"{key} = {values[key]}")
 
@@ -184,15 +144,15 @@ class LinuxPasswordPolicyProvider:
     """Linux implementation for PAM password policy and expiry inspection."""
 
     def get_policy_settings(self) -> dict[str, int]:
-        return _parse_policy_values(_read_pwquality_text())
+        return parse_pwquality_policy_values(_read_pwquality_text())
 
     def update_policy_settings(self, updates: dict[str, int]) -> tuple[dict[str, int], dict[str, int]]:
-        unknown_keys = sorted(set(updates) - set(_WRITABLE_KEYS))
+        unknown_keys = sorted(set(updates) - set(WRITABLE_PASSWORD_POLICY_KEYS))
         if unknown_keys:
             raise ValueError(f"Unknown password policy key(s): {', '.join(unknown_keys)}")
 
         existing_text = _read_pwquality_text()
-        previous_values = _parse_policy_values(existing_text)
+        previous_values = parse_pwquality_policy_values(existing_text)
         next_values = dict(previous_values)
         next_values.update(updates)
 

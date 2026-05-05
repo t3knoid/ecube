@@ -70,6 +70,94 @@ target_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 PY
 }
 
+sync_demo_runtime_env() {
+  local env_file="$1"
+  local source_metadata="$2"
+  local shared_password="$3"
+
+  sudo python3 - <<'PY' "${env_file}" "${source_metadata}" "${shared_password}"
+import json
+import sys
+from pathlib import Path
+
+env_path = Path(sys.argv[1])
+source_metadata = Path(sys.argv[2])
+shared_password = sys.argv[3].strip()
+
+try:
+  payload = json.loads(source_metadata.read_text(encoding="utf-8"))
+except Exception:
+  payload = {}
+
+demo_config = payload.get("demo_config") if isinstance(payload, dict) else {}
+if not isinstance(demo_config, dict):
+  demo_config = {}
+
+login_message = demo_config.get("login_message")
+if not isinstance(login_message, str):
+  login_message = ""
+
+raw_accounts = demo_config.get("accounts", demo_config.get("demo_accounts", []))
+safe_accounts = []
+if isinstance(raw_accounts, list):
+  for raw in raw_accounts:
+    if not isinstance(raw, dict):
+      continue
+    username = str(raw.get("username", "")).strip()
+    if not username:
+      continue
+    safe_accounts.append(
+      {
+        "username": username,
+        "label": str(raw.get("label", "")).strip(),
+        "description": str(raw.get("description", "")).strip(),
+      }
+    )
+
+if "demo_disable_password_change" in demo_config:
+  disable_password_change = bool(demo_config["demo_disable_password_change"])
+elif "password_change_allowed" in demo_config:
+  disable_password_change = not bool(demo_config["password_change_allowed"])
+else:
+  disable_password_change = True
+
+updates = {
+  "DEMO_MODE": "true",
+  "DEMO_LOGIN_MESSAGE": login_message.strip(),
+  "DEMO_SHARED_PASSWORD": shared_password,
+  "DEMO_DISABLE_PASSWORD_CHANGE": "true" if disable_password_change else "false",
+  "DEMO_ACCOUNTS": json.dumps(safe_accounts, separators=(",", ":")),
+}
+
+
+def _format_env_value(value: str) -> str:
+  if value == "":
+    return ""
+  if value.startswith("[") or value.startswith("{"):
+    return value
+  if value != value.strip() or any(ch in value for ch in ('#', "\n", "\r")):
+    return json.dumps(value)
+  if any(ch in value for ch in ('"', "'")):
+    return json.dumps(value)
+  return value
+
+text = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
+lines = text.splitlines()
+
+for key, value in updates.items():
+  replacement = f"{key}={_format_env_value(value)}"
+  for index, line in enumerate(lines):
+    if line.startswith(f"{key}="):
+      lines[index] = replacement
+      break
+  else:
+    lines.append(replacement)
+
+env_path.parent.mkdir(parents=True, exist_ok=True)
+env_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+PY
+}
+
 usage() {
   cat <<EOF
 Usage: ./scripts/post_install_demo_setup.sh [shared-password]
@@ -222,6 +310,7 @@ fi
 
 DATABASE_URL="$(ensure_database_url "${ENV_FILE}" "${DEFAULT_DATABASE_URL}")"
 ensure_local_database_exists "${DATABASE_URL}"
+sync_demo_runtime_env "${ENV_FILE}" "${SOURCE_METADATA}" "${SHARED_PASSWORD}"
 
 sudo install -d -m 0755 "${INSTALL_DIR}"
 install_demo_metadata "${SOURCE_METADATA}" "${INSTALL_DIR}/demo-metadata.json" "${SHARED_PASSWORD}"

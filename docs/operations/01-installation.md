@@ -163,7 +163,7 @@ The installer will:
 14. Deploy the pre-built frontend to `<install-dir>/www` so FastAPI serves the SPA directly (no separate web server required).
 15. Optionally configure `ufw` firewall rules.
 
-If you run the installer with `--demo`, place `demo-metadata.json` next to `install.sh` before starting the install. The installer uses that file as the source of truth for demo accounts, login guidance, shared password behavior, and password-change policy, then runs the demo bootstrap automatically after migrations complete. If `demo_config.shared_password` is blank, the installer generates a strong shared password, writes it into the installed metadata, prints it in the completion summary, and the login page exposes it for demo users.
+If you run the installer with `--demo`, place `demo-metadata.json` next to `install.sh` before starting the install. The installer uses that file as trusted bootstrap input for demo accounts, login guidance, shared password behavior, and password-change policy, writes the resulting `DEMO_*` runtime values into `.env`, and then runs the demo bootstrap automatically after migrations complete. If `demo_config.shared_password` is blank, the installer generates a strong shared password, writes it into the installed metadata, prints it in the completion summary, and writes it into `.env` so the login page can expose it for demo users.
 
 At the end it prints a summary with the UI URL, API URL, and service management commands.
 
@@ -204,7 +204,7 @@ When PostgreSQL is available locally, the installer also creates (or updates) a 
 sudo ./install.sh --demo
 ```
 
-This mode enables `DEMO_MODE=true`, ensures the application database is ready, and seeds demo accounts from `demo-metadata.json` located beside `install.sh`. If `demo_config.shared_password` is blank, the installer generates and prints a strong demo password, stores it in the installed metadata, and exposes it through the login UI and public auth payload for self-serve demo access. It does not generate demo metadata, discover USB devices, stage sample content, or create a separate `demo-data` directory.
+This mode enables `DEMO_MODE=true`, writes the runtime `DEMO_*` values derived from `demo-metadata.json` into `.env`, ensures the application database is ready, and seeds demo accounts from `demo-metadata.json` located beside `install.sh`. On later service starts, runtime startup reconciliation keeps those demo OS users, DB roles, and shared-password state aligned with the installed `DEMO_*` settings. If `demo_config.shared_password` is blank, the installer generates and prints a strong demo password, stores it in the installed metadata, and writes it into `.env` so the login UI and public auth payload can expose it for self-serve demo access. It does not generate demo metadata, discover USB devices, stage sample content, or create a separate `demo-data` directory.
 
 ---
 

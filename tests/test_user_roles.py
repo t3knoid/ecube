@@ -163,20 +163,25 @@ class TestUserRoleEndpoints:
         logs = db.query(AuditLog).filter(AuditLog.action == "AUTHORIZATION_DENIED").all()
         assert any(log.details.get("target_user") == "demo-user" for log in logs)
 
-    def test_seeded_demo_metadata_keeps_role_mutations_blocked_when_env_flag_is_false(self, admin_client, db, monkeypatch, tmp_path):
+    def test_demo_runtime_values_do_not_block_role_mutations_when_demo_flag_is_false(self, admin_client, db, monkeypatch):
         from app.models.audit import AuditLog
 
-        payload = {"managed_by": "ecube-demo-seed-v1", "demo_config": {"demo_mode": True}}
-
         monkeypatch.setattr(settings, "demo_mode", False, raising=False)
-        monkeypatch.setattr(settings, "_load_demo_metadata_payload", lambda: payload, raising=False)
+        monkeypatch.setattr(settings, "demo_login_message", "Use the shared demo accounts below.", raising=False)
+        monkeypatch.setattr(settings, "demo_shared_password", "Demo#123456", raising=False)
+        monkeypatch.setattr(
+            settings,
+            "demo_accounts",
+            [{"username": "demo_user", "label": "Demo user", "description": "Role review"}],
+            raising=False,
+        )
 
         resp = admin_client.put("/users/demo-user/roles", json={"roles": ["manager"]})
-        assert resp.status_code == 403
-        assert "demo mode" in resp.json()["message"].lower()
+        assert resp.status_code == 200
+        assert resp.json()["roles"] == ["manager"]
 
         logs = db.query(AuditLog).filter(AuditLog.action == "AUTHORIZATION_DENIED").all()
-        assert any(log.details.get("target_user") == "demo-user" for log in logs)
+        assert not any(log.details.get("target_user") == "demo-user" for log in logs)
 
     def test_list_users_after_assignments(self, admin_client):
         admin_client.put("/users/a/roles", json={"roles": ["admin"]})

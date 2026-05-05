@@ -46,6 +46,7 @@ from app.repositories.job_repository import FileRepository, StartupAnalysisEntry
 from app.repositories.user_role_repository import UserRoleRepository
 from app.repositories.audit_repository import AuditRepository
 from app.services.callback_service import deliver_callback
+from app.services.demo_seed_service import seed_runtime_demo_environment
 from app.services.mount_check_utils import check_mounted_with_configured_timeout
 from app.constants import ECUBE_GROUP_ROLE_MAP
 from app.utils.sanitize import normalize_project_id
@@ -126,7 +127,14 @@ def reconcile_identity_users(
     created_users = 0
     missing_os_accounts = 0
     groups_updated = 0
+    passwords_reset = 0
     errors: list[dict[str, str]] = []
+    demo_account_usernames = {
+        str(account.get("username", "")).strip()
+        for account in settings.get_demo_accounts()
+        if isinstance(account, dict) and str(account.get("username", "")).strip()
+    }
+    effective_demo_shared_password = settings.get_demo_shared_password().strip()
 
     for row in assignments:
         username = row.get("username")
@@ -160,6 +168,33 @@ def reconcile_identity_users(
                 _skip_managed_check=True,
             )
             groups_updated += 1
+
+            if (
+                settings.is_demo_mode_enabled()
+                and username in demo_account_usernames
+                and effective_demo_shared_password
+            ):
+                try:
+                    os_user_provider.reset_password(
+                        username,
+                        effective_demo_shared_password,
+                        _skip_managed_check=True,
+                    )
+                    passwords_reset += 1
+                except Exception as exc:
+                    logger.info(
+                        "Startup demo password reset failed",
+                        extra={
+                            "operation_surface": "startup_reconciliation.identity",
+                            "failure_category": "demo_password_reset_failed",
+                            "username": username,
+                        },
+                    )
+                    logger.debug(
+                        "Startup demo password reset raw failure",
+                        extra={"username": username, "raw_error": str(exc)},
+                    )
+                    raise
         except Exception as exc:
             logger.exception("Identity user reconciliation failed for '%s'", username)
             errors.append({"username": username, "error": str(exc)})
@@ -170,6 +205,7 @@ def reconcile_identity_users(
         "users_created": created_users,
         "users_missing_os_account": missing_os_accounts,
         "users_groups_updated": groups_updated,
+        "users_passwords_reset": passwords_reset,
         "users_created_password_reset_required": created_users,
         "users_with_errors": len(errors),
         "errors": errors,
@@ -1221,6 +1257,29 @@ def run_startup_reconciliation(
                 results["identity"]["groups"] = {"error": hint or "identity group reconciliation failed"}
 
             _refresh_reconciliation_lock(db)
+
+            if settings.is_demo_mode_enabled():
+                logger.info("Startup reconciliation: ensuring demo accounts")
+                try:
+                    demo_result = seed_runtime_demo_environment(
+                        db,
+                        provider=os_user_provider,
+                        actor="system",
+                    )
+                    results["identity"]["demo"] = {
+                        "users_seeded": demo_result.users_seeded,
+                        "roles_seeded": demo_result.roles_seeded,
+                        "jobs_seeded": demo_result.jobs_seeded,
+                    }
+                except Exception as exc:
+                    hint = _schema_mismatch_hint(exc)
+                    if hint:
+                        logger.error("Startup demo reconciliation failed: %s", hint)
+                    else:
+                        logger.exception("Startup demo reconciliation failed")
+                    results["identity"]["demo"] = {"error": hint or "startup demo reconciliation failed"}
+
+                _refresh_reconciliation_lock(db)
 
             logger.info("Startup reconciliation: reconciling DB users to OS users")
             try:
