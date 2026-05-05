@@ -59,7 +59,7 @@ ECUBE defines four roles:
 | Retry failed file copies                    |  ✔    |    ✔    |     ✔     |    ✖    |
 | View job status                             |  ✔    |    ✔    |     ✔     |    ✔    |
 | Regenerate manifest / verify job            |  ✔    |    ✔    |     ✔     |    ✖    |
-| Read audit logs                             |  ✔    |    ✔    |     ✖     |    ✔    |
+| Read audit logs                             |  ✔    |    ✔    |     ✔     |    ✔    |
 | Introspection (read-only system info)       |  ✔    |    ✔    |     ✔     |    ✔    |
 | File hash / file compare (audit functions)  |  ✔    |    ✖    |     ✖     |    ✔    |
 

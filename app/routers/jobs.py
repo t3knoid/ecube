@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 _ALL_ROLES = require_roles("admin", "manager", "processor", "auditor")
-_COC_READ_ROLES = require_roles("admin", "manager", "auditor")
+_COC_READ_ROLES = require_roles("admin", "manager", "processor", "auditor")
 _ADMIN_MANAGER = require_roles("admin", "manager")
 _ADMIN_MANAGER_PROCESSOR = require_roles("admin", "manager", "processor")
 
@@ -415,7 +415,7 @@ def get_job_chain_of_custody(
     return the most recent stored snapshot and require an explicit refresh
     action to generate and persist a new one.
 
-    **Roles:** ``admin``, ``manager``, ``auditor``
+    **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
     """
     return audit_service.get_job_chain_of_custody_report(
         db,

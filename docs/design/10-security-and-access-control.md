@@ -171,8 +171,8 @@ groups are entirely unmapped receives an empty role list, which causes
 | Start copy jobs                            |  ✔    |    ✔    |     ✔     |    ✖    |
 | View job status                            |  ✔    |    ✔    |     ✔     |    ✔    |
 | Regenerate manifest / verify job           |  ✔    |    ✔    |     ✔     |    ✖    |
-| Read audit logs                            |  ✔    |    ✔    |     ✖     |    ✔    |
-| Read chain-of-custody reports              |  ✔    |    ✔    |     ✖     |    ✔    |
+| Read audit logs                            |  ✔    |    ✔    |     ✔     |    ✔    |
+| Read chain-of-custody reports              |  ✔    |    ✔    |     ✔     |    ✔    |
 | Refresh stored CoC snapshot (`POST /jobs/{job_id}/chain-of-custody/refresh`) |  ✔    |    ✔    |     ✖     |    ✖    |
 | Confirm custody handoff (`POST /jobs/{job_id}/chain-of-custody/handoff`) |  ✔    |    ✔    |     ✖     |    ✖    |
 | View application logs (`/admin/logs/view`) |  ✔    |    ✖    |     ✖     |    ✖    |

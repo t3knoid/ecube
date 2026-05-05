@@ -149,7 +149,7 @@ Compatibility note: To support project-to-source-path policy, use project source
 | PUT | `/jobs/{job_id}` | processor+ | Update a pending, paused, or failed job from the Job Detail page |
 | DELETE | `/jobs/{job_id}` | processor+ | Delete a pending job and release its current drive assignment |
 | GET | `/jobs/{job_id}` | admin/manager/processor/auditor | Get job detail, including source path, creation notes, overflow assignments, progress, cumulative active duration that excludes paused time, and sanitized failure summaries |
-| GET | `/jobs/{job_id}/chain-of-custody` | admin/manager/auditor | Return the last stored CoC snapshot for the job, including snapshot metadata such as last on-disk update time |
+| GET | `/jobs/{job_id}/chain-of-custody` | admin/manager/processor/auditor | Return the last stored CoC snapshot for the job, including snapshot metadata such as last on-disk update time |
 | POST | `/jobs/{job_id}/chain-of-custody/refresh` | admin/manager | Rebuild and persist the latest job-scoped CoC snapshot from current trusted state |
 | POST | `/jobs/{job_id}/chain-of-custody/handoff` | admin/manager | Record custody transfer for a job-assigned drive and store the refreshed CoC snapshot |
 | GET | `/jobs/{job_id}/files` | admin/manager/processor/auditor | List operator-safe file status rows for the job with `page` and optional `limit` pagination, including safe per-file `error_message` text when available |
@@ -180,6 +180,8 @@ Compatibility note: To support project-to-source-path policy, use project source
 **Job Detail Response Shape:** `GET /jobs/{job_id}` also returns the trusted `source_path`, any operator `notes` recovered from the job-creation audit record, and `overflow_assignments` for reserved, active, or released continuation media in assignment order. When the job is actively running, the response includes `started_at` for the current active run so Job Detail can show both the live start timestamp and the cumulative active duration summary.
 
 **Chain-of-Custody Snapshot Semantics:** `GET /jobs/{job_id}/chain-of-custody` returns only the stored snapshot for that job. If no snapshot has been stored yet, the endpoint returns **404 Not Found** with guidance to refresh the report first. `POST /jobs/{job_id}/chain-of-custody/refresh` is the only API path that regenerates and persists the snapshot, returns snapshot metadata including the last on-disk update timestamp, and records the write in both the audit trail and the application log. Archived jobs remain readable through `GET /jobs/{job_id}/chain-of-custody` but cannot be refreshed.
+
+**Read-Only CoC Access:** `processor` shares the same read access as `admin`, `manager`, and `auditor` for `GET /jobs/{job_id}/chain-of-custody`. Snapshot refresh and custody handoff remain limited to `admin` and `manager`.
 
 **Job Detail Lifecycle Controls:** Analyze is available for eligible pending or restartable jobs and runs startup analysis without moving the job into `RUNNING`. Edit and Complete are limited to `PENDING`, `PAUSED`, and `FAILED` jobs. `Continue on Another Drive` is available for eligible pending, paused, failed, and partial-success completed jobs so operators can move remaining work onto another mounted destination drive without creating a second job when ECUBE did not already auto-continue onto an eligible prepared project drive. `Retry Failed Files` is limited to `COMPLETED` jobs that still contain `ERROR` or `TIMEOUT` file rows and re-queues only those failed terminal files while leaving successful copies unchanged. Delete is limited to `PENDING` jobs only, and the project binding on an existing job cannot be changed during edit. Startup-analysis cache cleanup is limited to `admin` and `manager`, requires explicit confirmation, and removes only the persisted startup-analysis snapshot rather than file-level copy history.
 
@@ -215,8 +217,9 @@ Compatibility note: To support project-to-source-path policy, use project source
 
 | Method | Endpoint | Role | Description |
 | ------ | -------- | -------- | ----------------------- |
-| GET | `/audit` | auditor+ | Query audit logs with server-backed pagination, filters, and free-text search |
-| GET | `/audit/options` | auditor+ | Return distinct action, user, and job filter options for the Audit UI |
+| GET | `/audit` | admin/manager/processor/auditor | Query audit logs with server-backed pagination, filters, and free-text search |
+| GET | `/audit/options` | admin/manager/processor/auditor | Return distinct action, user, and job filter options for the Audit UI |
+| GET | `/audit/chain-of-custody` | admin/manager/processor/auditor | Return chain-of-custody report sections by drive ID, drive serial, or project ID |
 
 **Filters:**
 
@@ -236,6 +239,7 @@ Compatibility note: To support project-to-source-path policy, use project source
 - When `include_total=false`, `total` is `null` and `has_more` remains the forward-pagination signal
 - `search` is intended for operator-safe substring matching across audit content; `client_ip` participates only for roles that are already allowed to view it
 - `GET /audit/options` returns `actions`, `users`, and `job_ids` arrays for distinct filter values
+- `GET /audit/chain-of-custody` accepts `drive_id`, `drive_sn`, or `project_id`; when `drive_id` is present it remains authoritative over the other selectors
 
 **Example:**
 

@@ -1077,11 +1077,13 @@ If an earlier test temporarily disabled password-quality enforcement, run `sudo 
 | 6 | Processor mounts drive | `POST /drives/{drive_id}/mount` with processor token | 403, `FORBIDDEN` |
 | 7 | Auditor mounts drive | `POST /drives/{drive_id}/mount` with auditor token | 403, `FORBIDDEN` |
 | 8 | Processor formats drive | `POST /drives/{drive_id}/format` with processor token | 403, `FORBIDDEN` |
-| 9 | Processor reads audit | `GET /audit` with processor token | 403, `FORBIDDEN` |
+| 9 | Processor reads audit | `GET /audit` with processor token | 200 |
 | 10 | Auditor reads audit | `GET /audit` with auditor token | 200 |
-| 11 | Processor creates job | `POST /jobs` with processor token | 200 |
-| 12 | All four roles read job files | `GET /jobs/{job_id}/files` with admin/manager/processor/auditor tokens | 200 for each role |
-| 13 | All error responses have `trace_id` | Inspect any 4xx/5xx JSON body | `trace_id` field present |
+| 11 | Processor reads job chain-of-custody snapshot | `GET /jobs/{job_id}/chain-of-custody` with processor token for a job without a stored snapshot | 404 with guidance to ask an admin or manager to refresh the report, proving the read reached business rules instead of RBAC denial |
+| 12 | Processor reads drive/project chain-of-custody report | `GET /audit/chain-of-custody?project_id=PROJ-001` with processor token | 200, selector processed without `403` |
+| 13 | Processor creates job | `POST /jobs` with processor token | 200 |
+| 14 | All four roles read job files | `GET /jobs/{job_id}/files` with admin/manager/processor/auditor tokens | 200 for each role |
+| 15 | All error responses have `trace_id` | Inspect any 4xx/5xx JSON body | `trace_id` field present |
 
 ### 12.2.1 Session Lifecycle and Token Expiry
 

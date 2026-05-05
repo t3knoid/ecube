@@ -1361,7 +1361,7 @@ def test_refresh_job_chain_of_custody_denies_auditor(auditor_client, db):
     assert response.status_code == 403
 
 
-def test_get_job_chain_of_custody_denies_processor_role(client, db):
+def test_get_job_chain_of_custody_allows_processor_role(client, db):
     job = ExportJob(
         project_id="PROJ-COC-DENY",
         evidence_number="EV-COC-DENY",
@@ -1373,7 +1373,8 @@ def test_get_job_chain_of_custody_denies_processor_role(client, db):
 
     response = client.get(f"/jobs/{job.id}/chain-of-custody")
 
-    assert response.status_code == 403
+    assert response.status_code == 404
+    assert "ask an admin or manager to refresh the report to create one" in response.json()["message"].lower()
 
 
 def test_confirm_job_chain_of_custody_handoff_requires_drive_assignment(manager_client, db):
