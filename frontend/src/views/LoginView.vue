@@ -154,19 +154,20 @@ onMounted(async () => {
 async function handleLogin() {
   error.value = "";
   loading.value = true;
+  const submittedUsername = username.value.trim();
   try {
-    await authStore.login(username.value, password.value);
+    await authStore.login(submittedUsername, password.value);
     router.push("/");
   } catch (err) {
     const responseData = err.response?.data || {};
     if (responseData.reason === "password_expired") {
-      if (isDemoPasswordLockedUser(username.value)) {
+      if (isDemoPasswordLockedUser(submittedUsername)) {
         error.value = t("auth.demoPasswordManaged");
         return;
       }
       passwordChangeError.value = "";
       passwordChangeForm.value = {
-        username: username.value,
+        username: submittedUsername,
         currentPassword: password.value,
         newPassword: "",
         confirmPassword: "",
