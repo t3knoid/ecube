@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
+import { getPublicAuthConfig } from '@/api/auth.js'
 import { getDrives, formatDrive, initializeDrive, mountDrive, prepareEjectDrive, refreshDrives } from '@/api/drives.js'
 import { getJobChainOfCustody, listAllJobs, listJobs } from '@/api/jobs.js'
 import { getMounts } from '@/api/mounts.js'
@@ -90,6 +91,7 @@ const initializeTriggerRef = ref(null)
 const initializeDialogTitleId = 'drive-initialize-dialog-title'
 const initializeDialogHelpId = 'drive-initialize-dialog-help'
 const initializeDialogStatusId = 'drive-initialize-dialog-status'
+const DEFAULT_DRIVE_MOUNT_TIMEOUT_SECONDS = 120
 const EJECT_PREFLIGHT_TIMEOUT_MS = 5000
 const EJECT_BLOCKING_JOB_STATUSES = ['RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING']
 
@@ -155,6 +157,32 @@ function protectedValue(value) {
 function isValidJobId(value) {
   const normalizedJobId = Number(value)
   return Number.isInteger(normalizedJobId) && normalizedJobId > 0
+}
+
+function resolveDriveMountTimeoutMs(configurationResponse) {
+  const setting = Array.isArray(configurationResponse?.settings)
+    ? configurationResponse.settings.find((entry) => entry?.key === 'drive_mount_timeout_seconds')
+    : null
+  const seconds = Number(setting?.value)
+
+  if (Number.isFinite(seconds) && seconds >= 1) {
+    return seconds * 1000
+  }
+
+  return DEFAULT_DRIVE_MOUNT_TIMEOUT_SECONDS * 1000
+}
+
+async function getDriveMountTimeoutMs() {
+  try {
+    const publicAuthConfig = await getPublicAuthConfig()
+    return resolveDriveMountTimeoutMs({
+      settings: [
+        { key: 'drive_mount_timeout_seconds', value: publicAuthConfig?.drive_mount_timeout_seconds },
+      ],
+    })
+  } catch {
+    return DEFAULT_DRIVE_MOUNT_TIMEOUT_SECONDS * 1000
+  }
 }
 
 function openRelatedJob() {
@@ -407,7 +435,8 @@ async function runMount() {
   saving.value = true
   clearBanners()
   try {
-    drive.value = normalizeProjectRecord(await mountDrive(drive.value.id), ['current_project_id'])
+    const mountTimeoutMs = await getDriveMountTimeoutMs()
+    drive.value = normalizeProjectRecord(await mountDrive(drive.value.id, { timeout: mountTimeoutMs }), ['current_project_id'])
     infoMessage.value = t('drives.mountSuccess')
   } catch (err) {
     const status = err?.response?.status

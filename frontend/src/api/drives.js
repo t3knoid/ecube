@@ -22,8 +22,12 @@ export function formatDrive(driveId, payload = {}, { timeout } = {}) {
   return toData(apiClient.post(`${API_BASE}/drives/${driveId}/format`, payload, config))
 }
 
-export function mountDrive(driveId) {
-  return toData(apiClient.post(`${API_BASE}/drives/${driveId}/mount`))
+export function mountDrive(driveId, { timeout } = {}) {
+  const config = {}
+  if (timeout != null) {
+    config.timeout = timeout
+  }
+  return toData(apiClient.post(`${API_BASE}/drives/${driveId}/mount`, null, config))
 }
 
 export function prepareEjectDrive(driveId, options = {}) {

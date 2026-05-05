@@ -6,6 +6,7 @@ import DriveDetailView from '@/views/DriveDetailView.vue'
 const mocks = vi.hoisted(() => ({
   hasAnyRole: vi.fn(),
   push: vi.fn(),
+  getPublicAuthConfig: vi.fn(),
   getDrives: vi.fn(),
   getJobChainOfCustody: vi.fn(),
   listAllJobs: vi.fn(),
@@ -28,6 +29,10 @@ vi.mock('@/stores/auth.js', () => ({
   useAuthStore: () => ({
     hasAnyRole: mocks.hasAnyRole,
   }),
+}))
+
+vi.mock('@/api/auth.js', () => ({
+  getPublicAuthConfig: (...args) => mocks.getPublicAuthConfig(...args),
 }))
 
 vi.mock('@/api/drives.js', () => ({
@@ -108,6 +113,7 @@ describe('DriveDetailView mount workflow', () => {
   beforeEach(() => {
     mocks.hasAnyRole.mockReset()
     mocks.push.mockReset()
+    mocks.getPublicAuthConfig.mockReset()
     mocks.getDrives.mockReset()
     mocks.getJobChainOfCustody.mockReset()
     mocks.listAllJobs.mockReset()
@@ -121,6 +127,9 @@ describe('DriveDetailView mount workflow', () => {
     mocks.enablePort.mockReset()
 
     mocks.hasAnyRole.mockReturnValue(true)
+    mocks.getPublicAuthConfig.mockResolvedValue({
+      drive_mount_timeout_seconds: 120,
+    })
     mocks.getDrives.mockResolvedValue([buildDrive()])
     mocks.listAllJobs.mockResolvedValue([])
     mocks.getJobChainOfCustody.mockResolvedValue({ selector_mode: 'JOB', reports: [] })
@@ -156,7 +165,8 @@ describe('DriveDetailView mount workflow', () => {
     await mountButton.trigger('click')
     await flushPromises()
 
-    expect(mocks.mountDrive).toHaveBeenCalledWith(7)
+    expect(mocks.getPublicAuthConfig).toHaveBeenCalledTimes(1)
+    expect(mocks.mountDrive).toHaveBeenCalledWith(7, { timeout: 120000 })
     expect(wrapper.text()).toContain(i18n.global.t('drives.mountSuccess'))
     expect(wrapper.text()).not.toContain('/mnt/ecube/7')
     expect(wrapper.text()).not.toContain('USB-DETAIL-007')
@@ -165,6 +175,39 @@ describe('DriveDetailView mount workflow', () => {
     const statusBanner = wrapper.find('.ok-banner')
     expect(statusBanner.attributes('role')).toBe('status')
     expect(statusBanner.attributes('aria-live')).toBe('polite')
+  })
+
+  it('uses the configured drive mount timeout from the backend configuration', async () => {
+    mocks.getPublicAuthConfig.mockResolvedValue({
+      drive_mount_timeout_seconds: 300,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const mountButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.mount'))
+    expect(mountButton).toBeTruthy()
+
+    await mountButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.mountDrive).toHaveBeenCalledWith(7, { timeout: 300000 })
+  })
+
+  it('falls back to the default mount timeout when configuration lookup fails', async () => {
+    mocks.getPublicAuthConfig.mockRejectedValue(new Error('network error'))
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const mountButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.mount'))
+    expect(mountButton).toBeTruthy()
+
+    await mountButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.mountDrive).toHaveBeenCalledWith(7, { timeout: 120000 })
+    expect(wrapper.text()).toContain(i18n.global.t('drives.mountSuccess'))
   })
 
   it('hides the Mount action when the drive is already mounted', async () => {

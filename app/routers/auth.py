@@ -154,6 +154,7 @@ class DemoAccountResponse(BaseModel):
 class PublicAuthConfigResponse(BaseModel):
     demo_mode_enabled: bool = Field(default=False, description="Whether demo mode is enabled")
     default_nfs_client_version: str = Field(default="4.1", description="Default NFS client version suggested by ECUBE host configuration")
+    drive_mount_timeout_seconds: int = Field(default=120, description="Default drive mount timeout in seconds for public-safe UI workflows")
     nfs_client_version_options: list[str] = Field(default_factory=lambda: ["4.2", "4.1", "4.0", "3"], description="Supported NFS client versions operators may select in the UI")
     login_message: str | None = Field(default=None, description="Optional public-safe login instructions")
     shared_password: str | None = Field(default=None, description="Public shared demo password displayed on the login screen when demo mode is enabled")
@@ -228,16 +229,19 @@ def _build_token_response(
 
 @router.get("/public-config", response_model=PublicAuthConfigResponse)
 def public_auth_config() -> PublicAuthConfigResponse:
-    """Return login metadata for the public login screen.
+    """Return public-safe frontend runtime metadata.
 
     This route must avoid leaking internal paths, hardware details, per-account
-    credentials, or other sensitive configuration values. In demo mode it may
-    intentionally expose the shared demo password so unattended users can sign in.
+    credentials, or other sensitive configuration values. It may expose
+    public-safe UI defaults such as NFS client version hints and drive mount
+    timeout values. In demo mode it may intentionally expose the shared demo
+    password so unattended users can sign in.
     """
     if not settings.is_demo_mode_enabled():
         return PublicAuthConfigResponse(
             demo_mode_enabled=False,
             default_nfs_client_version=settings.nfs_client_version,
+            drive_mount_timeout_seconds=settings.drive_mount_timeout_seconds,
             nfs_client_version_options=["4.2", "4.1", "4.0", "3"],
             login_message=None,
             shared_password=None,
@@ -264,6 +268,7 @@ def public_auth_config() -> PublicAuthConfigResponse:
     return PublicAuthConfigResponse(
         demo_mode_enabled=True,
         default_nfs_client_version=settings.nfs_client_version,
+        drive_mount_timeout_seconds=settings.drive_mount_timeout_seconds,
         nfs_client_version_options=["4.2", "4.1", "4.0", "3"],
         login_message=settings.get_demo_login_message() or None,
         shared_password=settings.get_demo_shared_password() or None,
