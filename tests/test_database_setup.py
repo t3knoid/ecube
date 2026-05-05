@@ -18,9 +18,11 @@ from unittest.mock import ANY, MagicMock, Mock, patch
 
 import pytest
 
+from app.main import app as fastapi_app
 from pydantic import ValidationError
 
 from app.models.users import UserRole
+from app.routers.auth import _get_pam
 from app.services import database_service
 from app.schemas.database import (
     DatabaseProvisionRequest,
@@ -957,6 +959,87 @@ class TestSetupWizardLogging:
             actor="system",
         )
         mock_audit_add.assert_called_once()
+
+    @patch("app.routers.setup.AuditRepository.add")
+    @patch("app.routers.setup.get_os_user_provider")
+    @patch("app.routers.setup.seed_runtime_demo_environment")
+    @patch("app.routers.setup.database_service.set_trust_proxy_headers")
+    @patch("app.routers.setup._run_os_setup", return_value=([], "created_admin_user"))
+    @patch("app.routers.setup._is_setup_initialized_with_auto_migrate", side_effect=[False, False])
+    def test_demo_user_can_login_immediately_after_setup_without_restart(
+        self,
+        mock_is_setup_initialized,
+        mock_run_os_setup,
+        mock_set_trust_proxy_headers,
+        mock_seed_runtime_demo_environment,
+        mock_get_os_user_provider,
+        mock_audit_add,
+        unauthenticated_client,
+        db,
+    ):
+        provider = Mock()
+        mock_get_os_user_provider.return_value = provider
+
+        def _seed_demo_roles(session, provider=None, actor=None):
+            existing_role = (
+                session.query(UserRole)
+                .filter(UserRole.username == "demo_admin", UserRole.role == "admin")
+                .first()
+            )
+            if existing_role is None:
+                session.add(UserRole(username="demo_admin", role="admin"))
+                session.commit()
+            return Mock(users_seeded=4, roles_seeded=4, jobs_seeded=0)
+
+        mock_seed_runtime_demo_environment.side_effect = _seed_demo_roles
+
+        mock_pam = MagicMock()
+        mock_pam.authenticate.return_value = True
+        mock_pam.get_user_groups.return_value = []
+        fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
+
+        try:
+            with patch("app.config.Settings.is_demo_mode_enabled", return_value=True):
+                setup_resp = unauthenticated_client.post(
+                    "/setup/initialize",
+                    json={
+                        "username": "admin",
+                        "password": "StrongPass#123",
+                        "trust_proxy_headers": False,
+                    },
+                )
+
+            assert setup_resp.status_code == 200
+            assert mock_is_setup_initialized.call_count == 2
+            mock_run_os_setup.assert_called_once()
+            mock_set_trust_proxy_headers.assert_called_once_with(False)
+            mock_get_os_user_provider.assert_called_once()
+            mock_seed_runtime_demo_environment.assert_called_once_with(
+                ANY,
+                provider=provider,
+                actor="system",
+            )
+
+            login_resp = unauthenticated_client.post(
+                "/auth/token",
+                json={"username": "demo_admin", "password": "secret"},
+            )
+
+            assert login_resp.status_code == 200
+            assert db.query(UserRole).filter_by(username="demo_admin", role="admin").count() == 1
+            mock_audit_add.assert_any_call(
+                action="SYSTEM_INITIALIZED",
+                user="admin",
+                details={
+                    "groups_created": [],
+                    "admin_user": "admin",
+                    "setup_status": "created_admin_user",
+                    "trust_proxy_headers": False,
+                },
+                client_ip="unknown",
+            )
+        finally:
+            fastapi_app.dependency_overrides.pop(_get_pam, None)
 
     @patch("app.routers.setup.AuditRepository.add")
     @patch("app.routers.setup.database_service.set_trust_proxy_headers")
