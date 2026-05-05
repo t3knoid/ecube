@@ -248,10 +248,6 @@ class Settings(BaseSettings):
     #: is enabled.
     demo_disable_password_change: bool = True
 
-    #: Dedicated demo-only root used by the bootstrap flow for staging
-    #: sanitized sample content.
-    demo_data_root: str = "./demo-data"
-
     # ---------------------------------------------------------------------------
     # Copy engine tuning
     # ---------------------------------------------------------------------------
@@ -579,10 +575,10 @@ class Settings(BaseSettings):
     redis_socket_keepalive: bool = True
 
     def _demo_metadata_path(self) -> Path:
-        return Path(self.demo_data_root).expanduser().resolve() / "demo-metadata.json"
+        return Path(__file__).resolve().parents[1] / "demo-metadata.json"
 
     def _load_demo_metadata_payload(self) -> Dict[str, Any]:
-        """Load the raw demo metadata payload from the managed demo-data root."""
+        """Load the raw demo metadata payload from the colocated install-root file."""
         metadata_path = self._demo_metadata_path()
         if not metadata_path.is_file():
             return {}
@@ -590,7 +586,14 @@ class Settings(BaseSettings):
         try:
             payload = json.loads(metadata_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
-            logger.warning("Failed to load demo metadata", {"error": str(exc), "path": str(metadata_path)})
+            logger.warning(
+                "Failed to load demo metadata",
+                {"failure_category": "demo_metadata_unreadable"},
+            )
+            logger.debug(
+                "Demo metadata load details",
+                {"error": str(exc), "path": str(metadata_path)},
+            )
             return {}
 
         if isinstance(payload, dict):
@@ -598,7 +601,7 @@ class Settings(BaseSettings):
         return {}
 
     def load_demo_metadata(self) -> Dict[str, Any]:
-        """Load effective demo runtime metadata from the managed demo-data root."""
+        """Load effective demo runtime metadata from the colocated install-root file."""
         payload = self._load_demo_metadata_payload()
         if not payload:
             return {}
@@ -611,8 +614,8 @@ class Settings(BaseSettings):
     def is_demo_mode_enabled(self) -> bool:
         """Return the effective demo-mode state.
 
-        Once the demo bootstrap has seeded a managed demo root, the deployment
-        remains in demo mode until the managed root is reset or removed.
+        Once managed demo metadata has been seeded, the deployment remains in
+        demo mode until the seeded state is reset or the metadata is removed.
         """
         if bool(self.demo_mode):
             return True

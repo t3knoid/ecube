@@ -157,7 +157,6 @@ class PublicAuthConfigResponse(BaseModel):
     nfs_client_version_options: list[str] = Field(default_factory=lambda: ["4.2", "4.1", "4.0", "3"], description="Supported NFS client versions operators may select in the UI")
     login_message: str | None = Field(default=None, description="Optional public-safe login instructions")
     demo_accounts: list[DemoAccountResponse] = Field(default_factory=list, description="Demo-safe accounts for display on the login screen")
-    shared_password: str | None = Field(default=None, description="Optional shared demo password intentionally shown on the login screen")
     password_change_allowed: bool = Field(default=True, description="Whether password changes are allowed in the current deployment")
 
 
@@ -218,7 +217,6 @@ def public_auth_config() -> PublicAuthConfigResponse:
             nfs_client_version_options=["4.2", "4.1", "4.0", "3"],
             login_message=None,
             demo_accounts=[],
-            shared_password=None,
             password_change_allowed=True,
         )
 
@@ -243,7 +241,6 @@ def public_auth_config() -> PublicAuthConfigResponse:
         nfs_client_version_options=["4.2", "4.1", "4.0", "3"],
         login_message=settings.get_demo_login_message() or None,
         demo_accounts=accounts,
-        shared_password=settings.get_demo_shared_password() or None,
         password_change_allowed=not settings.get_demo_disable_password_change(),
     )
 

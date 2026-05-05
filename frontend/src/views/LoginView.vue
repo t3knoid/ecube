@@ -32,7 +32,6 @@ const publicAuthConfig = ref({
   demo_mode_enabled: false,
   login_message: null,
   demo_accounts: [],
-  shared_password: null,
   password_change_allowed: true,
 });
 
@@ -68,19 +67,13 @@ const setupAlreadyInitialized = computed(
 const showLogoImage = computed(
   () => Boolean(themeStore.currentLogo) && !logoLoadFailed.value,
 );
-const isSharedDemoPassword = computed(() => {
-  const value = publicAuthConfig.value.shared_password;
-  return typeof value === "string" && value.trim().length > 0;
-});
 const showDemoLoginPanel = computed(() => {
   const config = publicAuthConfig.value;
   return Boolean(
     config.demo_mode_enabled &&
     ((typeof config.login_message === "string" &&
       config.login_message.trim()) ||
-      config.demo_accounts.length ||
-      (typeof config.shared_password === "string" &&
-        config.shared_password.trim())),
+      config.demo_accounts.length),
   );
 });
 
@@ -133,24 +126,16 @@ onMounted(async () => {
             }))
             .filter((account) => account.username)
         : [],
-      shared_password:
-        typeof config?.shared_password === "string" &&
-        config.shared_password.trim()
-          ? config.shared_password.trim()
-          : null,
       password_change_allowed: config?.password_change_allowed !== false,
     };
     publicAuthConfig.value = normalizedConfig;
-    password.value = normalizedConfig.shared_password ?? "";
   } catch {
     publicAuthConfig.value = {
       demo_mode_enabled: false,
       login_message: null,
       demo_accounts: [],
-      shared_password: null,
       password_change_allowed: true,
     };
-    password.value = "";
   }
 });
 
@@ -346,7 +331,6 @@ async function handlePasswordChangeConfirm() {
             type="password"
             autocomplete="current-password"
             required
-            :readonly="isSharedDemoPassword"
             :disabled="loading"
           />
         </div>

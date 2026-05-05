@@ -1503,19 +1503,19 @@ Use this checklist to validate frontend behavior in the `Users` page for manual 
 
 ### 12.9.2 Demo Mode Rollout Validation Checklist
 
-Use this checklist after enabling demo mode and running the demo bootstrap command on a normal installation.
+Use this checklist after running `install.sh --demo` on a normal installation.
 
 | # | Demo Check | Steps | Expected |
 |---|------------|-------|----------|
-| 1 | Public login guidance is shown | Enable demo mode, configure demo accounts, and open the login page | The login screen displays only the public-safe message plus username, label, and description fields |
-| 2 | No sensitive demo credentials are exposed | Inspect the login panel and browser network response for the public auth config | Passwords, internal paths, and private bootstrap-only fields are not present |
+| 1 | Public login guidance is shown without password disclosure | Run `install.sh --demo`, then open the login page | The login screen displays only the public-safe message plus username, label, and description fields, and it does not auto-fill or expose the shared demo password |
+| 2 | Shared demo password stays out of the public auth payload | Inspect the login panel and browser network response for the public auth config | The public payload does not expose shared passwords, per-account passwords, internal paths, or private bootstrap-only fields |
 | 3 | Demo password changes are blocked in UI | Sign in as admin and open the Users page for a shared demo account | Reset password action is hidden or unavailable for the demo account |
 | 4 | Direct API reset is blocked | Attempt password reset for a configured demo account through the admin API | 403 response with sanitized message; no internal details leaked |
-| 5 | Demo seed is repeatable | Run the seed command twice against the same demo data root | Sample jobs, files, and role mappings return to a known good state without duplication |
-| 6 | Demo reset is safe | Run the reset command for the seeded demo root, then try an unmanaged directory path | Managed demo content is removed; unmanaged directories are refused |
-| 7 | Numeric project references round-trip correctly | Seed a demo root whose `projects[]` use numeric `project_id` values and whose `job_seed.jobs[].id` is set to a stable integer such as `42` | The resulting metadata keeps the numeric project references, the seeded job is created for the expected project name, and the Jobs view or API shows the same numeric job ID |
+| 5 | Demo seed is repeatable | Run the seed command twice against the same metadata file | Demo users and role mappings return to the same known-good state without duplicate role assignments or seeded jobs |
+| 6 | Demo reset removes only seeded state | Run the reset command against the seeded metadata file | Demo-seeded role assignments and seeded jobs are removed, but the metadata file itself is left in place |
+| 7 | Installer uses colocated metadata and generates a password when blank | Place `demo-metadata.json` beside `install.sh` with `demo_config.shared_password` blank, run `install.sh --demo`, then inspect the install root and installer summary | The install writes `DEMO_MODE=true`, generates and prints a strong demo password, stores it in the installed metadata, seeds from that metadata file, and does not create a separate `demo-data` directory or generated sample content |
 | 8 | Audit trail exists | Query audit logs for demo bootstrap and denied password actions | Audit entries exist for seed, reset, and authorization denial events |
-| 9 | Sanitized sample data only | Review the staged demo share contents | Files are clearly marked synthetic and contain no production or customer evidence |
+| 9 | No sample content is staged automatically | Review the install root and demo metadata after `install.sh --demo` | Demo bootstrap affects demo accounts, login guidance, and role state only; it does not stage sample projects, files, USB state, or network mounts |
 
 ### 12.10 Admin Log Viewing API
 

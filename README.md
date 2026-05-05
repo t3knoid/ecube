@@ -52,26 +52,6 @@ Immediate next step: open the ECUBE web UI and complete setup at `https://<hostn
 
 See the [Installation Guide](docs/operations/01-installation.md) for full installer behavior and all options (`--backend-only`, `--frontend-only`, `--api-port`, `--uninstall`, etc.).
 
-### Demo bootstrap
-
-A standard ECUBE install can be converted into a demo deployment with a supported post-install seed step.
-
-After setup is complete, configure demo mode and run the installed command:
-
-```bash
-ecube-demo-bootstrap seed --shared-password "Choose-A-Strong-Demo-Password" --data-root ./demo-data
-```
-
-To remove the managed sample content and restore the demo to a clean state, run:
-
-```bash
-ecube-demo-bootstrap reset --data-root ./demo-data
-```
-
-After seeding, the deployment remains in demo mode until the managed demo state is reset. Toggling `DEMO_MODE` alone does not revert the instance to the full application behavior.
-
-See [Demo bootstrap](docs/operations/14-demo-bootstrap.md) for the full workflow and safety notes.
-
 ### Docker Compose (Development PostgreSQL)
 
 > **Prerequisites:** Docker and Docker Compose must be installed.
@@ -176,7 +156,6 @@ Installer/package artifact workflows (`build-artifact.yml` and `tag-release.yml`
 - [Installation](docs/operations/01-installation.md) — native install and installer options
 - [Configuration Reference](docs/operations/04-configuration-reference.md) — environment variables and runtime settings
 - [API Quick Reference](docs/operations/11-api-quick-reference.md) — high-value endpoints for operators and automation
-- [Demo bootstrap](docs/operations/14-demo-bootstrap.md) — post-install demo seed and reset workflow
 - [REST API Design](docs/design/06-rest-api-design.md) — endpoint contracts and response behavior
 - [Security and Access Control](docs/design/10-security-and-access-control.md) — roles, trust boundary, and authorization model
 - [Build and Deployment](docs/design/13-build-and-deployment.md) — release artifacts and deployment model

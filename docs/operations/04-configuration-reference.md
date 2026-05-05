@@ -13,13 +13,14 @@
 2. [Database](#database)
 3. [Target Platform](#target-platform)
 4. [Security and Authentication](#security-and-authentication)
-5. [Local Group-to-Role Mapping](#local-group-to-role-mapping)
-6. [LDAP Configuration](#ldap-configuration)
-7. [OIDC/SSO Integration](#oidcsso-integration)
-8. [Session Management](#session-management)
-9. [Copy Engine](#copy-engine)
-10. [Logging](#logging)
-11. [Docker Compose Deployment Variables](#docker-compose-deployment-variables)
+5. [Demo Mode](#demo-mode)
+6. [Local Group-to-Role Mapping](#local-group-to-role-mapping)
+7. [LDAP Configuration](#ldap-configuration)
+8. [OIDC/SSO Integration](#oidcsso-integration)
+9. [Session Management](#session-management)
+10. [Copy Engine](#copy-engine)
+11. [Logging](#logging)
+12. [Docker Compose Deployment Variables](#docker-compose-deployment-variables)
 
 ---
 
@@ -70,6 +71,22 @@ These settings control the behaviour of the first-run setup wizard before the ap
 | `ALGORITHM`            | `HS256`                                     | JWT signing algorithm.                                                                                                                                                                                      |
 | `TOKEN_EXPIRE_MINUTES` | `60`                                        | Minutes before a locally-issued JWT expires.                                                                                                                                                                |
 | `ROLE_RESOLVER`        | `local`                                     | Role resolver provider: `local`, `ldap`, or `oidc`.                                                                                                                                                         |
+
+---
+
+## Demo Mode
+
+ECUBE demo mode is controlled by `.env` settings plus the install-root `demo-metadata.json` file. At runtime, ECUBE reads `demo-metadata.json` from the application root (for example `/opt/ecube/demo-metadata.json`) to derive demo login guidance, shared-password behavior, and demo account metadata.
+
+| Variable | Default | Description |
+| -------- | ------- | ----------- |
+| `DEMO_MODE` | `false` | Enables demo-mode restrictions and demo-aware login behavior. When a seeded `demo-metadata.json` is present, the runtime can remain in demo mode even if this flag is later set back to `false`. |
+| `DEMO_LOGIN_MESSAGE` | `Use the shared demo accounts below.` | Optional fallback login message when the metadata file does not provide one. |
+| `DEMO_SHARED_PASSWORD` | `demo` | Optional fallback shared password used for demo account seeding when the metadata file does not provide one. It is not exposed by the public auth payload. |
+| `DEMO_DISABLE_PASSWORD_CHANGE` | `true` | Blocks password-change flows for demo accounts. The public auth payload exposes the inverse as `password_change_allowed`. |
+| `DEMO_ACCOUNTS` | built-in demo personas | Optional fallback JSON array of demo account definitions used only when no metadata file is present. |
+
+The supported metadata contract now uses only `managed_by`, `generated_at`, and `demo_config`. Legacy `usb_seed`, `mount_seed`, `job_seed`, `projects`, and separate demo-data-root configuration are no longer part of the supported runtime configuration model.
 
 ---
 

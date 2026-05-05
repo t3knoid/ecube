@@ -20,12 +20,12 @@ def test_activate_install_root_uses_module_parent(monkeypatch, tmp_path):
     assert root == tmp_path.resolve()
 
 
-def test_build_parser_rejects_removed_connected_usb_flags():
+def test_build_parser_rejects_removed_legacy_usb_seed_flags():
+    """Removed USB seeding flags must stay rejected by the simplified CLI."""
     parser = demo_bootstrap.build_parser()
 
     with pytest.raises(SystemExit):
         parser.parse_args([
-            "--data-root", "./demo-data",
             "seed",
             "--shared-password", "demo",
             "--seed-connected-usb",

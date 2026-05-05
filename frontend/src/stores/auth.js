@@ -118,7 +118,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   function logout() {
     clearAuth()
-    window.location.href = LOGIN_PATH
+    window.location.href = `${LOGIN_PATH}?reason=logged_out`
   }
 
   function checkExpiry() {

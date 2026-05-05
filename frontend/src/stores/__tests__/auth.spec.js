@@ -99,7 +99,7 @@ describe('Auth Store', () => {
     expect(sessionStorage.getItem(STORAGE_TOKEN_KEY)).toBeNull()
   })
 
-  // logout() clears state and redirects to /login per docs/design/15-frontend-architecture.md §5.1
+  // logout() clears state and redirects to /login with an explicit logout marker.
   it('logout clears auth state and redirects to login', () => {
     const { store } = initWithToken({ sub: 'frank', roles: ['admin'], groups: [], exp: nowSec() + 3600 })
     expect(store.isAuthenticated).toBe(true)
@@ -113,7 +113,7 @@ describe('Auth Store', () => {
     expect(store.isAuthenticated).toBe(false)
     expect(store.token).toBeNull()
     expect(sessionStorage.getItem(STORAGE_TOKEN_KEY)).toBeNull()
-    expect(window.location.href).toContain('/login')
+    expect(window.location.href).toContain('/login?reason=logged_out')
 
     window.location = originalLocation
   })

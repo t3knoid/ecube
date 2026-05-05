@@ -212,6 +212,8 @@ The login page includes:
 - Session-expired banner when you were redirected after token expiry
 - Error banner for invalid credentials or connectivity failures
 
+In demo deployments, the login page shows only the public-safe demo message and account descriptions. It does not expose the shared demo password, per-account passwords, or internal bootstrap metadata.
+
 If your local account password has expired, ECUBE opens a required password-change dialog instead of leaving you on a generic login failure. Re-enter your current password, enter and confirm a new password, and submit the change to continue into the application. If the host rejects the new password, ECUBE keeps the dialog open and shows the policy failure message so you can correct it without restarting the login flow.
 
 If login fails:
