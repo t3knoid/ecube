@@ -17,6 +17,7 @@
     "system": "System",
     "users": "Users",
     "configuration": "Configuration",
+    "admin": "Admin",
     "openSidebar": "Open navigation",
     "closeSidebar": "Close navigation"
   },
@@ -586,10 +587,12 @@
   },
   "configuration": {
     "title": "Configuration",
-    "description": "Update selected runtime settings without shell access. Admin role required.",
+    "description": "Update operational runtime settings without shell access. Available to admin and manager roles.",
     "sections": {
-      "logging": "Logging",
-      "shares": "Shares",
+      "troubleshooting": "Troubleshooting",
+      "driveOperations": "Drive Operations",
+      "networkMountOperations": "Network Mount Operations",
+      "copyAndJobWorkflow": "Copy and Job Workflow",
       "databasePool": "Database Connection Pool",
       "passwordPolicy": "Password Policy",
       "copyJobs": "Copy Jobs",
@@ -724,6 +727,19 @@
       "saved": "Configuration saved.",
       "pendingRestart": "Changes saved. Restart is required for all updates to take effect.",
       "restartRequested": "Restart request submitted."
+    }
+  },
+  "adminPage": {
+    "title": "Admin",
+    "description": "Manage infrastructure, password policy, webhook, and service-control settings. Admin role required.",
+    "sections": {
+      "loggingInfrastructure": "Logging Infrastructure",
+      "databaseRuntime": "Database Runtime",
+      "platformIntegration": "Platform Integration",
+      "serviceControl": "Service Control"
+    },
+    "serviceControl": {
+      "idle": "Restart the ECUBE service after saving changes that require a restart."
     }
   },
   "common": {

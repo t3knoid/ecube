@@ -2,7 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { getPublicAuthConfig } from '@/api/auth.js'
 import { getSetupStatus } from '@/api/setup.js'
-import { AUDIT_ROLES, USERS_ROLES } from '@/constants/roles.js'
+import { AUDIT_ROLES, CONFIGURATION_ROLES, USERS_ROLES } from '@/constants/roles.js'
 import { EXPIRED_QUERY_KEY, EXPIRED_QUERY_VALUE } from '@/constants/auth.js'
 import AppShell from '@/components/layout/AppShell.vue'
 import { logger } from '@/utils/logger.js'
@@ -77,6 +77,12 @@ const routes = [
         path: 'configuration',
         name: 'configuration',
         component: () => import('@/views/ConfigurationView.vue'),
+        meta: { roles: CONFIGURATION_ROLES },
+      },
+      {
+        path: 'admin',
+        name: 'admin',
+        component: () => import('@/views/AdminView.vue'),
         meta: { roles: USERS_ROLES },
       },
       {

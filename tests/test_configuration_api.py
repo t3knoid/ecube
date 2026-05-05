@@ -128,18 +128,66 @@ class TestConfigurationSchemaValidation:
 
 
 class TestConfigurationEndpoints:
-    def test_get_configuration_admin_allowed(self, admin_client):
+    _MANAGER_CONFIGURATION_KEYS = {
+        "log_level",
+        "mkfs_exfat_cluster_size",
+        "drive_format_timeout_seconds",
+        "drive_mount_timeout_seconds",
+        "network_mount_timeout_seconds",
+        "mount_share_discovery_timeout_seconds",
+        "copy_job_timeout",
+        "job_detail_files_page_size",
+    }
+
+    _ADMIN_CONFIGURATION_KEYS = {
+        "log_format",
+        "log_file",
+        "log_file_max_bytes",
+        "log_file_backup_count",
+        "db_pool_size",
+        "db_pool_max_overflow",
+        "db_pool_recycle_seconds",
+        "callback_default_url",
+        "callback_proxy_url",
+        "callback_payload_fields",
+        "callback_payload_field_map",
+        "callback_hmac_secret_configured",
+        "nfs_client_version",
+        "startup_analysis_batch_size",
+    }
+
+    def test_get_manager_configuration_admin_allowed(self, admin_client):
+        resp = admin_client.get("/configuration")
+        assert resp.status_code == 200
+        data = resp.json()
+        keys = {item["key"] for item in data["settings"]}
+        assert keys == self._MANAGER_CONFIGURATION_KEYS
+
+    def test_get_configuration_manager_allowed(self, manager_client):
+        resp = manager_client.get("/configuration")
+        assert resp.status_code == 200
+
+        data = resp.json()
+        keys = {item["key"] for item in data["settings"]}
+        assert keys == self._MANAGER_CONFIGURATION_KEYS
+
+    def test_get_configuration_processor_forbidden(self, client):
+        resp = client.get("/configuration")
+        assert resp.status_code == 403
+
+    def test_get_configuration_auditor_forbidden(self, auditor_client):
+        resp = auditor_client.get("/configuration")
+        assert resp.status_code == 403
+
+    def test_get_admin_configuration_admin_allowed(self, admin_client):
         resp = admin_client.get("/admin/configuration")
         assert resp.status_code == 200
         data = resp.json()
         keys = {item["key"] for item in data["settings"]}
-        assert "log_level" in keys
+        assert keys == self._ADMIN_CONFIGURATION_KEYS
         assert "nfs_client_version" in keys
         assert "db_pool_recycle_seconds" in keys
         assert "startup_analysis_batch_size" in keys
-        assert "mkfs_exfat_cluster_size" in keys
-        assert "copy_job_timeout" in keys
-        assert "job_detail_files_page_size" in keys
         assert "callback_default_url" in keys
         assert "callback_proxy_url" in keys
         assert "callback_payload_fields" in keys
@@ -197,6 +245,43 @@ class TestConfigurationEndpoints:
         resp = client.get("/admin/configuration")
         assert resp.status_code == 403
 
+    @patch("app.services.configuration_service.database_service._write_env_settings")
+    def test_manager_update_configuration_allows_manager_field(
+        self,
+        mock_write_env,
+        manager_client,
+    ):
+        original_value = settings.copy_job_timeout
+        try:
+            resp = manager_client.put(
+                "/configuration",
+                json={"copy_job_timeout": 4200},
+            )
+            assert resp.status_code == 200, resp.json()
+
+            payload = resp.json()
+            assert payload["changed_settings"] == ["copy_job_timeout"]
+            assert payload["restart_required"] is False
+
+            written = mock_write_env.call_args.args[0]
+            assert written.get("COPY_JOB_TIMEOUT") == "4200"
+        finally:
+            settings.copy_job_timeout = original_value
+
+    def test_manager_update_configuration_rejects_admin_only_field(self, manager_client):
+        resp = manager_client.put(
+            "/configuration",
+            json={"db_pool_size": 12},
+        )
+        assert resp.status_code == 403, resp.json()
+
+    def test_manager_update_configuration_rejects_callback_secret_clear(self, manager_client):
+        resp = manager_client.put(
+            "/configuration",
+            json={"clear_callback_hmac_secret": True},
+        )
+        assert resp.status_code == 403, resp.json()
+
     def test_update_configuration_rejects_startup_analysis_batch_size_above_maximum(self, admin_client):
         resp = admin_client.put(
             "/admin/configuration",
@@ -212,9 +297,9 @@ class TestConfigurationEndpoints:
         mock_write_env,
         admin_client,
     ):
-        target_level = "DEBUG" if settings.log_level != "DEBUG" else "INFO"
+        target_batch_size = 128 if settings.startup_analysis_batch_size != 128 else 129
         payload = {
-            "log_level": target_level,
+            "startup_analysis_batch_size": target_batch_size,
             "db_pool_recycle_seconds": 120,
         }
         resp = admin_client.put("/admin/configuration", json=payload)
@@ -222,12 +307,12 @@ class TestConfigurationEndpoints:
 
         data = resp.json()
         assert data["status"] == "updated"
-        assert "log_level" in data["changed_settings"]
+        assert "startup_analysis_batch_size" in data["changed_settings"]
         assert "db_pool_recycle_seconds" in data["restart_required_settings"]
         assert data["restart_required"] is True
 
         mock_write_env.assert_called_once()
-        mock_configure_logging.assert_called_once()
+        mock_configure_logging.assert_not_called()
 
     @patch("app.services.configuration_service.database_service._write_env_settings")
     def test_update_configuration_persists_startup_analysis_batch_size(
@@ -236,10 +321,11 @@ class TestConfigurationEndpoints:
         admin_client,
     ):
         original_value = settings.startup_analysis_batch_size
+        target_value = 128 if original_value != 128 else 129
         try:
             resp = admin_client.put(
                 "/admin/configuration",
-                json={"startup_analysis_batch_size": 128},
+                json={"startup_analysis_batch_size": target_value},
             )
             assert resp.status_code == 200, resp.json()
 
@@ -248,7 +334,7 @@ class TestConfigurationEndpoints:
             assert payload["restart_required"] is False
 
             written = mock_write_env.call_args.args[0]
-            assert written.get("STARTUP_ANALYSIS_BATCH_SIZE") == "128"
+            assert written.get("STARTUP_ANALYSIS_BATCH_SIZE") == str(target_value)
         finally:
             settings.startup_analysis_batch_size = original_value
 
@@ -261,7 +347,7 @@ class TestConfigurationEndpoints:
         original_value = settings.mkfs_exfat_cluster_size
         try:
             resp = admin_client.put(
-                "/admin/configuration",
+                "/configuration",
                 json={"mkfs_exfat_cluster_size": "64K"},
             )
             assert resp.status_code == 200, resp.json()
@@ -284,7 +370,7 @@ class TestConfigurationEndpoints:
         original_value = settings.drive_format_timeout_seconds
         try:
             resp = admin_client.put(
-                "/admin/configuration",
+                "/configuration",
                 json={"drive_format_timeout_seconds": 1800},
             )
             assert resp.status_code == 200, resp.json()
@@ -307,7 +393,7 @@ class TestConfigurationEndpoints:
         original_value = settings.drive_mount_timeout_seconds
         try:
             resp = admin_client.put(
-                "/admin/configuration",
+                "/configuration",
                 json={"drive_mount_timeout_seconds": 300},
             )
             assert resp.status_code == 200, resp.json()
@@ -330,7 +416,7 @@ class TestConfigurationEndpoints:
         original_value = settings.network_mount_timeout_seconds
         try:
             resp = admin_client.put(
-                "/admin/configuration",
+                "/configuration",
                 json={"network_mount_timeout_seconds": 240},
             )
             assert resp.status_code == 200, resp.json()
@@ -353,7 +439,7 @@ class TestConfigurationEndpoints:
         original_value = settings.mount_share_discovery_timeout_seconds
         try:
             resp = admin_client.put(
-                "/admin/configuration",
+                "/configuration",
                 json={"mount_share_discovery_timeout_seconds": 75},
             )
             assert resp.status_code == 200, resp.json()
@@ -424,11 +510,11 @@ class TestConfigurationEndpoints:
             resp = admin_client.put(
                 "/admin/configuration",
                 json={
-                    "callback_payload_fields": ["event", "project_id", "completion_result"],
+                    "callback_payload_fields": [" event ", " project_id ", "completion_result"],
                     "callback_payload_field_map": {
-                        "type": "event",
-                        "project": "project_id",
-                        "summary": "project=${project_id};result=${completion_result}",
+                        " type ": " event ",
+                        "project": " project_id ",
+                        "summary": " project=${project_id};result=${completion_result} ",
                     },
                 },
             )
@@ -528,7 +614,7 @@ class TestConfigurationEndpoints:
     ):
         target_level = "DEBUG" if settings.log_level != "DEBUG" else "INFO"
 
-        resp = admin_client.put("/admin/configuration", json={"log_level": target_level})
+        resp = admin_client.put("/configuration", json={"log_level": target_level})
         assert resp.status_code == 200, resp.json()
 
         attempt = (
@@ -567,6 +653,7 @@ class TestConfigurationEndpoints:
         mock_configure_logging,
         mock_write_env,
         admin_client,
+        db,
     ):
         resp = admin_client.put("/admin/configuration", json={"log_file": "/var/log/ecube/custom.log"})
         assert resp.status_code == 200, resp.json()
@@ -576,6 +663,15 @@ class TestConfigurationEndpoints:
         written = mock_write_env.call_args.args[0]
         assert written.get("LOG_FILE") == "/var/log/ecube/custom.log"
         mock_configure_logging.assert_called_once()
+
+        attempt = (
+            db.query(AuditLog)
+            .filter(AuditLog.action == "CONFIGURATION_UPDATE_ATTEMPTED")
+            .order_by(AuditLog.id.desc())
+            .first()
+        )
+        assert attempt is not None
+        assert (attempt.details or {}).get("scope") == "admin"
 
     @patch("app.services.configuration_service.database_service._write_env_settings")
     def test_update_configuration_first_log_file_write_logs_immediately(
@@ -743,7 +839,8 @@ class TestConfigurationEndpoints:
         assert attempt is not None
         assert rejected is not None
         assert "log_file" in (attempt.details or {}).get("requested_settings", [])
-        assert "Unable to write log file" in str((rejected.details or {}).get("reason", ""))
+        assert (rejected.details or {}).get("reason") == "Permission or authentication failure"
+        assert "/var/log/ecube/denied.log" not in str(rejected.details or {})
 
     @patch("app.services.configuration_service.shutil.which", return_value="/usr/bin/systemctl")
     @patch("app.services.configuration_service.subprocess.run")
@@ -768,7 +865,7 @@ class TestConfigurationEndpoints:
         target_level = "DEBUG" if original_log_level != "DEBUG" else "INFO"
         mock_write_env.side_effect = RuntimeError("disk full")
 
-        resp = admin_client.put("/admin/configuration", json={"log_level": target_level})
+        resp = admin_client.put("/configuration", json={"log_level": target_level})
 
         assert resp.status_code == 500
         assert settings.log_level == original_log_level
@@ -787,7 +884,7 @@ class TestConfigurationEndpoints:
 
         mock_apply_runtime.side_effect = RuntimeError("runtime apply failed")
 
-        resp = admin_client.put("/admin/configuration", json={"log_level": target_level})
+        resp = admin_client.put("/configuration", json={"log_level": target_level})
 
         assert resp.status_code == 500
         assert settings.log_level == original_log_level
@@ -802,7 +899,7 @@ class TestConfigurationEndpoints:
     ):
         mock_update.side_effect = RuntimeError("internal path /tmp/secret")
 
-        resp = admin_client.put("/admin/configuration", json={"log_level": "DEBUG"})
+        resp = admin_client.put("/configuration", json={"log_level": "DEBUG"})
 
         assert resp.status_code == 500
         payload = resp.json()

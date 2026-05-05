@@ -52,7 +52,7 @@ Primary workflows covered in this guide:
 - Managing mount definitions
 - Viewing and exporting audit logs
 - Accessing user and system pages when your role permits it
-- Managing selected runtime configuration settings (admin-only)
+- Managing operational runtime configuration settings when your role permits it
 
 ## Scope
 
@@ -158,7 +158,8 @@ Common role effects in the UI:
 
 - The `Audit` page is visible only to roles allowed to inspect audit records.
 - The `Users` page is visible only to roles allowed to manage users.
-- The `Configuration` page is visible only to `admin` users.
+- The `Configuration` page is visible to `admin` and `manager` users.
+- The `Admin` page is visible only to `admin` users.
 - Action buttons such as formatting or initializing drives may be disabled if your role does not permit them.
 
 ![Role-based navigation visibility (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/dashboard-default-chromium-linux.png)
@@ -1062,11 +1063,46 @@ If your role does not include access to this page, the navigation item will not 
 
 ![Users page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/users-default-chromium-linux.png)
 
-## 13. Configuration
+## 13. Configuration and Admin
+
+ECUBE now separates runtime settings into two pages so managers can adjust operational settings without gaining access to infrastructure, password policy, webhook secret, or service-control workflows.
+
+### 13.1 Configuration
+
+**Allowed roles:** `admin`, `manager`
+
+Use the `Configuration` page to update operational runtime settings from the UI without logging into the host terminal.
+
+What this page is for:
+
+- Adjusting troubleshooting log verbosity with `Log Level`
+- Tuning drive formatting and mounting defaults used in day-to-day media handling
+- Tuning network mount and share-discovery timeout behavior for slow file servers
+- Adjusting copy timeout and Job Detail file-page defaults used by operators
+
+Basic workflow:
+
+1. Open `Configuration` from the navigation area.
+2. Review the current values in `Troubleshooting`, `Drive Operations`, `Network Mount Operations`, and `Copy and Job Workflow`.
+3. Edit one or more fields.
+4. Click `Save`.
+
+Important operational notes:
+
+- The `Configuration` page contains only operational settings: `log_level`, `mkfs_exfat_cluster_size`, `drive_format_timeout_seconds`, `drive_mount_timeout_seconds`, `network_mount_timeout_seconds`, `mount_share_discovery_timeout_seconds`, `copy_job_timeout`, and `job_detail_files_page_size`.
+- Managers cannot view or trigger password policy, webhook secret, logging infrastructure, database runtime, or service restart controls from this page.
+- `exFAT Cluster Size` controls the allocation unit ECUBE uses when formatting drives as exFAT. `4K` is recommended for most situations. Use larger values only for drives that will store very large files only and no small files.
+- `Drive Format Timeout (seconds)` controls how long ECUBE allows a drive format command to run before treating it as failed. Increase it for large removable media that legitimately need extended exFAT formatting time.
+- `Drive Mount Timeout (seconds)` controls how long ECUBE allows a drive mount command to run before treating it as failed. Increase it for large removable media or slower USB links that need extra time to mount.
+- `Network Mount Timeout (seconds)` controls how long ECUBE allows SMB and NFS mount workflows to run before treating them as failed. The same setting also governs related unmount and mount-state verification checks, so increase it when slow servers, DNS resolution, or authentication handshakes make network shares slow to validate or reconnect.
+- `Mount Share Discovery Timeout (seconds)` controls how long ECUBE allows SMB share browsing and NFS export discovery to run before treating them as failed. Increase it when the Add Mount `Browse` dialog times out against slow servers or high-latency networks.
+- Drive formatting now keeps the browser request open without the prior UI-side 30-second timeout. If a format still fails, operators should review the server log for `Drive format timed out` or `Drive format command failed` and adjust the Configuration values rather than treating the failure as a browser connectivity problem.
+
+### 13.2 Admin
 
 **Allowed roles:** `admin`
 
-Use the `Configuration` page to update selected runtime settings from the UI without logging into the host terminal.
+Use the `Admin` page for infrastructure-facing configuration, password policy, webhook, and service-control workflows.
 
 In a standard deployment, the Logging section loads with file logging already enabled and the log path prefilled as `/var/log/ecube/app.log`. Unchecking the file logging toggle clears `LOG_FILE` and returns ECUBE to console-only logging.
 
@@ -1080,11 +1116,12 @@ What this page is for:
 - Setting or clearing the write-only webhook signing secret used for the `X-ECUBE-Signature` header
 - Setting or clearing the outbound webhook proxy URL used for callback delivery
 - Setting or clearing JSON-based callback payload field selection and outbound field mapping rules
-- Applying safe configuration changes through role-restricted workflows
+- Adjusting platform integration defaults such as `nfs_client_version` and `startup_analysis_batch_size`
+- Applying safe admin-only configuration changes through role-restricted workflows
 
 Basic workflow:
 
-1. Open `Configuration` from the admin navigation area.
+1. Open `Admin` from the admin navigation area.
 2. Review current values in each section.
 3. Edit one or more fields.
 4. Click `Save`.
@@ -1106,12 +1143,7 @@ Important operational notes:
 - When demo mode is enabled and `DEMO_SHARED_PASSWORD` is left empty, ECUBE also derives the login screen's shared demo password from the active `Password Policy` values. After changing the policy, restart ECUBE or otherwise rerun startup reconciliation before expecting existing demo OS accounts to accept the newly displayed implicit password.
 - `enforce_for_root` remains enabled and is not editable from the UI.
 - `Startup Analysis Batch Size` accepts values from `1` to `5000`. Lower values reduce peak memory use during startup analysis; higher values reduce database round trips.
-- `exFAT Cluster Size` controls the allocation unit ECUBE uses when formatting drives as exFAT. `4K` is recommended for most situations. Use larger values only for drives that will store very large files only and no small files.
-- `Drive Format Timeout (seconds)` controls how long ECUBE allows a drive format command to run before treating it as failed. Increase it for large removable media that legitimately need extended exFAT formatting time.
-- `Drive Mount Timeout (seconds)` controls how long ECUBE allows a drive mount command to run before treating it as failed. Increase it for large removable media or slower USB links that need extra time to mount.
-- `Network Mount Timeout (seconds)` controls how long ECUBE allows SMB and NFS mount workflows to run before treating them as failed. The same setting also governs related unmount and mount-state verification checks, so increase it when slow servers, DNS resolution, or authentication handshakes make network shares slow to validate or reconnect.
-- `Mount Share Discovery Timeout (seconds)` controls how long ECUBE allows SMB share browsing and NFS export discovery to run before treating them as failed. Increase it when the Add Mount `Browse` dialog times out against slow servers or high-latency networks.
-- Drive formatting now keeps the browser request open without the prior UI-side 30-second timeout. If a format still fails, operators should review the server log for `Drive format timed out` or `Drive format command failed` and adjust the Configuration values rather than treating the failure as a browser connectivity problem.
+- Drive formatting and mount timeout controls now live on the `Configuration` page, not the `Admin` page.
 - The `Default Callback URL` must be a valid `https://` URL and is overridden by any job-specific `Webhook callback URL` entered on the Jobs page or Job Detail edit dialog.
 - The `Outbound Callback Proxy URL` must be a valid `http://` or `https://` URL and must not contain embedded credentials.
 - The `Webhook Signing Secret` field is write-only. Leave it blank to keep the current secret, enter a new value to rotate it, or use the clear checkbox to remove it.
@@ -1120,7 +1152,7 @@ Important operational notes:
 - If restart submission fails, use the displayed error and contact platform support or perform restart through approved host-level procedures.
 - For field-by-field meaning and defaults, see [04-configuration-reference.md](04-configuration-reference.md).
 
-If your role does not include access to this page, the navigation item will not appear.
+If your role does not include access to either page, the navigation item will not appear.
 
 ![Configuration page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/configuration-default-chromium-linux.png)
 
@@ -1132,7 +1164,7 @@ ECUBE can notify an external system when a persisted job lifecycle event occurs.
 
 You can configure webhook behavior in two places:
 
-- `Configuration` page: administrators can set a system-wide `Default Callback URL`
+- `Admin` page: administrators can set a system-wide `Default Callback URL`
 - Jobs UI: operators can set or clear a per-job `Webhook callback URL`
 
 How precedence works:
@@ -1154,7 +1186,7 @@ Use a job-specific callback URL when one export must notify a different downstre
 
 To configure a system-wide callback as an administrator:
 
-1. Open `Configuration`.
+1. Open `Admin`.
 2. Scroll to the `Webhooks` panel.
 3. Enter the `Default Callback URL` if jobs without a per-job callback should still notify a downstream system.
 4. Optionally enter an `Outbound Callback Proxy URL` if your environment requires webhook delivery through an HTTP or HTTPS forward proxy.
@@ -1173,11 +1205,11 @@ Operational notes:
 - Embedded credentials in callback or proxy URLs are rejected.
 - Leaving the job-level callback blank causes ECUBE to fall back to the configured system default, if one exists.
 - Leaving both values blank disables callback delivery for that job.
-- The signing secret is write-only in the UI. Leave it blank to keep the current secret, enter a new secret to rotate it, or clear it from the `Configuration` page.
+- The signing secret is write-only in the UI. Leave it blank to keep the current secret, enter a new secret to rotate it, or clear it from the `Admin` page.
 
 ### 14.2 Configure the Callback Payload
 
-Administrators can optionally customize the outbound payload in the `Configuration` page `Webhooks` panel with these two fields:
+Administrators can optionally customize the outbound payload in the `Admin` page `Webhooks` panel with these two fields:
 
 - `Callback Payload Source Fields`: JSON array of allowlisted source fields to include.
 - `Callback Payload Field Mapping`: JSON object that remaps outbound field names to either an exact source field name or a deterministic `${field}` template string.

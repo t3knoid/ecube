@@ -1,15 +1,17 @@
-"""Admin configuration endpoints."""
+"""Configuration and Admin configuration endpoints."""
 
 from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, require_roles
 from app.database import get_db
+from app.exceptions import AuthorizationError
 from app.schemas.configuration import (
+    ConfigurationField,
     ConfigurationGetResponse,
     ConfigurationRestartRequest,
     ConfigurationRestartResponse,
@@ -19,12 +21,14 @@ from app.schemas.configuration import (
 from app.schemas.errors import R_400, R_401, R_403, R_422, R_500, R_503
 from app.services import configuration_service
 from app.services.audit_service import log_and_audit
+from app.utils.sanitize import sanitize_error_message
 
 logger = logging.getLogger(__name__)
 
 _SECRET_CONFIGURATION_FIELDS = frozenset({"callback_hmac_secret"})
 
-router = APIRouter(prefix="/admin/configuration", tags=["admin"])
+router = APIRouter(tags=["configuration"])
+_CONFIGURATION_ACCESS = require_roles("admin", "manager")
 _ADMIN_ONLY = require_roles("admin")
 
 
@@ -53,6 +57,18 @@ def _sanitize_changed_setting_values(
     return sanitized
 
 
+def _validated_request_values(
+    body: ConfigurationUpdateRequest,
+    raw_values: dict[str, object],
+) -> dict[str, object]:
+    validated_values = body.model_dump()
+    return {key: validated_values[key] for key in raw_values}
+
+
+def _safe_configuration_reason(err: Exception, default_message: str) -> str:
+    return sanitize_error_message(err, default_message)
+
+
 def _log_configuration_event(
     db: Session,
     *,
@@ -76,34 +92,41 @@ def _log_configuration_event(
 
 
 @router.get(
-    "",
+    "/configuration",
     response_model=ConfigurationGetResponse,
     responses={**R_401, **R_403, **R_503},
 )
 def get_configuration(
-    _: CurrentUser = Depends(_ADMIN_ONLY),
+    _: CurrentUser = Depends(_CONFIGURATION_ACCESS),
 ) -> ConfigurationGetResponse:
-    """Return the current runtime configuration values for admin users."""
-    return ConfigurationGetResponse(settings=configuration_service.get_configuration_fields())
+    """Return the current manager-accessible runtime configuration values."""
+    return ConfigurationGetResponse(
+        settings=[
+            ConfigurationField(**field)
+            for field in configuration_service.get_configuration_fields(scope="manager")
+        ]
+    )
 
 
 @router.put(
-    "",
+    "/configuration",
     response_model=ConfigurationUpdateResponse,
     responses={**R_401, **R_403, **R_422, **R_500, **R_503},
 )
-def update_configuration(
+async def update_configuration(
+    request: Request,
     body: ConfigurationUpdateRequest,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(_ADMIN_ONLY),
+    current_user: CurrentUser = Depends(_CONFIGURATION_ACCESS),
 ) -> ConfigurationUpdateResponse:
-    """Apply supported runtime/admin configuration updates.
+    """Apply manager-accessible runtime configuration updates.
 
     Returns changed settings and whether a service restart is required for any
     of the requested updates.
     """
-    values = {key: getattr(body, key) for key in body.model_fields_set}
-    requested_settings = sorted(values.keys())
+    raw_values = await request.json()
+    values = _validated_request_values(body, raw_values)
+    requested_settings = sorted(raw_values.keys())
     requested_values = _sanitize_configuration_values(
         {key: values[key] for key in requested_settings}
     )
@@ -114,6 +137,7 @@ def update_configuration(
         actor=current_user.username,
         level=logging.WARNING,
         metadata={
+            "scope": "manager",
             "requested_settings": requested_settings,
             "requested_values": requested_values,
         },
@@ -122,38 +146,59 @@ def update_configuration(
     )
 
     try:
-        result = configuration_service.update_configuration(values)
-    except ValueError as exc:
+        result = configuration_service.update_configuration(values, scope="manager")
+    except AuthorizationError as exc:
+        safe_reason = _safe_configuration_reason(exc, "Configuration update rejected")
         _log_configuration_event(
             db,
             action="CONFIGURATION_UPDATE_REJECTED",
             actor=current_user.username,
             level=logging.WARNING,
             metadata={
+                "scope": "manager",
                 "requested_settings": requested_settings,
                 "requested_values": requested_values,
-                "reason": str(exc),
+                "reason": safe_reason,
             },
             fallback_message="CONFIGURATION_UPDATE_REJECTED actor=%s requested=%s reason=%s",
-            fallback_args=(current_user.username, requested_settings, str(exc)),
+            fallback_args=(current_user.username, requested_settings, safe_reason),
+        )
+        raise
+    except ValueError as exc:
+        safe_reason = _safe_configuration_reason(exc, "Configuration update validation failed")
+        _log_configuration_event(
+            db,
+            action="CONFIGURATION_UPDATE_REJECTED",
+            actor=current_user.username,
+            level=logging.WARNING,
+            metadata={
+                "scope": "manager",
+                "requested_settings": requested_settings,
+                "requested_values": requested_values,
+                "reason": safe_reason,
+            },
+            fallback_message="CONFIGURATION_UPDATE_REJECTED actor=%s requested=%s reason=%s",
+            fallback_args=(current_user.username, requested_settings, safe_reason),
         )
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         )
     except Exception as exc:
+        safe_reason = _safe_configuration_reason(exc, "Configuration update failed")
         _log_configuration_event(
             db,
             action="CONFIGURATION_UPDATE_FAILED",
             actor=current_user.username,
             level=logging.ERROR,
             metadata={
+                "scope": "manager",
                 "requested_settings": requested_settings,
                 "requested_values": requested_values,
-                "reason": str(exc),
+                "reason": safe_reason,
             },
             fallback_message="CONFIGURATION_UPDATE_FAILED actor=%s requested=%s reason=%s",
-            fallback_args=(current_user.username, requested_settings, str(exc)),
+            fallback_args=(current_user.username, requested_settings, safe_reason),
         )
         logger.exception(
             "CONFIGURATION_UPDATE_UNHANDLED actor=%s requested=%s",
@@ -171,6 +216,146 @@ def update_configuration(
         actor=current_user.username,
         level=logging.WARNING,
         metadata={
+            "scope": "manager",
+            "changed_settings": result["changed_settings"],
+            "changed_setting_values": _sanitize_changed_setting_values(
+                result["changed_setting_values"]
+            ),
+            "restart_required_settings": result["restart_required_settings"],
+        },
+        fallback_message="CONFIGURATION_UPDATED actor=%s changed=%s",
+        fallback_args=(current_user.username, result["changed_settings"]),
+    )
+
+    return ConfigurationUpdateResponse(**result)
+
+
+@router.get(
+    "/admin/configuration",
+    response_model=ConfigurationGetResponse,
+    responses={**R_401, **R_403, **R_503},
+)
+def get_admin_configuration(
+    _: CurrentUser = Depends(_ADMIN_ONLY),
+) -> ConfigurationGetResponse:
+    """Return the current admin-only runtime configuration values."""
+    return ConfigurationGetResponse(
+        settings=[
+            ConfigurationField(**field)
+            for field in configuration_service.get_configuration_fields(scope="admin")
+        ]
+    )
+
+
+@router.put(
+    "/admin/configuration",
+    response_model=ConfigurationUpdateResponse,
+    responses={**R_401, **R_403, **R_422, **R_500, **R_503},
+)
+async def update_admin_configuration(
+    request: Request,
+    body: ConfigurationUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_ONLY),
+) -> ConfigurationUpdateResponse:
+    """Apply supported admin-only configuration updates.
+
+    Returns changed settings and whether a service restart is required for any
+    of the requested updates.
+    """
+    raw_values = await request.json()
+    values = _validated_request_values(body, raw_values)
+    requested_settings = sorted(raw_values.keys())
+    requested_values = _sanitize_configuration_values(
+        {key: values[key] for key in requested_settings}
+    )
+
+    _log_configuration_event(
+        db,
+        action="CONFIGURATION_UPDATE_ATTEMPTED",
+        actor=current_user.username,
+        level=logging.WARNING,
+        metadata={
+            "scope": "admin",
+            "requested_settings": requested_settings,
+            "requested_values": requested_values,
+        },
+        fallback_message="CONFIGURATION_UPDATE_ATTEMPTED actor=%s requested=%s",
+        fallback_args=(current_user.username, requested_settings),
+    )
+
+    try:
+        result = configuration_service.update_configuration(values, scope="admin")
+    except AuthorizationError as exc:
+        safe_reason = _safe_configuration_reason(exc, "Configuration update rejected")
+        _log_configuration_event(
+            db,
+            action="CONFIGURATION_UPDATE_REJECTED",
+            actor=current_user.username,
+            level=logging.WARNING,
+            metadata={
+                "scope": "admin",
+                "requested_settings": requested_settings,
+                "requested_values": requested_values,
+                "reason": safe_reason,
+            },
+            fallback_message="CONFIGURATION_UPDATE_REJECTED actor=%s requested=%s reason=%s",
+            fallback_args=(current_user.username, requested_settings, safe_reason),
+        )
+        raise
+    except ValueError as exc:
+        safe_reason = _safe_configuration_reason(exc, "Configuration update validation failed")
+        _log_configuration_event(
+            db,
+            action="CONFIGURATION_UPDATE_REJECTED",
+            actor=current_user.username,
+            level=logging.WARNING,
+            metadata={
+                "scope": "admin",
+                "requested_settings": requested_settings,
+                "requested_values": requested_values,
+                "reason": safe_reason,
+            },
+            fallback_message="CONFIGURATION_UPDATE_REJECTED actor=%s requested=%s reason=%s",
+            fallback_args=(current_user.username, requested_settings, safe_reason),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        )
+    except Exception as exc:
+        safe_reason = _safe_configuration_reason(exc, "Configuration update failed")
+        _log_configuration_event(
+            db,
+            action="CONFIGURATION_UPDATE_FAILED",
+            actor=current_user.username,
+            level=logging.ERROR,
+            metadata={
+                "scope": "admin",
+                "requested_settings": requested_settings,
+                "requested_values": requested_values,
+                "reason": safe_reason,
+            },
+            fallback_message="CONFIGURATION_UPDATE_FAILED actor=%s requested=%s reason=%s",
+            fallback_args=(current_user.username, requested_settings, safe_reason),
+        )
+        logger.exception(
+            "CONFIGURATION_UPDATE_UNHANDLED actor=%s requested=%s",
+            current_user.username,
+            requested_settings,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Configuration update failed",
+        )
+
+    _log_configuration_event(
+        db,
+        action="CONFIGURATION_UPDATED",
+        actor=current_user.username,
+        level=logging.WARNING,
+        metadata={
+            "scope": "admin",
             "changed_settings": result["changed_settings"],
             "changed_setting_values": _sanitize_changed_setting_values(
                 result["changed_setting_values"]
@@ -185,7 +370,7 @@ def update_configuration(
 
 
 @router.post(
-    "/restart",
+    "/admin/configuration/restart",
     response_model=ConfigurationRestartResponse,
     responses={**R_400, **R_401, **R_403, **R_422, **R_500, **R_503},
 )

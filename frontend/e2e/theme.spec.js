@@ -105,16 +105,16 @@ async function mockCoreApis(page) {
     disk_write_bytes: 2048,
     worker_queue_size: 0,
   })
-  await routeJson(page, '**/api/admin/configuration', {
+  await routeJson(page, '**/api/configuration', {
     settings: [
       { key: 'log_level', value: 'INFO', requires_restart: false },
-      { key: 'log_format', value: 'text', requires_restart: false },
-      { key: 'log_file', value: '/var/log/ecube/app.log', requires_restart: false },
-      { key: 'log_file_max_bytes', value: 10485760, requires_restart: false },
-      { key: 'log_file_backup_count', value: 5, requires_restart: false },
-      { key: 'db_pool_size', value: 5, requires_restart: false },
-      { key: 'db_pool_max_overflow', value: 10, requires_restart: false },
-      { key: 'db_pool_recycle_seconds', value: -1, requires_restart: true },
+      { key: 'mkfs_exfat_cluster_size', value: '4K', requires_restart: false },
+      { key: 'drive_format_timeout_seconds', value: 900, requires_restart: false },
+      { key: 'drive_mount_timeout_seconds', value: 120, requires_restart: false },
+      { key: 'network_mount_timeout_seconds', value: 120, requires_restart: false },
+      { key: 'mount_share_discovery_timeout_seconds', value: 60, requires_restart: false },
+      { key: 'copy_job_timeout', value: 3600, requires_restart: false },
+      { key: 'job_detail_files_page_size', value: 40, requires_restart: false },
     ],
   })
   await routeJson(page, '**/api/admin/password-policy', {

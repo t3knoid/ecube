@@ -17,11 +17,13 @@
 6. [Jobs (`/jobs`)](#jobsjobs)
 7. [Audit (`/audit`)](#auditaudit)
 8. [Admin Users (`/admin/os-users`)](#admin-users-adminos-users)
-9. [Admin Password Policy (`/admin/password-policy`)](#admin-password-policy-adminpassword-policy)
-10. [Admin Logs (`/admin/logs`)](#admin-logs-adminlogs)
-11. [Introspection (`/introspection`)](#introspectionintrospection)
-12. [Telemetry (`/telemetry`)](#telemetrytelemetry)
-13. [Support and Resources](#support-and-resources)
+9. [Configuration (`/configuration`)](#configurationconfiguration)
+10. [Admin Configuration (`/admin/configuration`)](#admin-configuration-adminconfiguration)
+11. [Admin Password Policy (`/admin/password-policy`)](#admin-password-policy-adminpassword-policy)
+12. [Admin Logs (`/admin/logs`)](#admin-logs-adminlogs)
+13. [Introspection (`/introspection`)](#introspectionintrospection)
+14. [Telemetry (`/telemetry`)](#telemetrytelemetry)
+15. [Support and Resources](#support-and-resources)
 
 ---
 
@@ -279,6 +281,55 @@ curl -H "Authorization: Bearer $TOKEN" \
 Password reset behavior:
 
 - `PUT /admin/os-users/{username}/password` returns `422 Unprocessable Content` when PAM rejects the new password because it violates the active host password policy.
+
+---
+
+## Configuration (`/configuration`)
+
+| Method | Endpoint | Role | Description |
+| ------ | -------- | ---- | ----------- |
+| GET | `/configuration` | admin/manager | Return the manager-accessible runtime configuration fields shown on the `Configuration` page. |
+| PUT | `/configuration` | admin/manager | Update only the manager-accessible runtime configuration fields. |
+
+Manager-accessible fields are limited to:
+
+- `log_level`
+- `mkfs_exfat_cluster_size`
+- `drive_format_timeout_seconds`
+- `drive_mount_timeout_seconds`
+- `network_mount_timeout_seconds`
+- `mount_share_discovery_timeout_seconds`
+- `copy_job_timeout`
+- `job_detail_files_page_size`
+
+Notes:
+
+- `processor` and `auditor` receive `403 Forbidden`.
+- Requests that try to send admin-only configuration fields through `/configuration` are rejected with `403 Forbidden`.
+- This surface intentionally does not expose password policy, webhook secret, database runtime, logging infrastructure, or restart controls.
+
+---
+
+## Admin Configuration (`/admin/configuration`)
+
+| Method | Endpoint | Role | Description |
+| ------ | -------- | ---- | ----------- |
+| GET | `/admin/configuration` | admin | Return the admin-only runtime configuration fields shown on the `Admin` page. |
+| PUT | `/admin/configuration` | admin | Update admin-only runtime configuration fields. |
+| POST | `/admin/configuration/restart` | admin | Request an ECUBE service restart after explicit confirmation. |
+
+Admin-only fields exposed through this surface include:
+
+- Logging infrastructure: `log_format`, `log_file`, `log_file_max_bytes`, `log_file_backup_count`
+- Database runtime: `db_pool_size`, `db_pool_max_overflow`, `db_pool_recycle_seconds`
+- Webhooks: `callback_default_url`, `callback_proxy_url`, `callback_payload_fields`, `callback_payload_field_map`, `callback_hmac_secret`
+- Platform integration: `nfs_client_version`, `startup_analysis_batch_size`
+
+Notes:
+
+- `callback_hmac_secret` remains write-only. `GET /admin/configuration` returns `callback_hmac_secret_configured` instead of the raw secret value.
+- Restart remains an admin-only action and still requires `{ "confirm": true }`.
+- Shared error semantics remain the same: `401` for missing or invalid auth, `403` for insufficient role, `422` for validation failures, and `500` or `503` for service-side failures.
 
 ---
 
