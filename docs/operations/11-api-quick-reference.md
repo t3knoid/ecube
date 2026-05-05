@@ -79,6 +79,7 @@ During initial setup, `POST /setup/database/test-connection`, `POST /setup/datab
 Setup initialize behavior:
 
 - `POST /setup/initialize` accepts `trust_proxy_headers` (boolean, default `false`) in addition to admin username/password.
+- When demo mode is enabled, successful `POST /setup/initialize` also triggers runtime demo account reconciliation so demo role assignments are present immediately after setup completes.
 - If setup is already initialized, `POST /setup/initialize` returns `200` with `status="already_initialized"` and an informational message instead of returning `409`.
 - Once setup is already initialized, the call returns informational success but does not persist runtime setting changes; post-setup configuration updates require authenticated admin workflows.
 

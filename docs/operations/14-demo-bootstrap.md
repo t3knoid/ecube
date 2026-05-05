@@ -24,7 +24,7 @@ DEMO_MODE=true
 
 For a native install, `install.sh --demo` looks for `demo-metadata.json` in the same directory as `install.sh`, uses it as trusted bootstrap input, and writes the resulting runtime `DEMO_*` values into the installed `.env` file.
 
-At runtime, ECUBE reads only `.env` values such as `DEMO_MODE`, `DEMO_LOGIN_MESSAGE`, `DEMO_SHARED_PASSWORD`, `DEMO_DISABLE_PASSWORD_CHANGE`, and `DEMO_ACCOUNTS`. Running the app from source behaves normally unless you set those environment variables yourself. When `DEMO_MODE=true`, startup reconciliation also ensures the configured demo OS users and DB roles exist and resets their passwords to the effective demo shared password. If `DEMO_SHARED_PASSWORD` is empty, ECUBE derives that value from the active Password Policy settings before exposing it on the login screen and before applying it to demo accounts on the next startup reconciliation. Because those resets use the normal local-account password path, the effective shared password must satisfy the active PAM password policy whenever host password-policy enforcement is enabled.
+At runtime, ECUBE reads only `.env` values such as `DEMO_MODE`, `DEMO_LOGIN_MESSAGE`, `DEMO_SHARED_PASSWORD`, `DEMO_DISABLE_PASSWORD_CHANGE`, and `DEMO_ACCOUNTS`. Running the app from source behaves normally unless you set those environment variables yourself. When `DEMO_MODE=true`, successful setup completion and later startup reconciliation both ensure the configured demo OS users and DB roles exist and reset their passwords to the effective demo shared password. If `DEMO_SHARED_PASSWORD` is empty, ECUBE derives that value from the active Password Policy settings before exposing it on the login screen and before applying it to demo accounts during setup completion or the next startup reconciliation. Because those resets use the normal local-account password path, the effective shared password must satisfy the active PAM password policy whenever host password-policy enforcement is enabled.
 
 The login screen exposes the demo login message, the shared demo password when configured, the demo usernames, their labels and descriptions, and the password-change policy.
 
@@ -110,7 +110,7 @@ Reset no longer manages filesystem cleanup.
 
 - Demo mode disables user creation and password modification flows that are blocked by demo policy.
 - If `shared_password` is blank in the source metadata, the installer or post-install helper generates one before seeding demo accounts.
-- If `DEMO_SHARED_PASSWORD` is left empty at runtime, ECUBE derives the displayed shared password from the active Password Policy settings and reapplies that implicit password to demo accounts during the next startup reconciliation.
+- If `DEMO_SHARED_PASSWORD` is left empty at runtime, ECUBE derives the displayed shared password from the active Password Policy settings and reapplies that implicit password to demo accounts when setup completes and during later startup reconciliation.
 - If a demo account reaches a `password_expired` state, the login screen does not offer self-service password change for that account. Operators should rerun the demo seed with a new shared password to reset the managed demo credentials.
 - For an installed appliance, use one of these recovery paths:
 
