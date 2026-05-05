@@ -368,6 +368,19 @@ class TestDemoRuntimeBehavior:
         assert any(ch.isdigit() for ch in generated_password)
         assert any(not ch.isalnum() for ch in generated_password)
 
+    def test_demo_runtime_generated_shared_password_is_stable_within_one_settings_instance(self):
+        s = Settings(
+            database_url="sqlite://",
+            demo_mode=True,
+            demo_shared_password="",
+            demo_accounts=[],
+        )
+
+        first = s.get_demo_shared_password()
+        second = s.get_demo_shared_password()
+
+        assert first == second
+
     def test_serve_frontend_path_system_dir_rejected(self):
         for dangerous in ("/etc", "/var", "/tmp", "/usr", "/home"):
             with pytest.raises(ValueError, match="system root"):

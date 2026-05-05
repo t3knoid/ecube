@@ -244,19 +244,80 @@ PY
 
 _generate_demo_shared_password() {
   python3.11 - <<'PY'
+from pathlib import Path
 import secrets
-import string
 
-alphabet = string.ascii_letters + string.digits
-while True:
-    candidate = ''.join(secrets.choice(alphabet) for _ in range(20))
-    if (
-        any(ch.islower() for ch in candidate)
-        and any(ch.isupper() for ch in candidate)
-        and any(ch.isdigit() for ch in candidate)
-    ):
-        print(candidate)
+DEFAULTS = {
+  "minlen": 14,
+  "minclass": 3,
+}
+POOLS = {
+  "lower": "bcdfghjkmnpqrstvwxyz",
+  "upper": "BCDFGHJKLMNPQRSTVWXYZ",
+  "digit": "346789",
+  "special": "@%+=_",
+}
+
+
+def parse_policy(path: Path) -> dict[str, int]:
+  values = dict(DEFAULTS)
+  if not path.exists():
+    return values
+  try:
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+      line = raw_line.strip()
+      if not line or line.startswith("#") or "=" not in line:
+        continue
+      key, raw_value = [part.strip() for part in line.split("=", 1)]
+      if key not in values:
+        continue
+      try:
+        values[key] = int(raw_value)
+      except ValueError:
+        continue
+  except OSError:
+    return dict(DEFAULTS)
+  return values
+
+
+policy = parse_policy(Path("/etc/security/pwquality.conf"))
+minlen = max(int(policy.get("minlen", DEFAULTS["minlen"])), 12)
+minclass = max(0, min(int(policy.get("minclass", DEFAULTS["minclass"])), 4))
+
+pools = [POOLS["lower"], POOLS["upper"], POOLS["digit"]]
+if minclass >= 4:
+  pools.append(POOLS["special"])
+
+all_characters = "".join(pools)
+target_length = max(minlen, 20)
+
+characters: list[str] = []
+for pool in pools:
+  candidate = secrets.choice(pool)
+  if characters and candidate == characters[-1]:
+    choices = [char for char in pool if char != characters[-1]]
+    if choices:
+      candidate = secrets.choice(choices)
+  characters.append(candidate)
+
+while len(characters) < target_length:
+  candidate = secrets.choice(all_characters)
+  if characters and candidate == characters[-1]:
+    continue
+  characters.append(candidate)
+
+for index in range(len(characters) - 1, 0, -1):
+  swap_index = secrets.randbelow(index + 1)
+  characters[index], characters[swap_index] = characters[swap_index], characters[index]
+
+for index in range(1, len(characters)):
+  if characters[index] == characters[index - 1]:
+    for swap_index in range(index + 1, len(characters)):
+      if characters[swap_index] != characters[index - 1]:
+        characters[index], characters[swap_index] = characters[swap_index], characters[index]
         break
+
+print("".join(characters))
 PY
 }
 
@@ -564,13 +625,16 @@ _run_demo_install_tasks() {
 
   if [[ ! -f "${source_metadata}" ]]; then
     info "demo-metadata.json not found at ${source_metadata}; enabling runtime demo mode without install-time metadata bootstrap"
+    shared_password="$(_generate_demo_shared_password)"
+    DEMO_EFFECTIVE_SHARED_PASSWORD="${shared_password}"
     _upsert_env_value "${env_file}" "DEMO_MODE" "true"
+    _upsert_env_value "${env_file}" "DEMO_SHARED_PASSWORD" "${shared_password}"
     if [[ -f "${installed_metadata}" ]]; then
       run rm -f "${installed_metadata}"
       ok "Removed stale installed demo metadata: ${installed_metadata}"
     fi
     DEMO_INSTALL_MODE="runtime-fallback"
-    ok "Demo mode enabled in ${env_file}; runtime demo reconciliation will use built-in defaults"
+    ok "Demo mode enabled in ${env_file}; generated and persisted a runtime demo shared password"
     return 0
   fi
 
