@@ -24,6 +24,8 @@ const complete = ref(false)
 const provisionNote = ref('')
 const setupSuccessMessage = ref('')
 const demoModeEnabled = ref(false)
+const demoSetupAccountUsername = ref('')
+const demoSharedPassword = ref('')
 
 const db = ref({
   host: 'localhost',
@@ -180,8 +182,46 @@ async function runInitializeSetup() {
   }
 }
 
-function goNext() {
-  if (step.value < totalSteps.value) step.value += 1
+async function runDemoInitializeSetup() {
+  if (!demoSetupAccountUsername.value || !demoSharedPassword.value) {
+    error.value = t('setup.demoModeSetupUnavailable')
+    return false
+  }
+
+  busy.value = true
+  error.value = ''
+  try {
+    const response = await initializeSetup({
+      username: demoSetupAccountUsername.value,
+      password: demoSharedPassword.value,
+      trust_proxy_headers: admin.value.trust_proxy_headers,
+    })
+    if (typeof response?.message === 'string' && response.message.trim()) {
+      setupSuccessMessage.value = response.message
+    } else {
+      setupSuccessMessage.value = t('setup.demoModeSetupManaged')
+    }
+    complete.value = true
+    return true
+  } catch (err) {
+    if (err?.response?.status === 401) {
+      routeAfterSetupCheck()
+      return false
+    }
+    error.value = extractApiMessage(err, t('common.errors.requestConflict'))
+    return false
+  } finally {
+    busy.value = false
+  }
+}
+
+async function goNext() {
+  if (step.value >= totalSteps.value) return
+  if (demoModeEnabled.value && step.value === 3) {
+    const initialized = await runDemoInitializeSetup()
+    if (!initialized) return
+  }
+  step.value += 1
 }
 
 function goBack() {
@@ -218,10 +258,8 @@ onMounted(async () => {
     try {
       const publicConfig = await getPublicAuthConfig()
       demoModeEnabled.value = publicConfig?.demo_mode_enabled === true
-      if (demoModeEnabled.value) {
-        complete.value = true
-        setupSuccessMessage.value = t('setup.demoModeSetupManaged')
-      }
+      demoSetupAccountUsername.value = publicConfig?.setup_account_username || ''
+      demoSharedPassword.value = publicConfig?.shared_password || ''
 
       const provisionStatus = await getDatabaseProvisionStatus()
       if (provisionStatus?.provisioned === true) {

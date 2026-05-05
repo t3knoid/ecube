@@ -157,8 +157,31 @@ class PublicAuthConfigResponse(BaseModel):
     nfs_client_version_options: list[str] = Field(default_factory=lambda: ["4.2", "4.1", "4.0", "3"], description="Supported NFS client versions operators may select in the UI")
     login_message: str | None = Field(default=None, description="Optional public-safe login instructions")
     shared_password: str | None = Field(default=None, description="Public shared demo password displayed on the login screen when demo mode is enabled")
+    setup_account_username: str | None = Field(default=None, description="Demo setup account username the setup wizard should reconcile when demo mode is enabled")
     demo_accounts: list[DemoAccountResponse] = Field(default_factory=list, description="Demo-safe accounts for display on the login screen")
     password_change_allowed: bool = Field(default=True, description="Whether password changes are allowed in the current deployment")
+
+
+def _get_demo_setup_account_username() -> str | None:
+    configured_accounts = settings.get_demo_accounts()
+    for raw_account in configured_accounts:
+        if not isinstance(raw_account, dict):
+            continue
+        username = str(raw_account.get("username", "")).strip()
+        roles = raw_account.get("roles")
+        if not username or not isinstance(roles, list):
+            continue
+        if any(str(role).strip() == "admin" for role in roles):
+            return username
+
+    for raw_account in configured_accounts:
+        if not isinstance(raw_account, dict):
+            continue
+        username = str(raw_account.get("username", "")).strip()
+        if username:
+            return username
+
+    return None
 
 
 def _resolve_roles(db: Session, pam: PamAuthenticator, username: str) -> tuple[list[str], list[str]]:
@@ -218,6 +241,7 @@ def public_auth_config() -> PublicAuthConfigResponse:
             nfs_client_version_options=["4.2", "4.1", "4.0", "3"],
             login_message=None,
             shared_password=None,
+            setup_account_username=None,
             demo_accounts=[],
             password_change_allowed=True,
         )
@@ -243,6 +267,7 @@ def public_auth_config() -> PublicAuthConfigResponse:
         nfs_client_version_options=["4.2", "4.1", "4.0", "3"],
         login_message=settings.get_demo_login_message() or None,
         shared_password=settings.get_demo_shared_password() or None,
+        setup_account_username=_get_demo_setup_account_username(),
         demo_accounts=accounts,
         password_change_allowed=not settings.get_demo_disable_password_change(),
     )

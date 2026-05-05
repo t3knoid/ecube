@@ -492,6 +492,7 @@ def test_auth_public_config_returns_safe_defaults_when_demo_disabled(unauthentic
         "nfs_client_version_options": ["4.2", "4.1", "4.0", "3"],
         "login_message": None,
         "shared_password": None,
+        "setup_account_username": None,
         "demo_accounts": [],
         "password_change_allowed": True,
     }
@@ -526,6 +527,7 @@ def test_auth_public_config_returns_public_demo_password_and_safe_account_metada
     assert body["nfs_client_version_options"] == ["4.2", "4.1", "4.0", "3"]
     assert body["login_message"] == "Use the demo accounts below."
     assert body["shared_password"] == "demo"
+    assert body["setup_account_username"] == "demo_manager"
     assert body["password_change_allowed"] is False
     assert body["demo_accounts"] == [
         {
@@ -557,6 +559,7 @@ def test_auth_public_config_uses_built_in_demo_defaults_when_only_demo_mode_is_e
     assert body["demo_mode_enabled"] is True
     assert body["login_message"] == "Use the shared demo accounts below."
     assert len(body["shared_password"]) >= 16
+    assert body["setup_account_username"] == "demo_admin"
     assert any(ch.islower() for ch in body["shared_password"])
     assert any(ch.isupper() for ch in body["shared_password"])
     assert any(ch.isdigit() for ch in body["shared_password"])
