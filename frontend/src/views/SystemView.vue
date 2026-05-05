@@ -20,11 +20,17 @@ const { t } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 
+const canViewSystemTopology = computed(() => (
+  authStore.hasRole('admin') || authStore.hasRole('manager') || authStore.hasRole('processor')
+))
 const canViewLogs = computed(() => authStore.hasRole('admin') || authStore.hasRole('manager'))
 const canDownloadLogs = computed(() => authStore.hasRole('admin'))
 const canRunManagedMountReconciliation = computed(() => authStore.hasRole('admin') || authStore.hasRole('manager'))
 const tabs = computed(() => {
-  const items = ['health', 'usb', 'block', 'mounts']
+  const items = ['health']
+  if (canViewSystemTopology.value) {
+    items.push('usb', 'block', 'mounts')
+  }
   if (canViewLogs.value) {
     items.push('logs')
   }

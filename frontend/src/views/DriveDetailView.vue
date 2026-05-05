@@ -99,6 +99,7 @@ const { driveStateLabel } = useStatusLabels()
 
 const driveId = computed(() => Number(route.params.id))
 const canManage = computed(() => authStore.hasAnyRole(['admin', 'manager']))
+const canBrowseContents = computed(() => authStore.hasAnyRole(['admin', 'manager', 'processor']))
 const canEnable = computed(
   () => drive.value?.current_state === 'DISABLED'
     && drive.value?.port_id != null
@@ -130,7 +131,7 @@ const canEject = computed(
       || (drive.value?.current_state === 'AVAILABLE' && !!drive.value?.mount_path)
     ),
 )
-const canBrowse = computed(() => !!drive.value?.mount_path)
+const canBrowse = computed(() => !!drive.value?.mount_path && canBrowseContents.value)
 const hasMountedProjectOptions = computed(() => mountedProjectOptions.value.length > 0)
 
 function formatBytes(value) {

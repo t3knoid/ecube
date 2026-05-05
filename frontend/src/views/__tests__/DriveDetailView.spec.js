@@ -220,6 +220,18 @@ describe('DriveDetailView mount workflow', () => {
     expect(labels).not.toContain(i18n.global.t('drives.mount'))
   })
 
+  it('hides browse drive content for auditors', async () => {
+    mocks.hasAnyRole.mockImplementation((roles) => roles.includes('auditor'))
+    mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/7' })])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const labels = wrapper.findAll('button').map((node) => node.text())
+    expect(labels).not.toContain(i18n.global.t('drives.browse'))
+    expect(wrapper.find('.directory-browser-stub').exists()).toBe(false)
+  })
+
   it('shows Prepare Eject for a mounted available drive', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'AVAILABLE', mount_path: '/mnt/ecube/7' })])
 

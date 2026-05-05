@@ -61,7 +61,10 @@ const publicAuthConfig = ref({
 
 const mountId = computed(() => Number(route.params.id))
 const canManageMounts = computed(() => authStore.hasAnyRole(['admin', 'manager']))
-const canBrowse = computed(() => mountRecord.value?.status === 'MOUNTED' && Number.isInteger(mountRecord.value?.id))
+const canBrowseContents = computed(() => authStore.hasAnyRole(['admin', 'manager', 'processor']))
+const canBrowse = computed(() => (
+  canBrowseContents.value && mountRecord.value?.status === 'MOUNTED' && Number.isInteger(mountRecord.value?.id)
+))
 const redactedMountValue = computed(() => t('mounts.redactedValue'))
 const visibleRemotePath = computed(() => {
   if (!mountRecord.value?.remote_path) return '-'
@@ -451,7 +454,7 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="action-row">
-        <button class="btn" :disabled="!canBrowse" @click="browseExpanded = !browseExpanded">{{ t('mounts.browse') }}</button>
+        <button v-if="canBrowseContents" class="btn" :disabled="!canBrowse" @click="browseExpanded = !browseExpanded">{{ t('mounts.browse') }}</button>
         <button v-if="canManageMounts" class="btn" :disabled="saving" @click="openEditDialog($event)">{{ t('common.actions.edit') }}</button>
         <button v-if="canManageMounts" class="btn btn-danger" :disabled="saving" @click="requestRemove">{{ t('mounts.remove') }}</button>
       </div>

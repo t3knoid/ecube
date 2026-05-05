@@ -156,6 +156,20 @@ describe('SystemView USB topology tab', () => {
     expect(labels).not.toContain('Job Debug')
   })
 
+  it('hides USB topology, block devices, and mounts tabs for auditors', async () => {
+    mocks.hasRole.mockReturnValue(false)
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const labels = wrapper.findAll('button').map((button) => button.text())
+    expect(labels).toContain(i18n.global.t('system.tabs.health'))
+    expect(labels).not.toContain(i18n.global.t('system.tabs.usb'))
+    expect(labels).not.toContain(i18n.global.t('system.tabs.block'))
+    expect(labels).not.toContain(i18n.global.t('system.tabs.mounts'))
+    expect(labels).not.toContain(i18n.global.t('system.tabs.logs'))
+  })
+
   it('renders host metrics and ECUBE process diagnostics separately', async () => {
     mocks.getSystemHealth.mockResolvedValue({
       status: 'ok',

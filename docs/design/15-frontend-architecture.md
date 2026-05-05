@@ -442,16 +442,16 @@ Vue I18n 9.x provides the localization infrastructure. All user-visible strings 
 |-----------|-----------------|-----------|-------------|
 | `SetupWizardView.vue` | Screen 1 | UC-1.1 – UC-1.6 | Multi-step wizard (DB test → provision → reverse-proxy settings → create admin), requires matching admin password and confirmation values before setup completion, submits `trust_proxy_headers`, and handles informational `already_initialized` setup responses; renders outside AppShell |
 | `LoginView.vue` | Screen 2 | UC-2.1 – UC-2.2 | Username/password form; error display; renders outside AppShell |
-| `DashboardView.vue` | Screen 3 | UC-8.1 – UC-8.2 | Summary cards: drive counts by state, active jobs, system health; polls introspection |
+| `DashboardView.vue` | Screen 3 | UC-8.1 – UC-8.2 | Summary cards for system health plus role-gated drive/activity summary; auditors see only the system-health summary while other roles also see drive counts and active jobs; polls introspection |
 | `DrivesView.vue` | Screen 4a | UC-4.1 – UC-4.3 | Drive list table with status badges; refresh/rescan button |
 | `DriveDetailView.vue` | Screen 4b | UC-4.4 – UC-4.7 | Drive properties; format, initialize, eject action panels; role-gated actions |
-| `MountsView.vue` | Screen 5 | UC-5.1 – UC-5.6 | Mount list with test, details, and browse actions; add dialog; project/job context and redacted list presentation |
-| `MountDetailView.vue` | Screen 5b | UC-5.2 – UC-5.5 | Mount metadata view with browse, edit, and remove actions; inline edit dialog with credential-preservation and clear-credentials flows |
+| `MountsView.vue` | Screen 5 | UC-5.1 – UC-5.6 | Mount list with ID-driven detail navigation, project-driven browse for `admin`/`manager`/`processor`, add dialog for `admin`/`manager`, and redacted list presentation for read-only roles |
+| `MountDetailView.vue` | Screen 5b | UC-5.2 – UC-5.5 | Mount metadata view with browse gated to `admin`/`manager`/`processor`, edit/remove restricted to `admin`/`manager`, and an inline edit dialog with credential-preservation and clear-credentials flows |
 | `JobsView.vue` | Screen 6a | UC-6.1, UC-6.3 | Job list with status/progress; create-job button |
 | `JobDetailView.vue` | Screen 6b–d | UC-6.2 – UC-7.15 | Progress bar with polling; edit/pause/complete/delete lifecycle actions; gated verify/manifest controls; hash viewer; source/destination compare; manifest success feedback; job-scoped CoC dialog that loads stored snapshots, shows a `Generated At` timestamp sourced from stored snapshot metadata, supports explicit refresh for admin/manager, and exposes print/export/handoff controls according to role |
 | `AuditView.vue` | Screen 7 | UC-7.1 – UC-7.7 | Filterable audit log table; date range, user, action filters; dedicated `Export Audit CSV` action |
 | `UsersView.vue` | Screen 8 | UC-3.1 – UC-3.9 | Single editable users table: role selection, per-user save, password reset, and create-user flow; admin-only |
-| `SystemView.vue` | Screen 9 | UC-8.1 – UC-8.5, UC-8.7 – UC-8.9 | Tabbed: Health, USB Topology, Block Devices, Mounts, Logs; Health splits host metrics from ECUBE process diagnostics and shows an Active Copy Threads table with an empty state |
+| `SystemView.vue` | Screen 9 | UC-8.1 – UC-8.5, UC-8.7 – UC-8.9 | Tabbed: Health for all authenticated roles; USB Topology, Block Devices, and Mounts for `admin`/`manager`/`processor`; Logs for `admin`/`manager` with raw download still admin-only; Health splits host metrics from ECUBE process diagnostics and shows an Active Copy Threads table with an empty state |
 
 ### 9.3 Common/Shared Components
 

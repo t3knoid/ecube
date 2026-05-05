@@ -25,6 +25,7 @@ const jobs = ref([])
 const loading = ref(true)
 const error = ref('')
 const dismissedPasswordWarning = ref(sessionStorage.getItem(PASSWORD_WARNING_DISMISS_KEY) || '')
+const canViewOperationalSummary = computed(() => !authStore.hasRole('auditor'))
 
 const showPasswordWarning = computed(() => {
   if (!Number.isInteger(authStore.passwordWarningDays)) return false
@@ -157,13 +158,13 @@ onUnmounted(() => {
           <span>{{ t('common.labels.db') }}</span>
           <StatusBadge :status="health.database" />
         </div>
-        <div class="summary-row">
+        <div v-if="canViewOperationalSummary" class="summary-row">
           <span>{{ t('jobs.activeJobs') }}</span>
           <strong>{{ health.active_jobs || 0 }}</strong>
         </div>
       </article>
 
-      <article class="summary-card">
+      <article v-if="canViewOperationalSummary" class="summary-card">
         <h2>{{ t('dashboard.driveSummary') }}</h2>
         <div class="summary-row"><span>{{ t('drives.states.disconnected') }}</span><strong>{{ driveCounts.DISCONNECTED }}</strong></div>
         <div class="summary-row"><span>{{ t('drives.states.disabled') }}</span><strong>{{ driveCounts.DISABLED }}</strong></div>
@@ -172,7 +173,7 @@ onUnmounted(() => {
       </article>
     </div>
 
-    <article class="panel">
+    <article v-if="canViewOperationalSummary" class="panel">
       <h2>{{ t('jobs.activeJobs') }}</h2>
       <DataTable :columns="healthColumns" :rows="activeJobs" row-key="id" :empty-text="t('dashboard.noActiveJobs')">
         <template #cell-id="{ row }">

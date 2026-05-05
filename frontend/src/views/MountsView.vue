@@ -88,6 +88,7 @@ const discoveredShares = ref([])
 const shareBrowserError = ref('')
 
 const canManageMounts = computed(() => authStore.hasAnyRole(['admin', 'manager']))
+const canBrowseMountContents = computed(() => authStore.hasAnyRole(['admin', 'manager', 'processor']))
 const isEditMode = computed(() => editingMountId.value !== null)
 const activeEditMount = computed(() => (
   editingMountId.value !== null
@@ -715,7 +716,7 @@ onBeforeUnmount(() => {
       </template>
       <template #cell-project_id="{ row }">
         <button
-          v-if="row.status === 'MOUNTED'"
+          v-if="row.status === 'MOUNTED' && canBrowseMountContents"
           class="cell-link mount-project-link"
           type="button"
           :aria-expanded="browsingMountId === row.id"

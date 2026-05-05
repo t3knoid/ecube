@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   getDrives: vi.fn(),
   listJobs: vi.fn(),
   push: vi.fn(),
-  authStore: { passwordWarningDays: null },
+  authStore: { passwordWarningDays: null, hasRole: vi.fn() },
 }))
 
 vi.mock('vue-router', () => ({
@@ -76,6 +76,8 @@ describe('DashboardView active jobs', () => {
     mocks.listJobs.mockReset()
     mocks.push.mockReset()
     mocks.authStore.passwordWarningDays = null
+    mocks.authStore.hasRole.mockReset()
+    mocks.authStore.hasRole.mockReturnValue(false)
     sessionStorage.clear()
 
     mocks.getSystemHealth.mockResolvedValue({ status: 'ok', database: 'connected', active_jobs: 1 })
@@ -195,6 +197,29 @@ describe('DashboardView active jobs', () => {
     expect(summaryRows).toContain(`${i18n.global.t('drives.states.disabled')}1`)
     expect(summaryRows).toContain(`${i18n.global.t('drives.states.available')}1`)
     expect(summaryRows).toContain(`${i18n.global.t('drives.states.inUse')}1`)
+  })
+
+  it('hides drive summary and active jobs sections from auditors', async () => {
+    mocks.listJobs.mockResolvedValue([
+      {
+        id: 44,
+        project_id: 'PROJ-001',
+        status: 'RUNNING',
+        copied_bytes: 1000,
+        total_bytes: 1000,
+        file_count: 5,
+        files_succeeded: 2,
+        files_failed: 0,
+      },
+    ])
+    mocks.authStore.hasRole.mockImplementation((role) => role === 'auditor')
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain(i18n.global.t('dashboard.driveSummary'))
+    expect(wrapper.text()).not.toContain(i18n.global.t('jobs.activeJobs'))
+    expect(wrapper.text()).toContain(i18n.global.t('dashboard.systemHealth'))
   })
 
   it('renders the Job ID cell as a link to Job Detail for active jobs', async () => {
