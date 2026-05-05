@@ -327,6 +327,25 @@ class TestDemoRuntimeBehavior:
         ]
         assert s.get_demo_disable_password_change() is True
 
+    def test_demo_runtime_generated_shared_password_is_not_deterministic(self):
+        first = Settings(
+            database_url="sqlite://",
+            demo_mode=True,
+            demo_shared_password="",
+            demo_accounts=[],
+        ).get_demo_shared_password()
+
+        second = Settings(
+            database_url="sqlite://",
+            demo_mode=True,
+            demo_shared_password="",
+            demo_accounts=[],
+        ).get_demo_shared_password()
+
+        assert first != second
+        assert len(first) >= DEFAULT_PASSWORD_POLICY_VALUES["minlen"]
+        assert len(second) >= DEFAULT_PASSWORD_POLICY_VALUES["minlen"]
+
     def test_demo_runtime_shared_password_follows_active_password_policy(self, tmp_path):
         policy_path = tmp_path / "pwquality.conf"
         policy_path.write_text(

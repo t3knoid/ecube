@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import hashlib
-import json
+import secrets
 from typing import Mapping
 
 
@@ -72,18 +71,32 @@ def build_policy_friendly_demo_password(policy_values: Mapping[str, int] | None 
         pools.append(_SPECIAL_POOL)
 
     target_length = max(minlen, 20)
-    seed_payload = json.dumps(effective_values, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    all_characters = "".join(pools)
 
     characters: list[str] = []
-    for index in range(target_length):
-        pool = pools[index % len(pools)]
-        attempt = 0
-        while True:
-            digest = hashlib.sha256(seed_payload + f":{index}:{attempt}".encode("utf-8")).digest()
-            candidate = pool[digest[0] % len(pool)]
-            if not characters or candidate != characters[-1]:
-                characters.append(candidate)
-                break
-            attempt += 1
+    for pool in pools:
+        candidate = secrets.choice(pool)
+        if characters and candidate == characters[-1]:
+            choices = [char for char in pool if char != characters[-1]]
+            if choices:
+                candidate = secrets.choice(choices)
+        characters.append(candidate)
+
+    while len(characters) < target_length:
+        candidate = secrets.choice(all_characters)
+        if characters and candidate == characters[-1]:
+            continue
+        characters.append(candidate)
+
+    for index in range(len(characters) - 1, 0, -1):
+        swap_index = secrets.randbelow(index + 1)
+        characters[index], characters[swap_index] = characters[swap_index], characters[index]
+
+    for index in range(1, len(characters)):
+        if characters[index] == characters[index - 1]:
+            for swap_index in range(index + 1, len(characters)):
+                if characters[swap_index] != characters[index - 1]:
+                    characters[index], characters[swap_index] = characters[swap_index], characters[index]
+                    break
 
     return "".join(characters)
