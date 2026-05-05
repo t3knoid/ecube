@@ -473,6 +473,7 @@ def test_auth_token_endpoint_requires_no_auth(unauthenticated_client, db):
 def test_auth_public_config_returns_safe_defaults_when_demo_disabled(unauthenticated_client, monkeypatch):
     """Public auth metadata should return empty safe defaults outside demo mode."""
     monkeypatch.setattr(settings, "demo_mode", False, raising=False)
+    monkeypatch.setattr(settings, "_load_demo_metadata_payload", lambda: {}, raising=False)
     monkeypatch.setattr(settings, "demo_login_message", "Demo-only message", raising=False)
     monkeypatch.setattr(
         settings,
@@ -491,7 +492,6 @@ def test_auth_public_config_returns_safe_defaults_when_demo_disabled(unauthentic
         "nfs_client_version_options": ["4.2", "4.1", "4.0", "3"],
         "login_message": None,
         "demo_accounts": [],
-        "shared_password": None,
         "password_change_allowed": True,
     }
 
@@ -524,7 +524,6 @@ def test_auth_public_config_returns_only_display_safe_demo_metadata(unauthentica
     assert body["default_nfs_client_version"] == settings.nfs_client_version
     assert body["nfs_client_version_options"] == ["4.2", "4.1", "4.0", "3"]
     assert body["login_message"] == "Use the demo accounts below."
-    assert body["shared_password"] == "demo"
     assert body["password_change_allowed"] is False
     assert body["demo_accounts"] == [
         {
@@ -533,39 +532,34 @@ def test_auth_public_config_returns_only_display_safe_demo_metadata(unauthentica
             "description": "Explore drive lifecycle and job visibility.",
         }
     ]
+    assert "shared_password" not in body
     assert "must-not-leak" not in resp.text
+    assert '"shared_password"' not in resp.text
 
 
 def test_auth_public_config_falls_back_to_demo_metadata_file(unauthenticated_client, monkeypatch, tmp_path):
-    """Demo metadata should be loaded from demo-data when env fields are omitted."""
-    demo_root = tmp_path / "demo-data"
-    demo_root.mkdir()
-    (demo_root / "demo-metadata.json").write_text(
-        json.dumps(
-            {
-                "managed_by": "ecube-demo-seed-v1",
-                "demo_config": {
-                    "demo_mode": True,
-                    "login_message": "Use the seeded demo accounts below.",
-                    "shared_password": "demo",
-                    "password_change_allowed": False,
-                    "accounts": [
-                        {
-                            "username": "demo_auditor",
-                            "label": "Auditor demo",
-                            "description": "Read-only audit review",
-                            "roles": ["auditor"],
-                            "password": "must-not-leak",
-                        }
-                    ],
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
+    """Demo metadata should be loaded from the install-root metadata payload when env fields are omitted."""
+    payload = {
+        "managed_by": "ecube-demo-seed-v1",
+        "demo_config": {
+            "demo_mode": True,
+            "login_message": "Use the seeded demo accounts below.",
+            "shared_password": "demo",
+            "password_change_allowed": False,
+            "accounts": [
+                {
+                    "username": "demo_auditor",
+                    "label": "Auditor demo",
+                    "description": "Read-only audit review",
+                    "roles": ["auditor"],
+                    "password": "must-not-leak",
+                }
+            ],
+        },
+    }
 
     monkeypatch.setattr(settings, "demo_mode", True, raising=False)
-    monkeypatch.setattr(settings, "demo_data_root", str(demo_root), raising=False)
+    monkeypatch.setattr(settings, "_load_demo_metadata_payload", lambda: payload, raising=False)
     monkeypatch.setattr(settings, "demo_login_message", "", raising=False)
     monkeypatch.setattr(settings, "demo_shared_password", "", raising=False)
     monkeypatch.setattr(settings, "demo_accounts", [], raising=False)
@@ -578,7 +572,6 @@ def test_auth_public_config_falls_back_to_demo_metadata_file(unauthenticated_cli
     assert body["demo_mode_enabled"] is True
     assert body["default_nfs_client_version"] == settings.nfs_client_version
     assert body["login_message"] == "Use the seeded demo accounts below."
-    assert body["shared_password"] == "demo"
     assert body["password_change_allowed"] is False
     assert body["demo_accounts"] == [
         {
@@ -587,37 +580,32 @@ def test_auth_public_config_falls_back_to_demo_metadata_file(unauthenticated_cli
             "description": "Read-only audit review",
         }
     ]
+    assert "shared_password" not in body
     assert "must-not-leak" not in resp.text
+    assert '"shared_password"' not in resp.text
 
 
 def test_auth_public_config_stays_in_demo_mode_after_seed_even_if_env_flag_is_false(
     unauthenticated_client, monkeypatch, tmp_path
 ):
     """A seeded demo should remain locked in demo mode until reset."""
-    demo_root = tmp_path / "demo-data"
-    demo_root.mkdir()
-    (demo_root / "demo-metadata.json").write_text(
-        json.dumps(
-            {
-                "managed_by": "ecube-demo-seed-v1",
-                "demo_config": {
-                    "demo_mode": True,
-                    "login_message": "Seeded demo remains active.",
-                    "accounts": [
-                        {
-                            "username": "demo_manager",
-                            "label": "Manager demo",
-                            "description": "Role review",
-                        }
-                    ],
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
+    payload = {
+        "managed_by": "ecube-demo-seed-v1",
+        "demo_config": {
+            "demo_mode": True,
+            "login_message": "Seeded demo remains active.",
+            "accounts": [
+                {
+                    "username": "demo_manager",
+                    "label": "Manager demo",
+                    "description": "Role review",
+                }
+            ],
+        },
+    }
 
     monkeypatch.setattr(settings, "demo_mode", False, raising=False)
-    monkeypatch.setattr(settings, "demo_data_root", str(demo_root), raising=False)
+    monkeypatch.setattr(settings, "_load_demo_metadata_payload", lambda: payload, raising=False)
     monkeypatch.setattr(settings, "demo_login_message", "", raising=False)
     monkeypatch.setattr(settings, "demo_accounts", [], raising=False)
 

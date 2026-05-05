@@ -21,6 +21,12 @@ from app.repositories.user_role_repository import UserRoleRepository
 from app.routers.auth import _get_pam
 
 
+@pytest.fixture(autouse=True)
+def _clear_demo_metadata(monkeypatch):
+    monkeypatch.setattr(settings, "demo_mode", False, raising=False)
+    monkeypatch.setattr(settings, "_load_demo_metadata_payload", lambda: {}, raising=False)
+
+
 # ───────────────────────────────────────────────────────────────────────
 # Repository tests
 # ───────────────────────────────────────────────────────────────────────
@@ -160,15 +166,10 @@ class TestUserRoleEndpoints:
     def test_seeded_demo_metadata_keeps_role_mutations_blocked_when_env_flag_is_false(self, admin_client, db, monkeypatch, tmp_path):
         from app.models.audit import AuditLog
 
-        demo_root = tmp_path / "demo-data"
-        demo_root.mkdir()
-        (demo_root / "demo-metadata.json").write_text(
-            '{"managed_by":"ecube-demo-seed-v1","demo_config":{"demo_mode":true}}',
-            encoding="utf-8",
-        )
+        payload = {"managed_by": "ecube-demo-seed-v1", "demo_config": {"demo_mode": True}}
 
         monkeypatch.setattr(settings, "demo_mode", False, raising=False)
-        monkeypatch.setattr(settings, "demo_data_root", str(demo_root), raising=False)
+        monkeypatch.setattr(settings, "_load_demo_metadata_payload", lambda: payload, raising=False)
 
         resp = admin_client.put("/users/demo-user/roles", json={"roles": ["manager"]})
         assert resp.status_code == 403

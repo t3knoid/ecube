@@ -22,6 +22,7 @@ vi.mock("@/stores/auth.js", () => ({
   useAuthStore: () => ({
     login: mocks.login,
     changePassword: mocks.changePassword,
+    isAuthenticated: false,
     passwordWarningDays: null,
   }),
 }));
@@ -45,7 +46,6 @@ describe("LoginView logo behavior", () => {
       demo_mode_enabled: false,
       login_message: null,
       demo_accounts: [],
-      shared_password: null,
       password_change_allowed: true,
     });
     mocks.theme.currentLogo = null;
@@ -102,7 +102,6 @@ describe("LoginView logo behavior", () => {
           description: "Review mounts, drives, and jobs.",
         },
       ],
-      shared_password: "demo",
       password_change_allowed: false,
     });
 
@@ -118,8 +117,8 @@ describe("LoginView logo behavior", () => {
     expect(panel.text()).not.toContain("Shared password");
 
     const passwordInput = wrapper.find("#password");
-    expect(passwordInput.element.value).toBe("demo");
-    expect(passwordInput.attributes("readonly")).toBeDefined();
+    expect(passwordInput.element.value).toBe("");
+    expect(passwordInput.attributes("readonly")).toBeUndefined();
   });
 
   it("shows an informational banner when setup redirects an already initialized system to login", async () => {
@@ -181,7 +180,6 @@ describe("LoginView logo behavior", () => {
           description: "Review mounts, drives, and jobs.",
         },
       ],
-      shared_password: "demo",
       password_change_allowed: false,
     });
     mocks.login.mockRejectedValue({

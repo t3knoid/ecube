@@ -163,6 +163,8 @@ The installer will:
 14. Deploy the pre-built frontend to `<install-dir>/www` so FastAPI serves the SPA directly (no separate web server required).
 15. Optionally configure `ufw` firewall rules.
 
+If you run the installer with `--demo`, place `demo-metadata.json` next to `install.sh` before starting the install. The installer uses that file as the source of truth for demo accounts, login guidance, shared password behavior, and password-change policy, then runs the demo bootstrap automatically after migrations complete. If `demo_config.shared_password` is blank, the installer generates a strong shared password, writes it into the installed metadata, and prints it in the completion summary.
+
 At the end it prints a summary with the UI URL, API URL, and service management commands.
 
 ECUBE supports domain-backed user login through the host PAM stack when SSSD is installed and configured on the host. In that case, the installer writes an SSSD-enabled PAM configuration so both local accounts and domain accounts can authenticate to ECUBE.
@@ -190,10 +192,19 @@ When PostgreSQL is available locally, the installer also creates (or updates) a 
 | `--yes`, `-y` | off | Non-interactive / unattended mode. Firewall rules are skipped unless `--firewall-cidr` is provided. |
 | `--firewall-cidr CIDR` | *(skip)* | Source CIDR to allow through ufw for the API port (e.g. `192.168.1.0/24`). In `--yes` mode, if omitted the firewall rule is **skipped** (safe default). Use `any` to explicitly open to all sources. |
 | `--version TAG` | *(current package)* | Download and install a specific GitHub release tag. Must be exact format: v<major>.<minor>.<patch> (e.g. v0.2.0). Pre-releases, build metadata, and tags without a leading v are not supported. |
+| `--demo` | — | Enable demo mode, require a colocated `demo-metadata.json`, and run the demo bootstrap automatically after install-time database setup. |
 | `--uninstall` | — | Remove ECUBE from this host |
 | `--drop-database` | — | With --uninstall, also drop the configured application database. Uninstall now fails closed if the drop target cannot be determined safely or the drop fails. |
 | `--dry-run` | — | Print all actions without executing them |
 | `-h`, `--help` | — | Show this help message |
+
+### Demo Install (`--demo`)
+
+```bash
+sudo ./install.sh --demo
+```
+
+This mode enables `DEMO_MODE=true`, ensures the application database is ready, and seeds demo accounts from `demo-metadata.json` located beside `install.sh`. If `demo_config.shared_password` is blank, the installer generates and prints a strong demo password for operators instead of exposing it through the login UI or public auth payload. It does not generate demo metadata, discover USB devices, stage sample content, or create a separate `demo-data` directory.
 
 ---
 

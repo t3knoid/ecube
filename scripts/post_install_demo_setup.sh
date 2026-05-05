@@ -3,8 +3,7 @@
 set -euo pipefail
 
 INSTALL_DIR="${INSTALL_DIR:-/opt/ecube}"
-DEMO_DATA_DIR="${DEMO_DATA_DIR:-${INSTALL_DIR}/demo-data}"
-SOURCE_METADATA="${SOURCE_METADATA:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/demo-data/demo-metadata.json}"
+SOURCE_METADATA="${SOURCE_METADATA:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/demo-metadata.json}"
 SHARED_PASSWORD="${1:-}"
 ENV_FILE="${ENV_FILE:-${INSTALL_DIR}/.env}"
 DEFAULT_DATABASE_URL="${DEFAULT_DATABASE_URL:-postgresql://ecube:ecube@localhost/ecube}"
@@ -27,19 +26,63 @@ print(value.strip() if isinstance(value, str) else "")
 PY
 }
 
+generate_demo_shared_password() {
+  python3 - <<'PY'
+import secrets
+import string
+
+alphabet = string.ascii_letters + string.digits
+while True:
+    candidate = ''.join(secrets.choice(alphabet) for _ in range(20))
+    if (
+        any(ch.islower() for ch in candidate)
+        and any(ch.isupper() for ch in candidate)
+        and any(ch.isdigit() for ch in candidate)
+    ):
+        print(candidate)
+        break
+PY
+}
+
+install_demo_metadata() {
+  local source_metadata="$1"
+  local target_metadata="$2"
+  local shared_password="$3"
+
+  sudo python3 - <<'PY' "${source_metadata}" "${target_metadata}" "${shared_password}"
+import json
+import sys
+from pathlib import Path
+
+source_path = Path(sys.argv[1])
+target_path = Path(sys.argv[2])
+shared_password = sys.argv[3].strip()
+payload = json.loads(source_path.read_text(encoding="utf-8"))
+
+if shared_password:
+    demo_config = payload.get("demo_config")
+    if not isinstance(demo_config, dict):
+        demo_config = {}
+        payload["demo_config"] = demo_config
+    demo_config["shared_password"] = shared_password
+
+target_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
+}
+
 usage() {
   cat <<EOF
 Usage: ./scripts/post_install_demo_setup.sh [shared-password]
 
-Copies the repository demo-metadata.json into the ECUBE install demo-data root
-and runs the native demo bootstrap seed command documented in the post-install
-demo setup steps. When no shared-password argument is provided, the helper uses
-demo_config.shared_password from the source demo-metadata.json.
+Copies the repository demo-metadata.json into the ECUBE install root and runs
+the native demo bootstrap seed command documented in the post-install demo
+setup steps. When no shared-password argument is provided, the helper uses
+demo_config.shared_password from the source demo-metadata.json when present,
+or generates a strong demo password when the metadata leaves it blank.
 
 Environment overrides:
   INSTALL_DIR      ECUBE install root (default: /opt/ecube)
-  DEMO_DATA_DIR    Target demo-data directory (default: <INSTALL_DIR>/demo-data)
-  SOURCE_METADATA  Source demo-metadata.json path (default: ./demo-data/demo-metadata.json)
+  SOURCE_METADATA  Source demo-metadata.json path (default: ./demo-metadata.json)
   ENV_FILE         Target ECUBE environment file (default: <INSTALL_DIR>/.env)
   DEFAULT_DATABASE_URL
                    DATABASE_URL written when the target env file does not
@@ -174,19 +217,25 @@ if [[ -z "${SHARED_PASSWORD}" ]]; then
 fi
 
 if [[ -z "${SHARED_PASSWORD}" ]]; then
-  echo "No shared password provided and demo_config.shared_password is not set in ${SOURCE_METADATA}" >&2
-  usage >&2
-  exit 1
+  SHARED_PASSWORD="$(generate_demo_shared_password)"
 fi
 
 DATABASE_URL="$(ensure_database_url "${ENV_FILE}" "${DEFAULT_DATABASE_URL}")"
 ensure_local_database_exists "${DATABASE_URL}"
 
-sudo install -d -m 0755 "${DEMO_DATA_DIR}"
-sudo install -m 0644 "${SOURCE_METADATA}" "${DEMO_DATA_DIR}/demo-metadata.json"
+sudo install -d -m 0755 "${INSTALL_DIR}"
+install_demo_metadata "${SOURCE_METADATA}" "${INSTALL_DIR}/demo-metadata.json" "${SHARED_PASSWORD}"
 
-if [[ -n "${1:-}" ]]; then
-  sudo bash -lc "cd \"${INSTALL_DIR}\" && \"${INSTALL_DIR}/venv/bin/ecube-demo-bootstrap\" --data-root \"${DEMO_DATA_DIR}\" seed --shared-password \"${SHARED_PASSWORD}\""
-else
-  sudo bash -lc "cd \"${INSTALL_DIR}\" && \"${INSTALL_DIR}/venv/bin/ecube-demo-bootstrap\" --data-root \"${DEMO_DATA_DIR}\" seed"
-fi
+bootstrap_cmd=(
+  "${INSTALL_DIR}/venv/bin/ecube-demo-bootstrap"
+  --metadata-path "${INSTALL_DIR}/demo-metadata.json"
+  seed
+)
+bootstrap_cmd+=(--shared-password "${SHARED_PASSWORD}")
+
+printf 'Generated or resolved demo shared password: %s\n' "${SHARED_PASSWORD}"
+
+(
+  cd "${INSTALL_DIR}"
+  sudo "${bootstrap_cmd[@]}"
+)

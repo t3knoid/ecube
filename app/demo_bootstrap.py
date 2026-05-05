@@ -45,11 +45,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Audit actor name recorded for the bootstrap action.",
     )
     parser.add_argument(
-        "--data-root",
-        default=None,
-        help="Dedicated demo-only directory used for staged sample files.",
-    )
-    parser.add_argument(
         "--metadata-path",
         default=None,
         help="Path to the demo-metadata.json file to use for seeding. Defaults to <install-root>/demo-metadata.json when present.",
@@ -57,7 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    seed_parser = subparsers.add_parser("seed", help="Seed demo users, roles, and sample content.")
+    seed_parser = subparsers.add_parser("seed", help="Seed demo users and role assignments.")
     seed_parser.add_argument(
         "--shared-password",
         default=None,
@@ -66,10 +61,10 @@ def build_parser() -> argparse.ArgumentParser:
     seed_parser.add_argument(
         "--skip-os-users",
         action="store_true",
-        help="Only seed the database and sample files without creating or updating OS accounts.",
+        help="Only seed the database role assignments without creating or updating OS accounts.",
     )
 
-    subparsers.add_parser("reset", help="Remove demo-seeded roles, jobs, and staged files.")
+    subparsers.add_parser("reset", help="Remove demo-seeded roles and jobs.")
     return parser
 
 
@@ -103,7 +98,6 @@ def main(argv: list[str] | None = None) -> int:
             provider = None if args.skip_os_users else get_os_user_provider()
             result = seed_demo_environment(
                 db,
-                data_root=args.data_root,
                 metadata_path=args.metadata_path,
                 provider=provider,
                 shared_password=args.shared_password,
@@ -111,19 +105,19 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(
                 "Demo bootstrap complete: "
-                f"users={result.users_seeded}, roles={result.roles_seeded}, jobs={result.jobs_seeded}, files={result.files_staged}, usb_drives={result.usb_drives_seeded}, usb_mounted={result.usb_drives_mounted}, network_mounts={result.network_mounts_seeded}, network_mounted={result.network_mounts_mounted}, root={result.data_root}"
+                f"users={result.users_seeded}, roles={result.roles_seeded}, jobs={result.jobs_seeded}"
             )
             return 0
 
         if args.command == "reset":
             result = reset_demo_environment(
                 db,
-                data_root=args.data_root,
+                metadata_path=args.metadata_path,
                 actor=args.actor,
             )
             print(
                 "Demo reset complete: "
-                f"roles_removed={result.roles_removed}, jobs_removed={result.jobs_removed}, files_removed={result.files_removed}, root={result.data_root}"
+                f"roles_removed={result.roles_removed}, jobs_removed={result.jobs_removed}"
             )
             return 0
 
