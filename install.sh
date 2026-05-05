@@ -74,6 +74,8 @@ BACKEND_NO_TLS=false
 FIREWALL_CIDR=""
 DEMO_INSTALL=false
 DEMO_EFFECTIVE_SHARED_PASSWORD=""
+DEMO_INSTALL_MODE=""
+DEMO_INSTALLED_METADATA_PATH=""
 DEFAULT_DATABASE_URL="postgresql://ecube:ecube@localhost/ecube"
 
 # Credentials for the PostgreSQL superuser created during installation.
@@ -540,6 +542,12 @@ _print_demo_seed_command() {
   echo ""
 }
 
+_print_demo_runtime_note() {
+  echo -e "  Demo bootstrap:"
+  echo -e "    Runtime reconciliation via app startup and setup initialization"
+  echo ""
+}
+
 _run_demo_install_tasks() {
   [[ "${DEMO_INSTALL}" == true ]] || return 0
 
@@ -551,9 +559,17 @@ _run_demo_install_tasks() {
   local database_url=""
   local shared_password=""
 
+  DEMO_INSTALL_MODE=""
+  DEMO_INSTALLED_METADATA_PATH=""
+
   if [[ ! -f "${source_metadata}" ]]; then
     info "demo-metadata.json not found at ${source_metadata}; enabling runtime demo mode without install-time metadata bootstrap"
     _upsert_env_value "${env_file}" "DEMO_MODE" "true"
+    if [[ -f "${installed_metadata}" ]]; then
+      run rm -f "${installed_metadata}"
+      ok "Removed stale installed demo metadata: ${installed_metadata}"
+    fi
+    DEMO_INSTALL_MODE="runtime-fallback"
     ok "Demo mode enabled in ${env_file}; runtime demo reconciliation will use built-in defaults"
     return 0
   fi
@@ -585,6 +601,8 @@ _run_demo_install_tasks() {
     "DATABASE_URL=${database_url}" \
     "PYTHONPATH=${INSTALL_DIR}" \
     "${bootstrap_cmd[@]}"
+  DEMO_INSTALL_MODE="metadata-bootstrap"
+  DEMO_INSTALLED_METADATA_PATH="${installed_metadata}"
   ok "Demo bootstrap applied"
 }
 
@@ -2685,13 +2703,21 @@ print_summary() {
     echo ""
   fi
   if [[ "${DEMO_INSTALL}" == true ]]; then
-    echo -e "  Demo mode:    enabled and seeded"
-    echo -e "  Demo config:  ${INSTALL_DIR}/demo-metadata.json"
+    if [[ "${DEMO_INSTALL_MODE}" == "metadata-bootstrap" ]]; then
+      echo -e "  Demo mode:    enabled and seeded"
+      echo -e "  Demo config:  ${DEMO_INSTALLED_METADATA_PATH}"
+    else
+      echo -e "  Demo mode:    enabled via runtime fallback"
+    fi
     if [[ -n "${DEMO_EFFECTIVE_SHARED_PASSWORD}" ]]; then
       echo -e "  Demo password: ${DEMO_EFFECTIVE_SHARED_PASSWORD}"
     fi
     echo ""
-    _print_demo_seed_command "${INSTALL_DIR}/demo-metadata.json"
+    if [[ "${DEMO_INSTALL_MODE}" == "metadata-bootstrap" ]]; then
+      _print_demo_seed_command "${DEMO_INSTALLED_METADATA_PATH}"
+    else
+      _print_demo_runtime_note
+    fi
   fi
   echo -e "  Service management:"
   echo -e "    sudo systemctl start   ecube"
