@@ -135,6 +135,21 @@ describe("LoginView logo behavior", () => {
     expect(banner.text()).toContain(i18n.global.t("setup.alreadyInitialized"));
   });
 
+  it("trims trailing whitespace from the username before login", async () => {
+    mocks.login.mockResolvedValue(undefined);
+
+    const wrapper = mount(LoginView, { global: { plugins: [i18n] } });
+    await flushPromises();
+
+    await wrapper.find('#username').setValue('operator1 ');
+    await wrapper.find('#password').setValue('Secret#123456');
+    await wrapper.find('form').trigger('submit.prevent');
+    await flushPromises();
+
+    expect(mocks.login).toHaveBeenCalledWith('operator1', 'Secret#123456');
+    expect(mocks.push).toHaveBeenCalledWith('/');
+  });
+
   it("opens the forced password change dialog when the backend reports an expired password", async () => {
     mocks.login.mockRejectedValue({
       response: {
