@@ -69,7 +69,7 @@ describe('SetupWizardView existing admin reconciliation', () => {
     mocks.provisionDatabase.mockReset()
     mocks.initializeSetup.mockReset()
 
-    mocks.getPublicAuthConfig.mockResolvedValue({ demo_mode_enabled: false })
+    mocks.getPublicAuthConfig.mockResolvedValue({ demo_mode_enabled: false, setup_account_username: null, shared_password: null })
     mocks.getSystemInfo.mockResolvedValue({
       in_docker: false,
     })
@@ -231,7 +231,17 @@ describe('SetupWizardView existing admin reconciliation', () => {
   })
 
   it('skips the create-admin step when demo mode is enabled', async () => {
-    mocks.getPublicAuthConfig.mockResolvedValue({ demo_mode_enabled: true })
+    mocks.getPublicAuthConfig.mockResolvedValue({
+      demo_mode_enabled: true,
+      setup_account_username: 'demo_admin',
+      shared_password: 'Demo#123456',
+    })
+    mocks.initializeSetup.mockResolvedValue({
+      status: 'reconciled_existing_user',
+      message: 'Setup complete. Existing OS admin user was reconciled, added to ecube-admins, and synced to ECUBE as an admin.',
+      username: 'demo_admin',
+      groups_created: [],
+    })
 
     const wrapper = mountView()
     await flushPromises()
@@ -257,8 +267,12 @@ describe('SetupWizardView existing admin reconciliation', () => {
     await flushPromises()
 
     expect(wrapper.text()).not.toContain(i18n.global.t('setup.createAdmin'))
-    expect(wrapper.text()).toContain(i18n.global.t('setup.demoModeSetupManaged'))
-    expect(mocks.initializeSetup).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Existing OS admin user was reconciled')
+    expect(mocks.initializeSetup).toHaveBeenCalledWith({
+      username: 'demo_admin',
+      password: 'Demo#123456',
+      trust_proxy_headers: false,
+    })
     expect(wrapper.findAll('button').find((node) => node.text() === i18n.global.t('setup.goToLogin')).attributes('disabled')).toBeUndefined()
   })
 })

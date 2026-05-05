@@ -511,10 +511,19 @@ def _do_initialize(
 
     if settings.is_demo_mode_enabled():
         try:
-            seed_runtime_demo_environment(
+            demo_seed_result = seed_runtime_demo_environment(
                 db,
                 provider=get_os_user_provider() if settings.role_resolver == "local" else None,
                 actor="system",
+            )
+            logger.info(
+                "Setup initialization demo reconciliation complete",
+                extra={
+                    "operation_surface": "setup.initialize",
+                    "users_seeded": demo_seed_result.users_seeded,
+                    "roles_seeded": demo_seed_result.roles_seeded,
+                    "jobs_seeded": demo_seed_result.jobs_seeded,
+                },
             )
         except Exception:
             db.rollback()
