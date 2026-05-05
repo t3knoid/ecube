@@ -117,6 +117,7 @@ describe('MountDetailView', () => {
     mocks.getPublicAuthConfig.mockResolvedValue({
       demo_mode_enabled: false,
       default_nfs_client_version: '4.1',
+      network_mount_timeout_seconds: 180,
       nfs_client_version_options: ['4.2', '4.1', '4.0', '3'],
     })
   })
@@ -183,7 +184,7 @@ describe('MountDetailView', () => {
       username: null,
       password: null,
       credentials_file: null,
-    })
+    }, { timeout: 180000 })
     expect(mocks.updateMount).toHaveBeenCalledWith(42, {
       type: 'SMB',
       remote_path: '//server/updated-share',
@@ -191,7 +192,7 @@ describe('MountDetailView', () => {
       username: null,
       password: null,
       credentials_file: null,
-    })
+    }, { timeout: 180000 })
     expect(wrapper.text()).toContain(i18n.global.t('mounts.updateSuccess'))
   })
 

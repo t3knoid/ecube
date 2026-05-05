@@ -47,6 +47,8 @@ const form = ref({
   mkfs_exfat_cluster_size: '4K',
   drive_format_timeout_seconds: 900,
   drive_mount_timeout_seconds: 120,
+  network_mount_timeout_seconds: 120,
+  mount_share_discovery_timeout_seconds: 60,
   copy_job_timeout: 3600,
   job_detail_files_page_size: 40,
   callback_default_url: '',
@@ -85,6 +87,8 @@ const fieldOrder = [
   'mkfs_exfat_cluster_size',
   'drive_format_timeout_seconds',
   'drive_mount_timeout_seconds',
+  'network_mount_timeout_seconds',
+  'mount_share_discovery_timeout_seconds',
   'copy_job_timeout',
   'job_detail_files_page_size',
   'callback_default_url',
@@ -437,6 +441,24 @@ onMounted(loadConfiguration)
           <option v-for="option in nfsClientVersionOptions" :key="option" :value="option">{{ option }}</option>
         </select>
         <p class="field-help">{{ t('configuration.fields.nfs_client_version.help') }}</p>
+
+        <label for="cfg-network-mount-timeout-seconds">{{ t('configuration.fields.network_mount_timeout_seconds.label') }}</label>
+        <input
+          id="cfg-network-mount-timeout-seconds"
+          v-model.number="form.network_mount_timeout_seconds"
+          type="number"
+          min="1"
+        />
+        <p class="field-help">{{ t('configuration.fields.network_mount_timeout_seconds.help') }}</p>
+
+        <label for="cfg-mount-share-discovery-timeout-seconds">{{ t('configuration.fields.mount_share_discovery_timeout_seconds.label') }}</label>
+        <input
+          id="cfg-mount-share-discovery-timeout-seconds"
+          v-model.number="form.mount_share_discovery_timeout_seconds"
+          type="number"
+          min="1"
+        />
+        <p class="field-help">{{ t('configuration.fields.mount_share_discovery_timeout_seconds.help') }}</p>
       </article>
 
       <article class="panel">

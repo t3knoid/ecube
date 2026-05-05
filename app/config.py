@@ -326,6 +326,16 @@ class Settings(BaseSettings):
     #: generic subprocess timeout during mount.
     drive_mount_timeout_seconds: int = 120
 
+    #: Timeout in seconds for network mount subprocesses and related mount
+    #: state checks. Slow SMB/NFS servers, DNS resolution, or authentication
+    #: handshakes can legitimately exceed the generic subprocess timeout during
+    #: mount, unmount, or mount-state verification workflows.
+    network_mount_timeout_seconds: int = 120
+
+    #: Timeout in seconds for network share discovery subprocesses such as
+    #: ``showmount`` and ``smbclient`` enumeration.
+    mount_share_discovery_timeout_seconds: int = 60
+
     #: Default NFS client protocol version requested for network mounts.
     nfs_client_version: Literal["4.2", "4.1", "4.0", "3"] = "4.1"
 

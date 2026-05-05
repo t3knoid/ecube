@@ -55,6 +55,7 @@ const relatedJobId = ref(null)
 const publicAuthConfig = ref({
   demo_mode_enabled: false,
   default_nfs_client_version: '4.1',
+  network_mount_timeout_seconds: 120,
   nfs_client_version_options: ['4.2', '4.1', '4.0', '3'],
 })
 
@@ -85,6 +86,11 @@ const nfsClientVersionSelectOptions = computed(() => [
   },
   ...nfsClientVersionOptions.value.map((option) => ({ value: option, label: option })),
 ])
+
+function networkMountTimeoutMs() {
+  const seconds = Number(publicAuthConfig.value?.network_mount_timeout_seconds)
+  return (Number.isFinite(seconds) && seconds >= 1 ? seconds : 120) * 1000
+}
 
 function mountBrowseTitle(record) {
   if (!record?.project_id) return t('browse.browseMountContents')
@@ -132,6 +138,7 @@ async function loadMount() {
       publicAuthConfig.value = {
         demo_mode_enabled: Boolean(configResult.value?.demo_mode_enabled),
         default_nfs_client_version: String(configResult.value?.default_nfs_client_version || '4.1'),
+        network_mount_timeout_seconds: Number(configResult.value?.network_mount_timeout_seconds) || 120,
         nfs_client_version_options: Array.isArray(configResult.value?.nfs_client_version_options) && configResult.value.nfs_client_version_options.length
           ? configResult.value.nfs_client_version_options.map((value) => String(value))
           : ['4.2', '4.1', '4.0', '3'],
@@ -278,7 +285,7 @@ async function runDialogValidate() {
   dialogError.value = ''
   dialogSuccessMessage.value = ''
   try {
-    const result = await validateMount(mountRecord.value.id, buildMountPayload())
+    const result = await validateMount(mountRecord.value.id, buildMountPayload(), { timeout: networkMountTimeoutMs() })
     if (result?.status === 'MOUNTED') {
       dialogValidationPassed.value = true
       dialogSuccessMessage.value = t('mounts.testSuccess')
@@ -298,7 +305,7 @@ async function submitMountDialog() {
   clearBanners()
   dialogError.value = ''
   try {
-    const updatedMount = await updateMount(mountRecord.value.id, buildMountPayload())
+    const updatedMount = await updateMount(mountRecord.value.id, buildMountPayload(), { timeout: networkMountTimeoutMs() })
     if (updatedMount?.status === 'ERROR') {
       dialogError.value = t('mounts.updateFailed')
       return

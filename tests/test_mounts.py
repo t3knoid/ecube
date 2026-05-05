@@ -1663,7 +1663,33 @@ def test_linux_mount_provider_check_mounted_uses_configured_default_timeout():
         mounted = provider.check_mounted("/mnt/data")
 
     assert mounted is True
-    assert mock_run.call_args.kwargs["timeout"] == settings.subprocess_timeout_seconds
+    assert mock_run.call_args.kwargs["timeout"] == settings.network_mount_timeout_seconds
+
+
+def test_linux_mount_provider_discover_shares_uses_dedicated_timeout():
+    provider = LinuxMountProvider()
+
+    with patch("app.services.mount_service._resolve_showmount_binary", return_value="/usr/sbin/showmount"), \
+         patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout="/exports/data 10.0.0.0/8\n", stderr="")
+
+        shares = provider.discover_shares(MountType.NFS, "nas.local:/exports")
+
+    assert shares == ["nas.local:/exports/data"]
+    assert mock_run.call_args.kwargs["timeout"] == settings.mount_share_discovery_timeout_seconds
+
+
+def test_linux_mount_provider_smb_discover_shares_uses_dedicated_timeout():
+    provider = LinuxMountProvider()
+
+    with patch("app.services.mount_service._resolve_smbclient_binary", return_value="/usr/bin/smbclient"), \
+         patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout="Disk|CaseDrop|Case drop share\n", stderr="")
+
+        shares = provider.discover_shares(MountType.SMB, "//nas.local")
+
+    assert shares == ["//nas.local/CaseDrop"]
+    assert mock_run.call_args.kwargs["timeout"] == settings.mount_share_discovery_timeout_seconds
 
 
 def test_linux_mount_provider_uses_sudo_for_mount_when_configured(monkeypatch):
@@ -1685,6 +1711,20 @@ def test_linux_mount_provider_uses_sudo_for_mount_when_configured(monkeypatch):
     assert err is None
     cmd = mock_run.call_args_list[0].args[0]
     assert cmd[:2] == ["sudo", "-n"]
+    assert mock_run.call_args_list[0].kwargs["timeout"] == settings.network_mount_timeout_seconds
+
+
+def test_linux_mount_provider_unmount_uses_network_mount_timeout():
+    provider = LinuxMountProvider()
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stderr="", stdout="")
+
+        ok, err = provider.os_unmount("/mnt/music")
+
+    assert ok is True
+    assert err is None
+    assert mock_run.call_args.kwargs["timeout"] == settings.network_mount_timeout_seconds
 
 
 def test_linux_mount_provider_uses_guest_option_for_credentialless_smb_mount(monkeypatch):
@@ -1923,6 +1963,8 @@ def test_linux_mount_provider_uses_direct_helper_on_fstab_option_failure():
 
     assert ok is True
     assert err is None
+    assert mock_run.call_args_list[0].kwargs["timeout"] == settings.network_mount_timeout_seconds
+    assert mock_run.call_args_list[1].kwargs["timeout"] == settings.network_mount_timeout_seconds
     assert mock_run.call_count == 2
     direct_cmd = mock_run.call_args_list[1].args[0]
     assert "/sbin/mount.nfs" in direct_cmd
@@ -2011,7 +2053,7 @@ def test_linux_mount_provider_check_mounted_non_positive_timeout_uses_default():
         mounted = provider.check_mounted("/mnt/data", timeout_seconds=0)
 
     assert mounted is True
-    assert mock_run.call_args.kwargs["timeout"] == settings.subprocess_timeout_seconds
+    assert mock_run.call_args.kwargs["timeout"] == settings.network_mount_timeout_seconds
 
 
 def test_validate_mount_passes_configured_timeout_to_provider(db):
@@ -2036,7 +2078,7 @@ def test_validate_mount_passes_configured_timeout_to_provider(db):
     updated = validate_mount(mount.id, db, provider=provider)
 
     assert updated.status == MountStatus.MOUNTED
-    assert provider.timeout_seconds == settings.subprocess_timeout_seconds
+    assert provider.timeout_seconds == settings.network_mount_timeout_seconds
 
 
 def test_check_mounted_with_configured_timeout_does_not_mask_provider_type_error():
