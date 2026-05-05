@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, PrivateAttr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.utils.password_policy import (
@@ -49,6 +49,7 @@ DEFAULT_DEMO_ACCOUNTS: list[dict[str, Any]] = [
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore", env_ignore_empty=True)
+    _generated_demo_shared_password: str | None = PrivateAttr(default=None)
 
     # Empty by default on fresh installs. The setup wizard writes this once
     # database connectivity is configured.
@@ -617,13 +618,18 @@ class Settings(BaseSettings):
         return message or DEFAULT_DEMO_LOGIN_MESSAGE
 
     def get_default_demo_shared_password(self) -> str:
+        if self._generated_demo_shared_password:
+            return self._generated_demo_shared_password
+
         path = Path(self.pwquality_conf_path)
         if not path.exists():
-            return build_policy_friendly_demo_password(DEFAULT_PASSWORD_POLICY_VALUES)
+            self._generated_demo_shared_password = build_policy_friendly_demo_password(DEFAULT_PASSWORD_POLICY_VALUES)
+            return self._generated_demo_shared_password
         try:
-            return build_policy_friendly_demo_password(
+            self._generated_demo_shared_password = build_policy_friendly_demo_password(
                 parse_pwquality_policy_values(path.read_text(encoding="utf-8"))
             )
+            return self._generated_demo_shared_password
         except OSError:
             logger.info(
                 "Demo shared password default fallback unavailable",
@@ -636,7 +642,8 @@ class Settings(BaseSettings):
                 "Demo shared password default fallback diagnostic",
                 extra={"path": str(path)},
             )
-            return build_policy_friendly_demo_password(DEFAULT_PASSWORD_POLICY_VALUES)
+            self._generated_demo_shared_password = build_policy_friendly_demo_password(DEFAULT_PASSWORD_POLICY_VALUES)
+            return self._generated_demo_shared_password
 
     def has_demo_shared_password_override(self) -> bool:
         return bool(self.demo_shared_password.strip())
