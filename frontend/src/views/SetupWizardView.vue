@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
+import { getPublicAuthConfig } from '@/api/auth.js'
 import {
   getSetupStatus,
   getDatabaseProvisionStatus,
@@ -22,6 +23,7 @@ const error = ref('')
 const complete = ref(false)
 const provisionNote = ref('')
 const setupSuccessMessage = ref('')
+const demoModeEnabled = ref(false)
 
 const db = ref({
   host: 'localhost',
@@ -45,6 +47,7 @@ const adminPasswordMismatch = computed(() => (
   && !!admin.value.confirmPassword
   && admin.value.password !== admin.value.confirmPassword
 ))
+const totalSteps = computed(() => (demoModeEnabled.value ? 4 : 5))
 
 const connectionOk = ref(false)
 const provisionOk = ref(false)
@@ -178,7 +181,7 @@ async function runInitializeSetup() {
 }
 
 function goNext() {
-  if (step.value < 5) step.value += 1
+  if (step.value < totalSteps.value) step.value += 1
 }
 
 function goBack() {
@@ -213,6 +216,13 @@ onMounted(async () => {
     }
 
     try {
+      const publicConfig = await getPublicAuthConfig()
+      demoModeEnabled.value = publicConfig?.demo_mode_enabled === true
+      if (demoModeEnabled.value) {
+        complete.value = true
+        setupSuccessMessage.value = t('setup.demoModeSetupManaged')
+      }
+
       const provisionStatus = await getDatabaseProvisionStatus()
       if (provisionStatus?.provisioned === true) {
         provisionDetected.value = true
@@ -232,7 +242,7 @@ onMounted(async () => {
   <section class="setup-wizard">
     <div class="setup-card">
       <h1>{{ t('system.setup') }}</h1>
-      <p class="muted">{{ t('setup.stepCounter', { step }) }}</p>
+      <p class="muted">{{ t('setup.stepCounter', { step, total: totalSteps }) }}</p>
       <p v-if="error" class="error-banner">{{ error }}</p>
 
       <div v-if="step === 1" class="step-grid">
@@ -275,7 +285,7 @@ onMounted(async () => {
         <p class="muted">{{ t('setup.trustProxyHeadersHelp') }}</p>
       </div>
 
-      <div v-else-if="step === 4" class="step-grid">
+      <div v-else-if="step === 4 && !demoModeEnabled" class="step-grid">
         <h2>{{ t('setup.createAdmin') }}</h2>
         <label for="admin-username">{{ t('auth.username') }}</label>
         <input id="admin-username" v-model="admin.username" type="text" />
@@ -306,16 +316,16 @@ onMounted(async () => {
 
       <div v-else class="step-grid">
         <h2>{{ t('setup.completeTitle') }}</h2>
-        <p class="ok-text" v-if="complete">{{ t('setup.completeBody') }}</p>
+        <p class="ok-text" v-if="complete">{{ setupSuccessMessage || t('setup.completeBody') }}</p>
         <button class="btn btn-primary" :disabled="!complete" @click="finish">{{ t('setup.goToLogin') }}</button>
       </div>
 
       <div class="actions">
         <button class="btn" :disabled="busy || step === 1" @click="goBack">{{ t('common.actions.back') }}</button>
         <button
-          v-if="step < 5"
+          v-if="step < totalSteps"
           class="btn btn-primary"
-          :disabled="busy || (step === 1 && !connectionOk) || (step === 2 && !provisionOk) || (step === 4 && !complete)"
+          :disabled="busy || (step === 1 && !connectionOk) || (step === 2 && !provisionOk) || (step === 4 && !complete && !demoModeEnabled)"
           @click="goNext"
         >
           {{ t('common.actions.next') }}

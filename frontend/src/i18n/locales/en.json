@@ -552,7 +552,7 @@
     "loadDrivesError": "Failed to load drive data."
   },
   "setup": {
-    "stepCounter": "Step {step} of 5",
+    "stepCounter": "Step {step} of {total}",
     "connectDatabase": "Connect to Database",
     "dbHost": "Database Host",
     "dbPort": "Database Port",
@@ -571,6 +571,7 @@
     "trustProxyHeadersHelp": "Enable only when ECUBE is behind a trusted reverse proxy that sets X-Forwarded-For or X-Real-IP. Leave disabled for direct/native deployments.",
     "adminCreated": "Admin user created successfully. Continue to the next step.",
     "adminReconciled": "Existing OS admin user reconciled successfully. Continue to the next step.",
+    "demoModeSetupManaged": "Demo mode manages admin account provisioning automatically. Continue to login.",
     "completeTitle": "Setup Complete",
     "completeBody": "System initialization has completed successfully.",
     "goToLogin": "Go to Login",
