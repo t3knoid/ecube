@@ -55,6 +55,36 @@ def test_read_mount_table_prefers_host_mounts_when_namespace_differs(monkeypatch
     assert opened_paths == ["/proc/1/mounts"]
 
 
+def test_read_mount_table_prefers_host_mounts_when_host_namespace_probe_fails(monkeypatch, caplog):
+    monkeypatch.setattr(mount_info.settings, "procfs_mounts_path", "/proc/mounts")
+
+    def fake_readlink(path: str) -> str:
+        if path == "/proc/self/ns/mnt":
+            return "mnt:[4026534000]"
+        if path == "/proc/1/ns/mnt":
+            raise OSError("permission denied")
+        raise AssertionError(f"unexpected path {path}")
+
+    opened_paths = []
+
+    def fake_open(path, *args, **kwargs):
+        opened_paths.append(path)
+        return mock_open(read_data="/dev/sdc /mnt/ecube/8 exfat rw 0 0\n")()
+
+    monkeypatch.setattr(mount_info.os, "readlink", fake_readlink)
+
+    with caplog.at_level("WARNING"):
+        with patch("builtins.open", side_effect=fake_open):
+            result = mount_info.read_mount_table()
+
+    assert result == {"/mnt/ecube/8": "/dev/sdc"}
+    assert opened_paths == ["/proc/1/mounts"]
+    assert any(
+        record.getMessage() == "Unable to read host mount namespace; assuming namespace differs"
+        for record in caplog.records
+    )
+
+
 def test_read_mount_points_filters_non_device_sources(monkeypatch):
     monkeypatch.setattr(
         mount_info,
