@@ -946,7 +946,18 @@ describe('SystemView logs tab', () => {
     revokeObjectURLSpy.mockRestore()
   })
 
-  it('hides logs tab for non-admin users', async () => {
+  it('shows logs tab for manager users', async () => {
+    mocks.hasRole.mockImplementation((role) => role === 'manager')
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const labels = wrapper.findAll('button').map((b) => b.text())
+    expect(labels).toContain(i18n.global.t('system.tabs.logs'))
+    expect(labels).not.toContain(i18n.global.t('system.download'))
+  })
+
+  it('hides logs tab for users without admin or manager roles', async () => {
     mocks.hasRole.mockReturnValue(false)
 
     const wrapper = mountView()

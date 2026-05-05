@@ -125,6 +125,28 @@ describe('AdminView', () => {
     ])
     expect(wrapper.find('#cfg-drive-mount-timeout-seconds').exists()).toBe(false)
     expect(wrapper.find('#cfg-policy-minlen').exists()).toBe(true)
+    expect(wrapper.find('#cfg-log-file').element.value).toBe('app.log')
+  })
+
+  it('saves default log-directory filenames back as full paths', async () => {
+    mocks.getAdminConfiguration.mockResolvedValue(buildAdminResponse({ log_file: '/var/log/ecube/app.log.2' }))
+    mocks.updateAdminConfiguration.mockResolvedValue({
+      restart_required: false,
+      restart_required_settings: [],
+      applied_immediately: ['log_file'],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const logFileInput = wrapper.find('#cfg-log-file')
+    expect(logFileInput.element.value).toBe('app.log.2')
+
+    await logFileInput.setValue('app.log.3')
+    await wrapper.find('.action-row .btn.btn-primary').trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateAdminConfiguration).toHaveBeenCalledWith({ log_file: '/var/log/ecube/app.log.3' })
   })
 
   it('loads and saves password policy values', async () => {

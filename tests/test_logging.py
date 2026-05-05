@@ -7,13 +7,13 @@ Covers:
 * Log level filtering
 * ``log_and_audit`` service helper
 * ``/admin/logs`` and ``/admin/logs/{filename}`` endpoints
-  – authentication enforcement (401 for unauthenticated)
-    – admin-only listing/download; 403 for non-admin users
+    – authentication enforcement (401 for unauthenticated)
+                – admin/manager listing; admin-only raw download; 403 for other users
   – path traversal rejection
   – audit trail recording
   – 404 when file-logging not configured
 * ``/admin/logs/view`` endpoint
-    – admin-only access and denied-attempt auditing
+        – admin/manager access and denied-attempt auditing
     – allowlisted source enforcement
     – tail pagination and text filtering
     – sensitive value redaction
@@ -583,8 +583,8 @@ class TestAdminLogsEndpoints:
                 assert entries[0].details["filename"] == "app.log"
                 assert "action" not in entries[0].details
 
-    def test_list_logs_non_admin_returns_403(self, manager_client, auditor_client, client):
-        """Non-admin users should be denied access to /admin/logs."""
+    def test_list_logs_manager_returns_200(self, manager_client):
+        """Manager users should be allowed to list logs."""
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = os.path.join(tmpdir, "app.log")
             with open(log_path, "w") as f:
@@ -592,11 +592,23 @@ class TestAdminLogsEndpoints:
 
             with patch("app.routers.admin.settings") as mock_settings:
                 mock_settings.log_file = log_path
-                for c in [manager_client, auditor_client, client]:
-                    resp = c.get("/admin/logs")
-                    assert resp.status_code == 403, "Expected 403 for non-admin user"
+                resp = manager_client.get("/admin/logs")
+                assert resp.status_code == 200
 
-    def test_list_logs_non_admin_records_denied_audit(self, manager_client, db):
+    def test_list_logs_non_privileged_returns_403(self, auditor_client, client):
+        """Users without admin or manager role should be denied access to /admin/logs."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                f.write("x")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                for c in [auditor_client, client]:
+                    resp = c.get("/admin/logs")
+                    assert resp.status_code == 403, "Expected 403 for non-privileged user"
+
+    def test_list_logs_non_privileged_records_denied_audit(self, auditor_client, db):
         from app.repositories.audit_repository import AuditRepository
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -606,15 +618,15 @@ class TestAdminLogsEndpoints:
 
             with patch("app.routers.admin.settings") as mock_settings:
                 mock_settings.log_file = log_path
-                resp = manager_client.get("/admin/logs")
+                resp = auditor_client.get("/admin/logs")
                 assert resp.status_code == 403
 
                 entries = AuditRepository(db).query(action="LOG_FILES_LIST_DENIED")
                 assert len(entries) >= 1
-                assert entries[0].details.get("reason") == "admin_role_required"
+                assert entries[0].details.get("reason") == "admin_or_manager_role_required"
 
-    def test_download_log_non_admin_returns_403(self, manager_client, auditor_client, client):
-        """Non-admin users should be denied access to /admin/logs/{filename}."""
+    def test_download_log_manager_returns_403(self, manager_client):
+        """Manager users should be denied raw log downloads."""
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = os.path.join(tmpdir, "app.log")
             with open(log_path, "w") as f:
@@ -622,11 +634,10 @@ class TestAdminLogsEndpoints:
 
             with patch("app.routers.admin.settings") as mock_settings:
                 mock_settings.log_file = log_path
-                for c in [manager_client, auditor_client, client]:
-                    resp = c.get("/admin/logs/app.log")
-                    assert resp.status_code == 403, "Expected 403 for non-admin user"
+                resp = manager_client.get("/admin/logs/app.log")
+                assert resp.status_code == 403
 
-    def test_download_log_non_admin_records_denied_audit(self, manager_client, db):
+    def test_download_log_manager_records_denied_audit(self, manager_client, db):
         from app.repositories.audit_repository import AuditRepository
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -637,6 +648,37 @@ class TestAdminLogsEndpoints:
             with patch("app.routers.admin.settings") as mock_settings:
                 mock_settings.log_file = log_path
                 resp = manager_client.get("/admin/logs/app.log")
+                assert resp.status_code == 403
+
+                entries = AuditRepository(db).query(action="LOG_FILE_DOWNLOAD_DENIED")
+                assert len(entries) >= 1
+                assert entries[0].details.get("reason") == "admin_role_required"
+                assert entries[0].details.get("filename") == "app.log"
+
+    def test_download_log_non_privileged_returns_403(self, auditor_client, client):
+        """Users without admin or manager role should be denied access to /admin/logs/{filename}."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                f.write("x")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                for c in [auditor_client, client]:
+                    resp = c.get("/admin/logs/app.log")
+                    assert resp.status_code == 403, "Expected 403 for non-privileged user"
+
+    def test_download_log_non_privileged_records_denied_audit(self, auditor_client, db):
+        from app.repositories.audit_repository import AuditRepository
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                f.write("x")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = auditor_client.get("/admin/logs/app.log")
                 assert resp.status_code == 403
 
                 entries = AuditRepository(db).query(action="LOG_FILE_DOWNLOAD_DENIED")
@@ -677,7 +719,18 @@ class TestAdminLogsEndpoints:
         resp = unauthenticated_client.get("/admin/logs/view")
         assert resp.status_code == 401
 
-    def test_view_logs_non_admin_returns_403_and_audits_denial(self, manager_client, db):
+    def test_view_logs_manager_returns_200(self, manager_client):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = os.path.join(tmpdir, "app.log")
+            with open(log_path, "w") as f:
+                f.write("line\n")
+
+            with patch("app.routers.admin.settings") as mock_settings:
+                mock_settings.log_file = log_path
+                resp = manager_client.get("/admin/logs/view")
+                assert resp.status_code == 200
+
+    def test_view_logs_non_privileged_returns_403_and_audits_denial(self, auditor_client, db):
         from app.repositories.audit_repository import AuditRepository
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -687,12 +740,12 @@ class TestAdminLogsEndpoints:
 
             with patch("app.routers.admin.settings") as mock_settings:
                 mock_settings.log_file = log_path
-                resp = manager_client.get("/admin/logs/view")
+                resp = auditor_client.get("/admin/logs/view")
                 assert resp.status_code == 403
 
                 entries = AuditRepository(db).query(action="LOG_LINES_VIEW_DENIED")
                 assert len(entries) >= 1
-                assert entries[0].details.get("reason") == "admin_role_required"
+                assert entries[0].details.get("reason") == "admin_or_manager_role_required"
 
     def test_view_logs_unknown_source_returns_404_and_audits_denial(self, admin_client, db):
         from app.repositories.audit_repository import AuditRepository

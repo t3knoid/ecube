@@ -294,6 +294,7 @@ Password reset behavior:
 Manager-accessible fields are limited to:
 
 - `log_level`
+- `log_file` (read-only visibility only)
 - `mkfs_exfat_cluster_size`
 - `drive_format_timeout_seconds`
 - `drive_mount_timeout_seconds`
@@ -306,6 +307,7 @@ Notes:
 
 - `processor` and `auditor` receive `403 Forbidden`.
 - Requests that try to send admin-only configuration fields through `/configuration` are rejected with `403 Forbidden`.
+- Managers can see the current effective `log_file` name on `GET /configuration`. The response returns a basename only, not a host path, and changing it remains admin-only through `/admin/configuration`.
 - This surface intentionally does not expose password policy, webhook secret, database runtime, logging infrastructure, or restart controls.
 
 ---
@@ -356,8 +358,8 @@ Notes:
 
 | Method | Endpoint | Role | Description |
 | ------ | -------- | ---- | ----------- |
-| GET | `/admin/logs/view` | admin | View redacted log lines with pagination/filtering (source allowlist) |
-| GET | `/admin/logs` | admin | List downloadable log files with metadata and aggregate size |
+| GET | `/admin/logs/view` | admin, manager | View redacted log lines with pagination/filtering (source allowlist) |
+| GET | `/admin/logs` | admin, manager | List available log files with metadata and aggregate size |
 | GET | `/admin/logs/{filename}` | admin | Download raw log file content |
 
 ### `GET /admin/logs/view` (quick params)

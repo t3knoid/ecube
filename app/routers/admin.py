@@ -1,9 +1,10 @@
 """Administrative endpoints for log file access and OS user/group management.
 
-Log endpoints allow ``admin`` users to list and download application log
-files.  OS user/group endpoints allow ``admin``-role users to create, list,
-delete, reset passwords, and modify group memberships for OS users, as well
-as create, list, and delete OS groups through the API.
+Log endpoints allow ``admin`` and ``manager`` users to list and inspect
+application log files, while raw log-file downloads remain ``admin`` only.
+OS user/group endpoints allow ``admin``-role users to create, list, delete,
+reset passwords, and modify group memberships for OS users, as well as
+create, list, and delete OS groups through the API.
 
 Security considerations
 -----------------------
@@ -11,9 +12,9 @@ Security considerations
   against ``os.path.basename`` and must match a real file inside the
   configured log directory.  Attempts to escape the directory (e.g.
   ``../../etc/passwd``) are rejected with ``400 Bad Request``.
-* **Admin-only log access**: all log endpoints require a valid JWT bearer
-    token and the ``admin`` role. This prevents non-admin users from listing
-    or downloading full, unredacted log files.
+* **Role-gated log access**: log listing and redacted log viewing require a
+    valid JWT bearer token and either the ``admin`` or ``manager`` role.
+    Raw log-file downloads remain ``admin`` only.
 * **Admin-only OS management**: all ``/admin/os-users`` and ``/admin/os-groups``
   endpoints are gated with ``require_roles("admin")``.
 * **Password handling**: passwords are never logged, stored in the database,
@@ -72,6 +73,9 @@ from app.utils.sanitize import sanitize_error_message, summarize_password_policy
 
 logger = logging.getLogger(__name__)
 
+_LOG_ACCESS_DEPENDENCY = require_roles("admin", "manager")
+_LOG_DOWNLOAD_ACCESS_DEPENDENCY = require_roles("admin")
+
 _PASSWORD_POLICY_ERROR_MARKERS = (
     "pam:",
     "bad password",
@@ -101,6 +105,62 @@ def _safe_password_policy_rejection_message(message: str) -> str:
     }:
         return "New password does not satisfy the active password policy."
     return sanitized
+
+
+def _require_log_files_list_access(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> CurrentUser:
+    try:
+        return _LOG_ACCESS_DEPENDENCY(request=request, current_user=current_user, db=db)
+    except AuthorizationError:
+        best_effort_audit(
+            db,
+            action="LOG_FILES_LIST_DENIED",
+            user=current_user.username,
+            details={"reason": "admin_or_manager_role_required"},
+            client_ip=get_client_ip(request),
+        )
+        raise
+
+
+def _require_log_lines_view_access(
+    request: Request,
+    source: str = Query("app", min_length=1, max_length=32),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> CurrentUser:
+    try:
+        return _LOG_ACCESS_DEPENDENCY(request=request, current_user=current_user, db=db)
+    except AuthorizationError:
+        best_effort_audit(
+            db,
+            action="LOG_LINES_VIEW_DENIED",
+            user=current_user.username,
+            details={"source": source, "reason": "admin_or_manager_role_required"},
+            client_ip=get_client_ip(request),
+        )
+        raise
+
+
+def _require_log_file_download_access(
+    request: Request,
+    filename: str,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> CurrentUser:
+    try:
+        return _LOG_DOWNLOAD_ACCESS_DEPENDENCY(request=request, current_user=current_user, db=db)
+    except AuthorizationError:
+        best_effort_audit(
+            db,
+            action="LOG_FILE_DOWNLOAD_DENIED",
+            user=current_user.username,
+            details={"filename": filename, "reason": "admin_role_required"},
+            client_ip=get_client_ip(request),
+        )
+        raise
 
 
 def _raise_os_error(exc: OSUserError, *, context: str = "OS operation") -> None:
@@ -493,7 +553,7 @@ def _log_log_view_failure(
 def list_log_files(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(_require_log_files_list_access),
 ):
     """List available log files with metadata (size, timestamps).
 
@@ -502,16 +562,6 @@ def list_log_files(
     Returns ``200`` with file list, ``404`` when file-based logging is not
     configured, or ``503`` when the configured log directory is unavailable.
     """
-    if "admin" not in current_user.roles:
-        best_effort_audit(
-            db,
-            action="LOG_FILES_LIST_DENIED",
-            user=current_user.username,
-            details={"reason": "admin_role_required"},
-            client_ip=get_client_ip(request),
-        )
-        raise HTTPException(status_code=403, detail="This action requires the admin role")
-
     log_dir = _log_directory()
     if not log_dir:
         raise HTTPException(
@@ -594,22 +644,12 @@ def view_log_lines(
     search: Optional[str] = Query(None, max_length=256),
     reverse: bool = Query(False),
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(_require_log_lines_view_access),
 ):
     """Return recent, redacted log lines from an allowlisted source.
 
-    Access is restricted to users with the ``admin`` role.
+    Access is restricted to users with the ``admin`` or ``manager`` role.
     """
-    if "admin" not in current_user.roles:
-        best_effort_audit(
-            db,
-            action="LOG_LINES_VIEW_DENIED",
-            user=current_user.username,
-            details={"source": source, "reason": "admin_role_required"},
-            client_ip=get_client_ip(request),
-        )
-        raise HTTPException(status_code=403, detail="This action requires the admin role")
-
     try:
         source_info = _resolve_log_source(source)
     except HTTPException as exc:
@@ -778,7 +818,7 @@ def download_log_file(
     filename: str,
     *,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(_require_log_file_download_access),
     request: Request,
 ):
     """Download a specific log file.
@@ -787,16 +827,6 @@ def download_log_file(
 
     The ``{filename}`` parameter is validated to prevent path traversal.
     """
-    if "admin" not in current_user.roles:
-        best_effort_audit(
-            db,
-            action="LOG_FILE_DOWNLOAD_DENIED",
-            user=current_user.username,
-            details={"filename": filename, "reason": "admin_role_required"},
-            client_ip=get_client_ip(request),
-        )
-        raise HTTPException(status_code=403, detail="This action requires the admin role")
-
     log_dir = _log_directory()
     if not log_dir:
         raise HTTPException(
