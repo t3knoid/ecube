@@ -9,7 +9,6 @@ import grp
 import logging
 import os
 import pwd
-import shutil
 import subprocess
 from typing import Protocol
 
@@ -142,19 +141,9 @@ def _with_host_mount_namespace(cmd: list[str]) -> list[str]:
     if _in_host_mount_namespace():
         return _with_sudo(cmd)
 
-    nsenter = shutil.which("nsenter")
-    if nsenter:
-        if os.geteuid() != 0:
-            if not settings.use_sudo:
-                logger.warning("Mount namespace differs from host but sudo is disabled; using current namespace")
-                return cmd
-            return ["sudo", "-n", nsenter, "-t", "1", "-m", *cmd]
-
-        return [nsenter, "-t", "1", "-m", *cmd]
-
     ns_flag_cmd = _with_mount_namespace_flag(cmd)
     if ns_flag_cmd is not None:
-        logger.warning("Mount namespace differs from host and nsenter is unavailable; falling back to util-linux namespace flag")
+        logger.warning("Mount namespace differs from host; using util-linux namespace flag")
         return _with_sudo(ns_flag_cmd)
 
     logger.warning("Mount namespace differs from host but no namespace helper is available; using current namespace")

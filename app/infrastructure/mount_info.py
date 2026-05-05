@@ -24,7 +24,13 @@ _HOST_PROCFS_MOUNTS_PATH = "/proc/1/mounts"
 def _mounts_path_for_current_context() -> str:
     """Return the authoritative mount table path for the current runtime."""
     mounts_path = settings.procfs_mounts_path
-    if mounts_path == _DEFAULT_PROCFS_MOUNTS_PATH and not shares_host_mount_namespace():
+    if mounts_path == _DEFAULT_PROCFS_MOUNTS_PATH and not shares_host_mount_namespace(
+        on_self_read_error=True,
+        on_host_read_error=False,
+        on_host_read_error_callback=lambda _exc: logger.warning(
+            "Unable to read host mount namespace; assuming namespace differs"
+        ),
+    ):
         return _HOST_PROCFS_MOUNTS_PATH
     return mounts_path
 

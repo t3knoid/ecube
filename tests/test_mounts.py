@@ -64,20 +64,12 @@ def test_add_mount_uses_nfs_v4_1_to_avoid_slow_negotiation(manager_client, db):
 
     assert response.status_code == 200
     first_call = mock_run.call_args_list[0]
-    assert first_call.args[0][:5] == [
+    assert first_call.args[0][:7] == [
         "sudo",
         "-n",
         settings.mount_binary_path,
-        "-t",
-        "nfs",
-    ] or first_call.args[0][:9] == [
-        "sudo",
-        "-n",
-        "/usr/bin/nsenter",
-        "-t",
-        "1",
-        "-m",
-        settings.mount_binary_path,
+        "-N",
+        "/proc/1/ns/mnt",
         "-t",
         "nfs",
     ]
@@ -1815,14 +1807,13 @@ def test_linux_mount_provider_treats_returncode_zero_with_inactive_mountpoint_as
     )
 
 
-def test_linux_mount_provider_uses_nsenter_when_mount_namespace_differs(monkeypatch):
+def test_linux_mount_provider_uses_mount_namespace_flag_when_mount_namespace_differs(monkeypatch):
     provider = LinuxMountProvider()
 
     monkeypatch.setattr("app.services.mount_service.settings.use_sudo", True)
     monkeypatch.setattr("app.services.mount_service.os.geteuid", lambda: 1000)
 
     with patch("app.services.mount_service.os.readlink", side_effect=["mnt:[2]", "mnt:[1]"]), \
-         patch("app.services.mount_service.shutil.which", return_value="/usr/bin/nsenter"), \
          patch("subprocess.run") as mock_run, \
          patch.object(provider, "check_mounted", return_value=True):
         mock_run.return_value = MagicMock(returncode=0, stderr="", stdout="")
@@ -1836,8 +1827,7 @@ def test_linux_mount_provider_uses_nsenter_when_mount_namespace_differs(monkeypa
     assert ok is True
     assert err is None
     cmd = mock_run.call_args_list[0].args[0]
-    assert cmd[:6] == ["sudo", "-n", "/usr/bin/nsenter", "-t", "1", "-m"]
-    assert "-N" not in cmd
+    assert cmd[:5] == ["sudo", "-n", "/bin/mount", "-N", "/proc/1/ns/mnt"]
 
 
 def test_check_mounted_uses_mount_namespace_flag_when_mount_namespace_differs(monkeypatch):
@@ -1859,14 +1849,13 @@ def test_check_mounted_uses_mount_namespace_flag_when_mount_namespace_differs(mo
     assert cmd[:5] == ["sudo", "-n", "/bin/mount", "-N", "/proc/1/ns/mnt"]
 
 
-def test_linux_mount_provider_uses_nsenter_when_host_namespace_read_fails(monkeypatch):
+def test_linux_mount_provider_uses_mount_namespace_flag_when_host_namespace_read_fails(monkeypatch):
     provider = LinuxMountProvider()
 
     monkeypatch.setattr("app.services.mount_service.settings.use_sudo", True)
     monkeypatch.setattr("app.services.mount_service.os.geteuid", lambda: 1000)
 
     with patch("app.services.mount_service.os.readlink", side_effect=["mnt:[2]", PermissionError("denied")]), \
-         patch("app.services.mount_service.shutil.which", return_value="/usr/bin/nsenter"), \
          patch("subprocess.run") as mock_run, \
          patch.object(provider, "check_mounted", return_value=True):
         mock_run.return_value = MagicMock(returncode=0, stderr="", stdout="")
@@ -1880,8 +1869,7 @@ def test_linux_mount_provider_uses_nsenter_when_host_namespace_read_fails(monkey
     assert ok is True
     assert err is None
     cmd = mock_run.call_args_list[0].args[0]
-    assert cmd[:6] == ["sudo", "-n", "/usr/bin/nsenter", "-t", "1", "-m"]
-    assert "-N" not in cmd
+    assert cmd[:5] == ["sudo", "-n", "/bin/mount", "-N", "/proc/1/ns/mnt"]
 
 
 def test_linux_mount_provider_uses_direct_helper_on_fstab_option_failure():
