@@ -957,6 +957,7 @@ class TestSetupWizardLogging:
             ANY,
             provider=provider,
             actor="system",
+            skip_password_usernames=["admin"],
         )
         mock_audit_add.assert_called_once()
 
@@ -980,7 +981,7 @@ class TestSetupWizardLogging:
         provider = Mock()
         mock_get_os_user_provider.return_value = provider
 
-        def _seed_demo_roles(session, provider=None, actor=None):
+        def _seed_demo_roles(session, provider=None, actor=None, skip_password_usernames=None):
             existing_role = (
                 session.query(UserRole)
                 .filter(UserRole.username == "demo_admin", UserRole.role == "admin")
@@ -1018,6 +1019,7 @@ class TestSetupWizardLogging:
                 ANY,
                 provider=provider,
                 actor="system",
+                skip_password_usernames=["admin"],
             )
 
             login_resp = unauthenticated_client.post(

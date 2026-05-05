@@ -37,7 +37,7 @@
 | UC-1.5 | Update database connection settings | Admin | admin |
 | UC-1.6 | Initialize system (create first admin) | Any (unauthenticated, one-time) | — |
 
-**UI Implication:** A setup wizard flow that detects uninitialized state and guides through UC-1.2 → UC-1.3 → UC-1.6 sequentially. The final admin-account step now requires the operator to enter the password twice and blocks completion with a visible validation message until the password and confirmation values match.
+**UI Implication:** A setup wizard flow that detects uninitialized state and guides through UC-1.2 → UC-1.3 → UC-1.6 sequentially. The final admin-account step now requires the operator to enter the password twice and blocks completion with a visible validation message until the password and confirmation values match. In demo mode, the wizard can complete setup with the configured demo admin account and should still land in the normal success state even when that account already exists on the host, because the immediate post-setup demo reconciliation no longer re-prompts or fails solely on a redundant same-password reset for that one setup-managed account.
 
 ---
 

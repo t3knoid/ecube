@@ -515,6 +515,7 @@ def _do_initialize(
                 db,
                 provider=get_os_user_provider() if settings.role_resolver == "local" else None,
                 actor="system",
+                skip_password_usernames=[body.username],
             )
             logger.info(
                 "Setup initialization demo reconciliation complete",
@@ -525,10 +526,24 @@ def _do_initialize(
                     "jobs_seeded": demo_seed_result.jobs_seeded,
                 },
             )
-        except Exception:
+        except Exception as exc:
             db.rollback()
             lock_released = _release_init_lock(db)
-            logger.error("Failed to seed demo runtime accounts after setup initialization")
+            logger.info(
+                "Setup initialization demo reconciliation failed",
+                extra={
+                    "operation_surface": "setup.initialize",
+                    "failure_category": "demo_reconciliation_failed",
+                    "lock_released": lock_released,
+                },
+            )
+            logger.debug(
+                "Setup initialization demo reconciliation failure details",
+                extra={
+                    "operation_surface": "setup.initialize",
+                    "raw_error": str(exc),
+                },
+            )
             detail = (
                 "Setup completed, but demo account role seeding failed. "
                 "Demo users may be missing ECUBE role assignments until setup is retried. "
