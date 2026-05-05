@@ -194,7 +194,7 @@ When PostgreSQL is available locally, the installer also creates (or updates) a 
 | `--version TAG` | *(current package)* | Download and install a specific GitHub release tag. Must be exact format: v<major>.<minor>.<patch> (e.g. v0.2.0). Pre-releases, build metadata, and tags without a leading v are not supported. |
 | `--demo` | — | Enable demo mode, require a colocated `demo-metadata.json`, and run the demo bootstrap automatically after install-time database setup. |
 | `--uninstall` | — | Remove ECUBE from this host |
-| `--drop-database` | — | With --uninstall, also drop the configured application database. Uninstall now fails closed if the drop target cannot be determined safely or the drop fails. |
+| `--drop-database` | — | With --uninstall, also drop the configured application database, deregister users from managed `ecube-*` role groups, and remove those managed role groups. Uninstall now fails closed if the drop target cannot be determined safely or the drop fails. |
 | `--dry-run` | — | Print all actions without executing them |
 | `-h`, `--help` | — | Show this help message |
 
@@ -385,6 +385,7 @@ When `--drop-database` is used, uninstall is fail-closed:
 
 - If `DATABASE_URL` is missing/invalid, points to a maintenance DB, or the database drop fails, uninstall exits non-zero and reports an explicit error.
 - This prevents silent continuation that could leave stale persisted drive/project rows across reinstall.
+- ECUBE also removes the managed role groups `ecube-admins`, `ecube-managers`, `ecube-processors`, and `ecube-auditors` after deregistering any remaining group members.
 
 Note: when `--drop-database` targets a remote PostgreSQL instance, superuser-role cleanup may require credentials for `SETUP_DEFAULT_ADMIN_USERNAME` via `.pgpass` or `PGPASSWORD`.
 
@@ -404,7 +405,7 @@ This will:
 6. Remove ECUBE-related ufw rules and installer log (if present).
 7. Remove the deadsnakes PPA entry if detected.
 8. Remove any legacy nginx ecube site configuration (if present from a previous version).
-9. When `--drop-database` is provided, attempt to terminate active sessions and drop the configured application database (best-effort).
+9. When `--drop-database` is provided, attempt to terminate active sessions and drop the configured application database (best-effort), then deregister any remaining members from the managed `ecube-*` role groups and remove those groups.
 
 Use `--yes` to auto-accept the initial uninstall confirmation prompt.
 
