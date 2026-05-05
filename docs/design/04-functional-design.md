@@ -324,7 +324,7 @@ The callback body is a JSON object containing:
 - Provide chain-of-custody report retrieval by `drive_id` and by `project_id`.
 - Default query mode to drive-based retrieval.
 - When both `drive_id` and `project_id` are provided, drive-based retrieval takes precedence.
-- Restrict CoC report access to the same role set that can read audit logs (`admin`, `manager`, `auditor`).
+- Restrict CoC report access to the same role set that can read audit logs (`admin`, `manager`, `processor`, `auditor`).
 - Support UI print/save workflows for authorized users using the same CoC report data model.
 - Ensure printed/saved CoC outputs include custody actors and custody timestamps required for legal review.
 - Define `delivery_time` as the timestamp of physical custody transfer confirmation.

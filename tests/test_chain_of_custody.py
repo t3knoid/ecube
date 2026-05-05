@@ -77,9 +77,9 @@ class TestChainOfCustodyGet:
         response = unauthenticated_client.get("/audit/chain-of-custody", params={"project_id": "CASE-R"})
         assert response.status_code == 401
 
-    def test_get_denies_processor_role(self, client):
+    def test_get_allows_processor_role(self, client):
         response = client.get("/audit/chain-of-custody", params={"project_id": "CASE-R"})
-        assert response.status_code == 403
+        assert response.status_code == 200
 
     def test_requires_selector(self, auditor_client):
         response = auditor_client.get("/audit/chain-of-custody")

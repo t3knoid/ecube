@@ -283,7 +283,7 @@ ECUBE must provide an automated export of chain-of-custody records:
 
 Rules:
 
-- CoC access remains limited to `admin`, `manager`, and `auditor`.
+- CoC access remains limited to `admin`, `manager`, `processor`, and `auditor`.
 - Only `admin` and `manager` may refresh or confirm handoff.
 - `GET /jobs/{job_id}/chain-of-custody` returns `404` when a non-archived job has no stored snapshot yet.
 - Archived jobs can still return the last stored snapshot for legal review, but they cannot be refreshed.
@@ -591,7 +591,7 @@ To prevent tampering with audit logs:
 
 3. **Cryptographic Signing (Optional):** Sign audit log exports with private key; verify signatures periodically to detect tampering.
 
-4. **Read-Only Access:** Only auditors can read logs; no other role can modify or delete audit entries.
+4. **Read Access and Immutability:** `admin`, `manager`, `processor`, and `auditor` may read audit logs, but no role can modify or delete audit entries.
 
 ---
 

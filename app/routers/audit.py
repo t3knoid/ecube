@@ -28,7 +28,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
-_ALLOWED = require_roles("admin", "manager", "auditor")
+_READ_ALLOWED = require_roles("admin", "manager", "processor", "auditor")
+_CHAIN_OF_CUSTODY_ALLOWED = require_roles("admin", "manager", "processor", "auditor")
 _WRITE_ALLOWED = require_roles("admin", "manager")
 @router.get("", response_model=AuditLogListResponse, responses={**R_401, **R_403, **R_422})
 def list_audit_logs(
@@ -44,11 +45,11 @@ def list_audit_logs(
     limit: int = Query(default=settings.audit_log_default_limit, ge=1, le=settings.audit_log_max_limit, description="Maximum number of results"),
     offset: int = Query(default=0, ge=0, description="Number of results to skip"),
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(_ALLOWED),
+    current_user: CurrentUser = Depends(_READ_ALLOWED),
 ):
     """Return audit log entries with optional filters.
 
-    **Roles:** ``admin``, ``manager``, ``auditor``
+    **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
     """
     if project_id is not None:
         normalized_project_id = normalize_project_id(project_id)
@@ -76,11 +77,11 @@ def list_audit_logs(
 @router.get("/options", response_model=AuditLogFilterOptionsResponse, responses={**R_401, **R_403})
 def get_audit_filter_options(
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(_ALLOWED),
+    _: CurrentUser = Depends(_READ_ALLOWED),
 ):
     """Return distinct filter values for the audit log search controls.
 
-    **Roles:** ``admin``, ``manager``, ``auditor``
+    **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
     """
     return audit_service.get_audit_filter_options(db)
 
@@ -91,13 +92,13 @@ def get_chain_of_custody(
     drive_sn: Optional[str] = Query(default=None, min_length=1, description="Drive device identifier/serial"),
     project_id: Optional[str] = Query(default=None, min_length=1, description="Project selector"),
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(_ALLOWED),
+    _: CurrentUser = Depends(_CHAIN_OF_CUSTODY_ALLOWED),
 ):
     """Return chain-of-custody report sections by drive or project selectors.
 
     Selector precedence: ``drive_id`` > ``drive_sn`` > ``project_id``.
 
-    **Roles:** ``admin``, ``manager``, ``auditor``
+    **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
     """
     if drive_sn is not None:
         try:

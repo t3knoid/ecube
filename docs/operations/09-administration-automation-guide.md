@@ -974,7 +974,7 @@ To refresh and retrieve the job-scoped chain-of-custody snapshot:
 curl -k -X POST -H "Authorization: Bearer $JWT_TOKEN" \
   "https://localhost:8443/jobs/42/chain-of-custody/refresh"
 
-# Retrieve the stored snapshot (admin/manager/auditor)
+# Retrieve the stored snapshot (admin/manager/processor/auditor)
 curl -k -H "Authorization: Bearer $JWT_TOKEN" \
   "https://localhost:8443/jobs/42/chain-of-custody"
 ```

@@ -158,8 +158,8 @@ Every authenticated request resolves to:
 | View job file status rows (`GET /jobs/{job_id}/files`) | ✔ | ✔ | ✔ | ✔ |
 | Regenerate manifest | ✔ | ✔ | ✔ | ✖ |
 | Verify job | ✔ | ✔ | ✔ | ✖ |
-| Read audit logs | ✔ | ✔ | ✖ | ✔ |
-| Read chain-of-custody reports | ✔ | ✔ | ✖ | ✔ |
+| Read audit logs | ✔ | ✔ | ✔ | ✔ |
+| Read chain-of-custody reports | ✔ | ✔ | ✔ | ✔ |
 | Introspection (read-only) | ✔ | ✔ | ✔ | ✔ |
 | Browse mount directories (`GET /browse`) | ✔ | ✔ | ✔ | ✔ |
 | File hash/compare | ✔ | ✖ | ✖ | ✔ |

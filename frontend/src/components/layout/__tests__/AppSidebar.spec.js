@@ -4,6 +4,7 @@ import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import i18n from '@/i18n/index.js'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
+import { useAuthStore } from '@/stores/auth.js'
 
 function mockMatchMedia(matches) {
   const listeners = new Set()
@@ -70,6 +71,20 @@ describe('AppSidebar', () => {
 
     expect(wrapper.attributes('aria-hidden')).toBeUndefined()
     expect(wrapper.attributes('inert')).toBeUndefined()
+
+    wrapper.unmount()
+  })
+
+  it('shows the audit nav item for processor roles', async () => {
+    mockMatchMedia(false)
+    const wrapper = mountSidebar({ sidebarOpen: true })
+    const authStore = useAuthStore()
+    authStore.roles = ['processor']
+
+    await nextTick()
+
+    const links = wrapper.findAllComponents(RouterLinkStub)
+    expect(links.some((link) => link.props('to') === '/audit')).toBe(true)
 
     wrapper.unmount()
   })

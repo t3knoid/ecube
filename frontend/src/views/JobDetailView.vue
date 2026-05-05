@@ -116,7 +116,7 @@ const canOperate = computed(() => authStore.hasAnyRole(['admin', 'manager', 'pro
 const canArchiveJobs = computed(() => authStore.hasAnyRole(['admin', 'manager']))
 const canManageStartupAnalysis = computed(() => authStore.hasAnyRole(['admin', 'manager']))
 const canInspectHashes = computed(() => authStore.hasAnyRole(['admin', 'auditor']))
-const canReadCoc = computed(() => authStore.hasAnyRole(['admin', 'manager', 'auditor']))
+const canReadCoc = computed(() => authStore.hasAnyRole(['admin', 'manager', 'processor', 'auditor']))
 const currentStatus = computed(() => String(job.value?.status || '').toUpperCase())
 const hasPendingCocHandoff = computed(() => (cocReport.value?.reports || []).some((report) => !report?.custody_complete))
 const canRefreshCoc = computed(() => authStore.hasAnyRole(['admin', 'manager'])

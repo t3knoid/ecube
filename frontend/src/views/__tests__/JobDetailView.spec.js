@@ -2738,4 +2738,49 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).toContain(i18n.global.t('jobs.analyze'))
     expect(wrapper.text()).not.toContain(i18n.global.t('jobs.clearStartupAnalysis'))
   })
+
+  it('shows chain-of-custody read controls for processor roles without handoff actions', async () => {
+    mocks.hasAnyRole.mockImplementation((roles) => roles.includes('processor'))
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 100,
+      total_bytes: 100,
+      files_failed: 0,
+      files_timed_out: 0,
+      startup_analysis_status: 'READY',
+      startup_analysis_ready: true,
+    })
+    mocks.getJobChainOfCustody.mockResolvedValue({
+      selector_mode: 'JOB',
+      project_id: 'PROJ-001',
+      snapshot_updated_at: '2026-04-28T19:30:00Z',
+      reports: [
+        {
+          drive_id: 1,
+          evidence_number: 'EV-006',
+          custody_complete: false,
+          chain_of_custody_events: [],
+          manifest_summary: [],
+        },
+      ],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const openCocButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.closeOutWithHandoff'))
+    await openCocButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.getJobChainOfCustody).toHaveBeenCalledWith(6)
+    expect(wrapper.find('#job-coc-title').exists()).toBe(true)
+    expect(wrapper.find('.coc-toolbar').findAll('button').some((node) => node.text() === i18n.global.t('common.actions.refresh'))).toBe(false)
+    expect(wrapper.text()).not.toContain(i18n.global.t('audit.handoffTitle'))
+  })
 })

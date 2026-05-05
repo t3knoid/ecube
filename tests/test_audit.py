@@ -4,7 +4,7 @@ Covers:
 - Basic listing returns all audit log entries.
 - Filtering by user, action, job_id, since, until.
 - Pagination (limit, offset).
-- Role restrictions: admin, manager, auditor allowed; processor denied.
+- Role restrictions: admin, manager, processor, auditor allowed.
 - Response schema matches AuditLogSchema.
 """
 
@@ -374,10 +374,10 @@ class TestAuditFilterOptions:
 
         assert response.status_code == 200
 
-    def test_processor_cannot_access_filter_options(self, client, db):
+    def test_processor_can_access_filter_options(self, client, db):
         response = client.get("/audit/options")
 
-        assert response.status_code == 403
+        assert response.status_code == 200
 
     def test_unauthenticated_cannot_access_filter_options(self, unauthenticated_client, db):
         response = unauthenticated_client.get("/audit/options")
@@ -451,10 +451,9 @@ class TestAuditRoleRestrictions:
         response = auditor_client.get("/audit")
         assert response.status_code == 200
 
-    def test_processor_cannot_access(self, client, db):
-        """processor role must receive 403."""
+    def test_processor_can_access(self, client, db):
         response = client.get("/audit")
-        assert response.status_code == 403
+        assert response.status_code == 200
 
     def test_unauthenticated_cannot_access(self, unauthenticated_client, db):
         response = unauthenticated_client.get("/audit")
