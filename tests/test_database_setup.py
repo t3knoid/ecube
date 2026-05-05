@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import os
 import stat
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, Mock, patch
 
 import pytest
 
@@ -871,17 +871,20 @@ class TestSetupWizardLogging:
         mock_log_and_audit.assert_called_once()
 
     @patch("app.routers.setup.AuditRepository.add")
+    @patch("app.routers.setup.seed_runtime_demo_environment")
     @patch("app.routers.setup.database_service.set_trust_proxy_headers")
     @patch("app.routers.setup._run_os_setup", return_value=(["ecube-admins"], "created_admin_user"))
     def test_initialize_emits_request_start_and_success_logs(
         self,
         mock_run_os_setup,
         mock_set_trust_proxy_headers,
+        mock_seed_runtime_demo_environment,
         mock_audit_add,
         unauthenticated_client,
         caplog,
     ):
         caplog.set_level(logging.INFO, logger="app.routers.setup")
+        mock_seed_runtime_demo_environment.return_value = Mock(users_seeded=0, roles_seeded=0, jobs_seeded=0)
 
         resp = unauthenticated_client.post(
             "/setup/initialize",
@@ -906,6 +909,47 @@ class TestSetupWizardLogging:
         assert success_records[0].trust_proxy_headers is True
         mock_run_os_setup.assert_called_once()
         mock_set_trust_proxy_headers.assert_called_once_with(True)
+        mock_seed_runtime_demo_environment.assert_not_called()
+        mock_audit_add.assert_called_once()
+
+    @patch("app.routers.setup.AuditRepository.add")
+    @patch("app.routers.setup.get_os_user_provider")
+    @patch("app.routers.setup.seed_runtime_demo_environment")
+    @patch("app.routers.setup.database_service.set_trust_proxy_headers")
+    @patch("app.routers.setup._run_os_setup", return_value=([], "created_admin_user"))
+    def test_initialize_triggers_demo_runtime_seed_when_demo_mode_enabled(
+        self,
+        mock_run_os_setup,
+        mock_set_trust_proxy_headers,
+        mock_seed_runtime_demo_environment,
+        mock_get_os_user_provider,
+        mock_audit_add,
+        unauthenticated_client,
+    ):
+        provider = Mock()
+        mock_get_os_user_provider.return_value = provider
+        mock_seed_runtime_demo_environment.return_value = Mock(users_seeded=4, roles_seeded=4, jobs_seeded=0)
+
+        with patch("app.routers.setup.settings.is_demo_mode_enabled", return_value=True), \
+             patch("app.routers.setup.settings.role_resolver", "local"):
+            resp = unauthenticated_client.post(
+                "/setup/initialize",
+                json={
+                    "username": "admin",
+                    "password": "StrongPass#123",
+                    "trust_proxy_headers": False,
+                },
+            )
+
+        assert resp.status_code == 200
+        mock_run_os_setup.assert_called_once()
+        mock_set_trust_proxy_headers.assert_called_once_with(False)
+        mock_get_os_user_provider.assert_called_once()
+        mock_seed_runtime_demo_environment.assert_called_once_with(
+            ANY,
+            provider=provider,
+            actor="system",
+        )
         mock_audit_add.assert_called_once()
 
     @patch("app.routers.setup.AuditRepository.add")

@@ -46,6 +46,7 @@ from app.schemas.admin import (
 from app.infrastructure import get_os_user_provider
 from app.infrastructure.os_user_protocol import OSUserError
 from app.schemas.errors import R_400, R_404, R_409, R_422, R_500
+from app.services.demo_seed_service import seed_runtime_demo_environment
 from app.utils.client_ip import get_client_ip
 from app.utils.sanitize import sanitize_error_message, summarize_password_policy_violation
 
@@ -507,6 +508,29 @@ def _do_initialize(
         else:
             detail += _LOCK_STUCK_SUFFIX
         raise HTTPException(status_code=500, detail=detail)
+
+    if settings.is_demo_mode_enabled():
+        try:
+            seed_runtime_demo_environment(
+                db,
+                provider=get_os_user_provider() if settings.role_resolver == "local" else None,
+                actor="system",
+            )
+        except Exception:
+            db.rollback()
+            lock_released = _release_init_lock(db)
+            logger.error("Failed to seed demo runtime accounts after setup initialization")
+            detail = (
+                "Setup completed, but demo account role seeding failed. "
+                "Demo users may be missing ECUBE role assignments until setup is retried. "
+            )
+            if lock_released:
+                detail += (
+                    "The initialization lock has been released so you can safely retry POST /setup/initialize."
+                )
+            else:
+                detail += _LOCK_STUCK_SUFFIX
+            raise HTTPException(status_code=500, detail=detail)
 
     # Step 5: Audit log.
     try:
