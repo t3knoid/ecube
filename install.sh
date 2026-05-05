@@ -988,7 +988,14 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       VERSION_TAG="$2"; shift 2 ;;
-    --demo)           DEMO_INSTALL=true; shift ;;
+    --demo)
+      local_demo_metadata_path="$(_demo_metadata_source_path)"
+      if [[ ! -f "${local_demo_metadata_path}" ]]; then
+        error "--demo requires demo-metadata.json in the same directory as install.sh (${local_demo_metadata_path})."
+        exit 1
+      fi
+      DEMO_INSTALL=true
+      shift ;;
     --uninstall)      UNINSTALL=true; shift ;;
     --drop-database)  DROP_DATABASE=true; shift ;;
     --dry-run)        DRY_RUN=true; shift ;;
