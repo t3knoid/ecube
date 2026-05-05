@@ -242,17 +242,12 @@ describe('MountDetailView', () => {
     await flushPromises()
 
     const buttonTexts = wrapper.findAll('button').map((node) => node.text())
-    expect(buttonTexts).toContain(i18n.global.t('mounts.browse'))
+    expect(buttonTexts).not.toContain(i18n.global.t('mounts.browse'))
     expect(buttonTexts).not.toContain(i18n.global.t('common.actions.edit'))
     expect(buttonTexts).not.toContain(i18n.global.t('mounts.remove'))
     expect(wrapper.text()).not.toContain('//server/share')
     expect(wrapper.text()).not.toContain('/smb/project2')
     expect(wrapper.text()).toContain(i18n.global.t('mounts.redactedValue'))
-
-    const browseButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.browse'))
-    await browseButton.trigger('click')
-    await flushPromises()
-
-    expect(wrapper.find('.directory-browser-stub').text()).toBe('11||true')
+    expect(wrapper.find('.directory-browser-stub').exists()).toBe(false)
   })
 })

@@ -292,7 +292,7 @@ Example dark-theme appearance:
 
 > **Access Summary**
 > **Page visibility:** `admin`, `manager`, `processor`, `auditor`
-> **Restricted actions:** None described on this screen; use linked pages for operational actions.
+> **Restricted actions:** Auditor users see a reduced dashboard summary focused on system health and database status.
 
 The dashboard provides a quick operational summary.
 
@@ -303,6 +303,8 @@ Typical information shown:
 - Number of active jobs
 - Drive state summary (`DISCONNECTED`, `DISABLED`, `AVAILABLE`, `IN_USE`)
 - Table of active jobs
+
+Auditor users see the dashboard with only the system-health summary card; drive summary and active-job counts/tables are hidden.
 
 If your password is nearing expiration, the dashboard shows a dismissible warning banner with the remaining days. Dismissing the banner hides it only for the current browser session.
 
@@ -456,18 +458,16 @@ If ECUBE detects timed-out or failed files in active drive assignments, the firs
 
 > **Access Summary**
 > **Page visibility:** `admin`, `manager`, `processor`, `auditor`
-> **Restricted actions:** The mounts page is currently available to all authenticated users in the frontend.
+> **Restricted actions:** `admin` and `manager` can add mounts. Mounted-share browsing from the list and from Mount Detail is available to `admin`, `manager`, and `processor`, but not `auditor`.
 
 The `Mounts` page manages source locations used for export jobs.
 
 You can typically:
 
 - Refresh the mount list
-- Add a new mount definition
 - Open Mount Detail for an existing mount definition from the clickable mount ID
-- Open browse for a mounted share from the clickable project value on the Mounts page
 
-`admin` and `manager` users can also edit or remove a mount from Mount Detail. `processor` and `auditor` users can open Mount Detail and browse mounted shares, but they do not see `Edit` or `Remove` actions and sensitive path fields remain redacted.
+`admin` and `manager` users can also add a new mount definition and edit or remove a mount from Mount Detail. `processor` users can browse mounted shares from the clickable project value on the Mounts page and from Mount Detail. `auditor` users can open the Mounts page and Mount Detail, but they do not see browse, `Edit`, or `Remove` actions and sensitive path fields remain redacted.
 
 ### 8.1 Adding a Mount
 
@@ -899,7 +899,7 @@ Operational guidance:
 
 > **Access Summary**
 > **Page visibility:** `admin`, `manager`, `processor`, `auditor`
-> **Restricted actions:** Most diagnostics on this page are relevant to administrators and support personnel. Log viewing is admin-only.
+> **Restricted actions:** `admin`, `manager`, and `processor` can open the `USB Topology`, `Block Devices`, and `Mounts` tabs. `auditor` users see only the `Health` tab on this page. Log viewing is not available to `auditor` users.
 
 The `System` page provides operational and diagnostic information. Depending on deployment and permissions, this may include host-level system health, ECUBE process metrics, active copy-thread diagnostics, USB information, block-device data, mount diagnostics, and application logs.
 
@@ -908,15 +908,15 @@ This page is useful when:
 - Confirming the backend is healthy
 - Checking whether hardware is visible to ECUBE
 - Reviewing mount or log details during issue investigation
-- Investigating system errors or performance issues via application logs (admin-only)
+- Investigating system errors or performance issues via application logs (`admin` and `manager`)
 
 End users who only perform evidence exports may rarely need this page. Administrators and support personnel are more likely to use it during troubleshooting.
 
 In the `System Health` tab, ECUBE separates host metrics from ECUBE-owned process diagnostics. The ECUBE process section shows ECUBE CPU and memory usage, the total ECUBE thread count, the number of active copy workers, and a table that correlates each active copy thread to its parent job and project, including status, configured threads, elapsed time, and CPU time.
 
-In the `USB Topology` tab, ECUBE shows a sorted device table and hides rows with no meaningful USB metadata so the list stays focused on useful hardware entries. On smaller screens, the table tightens to primary columns such as `Device` and `Product`, and the remaining hardware details move into a per-row overflow menu.
+For `admin`, `manager`, and `processor` users, the `USB Topology` tab shows a sorted device table and hides rows with no meaningful USB metadata so the list stays focused on useful hardware entries. On smaller screens, the table tightens to primary columns such as `Device` and `Product`, and the remaining hardware details move into a per-row overflow menu.
 
-In the `Mounts` tab, ECUBE continues to show device, mount point, filesystem type, and mount options on wider screens. On smaller screens, it keeps `Device` and `Mount Point` visible and moves the remaining fields into a per-row overflow menu.
+For `admin`, `manager`, and `processor` users, the `Mounts` tab continues to show device, mount point, filesystem type, and mount options on wider screens. On smaller screens, it keeps `Device` and `Mount Point` visible and moves the remaining fields into a per-row overflow menu.
 
 For users with `admin` or `manager` roles, the System tab bar includes a `Reconcile managed mounts` action button positioned between `Mounts` and `Logs`. This action triggers a manual managed-mount reconciliation pass and opens a dedicated results page.
 
@@ -994,7 +994,7 @@ Use this action when mounted-share state appears stale or inconsistent and you n
 1. Open the `System` page.
 2. In the tab bar, locate `Reconcile managed mounts` next to `Mounts`:
    - `admin`: between `Mounts` and `Logs`
-   - `manager`: after `Mounts` (the `Logs` tab is admin-only)
+   - `manager`: between `Mounts` and `Logs`
 3. Click `Reconcile managed mounts`.
 4. While the request is running, the button label changes to `Loading`.
 5. On success, ECUBE navigates to the `Reconciliation Results` page.

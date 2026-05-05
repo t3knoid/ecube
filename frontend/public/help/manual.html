@@ -353,7 +353,7 @@ Platform administrators can still influence the deployment default by controllin
 <h1 id="3-dashboard">3. Dashboard</h1>
 <blockquote><p><strong>Access Summary</strong></p></blockquote>
 <blockquote><p><strong>Page visibility:</strong> <code>admin</code>, <code>manager</code>, <code>processor</code>, <code>auditor</code></p></blockquote>
-<blockquote><p><strong>Restricted actions:</strong> None described on this screen; use linked pages for operational actions.</p></blockquote>
+<blockquote><p><strong>Restricted actions:</strong> Auditor users see a reduced dashboard summary focused on system health and database status.</p></blockquote>
 <p>The dashboard provides a quick operational summary.</p>
 <p>Typical information shown:</p>
 <ul><li>
@@ -367,6 +367,7 @@ Drive state summary (<code>DISCONNECTED</code>, <code>DISABLED</code>, <code>AVA
 </li><li>
 Table of active jobs
 </li></ul>
+<p>Auditor users see the dashboard with only the system-health summary card; drive summary and active-job counts/tables are hidden.</p>
 <p>If your password is nearing expiration, the dashboard shows a dismissible warning banner with the remaining days. Dismissing the banner hides it only for the current browser session.</p>
 <p>Use the dashboard when you need a quick answer to questions such as:</p>
 <ul><li>
@@ -522,19 +523,15 @@ The drive can be physically removed once the operation completes.
 <h1 id="5-mounts">5. Mounts</h1>
 <blockquote><p><strong>Access Summary</strong></p></blockquote>
 <blockquote><p><strong>Page visibility:</strong> <code>admin</code>, <code>manager</code>, <code>processor</code>, <code>auditor</code></p></blockquote>
-<blockquote><p><strong>Restricted actions:</strong> The mounts page is currently available to all authenticated users in the frontend.</p></blockquote>
+<blockquote><p><strong>Restricted actions:</strong> <code>admin</code> and <code>manager</code> can add mounts. Mounted-share browsing from the list and from Mount Detail is available to <code>admin</code>, <code>manager</code>, and <code>processor</code>, but not <code>auditor</code>.</p></blockquote>
 <p>The <code>Mounts</code> page manages source locations used for export jobs.</p>
 <p>You can typically:</p>
 <ul><li>
 Refresh the mount list
 </li><li>
-Add a new mount definition
-</li><li>
 Open Mount Detail for an existing mount definition from the clickable mount ID
-</li><li>
-Open browse for a mounted share from the clickable project value on the Mounts page
 </li></ul>
-<p><code>admin</code> and <code>manager</code> users can also edit or remove a mount from Mount Detail. <code>processor</code> and <code>auditor</code> users can open Mount Detail and browse mounted shares, but they do not see <code>Edit</code> or <code>Remove</code> actions and sensitive path fields remain redacted.</p>
+<p><code>admin</code> and <code>manager</code> users can also add a new mount definition and edit or remove a mount from Mount Detail. <code>processor</code> users can browse mounted shares from the clickable project value on the Mounts page and from Mount Detail. <code>auditor</code> users can open the Mounts page and Mount Detail, but they do not see browse, <code>Edit</code>, or <code>Remove</code> actions and sensitive path fields remain redacted.</p>
 <h2 id="5-1-adding-a-mount">5.1 Adding a Mount</h2>
 <p>The add-mount dialog supports common fields such as:</p>
 <ul><li>
@@ -998,7 +995,7 @@ Use <code>Cancel</code> if any custody detail needs correction before archival.
 <h1 id="8-system">8. System</h1>
 <blockquote><p><strong>Access Summary</strong></p></blockquote>
 <blockquote><p><strong>Page visibility:</strong> <code>admin</code>, <code>manager</code>, <code>processor</code>, <code>auditor</code></p></blockquote>
-<blockquote><p><strong>Restricted actions:</strong> Most diagnostics on this page are relevant to administrators and support personnel. Log viewing is admin-only.</p></blockquote>
+<blockquote><p><strong>Restricted actions:</strong> <code>admin</code>, <code>manager</code>, and <code>processor</code> can open the <code>USB Topology</code>, <code>Block Devices</code>, and <code>Mounts</code> tabs. <code>auditor</code> users see only the <code>Health</code> tab on this page. Log viewing is not available to <code>auditor</code> users.</p></blockquote>
 <p>The <code>System</code> page provides operational and diagnostic information. Depending on deployment and permissions, this may include host-level system health, ECUBE process metrics, active copy-thread diagnostics, USB information, block-device data, mount diagnostics, and application logs.</p>
 <p>This page is useful when:</p>
 <ul><li>
@@ -1008,12 +1005,12 @@ Checking whether hardware is visible to ECUBE
 </li><li>
 Reviewing mount or log details during issue investigation
 </li><li>
-Investigating system errors or performance issues via application logs (admin-only)
+Investigating system errors or performance issues via application logs (<code>admin</code> and <code>manager</code>)
 </li></ul>
 <p>End users who only perform evidence exports may rarely need this page. Administrators and support personnel are more likely to use it during troubleshooting.</p>
 <p>In the <code>System Health</code> tab, ECUBE separates host metrics from ECUBE-owned process diagnostics. The ECUBE process section shows ECUBE CPU and memory usage, the total ECUBE thread count, the number of active copy workers, and a table that correlates each active copy thread to its parent job and project, including status, configured threads, elapsed time, and CPU time.</p>
-<p>In the <code>USB Topology</code> tab, ECUBE shows a sorted device table and hides rows with no meaningful USB metadata so the list stays focused on useful hardware entries. On smaller screens, the table tightens to primary columns such as <code>Device</code> and <code>Product</code>, and the remaining hardware details move into a per-row overflow menu.</p>
-<p>In the <code>Mounts</code> tab, ECUBE continues to show device, mount point, filesystem type, and mount options on wider screens. On smaller screens, it keeps <code>Device</code> and <code>Mount Point</code> visible and moves the remaining fields into a per-row overflow menu.</p>
+<p>For <code>admin</code>, <code>manager</code>, and <code>processor</code> users, the <code>USB Topology</code> tab shows a sorted device table and hides rows with no meaningful USB metadata so the list stays focused on useful hardware entries. On smaller screens, the table tightens to primary columns such as <code>Device</code> and <code>Product</code>, and the remaining hardware details move into a per-row overflow menu.</p>
+<p>For <code>admin</code>, <code>manager</code>, and <code>processor</code> users, the <code>Mounts</code> tab continues to show device, mount point, filesystem type, and mount options on wider screens. On smaller screens, it keeps <code>Device</code> and <code>Mount Point</code> visible and moves the remaining fields into a per-row overflow menu.</p>
 <p>For users with <code>admin</code> or <code>manager</code> roles, the System tab bar includes a <code>Reconcile managed mounts</code> action button positioned between <code>Mounts</code> and <code>Logs</code>. This action triggers a manual managed-mount reconciliation pass and opens a dedicated results page.</p>
 <h2 id="8-1-application-logs-tab">8.1 Application Logs Tab</h2>
 <p><strong>Access:</strong> <code>admin</code>, <code>manager</code> roles</p>
@@ -1104,7 +1101,7 @@ In the tab bar, locate <code>Reconcile managed mounts</code> next to <code>Mount
 <ul><li>
 <code>admin</code>: between <code>Mounts</code> and <code>Logs</code>
 </li><li>
-<code>manager</code>: after <code>Mounts</code> (the <code>Logs</code> tab is admin-only)
+<code>manager</code>: between <code>Mounts</code> and <code>Logs</code>
 </li></ul>
 </li><li>
 Click <code>Reconcile managed mounts</code>.

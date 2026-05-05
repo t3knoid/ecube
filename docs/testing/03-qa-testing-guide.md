@@ -718,7 +718,7 @@ Use a pending job with a mounted source and eligible destination drive.
 - Start and complete the job after a successful analyze run, then verify the startup-analysis summary remains visible in Job Detail even though the reusable startup-analysis entry snapshot has been cleared.
 
 - On the Drives page, verify the `Drive ID` value navigates to Drive Detail, verify the related `Job ID` still navigates to Job Detail when present, verify mounted rows use the visible `Device` identifier to open browsing, verify the browse panel title uses that same visible device identifier, verify the browser starts at the USB root, and verify the breadcrumb does not expose the mounted host path.
-- On the Mounts page, verify the mount ID value navigates to Mount Detail, verify mounted rows use the `Project` value to open browsing directly, verify the browse panel title uses `Browse mount <project> contents`, verify the mounted-share browser starts at `/`, verify the breadcrumb does not expose the share name or begin with `//`, verify the related `Job ID` still navigates to Job Detail when present, and verify the list no longer shows a separate `Browse` action.
+- On the Mounts page, verify the mount ID value navigates to Mount Detail, verify mounted rows use the `Project` value to open browsing directly for `admin`, `manager`, and `processor`, verify the browse panel title uses `Browse mount <project> contents`, verify the mounted-share browser starts at `/`, verify the breadcrumb does not expose the share name or begin with `//`, verify the related `Job ID` still navigates to Job Detail when present, and verify the list no longer shows a separate `Browse` action. For `auditor`, verify the same mounted row renders the project as read-only text and does not open browse.
 
 #### 11.4d Responsive Mobile Workflow Checks
 
@@ -731,16 +731,16 @@ At a narrow viewport (for example `<= 768px` wide), verify the responsive operat
 - Mobile Jobs, Drives, and Mounts rows render compact status indicators that still expose accessible labels or tooltips for the underlying state.
 - Job Detail keeps the highest-priority lifecycle actions visible on mobile and moves the remaining actions into an overflow menu without changing role-based availability.
 - In the Job Detail Files panel, selecting a file path opens the hash viewer popup, the compare workflow is available inside the same popup, and mobile pagination uses a shorter page-number window than desktop.
-- On the System page, the USB Topology and Mounts tabs reduce visible columns on mobile and expose the remaining details through per-row overflow menus.
-- On the System page, the tab set no longer includes `Job Debug`; verify authenticated roles only see the remaining supported tabs, with `Logs` still hidden from non-admin users.
+- On the System page, the USB Topology and Mounts tabs reduce visible columns on mobile and expose the remaining details through per-row overflow menus for `admin`, `manager`, and `processor`. Verify `auditor` sees only the `Health` tab and never sees the topology or mounts tabs on mobile or desktop.
+- On the System page, the tab set no longer includes `Job Debug`; verify authenticated roles only see the remaining supported tabs, with the `Logs` tab visible to `admin` and `manager` users only.
 - On the Reconciliation Results page, the Current USB Drives and Current Shared Mounts tables follow the same compact mobile treatment as the main Drives and Mounts pages.
 
-For the current System page Logs tab UI, verify the admin-only log workflow behaves as follows:
+For the current System page Logs tab UI, verify the authorized log workflow behaves as follows:
 
-- The `Logs` tab is visible only to `admin` users.
+- The `Logs` tab is visible to `admin` and `manager` users.
 - The `Source` selector lists `app.log` and any eligible rotated files such as `app.log.1`.
 - Changing the selected source loads that file automatically without a second action.
-- Pressing `Download` exports the currently selected source file.
+- Pressing `Download` exports the currently selected source file for `admin` users.
 - Scrolling to the bottom of the log viewer loads older lines for the selected source, and scrolling back to the top loads newer lines when available.
 - If a selected rotated file is missing, unreadable, or rejected, the UI shows a non-generic error state instead of stale content.
 
@@ -1243,7 +1243,7 @@ These tests exercise real hardware paths that must be validated during manual QA
 | # | Test | Steps | Expected |
 |---|------|-------|----------|
 | 1 | Hot-plug detection | Plug in a USB drive, wait 30 seconds | `GET /drives` shows the new drive in `DISABLED` state if its port is disabled, or `AVAILABLE` if its port is enabled |
-| 2 | USB topology | `GET /introspection/usb/topology` and open the System `USB Topology` tab | Shows real device values, serial numbers when available, sorted `Device` order, and no rows with entirely empty USB metadata |
+| 2 | USB topology | Sign in as `admin`, `manager`, or `processor`, call `GET /introspection/usb/topology`, and open the System `USB Topology` tab | Shows real device values, serial numbers when available, sorted `Device` order, and no rows with entirely empty USB metadata |
 | 3 | Physical eject | Initialize drive → prepare-eject → physically remove | After the next discovery cycle, `GET /drives?include_disconnected=true` lists the drive with `current_state=DISCONNECTED`; audit shows `DRIVE_EJECT_PREPARED` |
 | 4 | Re-plug same drive | Remove and re-insert the same drive | Drive reappears as `AVAILABLE` with the same `port_system_path`/Device value and the same stable `device_identifier` (after discovery cycle) |
 | 5 | Multiple drives | Plug in 2+ drives simultaneously | All drives appear in `/drives`; each can be initialized to different projects |
@@ -1534,12 +1534,13 @@ Use this checklist after running `install.sh --demo` on a normal installation.
 
 ### 12.10 Admin Log Viewing API
 
-All admin log endpoints require the `admin` role.
+Log viewing and log listing require the `admin` or `manager` role. Raw log download remains `admin` only.
 
 | # | Test | How | Expected |
 |---|------|-----|----------|
 | 1 | View logs — unauthenticated | `GET /admin/logs/view` without token | 401, `UNAUTHORIZED` |
-| 2 | View logs — non-admin denied | `GET /admin/logs/view` with manager/processor/auditor token | 403, `FORBIDDEN`; denied audit event recorded |
+| 2 | View logs — manager allowed | `GET /admin/logs/view` with manager token | 200, redacted log payload returned |
+| 2a | View logs — processor/auditor denied | `GET /admin/logs/view` with processor/auditor token | 403, `FORBIDDEN`; denied audit event recorded |
 | 3 | View logs — unknown source | `GET /admin/logs/view?source=unknown` with admin token | 404, unknown log source |
 | 4 | View logs — baseline response shape | `GET /admin/logs/view?source=app&limit=5&offset=0` | 200 with object fields: `source`, `fetched_at`, `file_modified_at`, `offset`, `limit`, `returned`, `has_more`, `lines` |
 | 5 | View logs — source path redaction | Inspect `source.path` in successful response | Basename only (for example `app.log`), no absolute filesystem path |
@@ -1549,7 +1550,8 @@ All admin log endpoints require the `admin` role.
 | 9 | View logs — sensitive value redaction | Include tokens/passwords in source log lines, call view endpoint | Sensitive values replaced with redacted markers in `lines[].content` |
 | 10 | View logs — success audit | `GET /audit?action=LOG_LINES_VIEWED` after successful view | Audit entry includes `source`, `limit`, `offset`, `returned`, `has_more`, and basename `log_file` |
 | 11 | List logs — unauthenticated | `GET /admin/logs` without token | 401, `UNAUTHORIZED` |
-| 12 | List logs — non-admin denied | `GET /admin/logs` with non-admin token | 403, `FORBIDDEN`; denied audit event recorded |
+| 12 | List logs — manager allowed | `GET /admin/logs` with manager token | 200, log file metadata returned |
+| 12a | List logs — processor/auditor denied | `GET /admin/logs` with processor/auditor token | 403, `FORBIDDEN`; denied audit event recorded |
 | 13 | List logs — response envelope | `GET /admin/logs` with admin token and file logging configured | 200 object with `log_files` array and `total_size`; no `log_directory` field in response |
 | 14 | Download log — non-admin denied | `GET /admin/logs/app.log` with non-admin token | 403, `FORBIDDEN`; denied audit event recorded |
 | 15 | Download log — path traversal blocked | `GET /admin/logs/../../../etc/passwd` | Rejected (400/404/422), no file disclosure |

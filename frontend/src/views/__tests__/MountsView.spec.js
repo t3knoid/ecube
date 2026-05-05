@@ -216,6 +216,18 @@ describe('MountsView removal flow', () => {
     expect(wrapper.find('.directory-browser-stub').text()).toBe('11||true')
   })
 
+  it('does not expose mounted-share browsing to auditors from the mounts list', async () => {
+    authState.roles = ['auditor']
+    mocks.getMounts.mockResolvedValueOnce([buildMount({ status: 'MOUNTED', local_mount_point: '/smb/demo-case-002' })])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('.mount-project-link').exists()).toBe(false)
+    expect(wrapper.text()).toContain('PROJ-011')
+    expect(wrapper.find('.directory-browser-stub').exists()).toBe(false)
+  })
+
   it('does not expose separate browse, edit, or remove buttons in the desktop list', async () => {
     mocks.getMounts.mockResolvedValue([buildMount({ status: 'MOUNTED' })])
 
@@ -717,7 +729,7 @@ describe('MountsView removal flow', () => {
     expect(buttonTexts).not.toContain(i18n.global.t('mounts.remove'))
     expect(buttonTexts).not.toContain(i18n.global.t('mounts.details'))
     expect(buttonTexts).toContain('11')
-    expect(buttonTexts).toContain('PROJ-011')
+    expect(wrapper.text()).toContain('PROJ-011')
     expect(buttonTexts).not.toContain(i18n.global.t('mounts.browse'))
   })
 

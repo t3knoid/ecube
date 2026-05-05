@@ -107,4 +107,17 @@ describe('AppSidebar', () => {
     expect(wrapper.text()).not.toContain(i18n.global.t('nav.configuration'))
     expect(wrapper.text()).not.toContain(i18n.global.t('nav.admin'))
   })
+
+  it('shows Mounts for auditors while keeping the existing non-admin nav set', () => {
+    authState.roles = ['auditor']
+
+    const wrapper = mountSidebar()
+
+    expect(wrapper.text()).toContain(i18n.global.t('nav.dashboard'))
+    expect(wrapper.text()).toContain(i18n.global.t('nav.drives'))
+    expect(wrapper.text()).toContain(i18n.global.t('nav.mounts'))
+    expect(wrapper.text()).toContain(i18n.global.t('nav.jobs'))
+    expect(wrapper.text()).toContain(i18n.global.t('nav.audit'))
+    expect(wrapper.text()).toContain(i18n.global.t('nav.system'))
+  })
 })
