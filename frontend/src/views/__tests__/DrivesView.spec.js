@@ -10,6 +10,10 @@ const mocks = vi.hoisted(() => ({
   refreshDrives: vi.fn(),
 }))
 
+const authState = vi.hoisted(() => ({
+  roles: ['admin', 'manager'],
+}))
+
 const viewportState = vi.hoisted(() => ({
   mobile: false,
 }))
@@ -27,6 +31,12 @@ vi.mock('@/api/drives.js', () => ({
 
 vi.mock('@/api/jobs.js', () => ({
   listAllJobs: (...args) => mocks.listAllJobs(...args),
+}))
+
+vi.mock('@/stores/auth.js', () => ({
+  useAuthStore: () => ({
+    hasAnyRole: (roles) => roles.some((role) => authState.roles.includes(role)),
+  }),
 }))
 
 function buildDrive(overrides = {}) {
@@ -98,6 +108,7 @@ function installMatchMediaMock() {
 
 describe('DrivesView rescan and filter loading', () => {
   beforeEach(() => {
+    authState.roles = ['admin', 'manager']
     viewportState.mobile = false
     matchMediaListeners.clear()
     installMatchMediaMock()
@@ -163,6 +174,17 @@ describe('DrivesView rescan and filter loading', () => {
 
     expect(wrapper.find('select').element.value).toBe('ALL')
     expect(mocks.getDrives).toHaveBeenLastCalledWith({})
+  })
+
+  it('hides the rescan action from processor-only roles', async () => {
+    authState.roles = ['processor']
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const labels = wrapper.findAll('button').map((node) => node.text())
+    expect(labels).toContain(i18n.global.t('common.actions.refresh'))
+    expect(labels).not.toContain(i18n.global.t('drives.rescan'))
   })
 
   it('shows the readable device label, project, and related job ID in the list', async () => {

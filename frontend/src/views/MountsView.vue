@@ -481,6 +481,7 @@ function selectDiscoveredShare(remotePath) {
 }
 
 function openAddDialog(event) {
+  if (!canManageMounts.value) return
   addDialogTriggerRef.value = event?.currentTarget instanceof HTMLElement ? event.currentTarget : document.activeElement
   editingMountId.value = null
   error.value = ''
@@ -680,7 +681,7 @@ onBeforeUnmount(() => {
       <h1>{{ t('mounts.title') }}</h1>
       <div class="actions">
         <button class="btn" @click="loadMounts">{{ t('common.actions.refresh') }}</button>
-        <button class="btn btn-primary" @click="openAddDialog">{{ t('mounts.add') }}</button>
+        <button v-if="canManageMounts" class="btn btn-primary" @click="openAddDialog">{{ t('mounts.add') }}</button>
       </div>
     </header>
 

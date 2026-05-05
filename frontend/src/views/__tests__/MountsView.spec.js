@@ -229,6 +229,18 @@ describe('MountsView removal flow', () => {
     expect(labels).not.toContain(i18n.global.t('mounts.remove'))
   })
 
+  it('hides the add mount action from processor-only roles', async () => {
+    authState.roles = ['processor']
+    mocks.getMounts.mockResolvedValueOnce([buildMount({ status: 'UNMOUNTED' })])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const labels = wrapper.findAll('button').map((node) => node.text())
+    expect(labels).toContain(i18n.global.t('common.actions.refresh'))
+    expect(labels).not.toContain(i18n.global.t('mounts.add'))
+  })
+
   it('does not render a separate browse action control when the mount ID is clickable', async () => {
     mocks.getMounts.mockResolvedValueOnce([buildMount({ status: 'MOUNTED', local_mount_point: '/smb/demo-case-002' })])
 
