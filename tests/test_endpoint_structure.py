@@ -279,8 +279,8 @@ class TestOpenAPISchema:
             "/health", "/health/live", "/health/ready", "/auth/token", "/auth/public-config", "/setup/status", "/setup/initialize",
             "/introspection/version", "/setup/database/system-info",
         }
-        # Authenticated but no role restriction (any valid user succeeds, no 403)
-        no_role_paths = {"/admin/logs", "/admin/logs/{filename}"}
+        # Authenticated but no role restriction (any valid user succeeds, no 403).
+        no_role_paths = set()
         skip_401 = unauthenticated_paths
         skip_403 = unauthenticated_paths | no_role_paths
 

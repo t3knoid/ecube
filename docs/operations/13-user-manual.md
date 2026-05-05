@@ -924,14 +924,14 @@ For users with `admin` or `manager` roles, the System tab bar includes a `Reconc
 
 ### 11.1 Application Logs Tab
 
-**Access:** `admin` role only
+**Access:** `admin`, `manager` roles
 
-The **Logs** tab allows administrators to inspect the active application log and eligible rotated log files in real time without requiring SSH or command-line access to the ECUBE host. This is useful for diagnosing system issues, checking for errors, and monitoring application behavior.
+The **Logs** tab allows authorized operators to inspect the active application log and eligible rotated log files in real time without requiring SSH or command-line access to the ECUBE host. This is useful for diagnosing system issues, checking for errors, and monitoring application behavior.
 
 #### Viewing Logs
 
 1. Open the `System` page.
-2. Click the **Logs** tab (visible to admins only).
+2. Click the **Logs** tab (visible to `admin` and `manager` users).
 3. Use the **Source** selector to choose the active application log or an available rotated file such as `app.log.1`.
 4. The selected source loads automatically into the viewer.
 5. Log entries are displayed in reverse chronological order (newest first) within the current window.
@@ -968,20 +968,20 @@ This redaction occurs automatically; you cannot bypass it via search or filter o
 
 1. Click the **Refresh** button to retrieve the latest log entries.
 2. The displayed lines update immediately for the currently selected source and reset the viewer to the newest page for that selection.
-3. The **Download** button exports the currently selected log source.
+3. For `admin` users, the **Download** button exports the currently selected log source.
 4. If the selected log file is unavailable, unreadable, or no longer present, an appropriate error message appears.
 
 #### Troubleshooting Log Viewing
 
 If the Logs tab shows an error or is unavailable:
 
-- Verify you have the `admin` role (non-admin users will not see this tab).
+- Verify you have the `admin` or `manager` role (other users will not see this tab).
 - Check that the selected log file still exists on the ECUBE host.
 - Verify the ECUBE service account has read permissions on the selected log file.
 - If you selected a rotated file, confirm the file has not been removed or replaced during log rotation.
 - Consult [16. Troubleshooting](#16-troubleshooting) for service-level issues.
 
-Governance note: denied log access attempts by non-admin users are recorded in the audit trail for accountability and compliance visibility.
+Governance note: denied log access attempts by users without `admin` or `manager` roles are recorded in the audit trail for accountability and compliance visibility.
 
 ### 11.2 Manual Mount Reconciliation
 
@@ -1090,6 +1090,7 @@ Basic workflow:
 Important operational notes:
 
 - The `Configuration` page contains only operational settings: `log_level`, `mkfs_exfat_cluster_size`, `drive_format_timeout_seconds`, `drive_mount_timeout_seconds`, `network_mount_timeout_seconds`, `mount_share_discovery_timeout_seconds`, `copy_job_timeout`, and `job_detail_files_page_size`.
+- The `Configuration` page also shows the current effective log file name as a read-only value so managers can verify the target log file without exposing host path details.
 - Managers cannot view or trigger password policy, webhook secret, logging infrastructure, database runtime, or service restart controls from this page.
 - `exFAT Cluster Size` controls the allocation unit ECUBE uses when formatting drives as exFAT. `4K` is recommended for most situations. Use larger values only for drives that will store very large files only and no small files.
 - `Drive Format Timeout (seconds)` controls how long ECUBE allows a drive format command to run before treating it as failed. Increase it for large removable media that legitimately need extended exFAT formatting time.
@@ -1497,14 +1498,14 @@ Notes:
 5. Click **Refresh** to reload the newest page for the selected source.
 6. Scroll within the viewer to move to older or newer log pages for that source.
 7. Review the redacted log entries for errors, warnings, or relevant diagnostic messages.
-8. If you need to investigate further, take note of timestamps or error messages to share with support, or click **Download** to export the currently selected log file.
+8. If you need to investigate further, take note of timestamps or error messages to share with support. `admin` users can also click **Download** to export the currently selected raw log file.
 
 Notes:
 
 - Sensitive values (passwords, tokens, API keys) are automatically redacted from displayed logs for security.
 - The log viewer pages through the selected source as you scroll and does not load the entire file into memory.
-- Download always follows the currently selected source.
-- This feature is admin-only to prevent information leakage from diagnostic data.
+- For `admin` users, Download always follows the currently selected source.
+- The redacted viewer is available to `admin` and `manager` users, but raw log-file download remains admin-only to prevent information leakage from diagnostic data.
 
 ---
 

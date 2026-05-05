@@ -96,7 +96,19 @@ _EDITABLE_FIELDS: Dict[str, _FieldSpec] = {
     "callback_payload_field_map": _FieldSpec("CALLBACK_PAYLOAD_FIELD_MAP", False, _serialize_json_value),
 }
 
-_MANAGER_CONFIGURATION_FIELDS = (
+_MANAGER_CONFIGURATION_READ_FIELDS = (
+    "log_level",
+    "log_file",
+    "mkfs_exfat_cluster_size",
+    "drive_format_timeout_seconds",
+    "drive_mount_timeout_seconds",
+    "network_mount_timeout_seconds",
+    "mount_share_discovery_timeout_seconds",
+    "copy_job_timeout",
+    "job_detail_files_page_size",
+)
+
+_MANAGER_CONFIGURATION_UPDATE_FIELDS = (
     "log_level",
     "mkfs_exfat_cluster_size",
     "drive_format_timeout_seconds",
@@ -124,8 +136,13 @@ _ADMIN_CONFIGURATION_FIELDS = (
     "startup_analysis_batch_size",
 )
 
-_CONFIGURATION_FIELDS_BY_SCOPE = {
-    "manager": _MANAGER_CONFIGURATION_FIELDS,
+_CONFIGURATION_READ_FIELDS_BY_SCOPE = {
+    "manager": _MANAGER_CONFIGURATION_READ_FIELDS,
+    "admin": _ADMIN_CONFIGURATION_FIELDS,
+}
+
+_CONFIGURATION_UPDATE_FIELDS_BY_SCOPE = {
+    "manager": _MANAGER_CONFIGURATION_UPDATE_FIELDS,
     "admin": _ADMIN_CONFIGURATION_FIELDS,
 }
 
@@ -135,15 +152,22 @@ _SPECIAL_UPDATE_KEYS_BY_SCOPE = {
 }
 
 
-def _get_scope_field_names(scope: str) -> tuple[str, ...]:
+def _get_scope_read_field_names(scope: str) -> tuple[str, ...]:
     try:
-        return _CONFIGURATION_FIELDS_BY_SCOPE[scope]
+        return _CONFIGURATION_READ_FIELDS_BY_SCOPE[scope]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported configuration scope: {scope}") from exc
+
+
+def _get_scope_update_field_names(scope: str) -> tuple[str, ...]:
+    try:
+        return _CONFIGURATION_UPDATE_FIELDS_BY_SCOPE[scope]
     except KeyError as exc:
         raise ValueError(f"Unsupported configuration scope: {scope}") from exc
 
 
 def _get_allowed_update_keys(scope: str) -> frozenset[str]:
-    return frozenset(_get_scope_field_names(scope)) | _SPECIAL_UPDATE_KEYS_BY_SCOPE[scope]
+    return frozenset(_get_scope_update_field_names(scope)) | _SPECIAL_UPDATE_KEYS_BY_SCOPE[scope]
 
 
 def _ensure_scope_allows_requested_keys(values: Dict[str, Any], scope: str) -> None:
@@ -181,21 +205,30 @@ def _display_value(field_name: str, value: Any) -> Any:
     return normalized
 
 
+def _manager_display_value(field_name: str, value: Any) -> Any:
+    normalized = _display_value(field_name, value)
+    if field_name == "log_file" and normalized:
+        return os.path.basename(str(normalized))
+    return normalized
+
+
 def get_configuration_fields(*, scope: str) -> List[Dict[str, Any]]:
     """Return editable configuration fields and their current values."""
     fields: List[Dict[str, Any]] = []
-    for key in _get_scope_field_names(scope):
+    for key in _get_scope_read_field_names(scope):
         spec = _EDITABLE_FIELDS[key]
         if not spec.readable:
             continue
+        value = getattr(settings, key)
+        display_value = _manager_display_value(key, value) if scope == "manager" else _display_value(key, value)
         fields.append(
             {
                 "key": key,
-                "value": _display_value(key, getattr(settings, key)),
+                "value": display_value,
                 "requires_restart": spec.requires_restart,
             }
         )
-    if "callback_hmac_secret" in _get_scope_field_names(scope):
+    if "callback_hmac_secret" in _get_scope_read_field_names(scope):
         fields.append(
             {
                 "key": "callback_hmac_secret_configured",

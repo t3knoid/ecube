@@ -1016,13 +1016,13 @@ Investigating system errors or performance issues via application logs (admin-on
 <p>In the <code>Mounts</code> tab, ECUBE continues to show device, mount point, filesystem type, and mount options on wider screens. On smaller screens, it keeps <code>Device</code> and <code>Mount Point</code> visible and moves the remaining fields into a per-row overflow menu.</p>
 <p>For users with <code>admin</code> or <code>manager</code> roles, the System tab bar includes a <code>Reconcile managed mounts</code> action button positioned between <code>Mounts</code> and <code>Logs</code>. This action triggers a manual managed-mount reconciliation pass and opens a dedicated results page.</p>
 <h2 id="8-1-application-logs-tab">8.1 Application Logs Tab</h2>
-<p><strong>Access:</strong> <code>admin</code> role only</p>
-<p>The <strong>Logs</strong> tab allows administrators to inspect the active application log and eligible rotated log files in real time without requiring SSH or command-line access to the ECUBE host. This is useful for diagnosing system issues, checking for errors, and monitoring application behavior.</p>
+<p><strong>Access:</strong> <code>admin</code>, <code>manager</code> roles</p>
+<p>The <strong>Logs</strong> tab allows authorized operators to inspect the active application log and eligible rotated log files in real time without requiring SSH or command-line access to the ECUBE host. This is useful for diagnosing system issues, checking for errors, and monitoring application behavior.</p>
 <h3 id="viewing-logs">Viewing Logs</h3>
 <ol><li>
 Open the <code>System</code> page.
 </li><li>
-Click the <strong>Logs</strong> tab (visible to admins only).
+Click the <strong>Logs</strong> tab (visible to <code>admin</code> and <code>manager</code> users).
 </li><li>
 Use the <strong>Source</strong> selector to choose the active application log or an available rotated file such as <code>app.log.1</code>.
 </li><li>
@@ -1075,14 +1075,14 @@ Click the <strong>Refresh</strong> button to retrieve the latest log entries.
 </li><li>
 The displayed lines update immediately for the currently selected source and reset the viewer to the newest page for that selection.
 </li><li>
-The <strong>Download</strong> button exports the currently selected log source.
+For <code>admin</code> users, the <strong>Download</strong> button exports the currently selected log source.
 </li><li>
 If the selected log file is unavailable, unreadable, or no longer present, an appropriate error message appears.
 </li></ol>
 <h3 id="troubleshooting-log-viewing">Troubleshooting Log Viewing</h3>
 <p>If the Logs tab shows an error or is unavailable:</p>
 <ul><li>
-Verify you have the <code>admin</code> role (non-admin users will not see this tab).
+Verify you have the <code>admin</code> or <code>manager</code> role (other users will not see this tab).
 </li><li>
 Check that the selected log file still exists on the ECUBE host.
 </li><li>
@@ -1092,7 +1092,7 @@ If you selected a rotated file, confirm the file has not been removed or replace
 </li><li>
 Consult <a href="#13-troubleshooting">13. Troubleshooting</a> for service-level issues.
 </li></ul>
-<p>Governance note: denied log access attempts by non-admin users are recorded in the audit trail for accountability and compliance visibility.</p>
+<p>Governance note: denied log access attempts by users without <code>admin</code> or <code>manager</code> roles are recorded in the audit trail for accountability and compliance visibility.</p>
 <h2 id="8-2-manual-mount-reconciliation">8.2 Manual Mount Reconciliation</h2>
 <p><strong>Access:</strong> <code>admin</code>, <code>manager</code> roles</p>
 <p>Use this action when mounted-share state appears stale or inconsistent and you need to reconcile managed network and USB mount state without restarting the service.</p>
@@ -1210,6 +1210,8 @@ Click <code>Save</code>.
 <p>Important operational notes:</p>
 <ul><li>
 The <code>Configuration</code> page contains only operational settings: <code>log_level</code>, <code>mkfs_exfat_cluster_size</code>, <code>drive_format_timeout_seconds</code>, <code>drive_mount_timeout_seconds</code>, <code>network_mount_timeout_seconds</code>, <code>mount_share_discovery_timeout_seconds</code>, <code>copy_job_timeout</code>, and <code>job_detail_files_page_size</code>.
+</li><li>
+The <code>Configuration</code> page also shows the current effective log file name as a read-only value so managers can verify the target log file without exposing host path details.
 </li><li>
 Managers cannot view or trigger password policy, webhook secret, logging infrastructure, database runtime, or service restart controls from this page.
 </li><li>
@@ -1839,7 +1841,7 @@ Scroll within the viewer to move to older or newer log pages for that source.
 </li><li>
 Review the redacted log entries for errors, warnings, or relevant diagnostic messages.
 </li><li>
-If you need to investigate further, take note of timestamps or error messages to share with support, or click <strong>Download</strong> to export the currently selected log file.
+If you need to investigate further, take note of timestamps or error messages to share with support. <code>admin</code> users can also click <strong>Download</strong> to export the currently selected raw log file.
 </li></ol>
 <p>Notes:</p>
 <ul><li>
@@ -1847,9 +1849,9 @@ Sensitive values (passwords, tokens, API keys) are automatically redacted from d
 </li><li>
 The log viewer pages through the selected source as you scroll and does not load the entire file into memory.
 </li><li>
-Download always follows the currently selected source.
+For <code>admin</code> users, Download always follows the currently selected source.
 </li><li>
-This feature is admin-only to prevent information leakage from diagnostic data.
+The redacted viewer is available to <code>admin</code> and <code>manager</code> users, but raw log-file download remains admin-only to prevent information leakage from diagnostic data.
 </li></ul>
 <p class="help-back-to-top"><a href="#help-toc-title">Back to top</a></p>
 <hr />

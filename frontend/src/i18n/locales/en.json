@@ -610,7 +610,8 @@
       "log_file": {
         "label": "Log File Path",
         "enabledLabel": "Enable file logging",
-        "help": "When unchecked, ECUBE clears LOG_FILE in .env. When checked, ECUBE sets LOG_FILE to the path shown above (default: /var/log/ecube/app.log)."
+        "help": "When unchecked, ECUBE clears LOG_FILE in .env. When checked, values in ECUBE's default log directory are shown by filename only and saved back under /var/log/ecube. Enter a full path to use a different directory.",
+        "readOnlyHelp": "Current effective log file name. Managers can view this value here but must use the Admin page to change it."
       },
       "log_file_max_bytes": {
         "label": "Log File Max Bytes"

@@ -20,7 +20,8 @@ const { t } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 
-const canViewLogs = computed(() => authStore.hasRole('admin'))
+const canViewLogs = computed(() => authStore.hasRole('admin') || authStore.hasRole('manager'))
+const canDownloadLogs = computed(() => authStore.hasRole('admin'))
 const canRunManagedMountReconciliation = computed(() => authStore.hasRole('admin') || authStore.hasRole('manager'))
 const tabs = computed(() => {
   const items = ['health', 'usb', 'block', 'mounts']
@@ -699,7 +700,7 @@ onBeforeUnmount(() => {
           @keyup.enter="refreshLogViewer"
         />
         <button class="btn" @click="refreshLogViewer">{{ t('common.actions.refresh') }}</button>
-        <button class="btn" :disabled="!selectedLogDownloadName || downloadingLogName === selectedLogDownloadName" @click="downloadLog">
+        <button v-if="canDownloadLogs" class="btn" :disabled="!selectedLogDownloadName || downloadingLogName === selectedLogDownloadName" @click="downloadLog">
           {{ t('system.download') }}
         </button>
       </div>

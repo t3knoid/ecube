@@ -37,6 +37,7 @@ vi.mock('@/composables/useToast.js', () => ({
 function buildManagerResponse(overrides = {}) {
   const values = {
     log_level: 'INFO',
+    log_file: '/var/log/ecube/app.log',
     mkfs_exfat_cluster_size: '4K',
     drive_format_timeout_seconds: 900,
     drive_mount_timeout_seconds: 120,
@@ -93,7 +94,11 @@ describe('ConfigurationView', () => {
       i18n.global.t('configuration.sections.networkMountOperations'),
       i18n.global.t('configuration.sections.copyAndJobWorkflow'),
     ])
-    expect(wrapper.find('#cfg-log-file').exists()).toBe(false)
+    const logFileInput = wrapper.find('#cfg-log-file')
+    expect(logFileInput.exists()).toBe(true)
+    expect(logFileInput.element.value).toBe('app.log')
+    expect(logFileInput.attributes('readonly')).toBeDefined()
+    expect(wrapper.find('#cfg-log-file-enabled').exists()).toBe(false)
     expect(wrapper.find('#cfg-policy-minlen').exists()).toBe(false)
     expect(mocks.getPasswordPolicy).not.toHaveBeenCalled()
   })

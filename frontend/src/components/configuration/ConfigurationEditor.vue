@@ -39,6 +39,7 @@ const logFileEnabled = ref(false)
 const originalLogFileEnabled = ref(false)
 
 const DEFAULT_LOG_FILE_PATH = '/var/log/ecube/app.log'
+const DEFAULT_LOG_FILE_DIRECTORY = '/var/log/ecube'
 const CALLBACK_PAYLOAD_FIELDS_PLACEHOLDER = `[
   "event",
   "project_id",
@@ -78,6 +79,9 @@ const adminFieldOrder = [
 ]
 
 const fieldOrder = computed(() => (isAdminMode.value ? adminFieldOrder : managerFieldOrder))
+const visibleFieldKeys = computed(() => (
+  isAdminMode.value ? adminFieldOrder : ['log_file', ...managerFieldOrder]
+))
 
 const title = computed(() => (isAdminMode.value ? t('adminPage.title') : t('configuration.title')))
 const description = computed(() => (isAdminMode.value ? t('adminPage.description') : t('configuration.description')))
@@ -129,6 +133,13 @@ const levelOptions = ['DEBUG', 'INFO', 'WARNING', 'ERROR']
 const formatOptions = ['text', 'json']
 const nfsClientVersionOptions = ['4.2', '4.1', '4.0', '3']
 const exfatClusterSizeOptions = ['4K', '64K', '128K', '256K']
+const displayedLogFile = computed(() => collapseDefaultLogDirectoryPath(form.value.log_file))
+const editableLogFile = computed({
+  get: () => collapseDefaultLogDirectoryPath(form.value.log_file),
+  set: (value) => {
+    form.value.log_file = value
+  },
+})
 
 const hasChanges = computed(() => {
   for (const key of fieldOrder.value) {
@@ -209,7 +220,7 @@ function normalizeForm(data) {
   for (const entry of list) {
     if (!entry?.key) continue
     const key = entry.key
-    if (!fieldOrder.value.includes(key) && key !== 'callback_hmac_secret_configured') continue
+    if (!visibleFieldKeys.value.includes(key) && key !== 'callback_hmac_secret_configured') continue
     let value = entry.value
     if (key === 'log_file') {
       value = value || ''
@@ -252,10 +263,36 @@ function normalizePasswordPolicy(data) {
   originalPasswordPolicyForm.value = { ...next }
 }
 
+function collapseDefaultLogDirectoryPath(value) {
+  const trimmed = String(value || '').trim()
+  if (!trimmed) return ''
+
+  const normalizedDirectory = DEFAULT_LOG_FILE_DIRECTORY.replace(/\\/g, '/').replace(/\/+$/, '')
+  const normalizedValue = trimmed.replace(/\\/g, '/')
+  const prefix = `${normalizedDirectory}/`
+
+  if (!normalizedValue.startsWith(prefix)) {
+    return trimmed
+  }
+
+  const remainder = normalizedValue.slice(prefix.length)
+  return remainder && !remainder.includes('/') ? remainder : trimmed
+}
+
+function expandDisplayedLogFilePath(value) {
+  const trimmed = String(value || '').trim()
+  if (!trimmed) return ''
+  if (trimmed.includes('/') || trimmed.includes('\\')) {
+    return trimmed
+  }
+  return `${DEFAULT_LOG_FILE_DIRECTORY}/${trimmed}`
+}
+
 function effectiveLogFileValue(currentEnabled, currentValue) {
   if (!currentEnabled) return ''
   const trimmed = String(currentValue || '').trim()
-  return trimmed || DEFAULT_LOG_FILE_PATH
+  if (!trimmed) return DEFAULT_LOG_FILE_PATH
+  return expandDisplayedLogFilePath(trimmed)
 }
 
 function buildPatchPayload() {
@@ -391,7 +428,8 @@ async function saveConfiguration() {
       const result = isAdminMode.value
         ? await updateAdminConfiguration(payload)
         : await updateConfiguration(payload)
-      form.value.log_file = effectiveLogFileValue(logFileEnabled.value, form.value.log_file) || DEFAULT_LOG_FILE_PATH
+      const savedLogFileValue = effectiveLogFileValue(logFileEnabled.value, form.value.log_file) || DEFAULT_LOG_FILE_PATH
+      form.value.log_file = collapseDefaultLogDirectoryPath(savedLogFileValue)
       if (payload.callback_hmac_secret) {
         form.value.callback_hmac_secret_configured = true
       }
@@ -459,6 +497,10 @@ onMounted(loadConfiguration)
             <option v-for="option in levelOptions" :key="option" :value="option">{{ option }}</option>
           </select>
           <p class="field-help">{{ t('configuration.fields.log_level.help') }}</p>
+
+          <label for="cfg-log-file">{{ t('configuration.fields.log_file.label') }}</label>
+          <input id="cfg-log-file" :value="displayedLogFile" type="text" readonly />
+          <p class="field-help">{{ t('configuration.fields.log_file.readOnlyHelp') }}</p>
         </article>
 
         <article class="panel">
@@ -545,7 +587,7 @@ onMounted(loadConfiguration)
             <input id="cfg-log-file-enabled" v-model="logFileEnabled" type="checkbox" />
             <span>{{ t('configuration.fields.log_file.enabledLabel') }}</span>
           </label>
-          <input id="cfg-log-file" v-model="form.log_file" type="text" :disabled="!logFileEnabled" />
+          <input id="cfg-log-file" v-model="editableLogFile" type="text" :disabled="!logFileEnabled" />
           <p class="field-help">{{ t('configuration.fields.log_file.help') }}</p>
 
           <label for="cfg-log-max-bytes">{{ t('configuration.fields.log_file_max_bytes.label') }}</label>

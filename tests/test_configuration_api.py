@@ -130,6 +130,7 @@ class TestConfigurationSchemaValidation:
 class TestConfigurationEndpoints:
     _MANAGER_CONFIGURATION_KEYS = {
         "log_level",
+        "log_file",
         "mkfs_exfat_cluster_size",
         "drive_format_timeout_seconds",
         "drive_mount_timeout_seconds",
@@ -170,6 +171,13 @@ class TestConfigurationEndpoints:
         data = resp.json()
         keys = {item["key"] for item in data["settings"]}
         assert keys == self._MANAGER_CONFIGURATION_KEYS
+
+    def test_get_configuration_manager_includes_log_file(self, manager_client):
+        resp = manager_client.get("/configuration")
+        assert resp.status_code == 200
+
+        settings_map = {item["key"]: item["value"] for item in resp.json()["settings"]}
+        assert settings_map["log_file"] == "app.log"
 
     def test_get_configuration_processor_forbidden(self, client):
         resp = client.get("/configuration")
@@ -272,6 +280,13 @@ class TestConfigurationEndpoints:
         resp = manager_client.put(
             "/configuration",
             json={"db_pool_size": 12},
+        )
+        assert resp.status_code == 403, resp.json()
+
+    def test_manager_update_configuration_rejects_log_file_update(self, manager_client):
+        resp = manager_client.put(
+            "/configuration",
+            json={"log_file": "/var/log/ecube/manager.log"},
         )
         assert resp.status_code == 403, resp.json()
 
