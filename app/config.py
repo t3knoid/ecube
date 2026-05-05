@@ -7,12 +7,44 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.utils.password_policy import (
+    DEFAULT_PASSWORD_POLICY_VALUES,
+    build_policy_friendly_demo_password,
+    parse_pwquality_policy_values,
+)
 from app.utils.callback_payload_contract import validate_callback_payload_contract
 
 logger = logging.getLogger(__name__)
 
 
 DEFAULT_READINESS_MOUNT_CHECK_TIMEOUT_SECONDS = 1.0
+DEFAULT_DEMO_LOGIN_MESSAGE = "Use the shared demo accounts below."
+DEFAULT_DEMO_ACCOUNTS: list[dict[str, Any]] = [
+    {
+        "username": "demo_admin",
+        "label": "Admin demo",
+        "description": "Full demo access for guided product walkthroughs.",
+        "roles": ["admin"],
+    },
+    {
+        "username": "demo_manager",
+        "label": "Manager demo",
+        "description": "Drive lifecycle, mounts, and job visibility.",
+        "roles": ["manager"],
+    },
+    {
+        "username": "demo_processor",
+        "label": "Processor demo",
+        "description": "Create and review sanitized export activity.",
+        "roles": ["processor"],
+    },
+    {
+        "username": "demo_auditor",
+        "label": "Auditor demo",
+        "description": "Read-only audit and verification review.",
+        "roles": ["auditor"],
+    },
+]
 
 
 class Settings(BaseSettings):
@@ -230,7 +262,7 @@ class Settings(BaseSettings):
 
     #: Optional public-safe guidance text shown on the login screen when demo
     #: mode is enabled. This must never include internal-only deployment data.
-    demo_login_message: str = ""
+    demo_login_message: str = DEFAULT_DEMO_LOGIN_MESSAGE
 
     #: Optional shared demo password shown publicly on the login screen for
     #: disposable demo deployments. Only set this when the password is
@@ -242,7 +274,9 @@ class Settings(BaseSettings):
     #: on the login screen. Internal-only keys such as ``roles`` or ``password``
     #: may also be supplied for the trusted demo bootstrap command and are never
     #: exposed by the public auth metadata endpoint.
-    demo_accounts: List[Dict[str, Any]] = Field(default_factory=list)
+    demo_accounts: List[Dict[str, Any]] = Field(
+        default_factory=lambda: [dict(account) for account in DEFAULT_DEMO_ACCOUNTS]
+    )
 
     #: Disable password-change operations for shared demo accounts when demo mode
     #: is enabled.
@@ -574,97 +608,50 @@ class Settings(BaseSettings):
     #: Enable TCP keepalive on the Redis socket to detect dead connections.
     redis_socket_keepalive: bool = True
 
-    def _demo_metadata_path(self) -> Path:
-        return Path(__file__).resolve().parents[1] / "demo-metadata.json"
-
-    def _load_demo_metadata_payload(self) -> Dict[str, Any]:
-        """Load the raw demo metadata payload from the colocated install-root file."""
-        metadata_path = self._demo_metadata_path()
-        if not metadata_path.is_file():
-            return {}
-
-        try:
-            payload = json.loads(metadata_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            logger.warning(
-                "Failed to load demo metadata",
-                {"failure_category": "demo_metadata_unreadable"},
-            )
-            logger.debug(
-                "Demo metadata load details",
-                {"error": str(exc), "path": str(metadata_path)},
-            )
-            return {}
-
-        if isinstance(payload, dict):
-            return payload
-        return {}
-
-    def load_demo_metadata(self) -> Dict[str, Any]:
-        """Load effective demo runtime metadata from the colocated install-root file."""
-        payload = self._load_demo_metadata_payload()
-        if not payload:
-            return {}
-
-        config = payload.get("demo_config")
-        if isinstance(config, dict):
-            return config
-        return payload
-
     def is_demo_mode_enabled(self) -> bool:
-        """Return the effective demo-mode state.
-
-        Once managed demo metadata has been seeded, the deployment remains in
-        demo mode until the seeded state is reset or the metadata is removed.
-        """
-        if bool(self.demo_mode):
-            return True
-
-        payload = self._load_demo_metadata_payload()
-        if not payload:
-            return False
-
-        config = payload.get("demo_config") if isinstance(payload.get("demo_config"), dict) else payload
-        if isinstance(config, dict) and "demo_mode" in config:
-            return bool(config.get("demo_mode"))
-
-        return payload.get("managed_by") == "ecube-demo-seed-v1"
+        """Return the effective demo-mode state from runtime environment only."""
+        return bool(self.demo_mode)
 
     def get_demo_login_message(self) -> str:
-        value = self.demo_login_message.strip()
-        if value:
-            return value
-        metadata_value = self.load_demo_metadata().get("login_message")
-        if isinstance(metadata_value, str):
-            return metadata_value.strip()
-        return ""
+        message = self.demo_login_message.strip()
+        return message or DEFAULT_DEMO_LOGIN_MESSAGE
+
+    def get_default_demo_shared_password(self) -> str:
+        path = Path(self.pwquality_conf_path)
+        if not path.exists():
+            return build_policy_friendly_demo_password(DEFAULT_PASSWORD_POLICY_VALUES)
+        try:
+            return build_policy_friendly_demo_password(
+                parse_pwquality_policy_values(path.read_text(encoding="utf-8"))
+            )
+        except OSError:
+            logger.info(
+                "Demo shared password default fallback unavailable",
+                extra={
+                    "operation_surface": "config.demo",
+                    "failure_category": "password_policy_read_failed",
+                },
+            )
+            logger.debug(
+                "Demo shared password default fallback diagnostic",
+                extra={"path": str(path)},
+            )
+            return build_policy_friendly_demo_password(DEFAULT_PASSWORD_POLICY_VALUES)
+
+    def has_demo_shared_password_override(self) -> bool:
+        return bool(self.demo_shared_password.strip())
 
     def get_demo_shared_password(self) -> str:
-        value = self.demo_shared_password.strip()
-        if value:
-            return value
-        metadata_value = self.load_demo_metadata().get("shared_password")
-        if isinstance(metadata_value, str):
-            return metadata_value.strip()
-        return ""
+        shared_password = self.demo_shared_password.strip()
+        return shared_password or self.get_default_demo_shared_password()
 
     def get_demo_accounts(self) -> List[Dict[str, Any]]:
-        if self.demo_accounts:
-            return list(self.demo_accounts)
-        metadata = self.load_demo_metadata()
-        accounts = metadata.get("accounts", metadata.get("demo_accounts", []))
-        if isinstance(accounts, list):
-            return [account for account in accounts if isinstance(account, dict)]
-        return []
+        configured_accounts = [dict(account) for account in self.demo_accounts if isinstance(account, dict)]
+        if configured_accounts:
+            return configured_accounts
+        return [dict(account) for account in DEFAULT_DEMO_ACCOUNTS]
 
     def get_demo_disable_password_change(self) -> bool:
-        metadata = self.load_demo_metadata()
-        if "demo_disable_password_change" in getattr(self, "model_fields_set", set()) or os.getenv("DEMO_DISABLE_PASSWORD_CHANGE") is not None:
-            return bool(self.demo_disable_password_change)
-        if "demo_disable_password_change" in metadata:
-            return bool(metadata["demo_disable_password_change"])
-        if "password_change_allowed" in metadata:
-            return not bool(metadata["password_change_allowed"])
         return bool(self.demo_disable_password_change)
 
     @field_validator("serve_frontend_path", mode="before")

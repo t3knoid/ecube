@@ -205,6 +205,62 @@ def test_lifespan_audits_and_logs_startup_reconciliation_failure(db, monkeypatch
     assert any(record.getMessage() == "Startup reconciliation raw failure" for record in caplog.records)
 
 
+def test_lifespan_logs_demo_mode_runtime_configuration(monkeypatch, caplog):
+    caplog.set_level(logging.DEBUG, logger="app.main")
+
+    class _DiscoveryProvider:
+        def discover_topology(self):
+            return {"hubs": [], "ports": [], "drives": []}
+
+    monkeypatch.setattr(main_module.settings, "demo_mode", True)
+    monkeypatch.setattr(main_module.settings, "demo_login_message", "Custom demo guidance")
+    monkeypatch.setattr(main_module.settings, "demo_shared_password", "Shared#123")
+    monkeypatch.setattr(
+        main_module.settings,
+        "demo_accounts",
+        [{"username": "demo_custom", "label": "Custom demo", "description": "Operator-selected persona"}],
+    )
+    monkeypatch.setattr(main_module.settings, "demo_disable_password_change", False)
+    monkeypatch.setattr(main_module.settings, "database_url", "sqlite://")
+    monkeypatch.setattr(main_module.settings, "audit_log_retention_days", 0)
+    monkeypatch.setattr(main_module.settings, "usb_discovery_interval", 0)
+    monkeypatch.setattr(main_module.settings, "role_resolver", "oidc")
+    monkeypatch.setattr(main_module, "init_session_backend", _noop_session_backend)
+    monkeypatch.setattr(main_module, "close_session_backend", _noop_session_backend)
+    monkeypatch.setattr(database_service, "is_database_provisioned", lambda: True)
+    monkeypatch.setattr(infra_module, "get_mount_provider", lambda: object())
+    monkeypatch.setattr(main_module, "get_drive_mount", lambda: object())
+    monkeypatch.setattr(infra_module, "get_filesystem_detector", lambda: object())
+    monkeypatch.setattr(infra_module, "get_drive_discovery", lambda: _DiscoveryProvider())
+    monkeypatch.setattr(
+        "app.services.reconciliation_service.run_startup_reconciliation",
+        lambda *_args, **_kwargs: {"skipped": True},
+    )
+    monkeypatch.setattr("app.routers.introspection.prime_cpu_sampler", lambda: None)
+
+    with TestClient(main_module.app):
+        pass
+
+    info_record = next(record for record in caplog.records if record.getMessage() == "Demo mode enabled")
+    assert info_record.active_overrides == [
+        "DEMO_LOGIN_MESSAGE",
+        "DEMO_SHARED_PASSWORD",
+        "DEMO_ACCOUNTS",
+        "DEMO_DISABLE_PASSWORD_CHANGE",
+    ]
+    assert info_record.shared_password_configured is True
+    assert info_record.account_count == 1
+    assert info_record.password_change_allowed is True
+
+    debug_record = next(record for record in caplog.records if record.getMessage() == "Demo mode runtime configuration")
+    assert debug_record.login_message == "Custom demo guidance"
+    assert debug_record.account_usernames == ["demo_custom"]
+    assert debug_record.shared_password_source == "override"
+    assert debug_record.login_message_source == "override"
+    assert debug_record.accounts_source == "override"
+    assert debug_record.password_change_policy_source == "override"
+
+
 def test_health_ready_returns_200_when_no_mounts_configured(unauthenticated_client, db, monkeypatch):
     """Readiness should pass without provider when no mounts are configured."""
     def _raise_provider_error():

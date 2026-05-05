@@ -473,8 +473,8 @@ def test_auth_token_endpoint_requires_no_auth(unauthenticated_client, db):
 def test_auth_public_config_returns_safe_defaults_when_demo_disabled(unauthenticated_client, monkeypatch):
     """Public auth metadata should return empty safe defaults outside demo mode."""
     monkeypatch.setattr(settings, "demo_mode", False, raising=False)
-    monkeypatch.setattr(settings, "_load_demo_metadata_payload", lambda: {}, raising=False)
     monkeypatch.setattr(settings, "demo_login_message", "Demo-only message", raising=False)
+    monkeypatch.setattr(settings, "demo_shared_password", "demo", raising=False)
     monkeypatch.setattr(
         settings,
         "demo_accounts",
@@ -537,92 +537,52 @@ def test_auth_public_config_returns_public_demo_password_and_safe_account_metada
     assert "must-not-leak" not in resp.text
 
 
-def test_auth_public_config_falls_back_to_demo_metadata_file(unauthenticated_client, monkeypatch, tmp_path):
-    """Demo metadata should be loaded from the install-root metadata payload when env fields are omitted."""
-    payload = {
-        "managed_by": "ecube-demo-seed-v1",
-        "demo_config": {
-            "demo_mode": True,
-            "login_message": "Use the seeded demo accounts below.",
-            "shared_password": "demo",
-            "password_change_allowed": False,
-            "accounts": [
-                {
-                    "username": "demo_auditor",
-                    "label": "Auditor demo",
-                    "description": "Read-only audit review",
-                    "roles": ["auditor"],
-                    "password": "must-not-leak",
-                }
-            ],
-        },
-    }
+def test_auth_public_config_uses_built_in_demo_defaults_when_only_demo_mode_is_enabled(
+    unauthenticated_client, monkeypatch, tmp_path
+):
+    policy_path = tmp_path / "pwquality.conf"
+    policy_path.write_text("minlen = 16\nminclass = 4\n", encoding="utf-8")
 
     monkeypatch.setattr(settings, "demo_mode", True, raising=False)
-    monkeypatch.setattr(settings, "_load_demo_metadata_payload", lambda: payload, raising=False)
     monkeypatch.setattr(settings, "demo_login_message", "", raising=False)
     monkeypatch.setattr(settings, "demo_shared_password", "", raising=False)
     monkeypatch.setattr(settings, "demo_accounts", [], raising=False)
     monkeypatch.setattr(settings, "demo_disable_password_change", True, raising=False)
+    monkeypatch.setattr(settings, "pwquality_conf_path", str(policy_path), raising=False)
 
     resp = unauthenticated_client.get("/auth/public-config")
 
     assert resp.status_code == 200
     body = resp.json()
     assert body["demo_mode_enabled"] is True
-    assert body["default_nfs_client_version"] == settings.nfs_client_version
-    assert body["login_message"] == "Use the seeded demo accounts below."
-    assert body["shared_password"] == "demo"
+    assert body["login_message"] == "Use the shared demo accounts below."
+    assert len(body["shared_password"]) >= 16
+    assert any(ch.islower() for ch in body["shared_password"])
+    assert any(ch.isupper() for ch in body["shared_password"])
+    assert any(ch.isdigit() for ch in body["shared_password"])
+    assert any(not ch.isalnum() for ch in body["shared_password"])
     assert body["password_change_allowed"] is False
     assert body["demo_accounts"] == [
         {
-            "username": "demo_auditor",
-            "label": "Auditor demo",
-            "description": "Read-only audit review",
-        }
-    ]
-    assert "must-not-leak" not in resp.text
-
-
-def test_auth_public_config_stays_in_demo_mode_after_seed_even_if_env_flag_is_false(
-    unauthenticated_client, monkeypatch, tmp_path
-):
-    """A seeded demo should remain locked in demo mode until reset."""
-    payload = {
-        "managed_by": "ecube-demo-seed-v1",
-        "demo_config": {
-            "demo_mode": True,
-            "login_message": "Seeded demo remains active.",
-            "accounts": [
-                {
-                    "username": "demo_manager",
-                    "label": "Manager demo",
-                    "description": "Role review",
-                }
-            ],
+            "username": "demo_admin",
+            "label": "Admin demo",
+            "description": "Full demo access for guided product walkthroughs.",
         },
-    }
-
-    monkeypatch.setattr(settings, "demo_mode", False, raising=False)
-    monkeypatch.setattr(settings, "_load_demo_metadata_payload", lambda: payload, raising=False)
-    monkeypatch.setattr(settings, "demo_login_message", "", raising=False)
-    monkeypatch.setattr(settings, "demo_shared_password", "", raising=False)
-    monkeypatch.setattr(settings, "demo_accounts", [], raising=False)
-
-    resp = unauthenticated_client.get("/auth/public-config")
-
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["demo_mode_enabled"] is True
-    assert body["default_nfs_client_version"] == settings.nfs_client_version
-    assert body["login_message"] == "Seeded demo remains active."
-    assert body["shared_password"] is None
-    assert body["demo_accounts"] == [
         {
             "username": "demo_manager",
             "label": "Manager demo",
-            "description": "Role review",
-        }
+            "description": "Drive lifecycle, mounts, and job visibility.",
+        },
+        {
+            "username": "demo_processor",
+            "label": "Processor demo",
+            "description": "Create and review sanitized export activity.",
+        },
+        {
+            "username": "demo_auditor",
+            "label": "Auditor demo",
+            "description": "Read-only audit and verification review.",
+        },
     ]
 
 

@@ -459,6 +459,7 @@ PUT  /admin/password-policy          → writes updated values to pwquality.conf
 - The API must enforce an allowlist of writable keys (`minlen`, `minclass`, `maxrepeat`, `maxsequence`, `maxclassrepeat`, `dictcheck`, `usercheck`, `difok`, `retry`) and reject attempts to set other keys with `422`. The `enforce_for_root` key is not exposed as writable — it is always written as `1` on every PUT to prevent accidental security bypass through a partial update.
 - `enforce_for_root` must not be settable to `0` through the API to prevent policy bypass. Attempts to set it to `0` or `false` must be rejected with `422`.
 - Each write emits a `PASSWORD_POLICY_UPDATED` audit event with the actor, the previous values, and the new values.
+- When demo mode is enabled and `DEMO_SHARED_PASSWORD` is unset, the effective shared demo password exposed by `GET /auth/public-config` is derived from the current `pwquality.conf` values. Existing demo OS accounts are updated to that implicit value during startup reconciliation, so password-policy edits can change the public demo password even when no explicit demo override is present.
 
 **UI design:**
 - A new "Password Policy" card or panel must be added to the Configuration page (admin-only, role-gated).

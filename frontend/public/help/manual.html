@@ -1236,6 +1236,8 @@ Restarting the application service can interrupt active operations. Prefer using
 </li><li>
 The <code>Password Policy</code> panel applies to locally managed OS accounts authenticated through PAM. New passwords, password resets, and expired-password recovery all use the active policy immediately.
 </li><li>
+When demo mode is enabled and <code>DEMO_SHARED_PASSWORD</code> is left empty, ECUBE also derives the login screen's shared demo password from the active <code>Password Policy</code> values. After changing the policy, restart ECUBE or otherwise rerun startup reconciliation before expecting existing demo OS accounts to accept the newly displayed implicit password.
+</li><li>
 <code>enforce_for_root</code> remains enabled and is not editable from the UI.
 </li><li>
 <code>Startup Analysis Batch Size</code> accepts values from <code>1</code> to <code>5000</code>. Lower values reduce peak memory use during startup analysis; higher values reduce database round trips.

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-ECUBE demo mode turns a normal installation into a controlled product-demo environment. The supported workflow now focuses on demo-safe users, a shared demo password, and login guidance derived from `demo-metadata.json`.
+ECUBE demo mode turns a normal installation into a controlled product-demo environment. The supported workflow now focuses on demo-safe users, a shared demo password, and login guidance that the installer or bootstrap derives from `demo-metadata.json` and persists into runtime `DEMO_*` settings.
 
 Demo bootstrap no longer seeds USB drives, network mounts, jobs, staged files, or sample projects.
 
@@ -22,9 +22,9 @@ Minimal `.env` configuration:
 DEMO_MODE=true
 ```
 
-For a native install, `install.sh --demo` looks for `demo-metadata.json` in the same directory as `install.sh` and uses that file as the source of truth for demo accounts, login messaging, and password-change policy.
+For a native install, `install.sh --demo` looks for `demo-metadata.json` in the same directory as `install.sh`, uses it as trusted bootstrap input, and writes the resulting runtime `DEMO_*` values into the installed `.env` file.
 
-If you want runtime fallback values when no metadata file is present, you may still set `DEMO_LOGIN_MESSAGE`, `DEMO_SHARED_PASSWORD`, `DEMO_DISABLE_PASSWORD_CHANGE`, or `DEMO_ACCOUNTS` in `.env`. The installer-driven seed flow itself reads demo accounts from `demo-metadata.json`, not from `.env`.
+At runtime, ECUBE reads only `.env` values such as `DEMO_MODE`, `DEMO_LOGIN_MESSAGE`, `DEMO_SHARED_PASSWORD`, `DEMO_DISABLE_PASSWORD_CHANGE`, and `DEMO_ACCOUNTS`. Running the app from source behaves normally unless you set those environment variables yourself. When `DEMO_MODE=true`, startup reconciliation also ensures the configured demo OS users and DB roles exist and resets their passwords to the effective demo shared password. If `DEMO_SHARED_PASSWORD` is empty, ECUBE derives that value from the active Password Policy settings before exposing it on the login screen and before applying it to demo accounts on the next startup reconciliation. Because those resets use the normal local-account password path, the effective shared password must satisfy the active PAM password policy whenever host password-policy enforcement is enabled.
 
 The login screen exposes the demo login message, the shared demo password when configured, the demo usernames, their labels and descriptions, and the password-change policy.
 
@@ -37,7 +37,7 @@ The login screen exposes the demo login message, the shared demo password when c
 sudo ./install.sh --demo
 ```
 
-When `--demo` is set during a real install, the installer updates `.env` with `DEMO_MODE=true`, ensures `DATABASE_URL` is set when missing, creates the local `ecube` database if needed, runs `alembic upgrade head`, and immediately runs `ecube-demo-bootstrap --metadata-path <install-root>/demo-metadata.json seed --shared-password <generated-or-configured-password>`. If the metadata leaves `demo_config.shared_password` blank, the installer generates a strong demo password, writes it into the installed `demo-metadata.json`, and prints it in the installer summary for operators.
+When `--demo` is set during a real install, the installer updates `.env` with `DEMO_MODE=true`, `DEMO_LOGIN_MESSAGE`, `DEMO_SHARED_PASSWORD`, `DEMO_DISABLE_PASSWORD_CHANGE`, and `DEMO_ACCOUNTS`, ensures `DATABASE_URL` is set when missing, creates the local `ecube` database if needed, runs `alembic upgrade head`, and immediately runs `ecube-demo-bootstrap --metadata-path <install-root>/demo-metadata.json seed --shared-password <generated-or-configured-password>`. If the metadata leaves `demo_config.shared_password` blank, the installer generates a strong demo password, writes it into the installed `demo-metadata.json`, and writes the same password into `.env` for runtime login prefill. Any configured or generated shared password still has to pass the active PAM password policy before ECUBE can apply it to local demo accounts.
 
 If `DATABASE_URL` already points at a different PostgreSQL instance, the installer preserves it and skips local database creation.
 
@@ -66,7 +66,7 @@ When the seed command runs, ECUBE performs these actions in order:
 
 ## demo-metadata.json
 
-The installer-colocated metadata file stores the runtime demo configuration.
+The installer-colocated metadata file is trusted demo bootstrap input and a rerun source for `ecube-demo-bootstrap`; the running application does not read it for runtime demo configuration.
 
 ```json
 {
@@ -110,6 +110,7 @@ Reset no longer manages filesystem cleanup.
 
 - Demo mode disables user creation and password modification flows that are blocked by demo policy.
 - If `shared_password` is blank in the source metadata, the installer or post-install helper generates one before seeding demo accounts.
+- If `DEMO_SHARED_PASSWORD` is left empty at runtime, ECUBE derives the displayed shared password from the active Password Policy settings and reapplies that implicit password to demo accounts during the next startup reconciliation.
 - If a demo account reaches a `password_expired` state, the login screen does not offer self-service password change for that account. Operators should rerun the demo seed with a new shared password to reset the managed demo credentials.
 - For an installed appliance, use one of these recovery paths:
 
@@ -129,7 +130,7 @@ bash ./scripts/post_install_demo_setup.sh "Choose-A-New-Demo-Password"
 
 After running `install.sh --demo`, verify the following:
 
-1. `.env` contains `DEMO_MODE=true`.
+1. `.env` contains `DEMO_MODE=true` and the expected `DEMO_LOGIN_MESSAGE`, `DEMO_SHARED_PASSWORD`, `DEMO_DISABLE_PASSWORD_CHANGE`, and `DEMO_ACCOUNTS` values.
 2. The demo users from `demo-metadata.json` exist and share the configured password.
 3. The login page shows the demo guidance and shared password, and prefills the password field for demo sign-in.
 4. Password changes and demo-user-management writes remain blocked in demo mode.

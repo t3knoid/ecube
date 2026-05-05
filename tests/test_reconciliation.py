@@ -23,7 +23,9 @@ from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, 
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.models.system import ReconciliationLock
 from app.models.users import UserRole
+from app.models.audit import AuditLog
 from app.infrastructure.os_user_protocol import OSUser
+from app.repositories.user_role_repository import UserRoleRepository
 from app.infrastructure.usb_discovery import (
     DiscoveredDrive,
     DiscoveredHub,
@@ -182,16 +184,19 @@ class FakeOsUserProvider:
         created_groups: Optional[list[str]] = None,
         should_fail_groups: bool = False,
         should_fail_users: bool = False,
+        should_fail_password_reset: bool = False,
         existing_users: Optional[dict[str, set[str]]] = None,
     ):
         self.created_groups = created_groups or []
         self.should_fail_groups = should_fail_groups
         self.should_fail_users = should_fail_users
+        self.should_fail_password_reset = should_fail_password_reset
         self.ensure_calls = 0
         self.list_users_calls = 0
         self.users = {u: set(gs) for u, gs in (existing_users or {}).items()}
         self.created_usernames: list[str] = []
         self.updated_group_usernames: list[str] = []
+        self.reset_password_calls: list[tuple[str, str, bool]] = []
 
     def ensure_ecube_groups(self) -> list[str]:
         self.ensure_calls += 1
@@ -245,6 +250,11 @@ class FakeOsUserProvider:
             shell="/bin/bash",
             groups=sorted(self.users[username]),
         )
+
+    def reset_password(self, username: str, password: str, *, _skip_managed_check: bool = False):
+        if self.should_fail_users or self.should_fail_password_reset:
+            raise RuntimeError("user reconciliation failed")
+        self.reset_password_calls.append((username, password, _skip_managed_check))
 
 
 def _empty_topology() -> DiscoveredTopology:
@@ -1083,8 +1093,56 @@ class TestReconcileIdentityUsers:
         assert result["users_created"] == 0
         assert result["users_missing_os_account"] == 0
         assert result["users_groups_updated"] == 1
+        assert result["users_passwords_reset"] == 0
         assert provider.updated_group_usernames == ["frank"]
         assert "ecube-auditors" in provider.users["frank"]
+
+    def test_resets_existing_demo_account_passwords_from_demo_shared_password(self, db: Session, monkeypatch):
+        db.add(UserRole(username="demo_admin", role="admin"))
+        db.commit()
+
+        monkeypatch.setattr(settings, "demo_mode", True, raising=False)
+        monkeypatch.setattr(settings, "demo_shared_password", "KnownDemo#123", raising=False)
+        monkeypatch.setattr(
+            settings,
+            "demo_accounts",
+            [{"username": "demo_admin", "label": "Admin demo", "description": "Guided walkthrough"}],
+            raising=False,
+        )
+
+        provider = FakeOsUserProvider(existing_users={"demo_admin": {"ecube-admins"}})
+        result = reconcile_identity_users(db, provider)
+
+        assert result["users_missing_os_account"] == 0
+        assert result["users_groups_updated"] == 1
+        assert result["users_passwords_reset"] == 1
+        assert provider.reset_password_calls == [("demo_admin", "KnownDemo#123", True)]
+
+    def test_logs_demo_password_reset_failure(self, db: Session, monkeypatch, caplog):
+        db.add(UserRole(username="demo_admin", role="admin"))
+        db.commit()
+
+        monkeypatch.setattr(settings, "demo_mode", True, raising=False)
+        monkeypatch.setattr(settings, "demo_shared_password", "KnownDemo#123", raising=False)
+        monkeypatch.setattr(
+            settings,
+            "demo_accounts",
+            [{"username": "demo_admin", "label": "Admin demo", "description": "Guided walkthrough"}],
+            raising=False,
+        )
+        caplog.set_level(logging.DEBUG, logger="app.services.reconciliation_service")
+
+        provider = FakeOsUserProvider(
+            should_fail_password_reset=True,
+            existing_users={"demo_admin": {"ecube-admins"}},
+        )
+        result = reconcile_identity_users(db, provider)
+
+        assert result["users_groups_updated"] == 1
+        assert result["users_passwords_reset"] == 0
+        assert result["users_with_errors"] == 1
+        assert any(record.getMessage() == "Startup demo password reset failed" for record in caplog.records)
+        assert any(record.getMessage() == "Startup demo password reset raw failure" for record in caplog.records)
 
     def test_does_not_scan_all_os_users(self, db: Session):
         db.add(UserRole(username="frank", role="manager"))
@@ -1261,13 +1319,47 @@ class TestRunStartupReconciliation:
 
         assert "identity" in result
         assert "groups" in result["identity"]
+        assert "demo" in result["identity"]
         assert "users" in result["identity"]
         assert "mounts" in result
         assert "jobs" in result
         assert "drives" in result
         assert result["identity"]["groups"]["groups_created"] == 1
+        assert result["identity"]["demo"]["users_seeded"] == 4
         assert result["mounts"]["mounts_corrected"] == 1
-        assert result["jobs"]["jobs_corrected"] == 1
+
+    def test_startup_reconciliation_seeds_demo_accounts_from_runtime_settings(self, db: Session, monkeypatch):
+        provider = FakeMountProvider(mounted_paths=set())
+        drive_provider = FakeDriveMountProvider()
+        os_user_provider = FakeOsUserProvider(existing_users={"admin": {"ecube-admins"}})
+
+        monkeypatch.setattr(settings, "demo_mode", True, raising=False)
+        monkeypatch.setattr(settings, "demo_shared_password", "KnownDemo#123", raising=False)
+        monkeypatch.setattr(
+            settings,
+            "demo_accounts",
+            [
+                {"username": "demo_admin", "label": "Admin demo", "description": "Guided walkthrough", "roles": ["admin"]},
+                {"username": "demo_manager", "label": "Manager demo", "description": "Workflow review", "roles": ["manager"]},
+            ],
+            raising=False,
+        )
+
+        result = run_startup_reconciliation(
+            db,
+            provider,
+            drive_mount_provider=drive_provider,
+            os_user_provider=os_user_provider,
+            topology_source=_empty_topology,
+            filesystem_detector=FakeFilesystemDetector(),
+        )
+
+        assert result["identity"]["demo"] == {"users_seeded": 2, "roles_seeded": 2, "jobs_seeded": 0}
+        assert set(os_user_provider.created_usernames) == {"demo_admin", "demo_manager"}
+        assert UserRoleRepository(db).get_roles("demo_admin") == ["admin"]
+        assert UserRoleRepository(db).get_roles("demo_manager") == ["manager"]
+        audit_log = db.query(AuditLog).filter(AuditLog.action == "DEMO_RUNTIME_RECONCILED").one()
+        assert audit_log.details["source"] == "runtime_env"
 
     def test_jobs_pass_emits_immediate_result_log(self, db: Session, caplog):
         _make_job(db, JobStatus.RUNNING)

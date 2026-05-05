@@ -19,7 +19,12 @@ from starlette.routing import BaseRoute, Match
 
 from app.auth import get_current_user
 from app import API_VERSION, __version__
-from app.config import DEFAULT_READINESS_MOUNT_CHECK_TIMEOUT_SECONDS, settings
+from app.config import (
+    DEFAULT_DEMO_ACCOUNTS,
+    DEFAULT_DEMO_LOGIN_MESSAGE,
+    DEFAULT_READINESS_MOUNT_CHECK_TIMEOUT_SECONDS,
+    settings,
+)
 from app import database as db_module
 from app.infrastructure import get_drive_discovery, get_drive_mount, get_mount_provider
 from app.exceptions import AuthenticationError, AuthorizationError, ConflictError, ECUBEException
@@ -254,6 +259,48 @@ def _startup_reconciliation_counts(payload: Any) -> dict[str, Any]:
     return counts
 
 
+def _log_demo_runtime_configuration() -> None:
+    if not settings.is_demo_mode_enabled():
+        return
+
+    effective_accounts = settings.get_demo_accounts()
+    login_message = settings.get_demo_login_message()
+    shared_password = settings.get_demo_shared_password()
+    password_change_disabled = settings.get_demo_disable_password_change()
+
+    active_overrides: list[str] = []
+    if login_message != DEFAULT_DEMO_LOGIN_MESSAGE:
+        active_overrides.append("DEMO_LOGIN_MESSAGE")
+    if settings.has_demo_shared_password_override():
+        active_overrides.append("DEMO_SHARED_PASSWORD")
+    if effective_accounts != DEFAULT_DEMO_ACCOUNTS:
+        active_overrides.append("DEMO_ACCOUNTS")
+    if password_change_disabled is not True:
+        active_overrides.append("DEMO_DISABLE_PASSWORD_CHANGE")
+
+    logger.info(
+        "Demo mode enabled",
+        extra={
+            "active_overrides": active_overrides,
+            "shared_password_configured": bool(shared_password),
+            "account_count": len(effective_accounts),
+            "password_change_allowed": not password_change_disabled,
+        },
+    )
+    logger.debug(
+        "Demo mode runtime configuration",
+        extra={
+            "login_message": login_message,
+            "account_usernames": [str(account.get("username", "")).strip() for account in effective_accounts],
+            "active_overrides": active_overrides,
+            "shared_password_source": "override" if "DEMO_SHARED_PASSWORD" in active_overrides else "default",
+            "login_message_source": "override" if "DEMO_LOGIN_MESSAGE" in active_overrides else "default",
+            "accounts_source": "override" if "DEMO_ACCOUNTS" in active_overrides else "default",
+            "password_change_policy_source": "override" if "DEMO_DISABLE_PASSWORD_CHANGE" in active_overrides else "default",
+        },
+    )
+
+
 def _summarize_startup_reconciliation(results: dict[str, Any]) -> dict[str, Any]:
     if results.get("skipped"):
         return {
@@ -325,6 +372,7 @@ def _resolve_readiness_mount_timeout(remaining_budget: float | None) -> float:
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     logger.info("ECUBE application starting")
+    _log_demo_runtime_configuration()
 
     db_runtime_ready = False
     if not (settings.database_url or "").strip():
