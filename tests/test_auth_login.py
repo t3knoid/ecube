@@ -491,13 +491,14 @@ def test_auth_public_config_returns_safe_defaults_when_demo_disabled(unauthentic
         "default_nfs_client_version": settings.nfs_client_version,
         "nfs_client_version_options": ["4.2", "4.1", "4.0", "3"],
         "login_message": None,
+        "shared_password": None,
         "demo_accounts": [],
         "password_change_allowed": True,
     }
 
 
-def test_auth_public_config_returns_only_display_safe_demo_metadata(unauthenticated_client, monkeypatch):
-    """Public auth metadata should expose only approved demo-safe fields."""
+def test_auth_public_config_returns_public_demo_password_and_safe_account_metadata(unauthenticated_client, monkeypatch):
+    """Public auth metadata should expose the shared demo password and safe account fields only."""
     monkeypatch.setattr(settings, "demo_mode", True, raising=False)
     monkeypatch.setattr(settings, "demo_login_message", "Use the demo accounts below.", raising=False)
     monkeypatch.setattr(settings, "demo_shared_password", "demo", raising=False)
@@ -524,6 +525,7 @@ def test_auth_public_config_returns_only_display_safe_demo_metadata(unauthentica
     assert body["default_nfs_client_version"] == settings.nfs_client_version
     assert body["nfs_client_version_options"] == ["4.2", "4.1", "4.0", "3"]
     assert body["login_message"] == "Use the demo accounts below."
+    assert body["shared_password"] == "demo"
     assert body["password_change_allowed"] is False
     assert body["demo_accounts"] == [
         {
@@ -532,9 +534,7 @@ def test_auth_public_config_returns_only_display_safe_demo_metadata(unauthentica
             "description": "Explore drive lifecycle and job visibility.",
         }
     ]
-    assert "shared_password" not in body
     assert "must-not-leak" not in resp.text
-    assert '"shared_password"' not in resp.text
 
 
 def test_auth_public_config_falls_back_to_demo_metadata_file(unauthenticated_client, monkeypatch, tmp_path):
@@ -572,6 +572,7 @@ def test_auth_public_config_falls_back_to_demo_metadata_file(unauthenticated_cli
     assert body["demo_mode_enabled"] is True
     assert body["default_nfs_client_version"] == settings.nfs_client_version
     assert body["login_message"] == "Use the seeded demo accounts below."
+    assert body["shared_password"] == "demo"
     assert body["password_change_allowed"] is False
     assert body["demo_accounts"] == [
         {
@@ -580,9 +581,7 @@ def test_auth_public_config_falls_back_to_demo_metadata_file(unauthenticated_cli
             "description": "Read-only audit review",
         }
     ]
-    assert "shared_password" not in body
     assert "must-not-leak" not in resp.text
-    assert '"shared_password"' not in resp.text
 
 
 def test_auth_public_config_stays_in_demo_mode_after_seed_even_if_env_flag_is_false(
@@ -607,6 +606,7 @@ def test_auth_public_config_stays_in_demo_mode_after_seed_even_if_env_flag_is_fa
     monkeypatch.setattr(settings, "demo_mode", False, raising=False)
     monkeypatch.setattr(settings, "_load_demo_metadata_payload", lambda: payload, raising=False)
     monkeypatch.setattr(settings, "demo_login_message", "", raising=False)
+    monkeypatch.setattr(settings, "demo_shared_password", "", raising=False)
     monkeypatch.setattr(settings, "demo_accounts", [], raising=False)
 
     resp = unauthenticated_client.get("/auth/public-config")
@@ -616,6 +616,7 @@ def test_auth_public_config_stays_in_demo_mode_after_seed_even_if_env_flag_is_fa
     assert body["demo_mode_enabled"] is True
     assert body["default_nfs_client_version"] == settings.nfs_client_version
     assert body["login_message"] == "Seeded demo remains active."
+    assert body["shared_password"] is None
     assert body["demo_accounts"] == [
         {
             "username": "demo_manager",

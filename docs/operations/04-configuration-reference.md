@@ -82,7 +82,7 @@ ECUBE demo mode is controlled by `.env` settings plus the install-root `demo-met
 | -------- | ------- | ----------- |
 | `DEMO_MODE` | `false` | Enables demo-mode restrictions and demo-aware login behavior. When a seeded `demo-metadata.json` is present, the runtime can remain in demo mode even if this flag is later set back to `false`. |
 | `DEMO_LOGIN_MESSAGE` | `Use the shared demo accounts below.` | Optional fallback login message when the metadata file does not provide one. |
-| `DEMO_SHARED_PASSWORD` | `demo` | Optional fallback shared password used for demo account seeding when the metadata file does not provide one. It is not exposed by the public auth payload. |
+| `DEMO_SHARED_PASSWORD` | `demo` | Optional fallback shared password used for demo account seeding when the metadata file does not provide one. In demo mode it is exposed by the public auth payload and login screen so self-serve demo users can sign in. |
 | `DEMO_DISABLE_PASSWORD_CHANGE` | `true` | Blocks password-change flows for demo accounts. The public auth payload exposes the inverse as `password_change_allowed`. |
 | `DEMO_ACCOUNTS` | built-in demo personas | Optional fallback JSON array of demo account definitions used only when no metadata file is present. |
 

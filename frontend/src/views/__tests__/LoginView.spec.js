@@ -45,6 +45,7 @@ describe("LoginView logo behavior", () => {
     mocks.getPublicAuthConfig.mockResolvedValue({
       demo_mode_enabled: false,
       login_message: null,
+      shared_password: null,
       demo_accounts: [],
       password_change_allowed: true,
     });
@@ -95,6 +96,7 @@ describe("LoginView logo behavior", () => {
     mocks.getPublicAuthConfig.mockResolvedValue({
       demo_mode_enabled: true,
       login_message: "Use the shared demo accounts below.",
+      shared_password: "Demo#123456",
       demo_accounts: [
         {
           username: "demo_manager",
@@ -114,11 +116,11 @@ describe("LoginView logo behavior", () => {
     expect(panel.text()).toContain("demo_manager");
     expect(panel.text()).toContain("Manager demo");
     expect(panel.text()).toContain("Review mounts, drives, and jobs.");
-    expect(panel.text()).not.toContain("Shared password");
+    expect(panel.text()).toContain(i18n.global.t("auth.demoSharedPassword"));
+    expect(panel.text()).toContain("Demo#123456");
 
     const passwordInput = wrapper.find("#password");
-    expect(passwordInput.element.value).toBe("");
-    expect(passwordInput.attributes("readonly")).toBeUndefined();
+    expect(passwordInput.element.value).toBe("Demo#123456");
   });
 
   it("shows an informational banner when setup redirects an already initialized system to login", async () => {
@@ -173,6 +175,7 @@ describe("LoginView logo behavior", () => {
     mocks.getPublicAuthConfig.mockResolvedValue({
       demo_mode_enabled: true,
       login_message: "Demo mode",
+      shared_password: "Demo#123456",
       demo_accounts: [
         {
           username: "demo_manager",

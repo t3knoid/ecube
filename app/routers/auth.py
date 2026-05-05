@@ -156,6 +156,7 @@ class PublicAuthConfigResponse(BaseModel):
     default_nfs_client_version: str = Field(default="4.1", description="Default NFS client version suggested by ECUBE host configuration")
     nfs_client_version_options: list[str] = Field(default_factory=lambda: ["4.2", "4.1", "4.0", "3"], description="Supported NFS client versions operators may select in the UI")
     login_message: str | None = Field(default=None, description="Optional public-safe login instructions")
+    shared_password: str | None = Field(default=None, description="Public shared demo password displayed on the login screen when demo mode is enabled")
     demo_accounts: list[DemoAccountResponse] = Field(default_factory=list, description="Demo-safe accounts for display on the login screen")
     password_change_allowed: bool = Field(default=True, description="Whether password changes are allowed in the current deployment")
 
@@ -204,11 +205,11 @@ def _build_token_response(
 
 @router.get("/public-config", response_model=PublicAuthConfigResponse)
 def public_auth_config() -> PublicAuthConfigResponse:
-    """Return public-safe auth metadata for the login screen.
+    """Return login metadata for the public login screen.
 
-    This route intentionally exposes only display-safe demo information. It must
-    not leak internal paths, hardware details, private credentials, or other
-    sensitive configuration values.
+    This route must avoid leaking internal paths, hardware details, per-account
+    credentials, or other sensitive configuration values. In demo mode it may
+    intentionally expose the shared demo password so unattended users can sign in.
     """
     if not settings.is_demo_mode_enabled():
         return PublicAuthConfigResponse(
@@ -216,6 +217,7 @@ def public_auth_config() -> PublicAuthConfigResponse:
             default_nfs_client_version=settings.nfs_client_version,
             nfs_client_version_options=["4.2", "4.1", "4.0", "3"],
             login_message=None,
+            shared_password=None,
             demo_accounts=[],
             password_change_allowed=True,
         )
@@ -240,6 +242,7 @@ def public_auth_config() -> PublicAuthConfigResponse:
         default_nfs_client_version=settings.nfs_client_version,
         nfs_client_version_options=["4.2", "4.1", "4.0", "3"],
         login_message=settings.get_demo_login_message() or None,
+        shared_password=settings.get_demo_shared_password() or None,
         demo_accounts=accounts,
         password_change_allowed=not settings.get_demo_disable_password_change(),
     )
