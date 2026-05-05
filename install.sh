@@ -552,8 +552,10 @@ _run_demo_install_tasks() {
   local shared_password=""
 
   if [[ ! -f "${source_metadata}" ]]; then
-    error "--demo requires demo-metadata.json in the same directory as install.sh (${source_metadata})."
-    exit 1
+    info "demo-metadata.json not found at ${source_metadata}; enabling runtime demo mode without install-time metadata bootstrap"
+    _upsert_env_value "${env_file}" "DEMO_MODE" "true"
+    ok "Demo mode enabled in ${env_file}; runtime demo reconciliation will use built-in defaults"
+    return 0
   fi
 
   shared_password="$(_metadata_shared_password "${source_metadata}")"
@@ -988,14 +990,7 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       VERSION_TAG="$2"; shift 2 ;;
-    --demo)
-      local_demo_metadata_path="$(_demo_metadata_source_path)"
-      if [[ ! -f "${local_demo_metadata_path}" ]]; then
-        error "--demo requires demo-metadata.json in the same directory as install.sh (${local_demo_metadata_path})."
-        exit 1
-      fi
-      DEMO_INSTALL=true
-      shift ;;
+    --demo)           DEMO_INSTALL=true; shift ;;
     --uninstall)      UNINSTALL=true; shift ;;
     --drop-database)  DROP_DATABASE=true; shift ;;
     --dry-run)        DRY_RUN=true; shift ;;

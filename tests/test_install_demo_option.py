@@ -452,7 +452,7 @@ def test_install_demo_tasks_quote_hashy_runtime_values_in_env(tmp_path):
     assert chown_log.exists()
 
 
-def test_install_demo_tasks_do_not_mutate_env_before_demo_metadata_presence_validation(tmp_path):
+def test_install_demo_tasks_enable_runtime_demo_mode_when_demo_metadata_is_missing(tmp_path):
     repo_root = Path(__file__).resolve().parent.parent
     install_dir = tmp_path / "install"
     env_file = install_dir / ".env"
@@ -555,9 +555,12 @@ def test_install_demo_tasks_do_not_mutate_env_before_demo_metadata_presence_vali
         env=env,
     )
 
-    assert result.returncode != 0
-    assert "--demo requires demo-metadata.json" in result.stderr
-    assert env_file.read_text(encoding="utf-8") == original_env_text
+    assert result.returncode == 0, (
+        f"demo installer tasks without metadata failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+    )
+    env_text = env_file.read_text(encoding="utf-8")
+    assert env_text != original_env_text
+    assert "DEMO_MODE=true\n" in env_text
     assert not (install_dir / "demo-metadata.json").exists()
     assert not psql_log.exists()
     assert not alembic_log.exists()
