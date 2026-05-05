@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   authStore: {
     isAuthenticated: false,
   },
+  getPublicAuthConfig: vi.fn(),
   getSetupStatus: vi.fn(),
   getDatabaseProvisionStatus: vi.fn(),
   getSystemInfo: vi.fn(),
@@ -26,6 +27,10 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/stores/auth.js', () => ({
   useAuthStore: () => mocks.authStore,
+}))
+
+vi.mock('@/api/auth.js', () => ({
+  getPublicAuthConfig: (...args) => mocks.getPublicAuthConfig(...args),
 }))
 
 vi.mock('@/api/setup.js', () => ({
@@ -56,6 +61,7 @@ describe('SetupWizardView existing admin reconciliation', () => {
     mocks.replace.mockReset()
     mocks.push.mockReset()
     mocks.authStore.isAuthenticated = false
+    mocks.getPublicAuthConfig.mockReset()
     mocks.getSetupStatus.mockReset()
     mocks.getDatabaseProvisionStatus.mockReset()
     mocks.getSystemInfo.mockReset()
@@ -63,6 +69,7 @@ describe('SetupWizardView existing admin reconciliation', () => {
     mocks.provisionDatabase.mockReset()
     mocks.initializeSetup.mockReset()
 
+    mocks.getPublicAuthConfig.mockResolvedValue({ demo_mode_enabled: false })
     mocks.getSystemInfo.mockResolvedValue({
       in_docker: false,
     })
@@ -221,5 +228,37 @@ describe('SetupWizardView existing admin reconciliation', () => {
       query: { reason: 'setup_already_initialized' },
     })
     expect(wrapper.find('.error-banner').exists()).toBe(false)
+  })
+
+  it('skips the create-admin step when demo mode is enabled', async () => {
+    mocks.getPublicAuthConfig.mockResolvedValue({ demo_mode_enabled: true })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('setup.stepCounter', { step: 1, total: 4 }))
+
+    await wrapper.find('#db-admin-user').setValue('postgres')
+    await wrapper.find('#db-admin-pass').setValue('DbAdmin#123')
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('setup.connectDatabase')).trigger('click')
+    await flushPromises()
+
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.next')).trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#app-db-pass').setValue('AppDb#123')
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('setup.provisionDb')).trigger('click')
+    await flushPromises()
+
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.next')).trigger('click')
+    await flushPromises()
+
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.next')).trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain(i18n.global.t('setup.createAdmin'))
+    expect(wrapper.text()).toContain(i18n.global.t('setup.demoModeSetupManaged'))
+    expect(mocks.initializeSetup).not.toHaveBeenCalled()
+    expect(wrapper.findAll('button').find((node) => node.text() === i18n.global.t('setup.goToLogin')).attributes('disabled')).toBeUndefined()
   })
 })
