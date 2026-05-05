@@ -1397,9 +1397,13 @@ class TestOSUserEndpoints:
         pw = _make_pw()
         mock_pwd.getpwnam.return_value = pw
         mock_grp.getgrnam.return_value = _make_grp(name="ecube-managers")
-        mock_grp.getgrall.return_value = [
-            _make_grp(name="ecube-admins", members=["testuser"]),
-            _make_grp(name="ecube-managers", members=["testuser"]),
+        mock_grp.getgrall.side_effect = [
+            [_make_grp(name="ecube-admins", members=["testuser"])],
+            [_make_grp(name="ecube-admins", members=["testuser"])],
+            [
+                _make_grp(name="ecube-admins", members=["testuser"]),
+                _make_grp(name="ecube-managers", members=["testuser"]),
+            ],
         ]
         mock_grp.getgrgid.return_value = _make_grp(name="testuser", gid=1000)
         mock_subprocess.return_value = _ok_result()
@@ -2032,6 +2036,7 @@ class TestSetupEndpoints:
         mock_pwd.getpwnam.side_effect = [
             pw,                        # create_user → user_exists (True → raises)
             pw,                        # add_user_to_groups → user_exists
+            pw,                        # add_user_to_groups → _get_user_groups
             pw,                        # add_user_to_groups → pwd.getpwnam (OSUser)
             pw,                        # add_user_to_groups → _get_user_groups
             pw,                        # reset_password → user_exists
@@ -2044,10 +2049,11 @@ class TestSetupEndpoints:
         })
         assert resp.status_code == 200
 
-        # Verify usermod -aG was called (not -G).
+        # Already being in ecube-admins is a no-op for the append path; the
+        # setup flow should still succeed and avoid a destructive -G replace.
         calls = [c.args[0] for c in mock_subprocess.call_args_list]
         aG_calls = [c for c in calls if "-aG" in c]
-        assert len(aG_calls) >= 1
+        assert len(aG_calls) == 0
         # Verify password was reset via chpasswd.
         chpasswd_calls = [c for c in calls if "/usr/sbin/chpasswd" in c]
         assert len(chpasswd_calls) >= 1
@@ -2084,6 +2090,7 @@ class TestSetupEndpoints:
         mock_pwd.getpwnam.side_effect = [
             pw,                        # create_user → user_exists (True → raises)
             pw,                        # add_user_to_groups → user_exists
+            pw,                        # add_user_to_groups → _get_user_groups
             pw,                        # add_user_to_groups → pwd.getpwnam (OSUser)
             pw,                        # add_user_to_groups → _get_user_groups
             pw,                        # reset_password → user_exists

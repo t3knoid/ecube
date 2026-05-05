@@ -359,6 +359,13 @@ def change_password(
     policy_provider: PasswordPolicyProvider = Depends(_get_password_policy),
     request: Request,
 ) -> TokenResponse:
+    """Change the authenticated user's OS password and return a fresh JWT.
+
+    The caller must prove knowledge of the current password unless PAM reports
+    a password-expired flow, in which case ECUBE still permits the reset path.
+    Successful password changes return a newly issued token with the caller's
+    current ECUBE roles.
+    """
     authenticated = pam.authenticate(body.username, body.current_password)
     auth_reason, auth_message = _classify_pam_auth_failure(pam)
     if not authenticated and auth_reason != "password_expired":

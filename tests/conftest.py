@@ -1,4 +1,5 @@
 import time
+from copy import deepcopy
 
 import jwt
 import pytest
@@ -10,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 from app.config import settings
 from app.database import Base, get_db
 import app.database as _app_database
+from app.config import DEFAULT_DEMO_ACCOUNTS, DEFAULT_DEMO_LOGIN_MESSAGE
 
 SQLALCHEMY_DATABASE_URL = "sqlite://"
 
@@ -26,6 +28,16 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 _app_database.SessionLocal = TestingSessionLocal
 
 from app.main import app  # noqa: E402  — must come after SessionLocal override
+
+
+_DEFAULT_MUTABLE_SETTINGS = {
+    "demo_mode": False,
+    "demo_login_message": DEFAULT_DEMO_LOGIN_MESSAGE,
+    "demo_shared_password": "",
+    "demo_accounts": deepcopy(DEFAULT_DEMO_ACCOUNTS),
+    "demo_disable_password_change": True,
+    "pwquality_conf_path": settings.pwquality_conf_path,
+}
 
 
 def pytest_addoption(parser):
@@ -59,6 +71,27 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(skip_integration)
         if "hardware" in item.keywords and not run_hardware:
             item.add_marker(skip_hardware)
+
+
+@pytest.fixture(autouse=True)
+def _reset_runtime_demo_settings():
+    """Restore mutable demo-related settings between tests.
+
+    Several tests monkeypatch runtime demo configuration, and the app startup
+    path can consume those values to seed demo state. Reset them after each
+    test so later auth/setup/admin tests do not inherit demo-mode behavior.
+    """
+    settings._generated_demo_shared_password = None
+    settings._generated_demo_shared_password_source = None
+    for key, value in _DEFAULT_MUTABLE_SETTINGS.items():
+        setattr(settings, key, deepcopy(value))
+
+    yield
+
+    settings._generated_demo_shared_password = None
+    settings._generated_demo_shared_password_source = None
+    for key, value in _DEFAULT_MUTABLE_SETTINGS.items():
+        setattr(settings, key, deepcopy(value))
 
 
 @pytest.fixture(scope="function")
