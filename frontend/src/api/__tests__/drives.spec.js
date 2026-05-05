@@ -31,4 +31,13 @@ describe('drives api helpers', () => {
     expect(post).toHaveBeenCalledWith('/api/drives/7/format', { filesystem_type: 'ext4' }, expect.objectContaining({ timeout: 0 }))
     expect(toData).toHaveBeenCalled()
   })
+
+  it('forwards an optional timeout override for mount requests', async () => {
+    const { mountDrive } = await import('@/api/drives.js')
+
+    await mountDrive(7, { timeout: 0 })
+
+    expect(post).toHaveBeenCalledWith('/api/drives/7/mount', null, expect.objectContaining({ timeout: 0 }))
+    expect(toData).toHaveBeenCalled()
+  })
 })
