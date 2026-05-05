@@ -608,7 +608,11 @@ def add_user_to_groups(username: str, groups: List[str], *, _skip_managed_check:
         if not group_exists(g):
             raise OSUserError(f"Group '{g}' does not exist")
 
-    _run_sudo([settings.usermod_binary_path, "-aG", ",".join(groups), username])
+    current_groups = set(_get_user_groups(username))
+    groups_to_add = [group for group in groups if group not in current_groups]
+
+    if groups_to_add:
+        _run_sudo([settings.usermod_binary_path, "-aG", ",".join(groups_to_add), username])
 
     pw = pwd.getpwnam(username)
     return OSUser(

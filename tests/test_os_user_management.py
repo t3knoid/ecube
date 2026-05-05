@@ -484,6 +484,24 @@ class TestAddUserToGroups:
         with pytest.raises(AuthorizationError, match="not in any ecube"):
             os_user_service.add_user_to_groups("plainuser", ["ecube-admins"])
 
+    @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_add_to_groups_skips_group_already_present_as_primary(self, mock_pwd, mock_grp, mock_subprocess):
+        mock_pwd.getpwnam.return_value = _make_pw(name="demo_admin", gid=1001)
+        mock_grp.getgrgid.return_value = _make_grp(name="ecube-admins", gid=1001)
+        mock_grp.getgrnam.return_value = _make_grp(name="ecube-admins", gid=1001)
+        mock_grp.getgrall.return_value = []
+
+        user = os_user_service.add_user_to_groups(
+            "demo_admin",
+            ["ecube-admins"],
+            _skip_managed_check=True,
+        )
+
+        assert user.groups == ["ecube-admins"]
+        mock_subprocess.assert_not_called()
+
 
 class TestCreateGroup:
     """os_user_service.create_group()."""

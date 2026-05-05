@@ -1,5 +1,7 @@
+import logging
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -202,6 +204,51 @@ def test_seed_demo_environment_resets_existing_demo_users_to_explicit_shared_pas
     ]
 
 
+def test_seed_runtime_demo_environment_skips_password_reset_for_selected_existing_user(db):
+    from app.services.demo_seed_service import seed_runtime_demo_environment
+
+    provider = _FakeOsUserProvider()
+    provider.users.add("demo_admin")
+
+    with patch("app.config.Settings.get_demo_accounts", return_value=[]), patch(
+        "app.config.Settings.get_demo_shared_password",
+        return_value="SharedDemo#123",
+    ):
+        result = seed_runtime_demo_environment(
+            db,
+            provider=provider,
+            actor="demo-seed-test",
+            skip_password_usernames=["demo_admin"],
+        )
+
+    assert result.users_seeded == 4
+    assert provider.reset == []
+    assert provider.created == [
+        {
+            "username": "demo_manager",
+            "password": "SharedDemo#123",
+            "groups": ["ecube-managers"],
+        },
+        {
+            "username": "demo_processor",
+            "password": "SharedDemo#123",
+            "groups": ["ecube-processors"],
+        },
+        {
+            "username": "demo_auditor",
+            "password": "SharedDemo#123",
+            "groups": ["ecube-auditors"],
+        },
+    ]
+    assert provider.group_updates == [
+        {
+            "username": "demo_admin",
+            "groups": ["ecube-admins"],
+            "skip": True,
+        }
+    ]
+
+
 def test_seed_demo_environment_creates_missing_demo_users_with_shared_password_over_account_password(db, tmp_path, monkeypatch):
     from app.services.demo_seed_service import seed_demo_environment
 
@@ -362,6 +409,26 @@ def test_seed_demo_environment_uses_only_metadata_accounts(db, tmp_path, monkeyp
     ]
     assert UserRoleRepository(db).get_roles("metadata_manager") == ["manager"]
     assert UserRoleRepository(db).get_roles("settings_default") == []
+
+
+def test_seed_runtime_demo_environment_ignores_audit_write_failures(db, caplog):
+    from app.services.demo_seed_service import seed_runtime_demo_environment
+
+    caplog.set_level(logging.INFO, logger="app.services.demo_seed_service")
+
+    with patch("app.config.Settings.get_demo_accounts", return_value=[]), patch(
+        "app.config.Settings.get_demo_shared_password",
+        return_value="SharedDemo#123",
+    ), patch(
+        "app.services.demo_seed_service.AuditRepository.add",
+        side_effect=RuntimeError("audit unavailable"),
+    ):
+        result = seed_runtime_demo_environment(db, provider=None, actor="demo-seed-test")
+
+    assert result.users_seeded == 0
+    assert result.roles_seeded == 4
+    assert result.jobs_seeded == 0
+    assert "Demo seed audit write failed" in caplog.text
 
 
 def test_seed_demo_environment_does_not_fallback_to_default_accounts_when_metadata_has_no_accounts(db, tmp_path, monkeypatch):

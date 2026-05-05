@@ -47,6 +47,36 @@ _DEFAULT_DEMO_ACCOUNTS: list[dict[str, Any]] = [
     },
 ]
 
+
+def _record_demo_audit(
+    db: Session,
+    *,
+    action: str,
+    actor: str,
+    details: dict[str, Any],
+) -> None:
+    try:
+        AuditRepository(db).add(
+            action=action,
+            user=actor,
+            details=details,
+        )
+    except Exception as exc:
+        logger.info(
+            "Demo seed audit write failed",
+            extra={
+                "failure_category": "demo_seed_audit_failed",
+                "audit_action": action,
+            },
+        )
+        logger.debug(
+            "Demo seed audit write failure details",
+            extra={
+                "audit_action": action,
+                "raw_error": str(exc),
+            },
+        )
+
 @dataclass(frozen=True)
 class DemoSeedResult:
     users_seeded: int
@@ -96,9 +126,10 @@ def seed_demo_environment(
             _reconcile_demo_os_user(provider, account, effective_shared_password)
             users_seeded += 1
 
-    AuditRepository(db).add(
+    _record_demo_audit(
+        db,
         action="DEMO_BOOTSTRAP_APPLIED",
-        user=actor,
+        actor=actor,
         details={
             "usernames": [account["username"] for account in accounts],
             "roles_removed": roles_removed,
@@ -128,9 +159,10 @@ def reset_demo_environment(
     roles_removed = _delete_demo_roles(db, [account["username"] for account in accounts])
     db.commit()
 
-    AuditRepository(db).add(
+    _record_demo_audit(
+        db,
         action="DEMO_BOOTSTRAP_RESET",
-        user=actor,
+        actor=actor,
         details={
             "usernames": [account["username"] for account in accounts],
             "jobs_removed": jobs_removed,
@@ -149,10 +181,16 @@ def seed_runtime_demo_environment(
     *,
     provider: OsUserProvider | None = None,
     actor: str = "system",
+    skip_password_usernames: Iterable[str] | None = None,
 ) -> DemoSeedResult:
     """Seed demo users and roles from runtime DEMO_* settings only."""
     accounts = _normalized_demo_accounts(settings.get_demo_accounts(), include_defaults=True)
     effective_shared_password = settings.get_demo_shared_password() or None
+    skip_password_usernames_set = {
+        str(username).strip()
+        for username in (skip_password_usernames or [])
+        if str(username).strip()
+    }
 
     roles_removed = _delete_demo_roles(db, [account["username"] for account in accounts])
     if roles_removed:
@@ -166,12 +204,18 @@ def seed_runtime_demo_environment(
     for account in accounts:
         roles_seeded += _set_demo_roles(db, account["username"], account["roles"])
         if provider is not None:
-            _reconcile_demo_os_user(provider, account, effective_shared_password)
+            _reconcile_demo_os_user(
+                provider,
+                account,
+                effective_shared_password,
+                skip_password_reset=account["username"] in skip_password_usernames_set,
+            )
             users_seeded += 1
 
-    AuditRepository(db).add(
+    _record_demo_audit(
+        db,
         action="DEMO_RUNTIME_RECONCILED",
-        user=actor,
+        actor=actor,
         details={
             "usernames": [account["username"] for account in accounts],
             "roles_removed": roles_removed,
@@ -308,14 +352,20 @@ def _set_demo_roles(db: Session, username: str, roles: list[str]) -> int:
     return len(roles)
 
 
-def _reconcile_demo_os_user(provider: OsUserProvider, account: dict[str, Any], shared_password: str | None) -> None:
+def _reconcile_demo_os_user(
+    provider: OsUserProvider,
+    account: dict[str, Any],
+    shared_password: str | None,
+    *,
+    skip_password_reset: bool = False,
+) -> None:
     username = account["username"]
     account_password = account.get("password")
     groups = sorted({_ROLE_TO_GROUP[role] for role in account["roles"] if role in _ROLE_TO_GROUP})
 
     if provider.user_exists(username):
         password_to_apply = shared_password or account_password
-        if password_to_apply:
+        if password_to_apply and not skip_password_reset:
             provider.reset_password(username, password_to_apply, _skip_managed_check=True)
         if groups:
             provider.add_user_to_groups(username, groups, _skip_managed_check=True)

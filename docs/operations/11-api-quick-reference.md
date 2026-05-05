@@ -80,8 +80,10 @@ Setup initialize behavior:
 
 - `POST /setup/initialize` accepts `trust_proxy_headers` (boolean, default `false`) in addition to admin username/password.
 - When demo mode is enabled, successful `POST /setup/initialize` also triggers runtime demo account reconciliation so demo role assignments are present immediately after setup completes.
+- When demo mode is enabled and setup authenticates with a configured demo admin account, that immediate reconciliation skips a redundant password reset for the just-authenticated setup account while still creating or reconciling the other configured demo users.
 - If setup is already initialized, `POST /setup/initialize` returns `200` with `status="already_initialized"` and an informational message instead of returning `409`.
 - Once setup is already initialized, the call returns informational success but does not persist runtime setting changes; post-setup configuration updates require authenticated admin workflows.
+- A trailing demo-reconciliation audit-write failure is now logged and does not by itself turn an otherwise successful demo reconciliation into a setup failure.
 
 Authentication response behavior:
 
