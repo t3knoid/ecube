@@ -9,12 +9,14 @@ import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 import { useStatusLabels } from '@/composables/useStatusLabels.js'
+import { useAuthStore } from '@/stores/auth.js'
 import { formatDriveIdentity } from '@/utils/driveIdentity.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 import { buildDriveJobMap, buildProjectEvidenceMap, getDriveJob, getProjectEvidenceJobId } from '@/utils/projectEvidence.js'
 
 const { t } = useI18n()
 const { driveStateLabel } = useStatusLabels()
+const authStore = useAuthStore()
 const router = useRouter()
 
 const drives = ref([])
@@ -41,6 +43,7 @@ const activeBrowsedDrive = computed(() =>
     ? drives.value.find((d) => d.id === browsingDriveId.value) || null
     : null
 )
+const canManageDrives = computed(() => authStore.hasAnyRole(['admin', 'manager']))
 
 const columns = computed(() => {
   return [
@@ -224,6 +227,7 @@ async function refreshList() {
 }
 
 async function rescan() {
+  if (!canManageDrives.value) return
   refreshing.value = true
   error.value = ''
   try {
@@ -292,7 +296,7 @@ onBeforeUnmount(() => {
       <h1>{{ t('drives.title') }}</h1>
       <div class="actions">
         <button class="btn" @click="refreshList">{{ t('common.actions.refresh') }}</button>
-        <button class="btn btn-primary" :disabled="refreshing" @click="rescan">
+        <button v-if="canManageDrives" class="btn btn-primary" :disabled="refreshing" @click="rescan">
           {{ refreshing ? t('common.labels.loading') : t('drives.rescan') }}
         </button>
       </div>
