@@ -555,7 +555,7 @@ Credentials file
 <p>ECUBE now creates the local mount point automatically based on the remote path and mount type (for example, NFS mounts are created under <code>/nfs/<em></code> and SMB mounts under <code>/smb/</em></code>).</p>
 <p>After a service restart, ECUBE may automatically restore an expected managed share mount or remove a stale ECUBE-managed mount point that no longer matches persisted system state. These startup corrections are intentional and are recorded in the audit log with sanitized details.</p>
 <p>The exact credential fields required depend on the mount type and your environment.</p>
-<p>If share browsing is unavailable because the ECUBE host is missing a required discovery tool, the dialog now shows an actionable message telling the operator which host package to install before retrying. The browse control is hidden entirely when ECUBE is running in demo mode.</p>
+<p>If share browsing is unavailable because the ECUBE host is missing a required discovery tool, the dialog now shows an actionable message telling the operator which host package to install before retrying. Demo mode does not hide the browse control or block share discovery.</p>
 <h3 id="5-1-1-editing-a-mount">5.1.1 Editing a Mount</h3>
 <p>Use the clickable mount ID on an existing mount row to open Mount Detail, then use <code>Edit</code> from the detail action row to reopen the edit dialog in place.</p>
 <ul><li>

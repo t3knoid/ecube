@@ -493,7 +493,7 @@ After a service restart, ECUBE may automatically restore an expected managed sha
 
 The exact credential fields required depend on the mount type and your environment.
 
-If share browsing is unavailable because the ECUBE host is missing a required discovery tool, the dialog now shows an actionable message telling the operator which host package to install before retrying. The browse control is hidden entirely when ECUBE is running in demo mode.
+If share browsing is unavailable because the ECUBE host is missing a required discovery tool, the dialog now shows an actionable message telling the operator which host package to install before retrying. Demo mode does not hide the browse control or block share discovery.
 
 ### 8.1.1 Editing a Mount
 

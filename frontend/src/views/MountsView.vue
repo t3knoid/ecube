@@ -95,7 +95,7 @@ const activeEditMount = computed(() => (
 const dialogTitle = computed(() => (isEditMode.value ? t('mounts.editDialogTitle') : t('mounts.addDialogTitle')))
 const dialogSubmitLabel = computed(() => (isEditMode.value ? t('common.actions.save') : t('common.actions.create')))
 const dialogLocalMountPoint = computed(() => activeEditMount.value?.local_mount_point || '')
-const shareDiscoveryAvailable = computed(() => !isEditMode.value && !publicAuthConfig.value?.demo_mode_enabled)
+const shareDiscoveryAvailable = computed(() => !isEditMode.value)
 const nfsClientVersionOptions = computed(() => {
   const configured = Array.isArray(publicAuthConfig.value?.nfs_client_version_options)
     ? publicAuthConfig.value.nfs_client_version_options
