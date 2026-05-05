@@ -50,6 +50,7 @@ DEFAULT_DEMO_ACCOUNTS: list[dict[str, Any]] = [
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore", env_ignore_empty=True)
     _generated_demo_shared_password: str | None = PrivateAttr(default=None)
+    _generated_demo_shared_password_source: str | None = PrivateAttr(default=None)
 
     # Empty by default on fresh installs. The setup wizard writes this once
     # database connectivity is configured.
@@ -628,17 +629,24 @@ class Settings(BaseSettings):
         return message or DEFAULT_DEMO_LOGIN_MESSAGE
 
     def get_default_demo_shared_password(self) -> str:
-        if self._generated_demo_shared_password:
+        path = Path(self.pwquality_conf_path)
+        cache_source = str(path)
+
+        if (
+            self._generated_demo_shared_password
+            and self._generated_demo_shared_password_source == cache_source
+        ):
             return self._generated_demo_shared_password
 
-        path = Path(self.pwquality_conf_path)
         if not path.exists():
             self._generated_demo_shared_password = build_policy_friendly_demo_password(DEFAULT_PASSWORD_POLICY_VALUES)
+            self._generated_demo_shared_password_source = cache_source
             return self._generated_demo_shared_password
         try:
             self._generated_demo_shared_password = build_policy_friendly_demo_password(
                 parse_pwquality_policy_values(path.read_text(encoding="utf-8"))
             )
+            self._generated_demo_shared_password_source = cache_source
             return self._generated_demo_shared_password
         except OSError:
             logger.info(
@@ -653,6 +661,7 @@ class Settings(BaseSettings):
                 extra={"path": str(path)},
             )
             self._generated_demo_shared_password = build_policy_friendly_demo_password(DEFAULT_PASSWORD_POLICY_VALUES)
+            self._generated_demo_shared_password_source = cache_source
             return self._generated_demo_shared_password
 
     def has_demo_shared_password_override(self) -> bool:

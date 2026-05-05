@@ -66,6 +66,7 @@ def get_password_policy(
     _: CurrentUser = Depends(_ADMIN_ONLY),
     provider: PasswordPolicyProvider = Depends(_get_provider),
 ) -> PasswordPolicySettings:
+    """Return the current host password policy settings for admin review."""
     try:
         return PasswordPolicySettings(**provider.get_policy_settings())
     except PasswordPolicyError as exc:
@@ -91,6 +92,7 @@ def update_password_policy(
     current_user: CurrentUser = Depends(_ADMIN_ONLY),
     provider: PasswordPolicyProvider = Depends(_get_provider),
 ) -> PasswordPolicySettings:
+    """Update the host password policy using the configured provider."""
     updates = {
         key: getattr(body, key)
         for key in body.model_fields_set

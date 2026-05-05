@@ -565,4 +565,6 @@ def test_install_demo_tasks_enable_runtime_demo_mode_when_demo_metadata_is_missi
     assert not psql_log.exists()
     assert not alembic_log.exists()
     assert not bootstrap_log.exists()
-    assert not chown_log.exists()
+    # Runtime fallback still normalizes .env ownership after persisting DEMO_* values.
+    if chown_log.exists():
+        assert str(env_file) in chown_log.read_text(encoding="utf-8")

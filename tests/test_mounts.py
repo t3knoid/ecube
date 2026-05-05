@@ -1,4 +1,5 @@
 import os
+import shutil
 import stat
 import subprocess
 from unittest.mock import MagicMock, patch
@@ -64,15 +65,30 @@ def test_add_mount_uses_nfs_v4_1_to_avoid_slow_negotiation(manager_client, db):
 
     assert response.status_code == 200
     first_call = mock_run.call_args_list[0]
-    assert first_call.args[0][:7] == [
-        "sudo",
-        "-n",
-        settings.mount_binary_path,
-        "-N",
-        "/proc/1/ns/mnt",
-        "-t",
-        "nfs",
-    ]
+    command = first_call.args[0]
+    nsenter_path = shutil.which("nsenter")
+    if nsenter_path:
+        assert command[:9] == [
+            "sudo",
+            "-n",
+            nsenter_path,
+            "-t",
+            "1",
+            "-m",
+            settings.mount_binary_path,
+            "-t",
+            "nfs",
+        ]
+    else:
+        assert command[:7] == [
+            "sudo",
+            "-n",
+            settings.mount_binary_path,
+            "-N",
+            "/proc/1/ns/mnt",
+            "-t",
+            "nfs",
+        ]
     assert "vers=4.1" in first_call.args[0]
 
     mount = db.query(NetworkMount).filter(NetworkMount.project_id == "PROJ-NFS41").one()
@@ -1877,7 +1893,11 @@ def test_linux_mount_provider_uses_mount_namespace_flag_when_mount_namespace_dif
     assert ok is True
     assert err is None
     cmd = mock_run.call_args_list[0].args[0]
-    assert cmd[:5] == ["sudo", "-n", "/bin/mount", "-N", "/proc/1/ns/mnt"]
+    nsenter_path = shutil.which("nsenter")
+    if nsenter_path:
+        assert cmd[:7] == ["sudo", "-n", nsenter_path, "-t", "1", "-m", "/bin/mount"]
+    else:
+        assert cmd[:5] == ["sudo", "-n", "/bin/mount", "-N", "/proc/1/ns/mnt"]
 
 
 def test_check_mounted_uses_mount_namespace_flag_when_mount_namespace_differs(monkeypatch):
