@@ -1,7 +1,7 @@
-"""Admin configuration management service.
+"""Configuration management service.
 
 Provides a controlled allowlist of runtime-editable settings for the
-frontend Configuration page and a helper to request service restarts.
+Configuration and Admin pages and a helper to request service restarts.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List
 
 from app.config import settings
+from app.exceptions import AuthorizationError
 from app.logging_config import configure_logging
 from app.services import database_service
 
@@ -95,6 +96,61 @@ _EDITABLE_FIELDS: Dict[str, _FieldSpec] = {
     "callback_payload_field_map": _FieldSpec("CALLBACK_PAYLOAD_FIELD_MAP", False, _serialize_json_value),
 }
 
+_MANAGER_CONFIGURATION_FIELDS = (
+    "log_level",
+    "mkfs_exfat_cluster_size",
+    "drive_format_timeout_seconds",
+    "drive_mount_timeout_seconds",
+    "network_mount_timeout_seconds",
+    "mount_share_discovery_timeout_seconds",
+    "copy_job_timeout",
+    "job_detail_files_page_size",
+)
+
+_ADMIN_CONFIGURATION_FIELDS = (
+    "log_format",
+    "log_file",
+    "log_file_max_bytes",
+    "log_file_backup_count",
+    "db_pool_size",
+    "db_pool_max_overflow",
+    "db_pool_recycle_seconds",
+    "callback_default_url",
+    "callback_proxy_url",
+    "callback_hmac_secret",
+    "callback_payload_fields",
+    "callback_payload_field_map",
+    "nfs_client_version",
+    "startup_analysis_batch_size",
+)
+
+_CONFIGURATION_FIELDS_BY_SCOPE = {
+    "manager": _MANAGER_CONFIGURATION_FIELDS,
+    "admin": _ADMIN_CONFIGURATION_FIELDS,
+}
+
+_SPECIAL_UPDATE_KEYS_BY_SCOPE = {
+    "manager": frozenset(),
+    "admin": frozenset({"clear_callback_hmac_secret"}),
+}
+
+
+def _get_scope_field_names(scope: str) -> tuple[str, ...]:
+    try:
+        return _CONFIGURATION_FIELDS_BY_SCOPE[scope]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported configuration scope: {scope}") from exc
+
+
+def _get_allowed_update_keys(scope: str) -> frozenset[str]:
+    return frozenset(_get_scope_field_names(scope)) | _SPECIAL_UPDATE_KEYS_BY_SCOPE[scope]
+
+
+def _ensure_scope_allows_requested_keys(values: Dict[str, Any], scope: str) -> None:
+    disallowed_keys = sorted(key for key in values if key not in _get_allowed_update_keys(scope))
+    if disallowed_keys:
+        raise AuthorizationError("One or more requested settings require the admin role")
+
 
 def _normalized_value(field_name: str, value: Any) -> Any:
     if field_name == "log_file":
@@ -125,10 +181,11 @@ def _display_value(field_name: str, value: Any) -> Any:
     return normalized
 
 
-def get_configuration_fields() -> List[Dict[str, Any]]:
+def get_configuration_fields(*, scope: str) -> List[Dict[str, Any]]:
     """Return editable configuration fields and their current values."""
     fields: List[Dict[str, Any]] = []
-    for key, spec in _EDITABLE_FIELDS.items():
+    for key in _get_scope_field_names(scope):
+        spec = _EDITABLE_FIELDS[key]
         if not spec.readable:
             continue
         fields.append(
@@ -138,17 +195,18 @@ def get_configuration_fields() -> List[Dict[str, Any]]:
                 "requires_restart": spec.requires_restart,
             }
         )
-    fields.append(
-        {
-            "key": "callback_hmac_secret_configured",
-            "value": _display_value("callback_hmac_secret", settings.callback_hmac_secret),
-            "requires_restart": False,
-        }
-    )
+    if "callback_hmac_secret" in _get_scope_field_names(scope):
+        fields.append(
+            {
+                "key": "callback_hmac_secret_configured",
+                "value": _display_value("callback_hmac_secret", settings.callback_hmac_secret),
+                "requires_restart": False,
+            }
+        )
     return fields
 
 
-def update_configuration(values: Dict[str, Any]) -> Dict[str, Any]:
+def update_configuration(values: Dict[str, Any], *, scope: str) -> Dict[str, Any]:
     """Apply allowlisted configuration updates.
 
     Returns metadata describing immediate application and restart-required
@@ -165,13 +223,12 @@ def update_configuration(values: Dict[str, Any]) -> Dict[str, Any]:
     old_values: Dict[str, Any] = {}
 
     values = dict(values)
+    _ensure_scope_allows_requested_keys(values, scope)
     clear_callback_hmac_secret = bool(values.pop("clear_callback_hmac_secret", False))
     if clear_callback_hmac_secret:
         values["callback_hmac_secret"] = None
 
     for key, new_value_raw in values.items():
-        if key not in _EDITABLE_FIELDS:
-            continue
         current_value = _normalized_value(key, getattr(settings, key))
         new_value = _normalized_value(key, new_value_raw)
         if current_value == new_value:

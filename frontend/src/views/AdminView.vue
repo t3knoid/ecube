@@ -3,5 +3,5 @@ import ConfigurationEditor from '@/components/configuration/ConfigurationEditor.
 </script>
 
 <template>
-  <ConfigurationEditor mode="manager" />
+  <ConfigurationEditor mode="admin" />
 </template>

@@ -1,4 +1,4 @@
-"""Pydantic schemas for admin configuration management endpoints."""
+"""Pydantic schemas for Configuration and Admin configuration endpoints."""
 
 from __future__ import annotations
 
@@ -21,13 +21,13 @@ class ConfigurationField(BaseModel):
 
 
 class ConfigurationGetResponse(BaseModel):
-    """Response for ``GET /admin/configuration``."""
+    """Response for configuration read endpoints."""
 
     settings: List[ConfigurationField] = Field(default_factory=list)
 
 
 class ConfigurationUpdateRequest(StrictIntMixin, BaseModel):
-    """Request body for ``PUT /admin/configuration``.
+    """Request body for configuration update endpoints.
 
     All fields are optional; only supplied fields are updated.
     """
@@ -140,7 +140,7 @@ class ConfigurationUpdateRequest(StrictIntMixin, BaseModel):
         return self
 
 class ConfigurationUpdateResponse(BaseModel):
-    """Response for ``PUT /admin/configuration``."""
+    """Response for configuration update endpoints."""
 
     status: str = Field(..., description="Update status")
     changed_settings: List[str] = Field(default_factory=list)

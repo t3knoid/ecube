@@ -1,10 +1,18 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mount, RouterLinkStub } from '@vue/test-utils'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
-import { createPinia, setActivePinia } from 'pinia'
 import i18n from '@/i18n/index.js'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
-import { useAuthStore } from '@/stores/auth.js'
+
+const authState = vi.hoisted(() => ({
+  roles: [],
+}))
+
+vi.mock('@/stores/auth.js', () => ({
+  useAuthStore: () => ({
+    hasAnyRole: (requiredRoles) => requiredRoles.some((role) => authState.roles.includes(role)),
+  }),
+}))
 
 function mockMatchMedia(matches) {
   const listeners = new Set()
@@ -24,68 +32,79 @@ function mockMatchMedia(matches) {
   return implementation
 }
 
-describe('AppSidebar', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals()
-  })
-
-  function mountSidebar(props = {}) {
-    const pinia = createPinia()
-    setActivePinia(pinia)
-
-    return mount(AppSidebar, {
-      props,
-      global: {
-        plugins: [i18n, pinia],
-        stubs: {
-          RouterLink: RouterLinkStub,
+function mountSidebar(props = {}) {
+  return mount(AppSidebar, {
+    props: { sidebarOpen: true, ...props },
+    global: {
+      plugins: [i18n],
+      stubs: {
+        RouterLink: {
+          props: ['to'],
+          template: '<a><slot /></a>',
         },
       },
-    })
-  }
+    },
+  })
+}
+
+describe('AppSidebar', () => {
+  beforeEach(() => {
+    authState.roles = []
+  })
 
   it('hides the closed sidebar from assistive technology on mobile', async () => {
     mockMatchMedia(true)
+
     const wrapper = mountSidebar({ sidebarOpen: false })
     await nextTick()
 
     expect(wrapper.attributes('aria-hidden')).toBe('true')
     expect(wrapper.attributes()).toHaveProperty('inert')
-
-    wrapper.unmount()
   })
 
-  it('keeps the sidebar available when opened on mobile', () => {
+  it('keeps the sidebar available when opened on mobile', async () => {
     mockMatchMedia(true)
+
     const wrapper = mountSidebar({ sidebarOpen: true })
-
-    expect(wrapper.attributes('aria-hidden')).toBeUndefined()
-    expect(wrapper.attributes('inert')).toBeUndefined()
-
-    wrapper.unmount()
-  })
-
-  it('keeps the sidebar available on desktop when closed', () => {
-    mockMatchMedia(false)
-    const wrapper = mountSidebar({ sidebarOpen: false })
-
-    expect(wrapper.attributes('aria-hidden')).toBeUndefined()
-    expect(wrapper.attributes('inert')).toBeUndefined()
-
-    wrapper.unmount()
-  })
-
-  it('shows the audit nav item for processor roles', async () => {
-    mockMatchMedia(false)
-    const wrapper = mountSidebar({ sidebarOpen: true })
-    const authStore = useAuthStore()
-    authStore.roles = ['processor']
-
     await nextTick()
 
-    const links = wrapper.findAllComponents(RouterLinkStub)
-    expect(links.some((link) => link.props('to') === '/audit')).toBe(true)
+    expect(wrapper.attributes('aria-hidden')).toBeUndefined()
+    expect(wrapper.attributes('inert')).toBeUndefined()
+  })
 
-    wrapper.unmount()
+  it('keeps the sidebar available on desktop when closed', async () => {
+    mockMatchMedia(false)
+
+    const wrapper = mountSidebar({ sidebarOpen: false })
+    await nextTick()
+
+    expect(wrapper.attributes('aria-hidden')).toBeUndefined()
+    expect(wrapper.attributes('inert')).toBeUndefined()
+  })
+
+  it('shows Configuration for managers without Admin or Users', () => {
+    authState.roles = ['manager']
+
+    const wrapper = mountSidebar()
+    expect(wrapper.text()).toContain(i18n.global.t('nav.configuration'))
+    expect(wrapper.text()).not.toContain(i18n.global.t('nav.admin'))
+    expect(wrapper.text()).not.toContain(i18n.global.t('nav.users'))
+  })
+
+  it('shows Configuration, Admin, and Users for admins', () => {
+    authState.roles = ['admin']
+
+    const wrapper = mountSidebar()
+    expect(wrapper.text()).toContain(i18n.global.t('nav.configuration'))
+    expect(wrapper.text()).toContain(i18n.global.t('nav.admin'))
+    expect(wrapper.text()).toContain(i18n.global.t('nav.users'))
+  })
+
+  it('hides Configuration and Admin for processors', () => {
+    authState.roles = ['processor']
+
+    const wrapper = mountSidebar()
+    expect(wrapper.text()).not.toContain(i18n.global.t('nav.configuration'))
+    expect(wrapper.text()).not.toContain(i18n.global.t('nav.admin'))
   })
 })

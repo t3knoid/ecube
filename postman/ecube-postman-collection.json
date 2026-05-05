@@ -2371,7 +2371,7 @@
 								"configuration"
 							]
 						},
-						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Get Configuration\n\noperationId: get_configuration_admin_configuration_get"
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Get Admin Configuration\n\noperationId: get_admin_configuration_admin_configuration_get"
 					},
 					"response": []
 				},
@@ -2390,7 +2390,7 @@
 								"configuration"
 							]
 						},
-						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Update Configuration\n\noperationId: update_configuration_admin_configuration_put"
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Update Admin Configuration\n\noperationId: update_admin_configuration_admin_configuration_put"
 					},
 					"response": []
 				},
@@ -2899,6 +2899,42 @@
 							]
 						},
 						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Browse Directory\n\noperationId: browse_directory_browse_get"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /configuration",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/configuration",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"configuration"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Get Configuration\n\noperationId: get_configuration_configuration_get"
+					},
+					"response": []
+				},
+				{
+					"name": "PUT /configuration",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/configuration",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"configuration"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Update Configuration\n\noperationId: update_configuration_configuration_put"
 					},
 					"response": []
 				},

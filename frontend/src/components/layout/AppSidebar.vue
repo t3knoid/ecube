@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
-import { AUDIT_ROLES, USERS_ROLES } from '@/constants/roles.js'
+import { AUDIT_ROLES, CONFIGURATION_ROLES, USERS_ROLES } from '@/constants/roles.js'
 
 const props = defineProps({
   sidebarOpen: {
@@ -28,8 +28,9 @@ const navItems = computed(() => [
 ])
 
 const adminItems = computed(() => [
+  { label: t('nav.configuration'), to: '/configuration', roles: CONFIGURATION_ROLES },
+  { label: t('nav.admin'), to: '/admin', roles: USERS_ROLES },
   { label: t('nav.users'), to: '/users', roles: USERS_ROLES },
-  { label: t('nav.configuration'), to: '/configuration', roles: USERS_ROLES },
 ])
 
 function isVisible(item) {
