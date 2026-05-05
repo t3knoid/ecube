@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { injectAuthToken, setupPublicPage } from './helpers/app.js'
+import { injectAuthToken, routeJson, setupPublicPage } from './helpers/app.js'
 
 // See here how to get started:
 // https://playwright.dev/docs/intro
@@ -19,15 +19,33 @@ test('redirects to /setup when system is not initialized', async ({ page }) => {
   await expect(page).toHaveURL(/\/setup$/)
 })
 
-test('redirects away from /audit when user lacks required role', async ({ page }) => {
+test('processor can access /audit', async ({ page }) => {
   await setupPublicPage(page, { initialized: true })
-  // Processor role cannot access /audit (requires admin, manager, or auditor)
+  await routeJson(page, '**/api/audit/options', {
+    actions: ['LOGIN'],
+    users: ['frank'],
+    job_ids: [],
+  })
+  await page.route(/\/api\/audit(?!\/)/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        entries: [],
+        total: 0,
+        limit: 20,
+        offset: 0,
+        has_more: false,
+      }),
+    })
+  })
+
+  // Processor role has read access to /audit.
   await injectAuthToken(page, ['processor'])
 
   await page.goto('/audit')
-  // Should be redirected to the dashboard
-  await page.waitForURL('**/')
-  expect(new URL(page.url()).pathname).toBe('/')
+  await expect(page).toHaveURL(/\/audit$/)
+  await expect(page.getByRole('heading', { name: 'Audit' })).toBeVisible()
 })
 
 test('redirects away from /users when user is not admin', async ({ page }) => {
