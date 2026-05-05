@@ -26,7 +26,7 @@ For a native install, `install.sh --demo` looks for `demo-metadata.json` in the 
 
 If you want runtime fallback values when no metadata file is present, you may still set `DEMO_LOGIN_MESSAGE`, `DEMO_SHARED_PASSWORD`, `DEMO_DISABLE_PASSWORD_CHANGE`, or `DEMO_ACCOUNTS` in `.env`. The installer-driven seed flow itself reads demo accounts from `demo-metadata.json`, not from `.env`.
 
-Only the username, label, description, and password-change policy are exposed publicly on the login screen.
+The login screen exposes the demo login message, the shared demo password when configured, the demo usernames, their labels and descriptions, and the password-change policy.
 
 ## Installer workflow
 
@@ -131,7 +131,7 @@ After running `install.sh --demo`, verify the following:
 
 1. `.env` contains `DEMO_MODE=true`.
 2. The demo users from `demo-metadata.json` exist and share the configured password.
-3. The login page shows the demo guidance without exposing the shared password.
+3. The login page shows the demo guidance and shared password, and prefills the password field for demo sign-in.
 4. Password changes and demo-user-management writes remain blocked in demo mode.
 
 ## Safety notes

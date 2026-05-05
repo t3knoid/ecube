@@ -1508,7 +1508,7 @@ Use this checklist after running `install.sh --demo` on a normal installation.
 | # | Demo Check | Steps | Expected |
 |---|------------|-------|----------|
 | 1 | Public login guidance is shown without password disclosure | Run `install.sh --demo`, then open the login page | The login screen displays only the public-safe message plus username, label, and description fields, and it does not auto-fill or expose the shared demo password |
-| 2 | Shared demo password stays out of the public auth payload | Inspect the login panel and browser network response for the public auth config | The public payload does not expose shared passwords, per-account passwords, internal paths, or private bootstrap-only fields |
+| 2 | Shared demo password is displayed for self-serve demo access | Inspect the login panel and browser network response for the public auth config | The public payload exposes the shared demo password and the login page displays and prefills it, but still does not expose per-account passwords, internal paths, or private bootstrap-only fields |
 | 3 | Demo password changes are blocked in UI | Sign in as admin and open the Users page for a shared demo account | Reset password action is hidden or unavailable for the demo account |
 | 4 | Direct API reset is blocked | Attempt password reset for a configured demo account through the admin API | 403 response with sanitized message; no internal details leaked |
 | 5 | Demo seed is repeatable | Run the seed command twice against the same metadata file | Demo users and role mappings return to the same known-good state without duplicate role assignments or seeded jobs |

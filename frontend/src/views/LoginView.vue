@@ -31,6 +31,7 @@ const passwordChangeForm = ref({
 const publicAuthConfig = ref({
   demo_mode_enabled: false,
   login_message: null,
+  shared_password: null,
   demo_accounts: [],
   password_change_allowed: true,
 });
@@ -73,6 +74,8 @@ const showDemoLoginPanel = computed(() => {
     config.demo_mode_enabled &&
     ((typeof config.login_message === "string" &&
       config.login_message.trim()) ||
+      (typeof config.shared_password === "string" &&
+        config.shared_password.trim()) ||
       config.demo_accounts.length),
   );
 });
@@ -110,6 +113,11 @@ onMounted(async () => {
         typeof config?.login_message === "string" && config.login_message.trim()
           ? config.login_message.trim()
           : null,
+      shared_password:
+        typeof config?.shared_password === "string" &&
+        config.shared_password.trim()
+          ? config.shared_password.trim()
+          : null,
       demo_accounts: Array.isArray(config?.demo_accounts)
         ? config.demo_accounts
             .map((account) => ({
@@ -129,10 +137,14 @@ onMounted(async () => {
       password_change_allowed: config?.password_change_allowed !== false,
     };
     publicAuthConfig.value = normalizedConfig;
+    if (normalizedConfig.shared_password && !password.value) {
+      password.value = normalizedConfig.shared_password;
+    }
   } catch {
     publicAuthConfig.value = {
       demo_mode_enabled: false,
       login_message: null,
+      shared_password: null,
       demo_accounts: [],
       password_change_allowed: true,
     };
@@ -281,6 +293,14 @@ async function handlePasswordChangeConfirm() {
         </p>
         <p v-if="publicAuthConfig.login_message" class="demo-login-message">
           {{ publicAuthConfig.login_message }}
+        </p>
+
+        <p
+          v-if="publicAuthConfig.shared_password"
+          class="demo-login-message"
+        >
+          <strong>{{ t("auth.demoSharedPassword") }}:</strong>
+          {{ publicAuthConfig.shared_password }}
         </p>
 
         <ul
