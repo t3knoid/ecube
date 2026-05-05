@@ -1461,7 +1461,7 @@ curl -k -X POST https://localhost:8443/mounts/discover \
   }'
 ```
 
-Response: returns a `shares` array of sanitized remote paths and display names suitable for the Add Mount dialog. In demo mode the endpoint returns `403 Forbidden`, and if required host discovery tooling is missing it returns a `500` detail telling the operator which package to install before retrying.
+Response: returns a `shares` array of sanitized remote paths and display names suitable for the Add Mount dialog, including when demo mode is enabled. If required host discovery tooling is missing it returns a `500` detail telling the operator which package to install before retrying.
 
 ### Remove Mount
 

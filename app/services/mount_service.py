@@ -1260,21 +1260,6 @@ def discover_mount_shares(
     audit_repo = AuditRepository(db)
     provider = provider or _default_provider()
 
-    if settings.is_demo_mode_enabled():
-        try:
-            audit_repo.add(
-                action="MOUNT_SHARE_DISCOVERY_FAILED",
-                user=actor,
-                details={
-                    "type": discovery_data.type.value,
-                    "reason": "demo_mode_disabled",
-                },
-                client_ip=client_ip,
-            )
-        except Exception:
-            logger.exception("Failed to write audit log for MOUNT_SHARE_DISCOVERY_FAILED")
-        raise HTTPException(status_code=403, detail="Share browsing is unavailable in demo mode")
-
     discovery_target = _extract_share_discovery_target(discovery_data.type, discovery_data.remote_path)
     logger.info(
         "Mount share discovery started",

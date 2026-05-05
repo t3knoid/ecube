@@ -1137,7 +1137,7 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 | 20a | View mount detail and manage the mount from that page | Open Mount Detail from the Mounts list | Mount Detail shows Type, Project, NFS Client version, Last Checked, Job ID, and Status for all permitted viewers; raw Remote Path and Local Mount Point values remain visible only to admin and manager users, while read-only roles see those path fields redacted. `Browse` is available for mounted shares, and `Edit`/`Remove` remain available only for admin and manager users |
 | 21 | Operate the Initialize and Add Mount dialogs with keyboard only | Focus enters the dialog, Tab stays trapped within it, Escape closes it, and focus returns to the triggering control |
 | 22 | Use `Browse` in the Add Mount dialog with many discovered shares | The share picker opens, supports vertical scrolling, and selecting a share fills the `Remote path` field |
-| 23 | Open Add Mount while demo mode is enabled | The share-discovery `Browse` control is hidden |
+| 23 | Open Add Mount while demo mode is enabled | The share-discovery `Browse` control remains available and opens the share picker normally |
 | 24 | Trigger share browsing on a host missing `smbclient` or `showmount` | The dialog shows an actionable message telling the operator which host tool to install before retrying |
 
 ### 12.4.1 Filesystem Detection

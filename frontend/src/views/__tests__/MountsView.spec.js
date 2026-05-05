@@ -603,7 +603,7 @@ describe('MountsView removal flow', () => {
     expect(wrapper.text()).not.toContain(i18n.global.t('mounts.browseSharesTitle'))
   })
 
-  it('hides share discovery controls in demo mode', async () => {
+  it('keeps share discovery controls available in demo mode', async () => {
     mocks.getMounts.mockResolvedValue([])
     mocks.getPublicAuthConfig.mockResolvedValue({ demo_mode_enabled: true })
 
@@ -616,7 +616,7 @@ describe('MountsView removal flow', () => {
     await addButton.trigger('click')
     await flushPromises()
 
-    expect(wrapper.find('.dialog-actions').text()).not.toContain(i18n.global.t('mounts.browseShares'))
+    expect(wrapper.find('.dialog-actions').text()).toContain(i18n.global.t('mounts.browseShares'))
   })
 
   it('shows actionable guidance when share browsing is unavailable on the host', async () => {

@@ -227,7 +227,7 @@ Discover SMB shares or NFS exports for the Add Mount workflow. The caller submit
 **Error responses:**
 
 - `401 Unauthorized` — Missing/invalid token
-- `403 Forbidden` — Insufficient role or share browsing disabled in demo mode
+- `403 Forbidden` — Insufficient role
 - `409 Conflict` — Share discovery failed because the server address or credentials could not be used successfully
 - `422 Unprocessable Entity` — Invalid request body or missing server address seed
 - `500 Internal Server Error` — Required host discovery tooling is unavailable (for example `smbclient` for SMB or `showmount` for NFS)

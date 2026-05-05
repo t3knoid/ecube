@@ -1398,8 +1398,13 @@ def test_discover_mount_shares_requires_admin_or_manager(auditor_client, db):
     assert response.status_code == 403
 
 
-def test_discover_mount_shares_rejected_in_demo_mode(manager_client, db):
-    with patch.object(type(settings), "is_demo_mode_enabled", return_value=True):
+def test_discover_mount_shares_allowed_in_demo_mode(manager_client, db):
+    class FakeProvider:
+        def discover_shares(self, mount_type, remote_path, *, credentials_file=None, username=None, password=None):
+            return ["nfs-server/export-a"]
+
+    with patch.object(type(settings), "is_demo_mode_enabled", return_value=True), \
+            patch("app.services.mount_service._default_provider", return_value=FakeProvider()):
         response = manager_client.post(
             "/mounts/discover",
             json={
@@ -1408,7 +1413,12 @@ def test_discover_mount_shares_rejected_in_demo_mode(manager_client, db):
             },
         )
 
-    assert response.status_code == 403
+    assert response.status_code == 200
+    assert response.json() == {
+        "shares": [
+            {"remote_path": "nfs-server/export-a", "display_name": "export-a"},
+        ]
+    }
 
 
 def test_discover_mount_shares_requires_server_seed(manager_client, db):
