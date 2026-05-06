@@ -212,7 +212,12 @@ def test_list_drives_include_disconnected(client, db):
 
 def test_list_drives_include_related_job_custody_complete(client, db):
     drive = UsbDrive(device_identifier="USB-CUSTODY-1", current_state=DriveState.IN_USE, current_project_id="PROJ-001")
-    job = ExportJob(project_id="PROJ-001", evidence_number="EV-001", status=JobStatus.COMPLETED)
+    job = ExportJob(
+        project_id="PROJ-001",
+        evidence_number="EV-001",
+        source_path="/nfs/proj-001",
+        status=JobStatus.COMPLETED,
+    )
     db.add_all([drive, job])
     db.flush()
     db.add(DriveAssignment(drive_id=drive.id, job_id=job.id, activated_at=datetime.now(timezone.utc)))
@@ -242,7 +247,12 @@ def test_list_drives_include_related_job_custody_complete(client, db):
 
 def test_list_drives_include_related_job_custody_pending(client, db):
     drive = UsbDrive(device_identifier="USB-CUSTODY-2", current_state=DriveState.IN_USE, current_project_id="PROJ-002")
-    job = ExportJob(project_id="PROJ-002", evidence_number="EV-002", status=JobStatus.COMPLETED)
+    job = ExportJob(
+        project_id="PROJ-002",
+        evidence_number="EV-002",
+        source_path="/nfs/proj-002",
+        status=JobStatus.COMPLETED,
+    )
     db.add_all([drive, job])
     db.flush()
     db.add(DriveAssignment(drive_id=drive.id, job_id=job.id, activated_at=datetime.now(timezone.utc)))
@@ -263,7 +273,12 @@ def test_list_drives_include_related_job_custody_pending(client, db):
 
 def test_list_drives_include_related_job_custody_unavailable_without_snapshot(client, db):
     drive = UsbDrive(device_identifier="USB-CUSTODY-3", current_state=DriveState.IN_USE, current_project_id="PROJ-003")
-    job = ExportJob(project_id="PROJ-003", evidence_number="EV-003", status=JobStatus.ARCHIVED)
+    job = ExportJob(
+        project_id="PROJ-003",
+        evidence_number="EV-003",
+        source_path="/nfs/proj-003",
+        status=JobStatus.ARCHIVED,
+    )
     db.add_all([drive, job])
     db.flush()
     db.add(DriveAssignment(drive_id=drive.id, job_id=job.id, activated_at=datetime.now(timezone.utc)))
@@ -284,7 +299,12 @@ def test_list_drives_include_related_job_custody_unavailable_without_snapshot(cl
 
 def test_list_drives_include_related_job_custody_from_archived_snapshot(client, db):
     drive = UsbDrive(device_identifier="USB-CUSTODY-4", current_state=DriveState.IN_USE, current_project_id="PROJ-004")
-    job = ExportJob(project_id="PROJ-004", evidence_number="EV-004", status=JobStatus.ARCHIVED)
+    job = ExportJob(
+        project_id="PROJ-004",
+        evidence_number="EV-004",
+        source_path="/nfs/proj-004",
+        status=JobStatus.ARCHIVED,
+    )
     db.add_all([drive, job])
     db.flush()
     db.add(DriveAssignment(drive_id=drive.id, job_id=job.id, activated_at=datetime.now(timezone.utc)))
@@ -326,7 +346,12 @@ def test_list_drives_include_related_job_custody_from_archived_snapshot(client, 
 
 def test_list_drives_include_related_job_custody_no_related_job_after_binding_clears(client, db):
     drive = UsbDrive(device_identifier="USB-CUSTODY-5", current_state=DriveState.AVAILABLE, current_project_id=None)
-    job = ExportJob(project_id="PROJ-005", evidence_number="EV-005", status=JobStatus.COMPLETED)
+    job = ExportJob(
+        project_id="PROJ-005",
+        evidence_number="EV-005",
+        source_path="/nfs/proj-005",
+        status=JobStatus.COMPLETED,
+    )
     db.add_all([drive, job])
     db.flush()
     db.add(DriveAssignment(drive_id=drive.id, job_id=job.id, activated_at=datetime.now(timezone.utc)))

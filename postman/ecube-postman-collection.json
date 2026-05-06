@@ -593,6 +593,7 @@
 									"    if (!Array.isArray(drives) || drives.length === 0) return;",
 									"    pm.expect(drives[0]).to.have.property('port_system_path');",
 									"    pm.expect(drives[0]).to.have.property('serial_number');",
+									"    pm.expect(drives[0]).to.have.property('related_job');",
 									"});"
 								],
 								"type": "text/javascript"
@@ -628,10 +629,16 @@
 									"value": "true",
 									"disabled": true,
 									"description": "Include DISCONNECTED drives in the default listing when no explicit state filter is used"
+								},
+								{
+									"key": "include_related_job_custody",
+									"value": "true",
+									"disabled": true,
+									"description": "Include trusted related-job custody context for each drive lifecycle, including related_job.custody_status and related_job.delivery_time when available"
 								}
 							]
 						},
-						"description": "List USB drives with state and project bindings. Supports optional project_id, repeatable state filters, and include_disconnected=true. Roles: admin, manager, processor, auditor."
+						"description": "List USB drives with state and project bindings. Supports optional project_id, repeatable state filters, include_disconnected=true, and include_related_job_custody=true. When related-job custody is requested, each drive may include a related_job object with job_id, evidence_number, custody_status, and delivery_time. Roles: admin, manager, processor, auditor."
 					}
 				},
 				{
