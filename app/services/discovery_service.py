@@ -50,6 +50,7 @@ from app.models.hardware import DriveState, UsbDrive, UsbPort
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
 from app.repositories.hardware_repository import HubRepository, PortRepository
+from app.services.operation_context import details_with_operation_id as _details_with_operation_id, operation_extra as _operation_extra
 from app.utils.drive_identity import (
     build_readable_device_label,
     extract_usb_serial_number,
@@ -59,18 +60,6 @@ from app.utils.drive_identity import (
 from app.utils.sanitize import normalize_project_id
 
 logger = logging.getLogger(__name__)
-
-
-def _operation_extra(operation_id: Optional[str], **extra) -> dict:
-    if operation_id:
-        return {"operation_id": operation_id, **extra}
-    return extra
-
-
-def _details_with_operation_id(details: dict, operation_id: Optional[str]) -> dict:
-    if operation_id:
-        return {**details, "operation_id": operation_id}
-    return details
 
 
 def _serial_number_from_identifier(device_identifier: Optional[str], port_system_path: Optional[str]) -> Optional[str]:

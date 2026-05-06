@@ -636,7 +636,7 @@ Archived jobs remain readable from Job Detail, but they are intentionally treate
 
 > **Access Summary**
 > **Page visibility:** `admin`, `manager`, `processor`, `auditor`
-> **Restricted actions:** `Analyze`, `Edit`, `Start`, `Continue on Another Drive`, `Retry Failed Files`, `Pause`, `Complete`, `Verify`, and `Manifest` are enabled for `admin`, `manager`, and `processor` when the current job state allows them. `Chain of Custody` is available to roles that can open the job-scoped chain-of-custody workflow. Within that report, `Custody Handoff` appears only for `admin` and `manager` when the loaded report still shows incomplete custody. `Archive` and `Clear startup analysis cache` remain limited to `admin` and `manager` when the current job state allows them. `Delete` is shown only for eligible pending jobs. Hash inspection and source/destination comparison remain available to `admin` and `auditor`.
+> **Restricted actions:** `Analyze`, `Edit`, `Start`, `Continue on Another Drive`, `Retry Failed Files`, `Pause`, `Complete`, `Verify`, and `Manifest` are enabled for `admin`, `manager`, and `processor` when the current job state allows them. `Chain of Custody` becomes available to authorized roles after the job reaches `COMPLETED` and remains available on archived job detail pages for stored-report review. Within that report, `Custody Handoff` appears only for `admin` and `manager` when the loaded report still shows incomplete custody. `Archive` and `Clear startup analysis cache` remain limited to `admin` and `manager` when the current job state allows them. `Delete` is shown only for eligible pending jobs. Hash inspection and source/destination comparison remain available to `admin` and `auditor`.
 
 The job detail page provides deeper inspection and follow-up controls.
 
@@ -672,7 +672,7 @@ Use them when appropriate:
 - `Retry Failed Files` to re-queue only `ERROR` and `TIMEOUT` file rows on a `COMPLETED` job that finished with partial-success results
 - `Pause` to request a safe stop after the current copy work finishes
 - `Complete` to manually mark a pending, paused, or failed job as complete when the operational workflow requires it
-- `Chain of Custody` to open the job-scoped chain-of-custody report as the normal closeout step when custody is being transferred
+- `Chain of Custody` to open the job-scoped chain-of-custody report as the normal closeout step once the job is completed and custody is being transferred
 - `Archive` to sunset a completed or failed job after confirmation when an exceptional administrative or non-handoff closure is required; this action is limited to `admin` and `manager` and requires `Prepare Eject` first when the job still has a related drive assignment
 - `Clear startup analysis cache` to remove a persisted startup scan after explicit confirmation; this is available only to `admin` and `manager` when cached startup-analysis data exists for the job
 - `Verify` to run verification checks once the job is fully complete with no failed or timed-out files

@@ -319,6 +319,21 @@ describe('JobDetailView start action', () => {
 
   it('opens the job-scoped CoC dialog on initial load when requested by route query', async () => {
     routeState.query = { coc: '1' }
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 100,
+      total_bytes: 100,
+      files_failed: 0,
+      files_timed_out: 0,
+      startup_analysis_status: 'READY',
+      startup_analysis_ready: true,
+    })
     mocks.getJobChainOfCustody.mockResolvedValue({
       selector_mode: 'JOB',
       project_id: 'PROJ-001',
@@ -336,6 +351,29 @@ describe('JobDetailView start action', () => {
     expect(mocks.getJobChainOfCustody).toHaveBeenCalledWith(6)
     expect(wrapper.find('#job-coc-title').exists()).toBe(true)
     expect(wrapper.text()).toContain('job-coc-report-5|JOB|PROJ-001|EV-006|casey|2026-04-29T09:15:00Z')
+  })
+
+  it('does not open the CoC dialog from the route query before the job is completed', async () => {
+    routeState.query = { coc: '1' }
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'PENDING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 0,
+      total_bytes: 100,
+      startup_analysis_status: 'READY',
+      startup_analysis_ready: true,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(mocks.getJobChainOfCustody).not.toHaveBeenCalled()
+    expect(wrapper.find('#job-coc-title').exists()).toBe(false)
   })
 
   it('shows startup-analysis status details and starts analysis for eligible jobs', async () => {
@@ -2598,7 +2636,6 @@ describe('JobDetailView start action', () => {
 
     expect(wrapper.find('.actions-menu').exists()).toBe(true)
     expect(wrapper.find('.detail-action-menu-overflow').exists()).toBe(true)
-    expect(wrapper.find('.detail-action-menu-coc').exists()).toBe(true)
     expect(wrapper.find('.detail-action-menu-complete').exists()).toBe(true)
     expect(wrapper.find('.detail-action-menu-delete').exists()).toBe(true)
   })
@@ -2658,7 +2695,6 @@ describe('JobDetailView start action', () => {
       i18n.global.t('jobs.complete'),
       i18n.global.t('jobs.verify'),
       i18n.global.t('jobs.manifest'),
-      i18n.global.t('jobs.closeOutWithHandoff'),
       i18n.global.t('jobs.archiveWithoutHandoff'),
       i18n.global.t('common.actions.delete'),
     ])
@@ -2804,5 +2840,27 @@ describe('JobDetailView start action', () => {
     expect(wrapper.find('#job-coc-title').exists()).toBe(true)
     expect(wrapper.find('.coc-toolbar').findAll('button').some((node) => node.text() === i18n.global.t('common.actions.refresh'))).toBe(false)
     expect(wrapper.text()).not.toContain(i18n.global.t('audit.handoffTitle'))
+  })
+
+  it('hides the chain-of-custody action before completion even for readable roles', async () => {
+    mocks.hasAnyRole.mockImplementation((roles) => roles.includes('processor'))
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'PAUSED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 10,
+      total_bytes: 100,
+      startup_analysis_status: 'READY',
+      startup_analysis_ready: true,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.findAll('button').some((node) => node.text() === i18n.global.t('jobs.closeOutWithHandoff'))).toBe(false)
   })
 })

@@ -4,7 +4,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
 import { analyzeJob, archiveJob, continueJobOverflow, getJob, getJobChainOfCustody, refreshJobChainOfCustody, getJobFiles, startJob, retryFailedJob, pauseJob, verifyJob, downloadManifest, updateJob, completeJob, deleteJob, clearJobStartupAnalysisCache, confirmJobChainOfCustodyHandoff } from '@/api/jobs.js'
-import { normalizeErrorMessage } from '@/api/client.js'
 import { getFileHashes, compareFiles } from '@/api/files.js'
 import { getDrives } from '@/api/drives.js'
 import { getMounts } from '@/api/mounts.js'
@@ -16,6 +15,8 @@ import StatusBadge from '@/components/common/StatusBadge.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import { formatDriveIdentity } from '@/utils/driveIdentity.js'
+import { buildJobErrorMessage } from '@/utils/jobErrors.js'
+import { canOperateOnInactiveJob, canPauseJob as canPauseJobAction, canReadJobCoc, canStartJob as canStartJobAction, getJobDetailPrimaryActionKeys } from '@/utils/jobActions.js'
 import { calculateJobProgress, isJobProgressActive } from '@/utils/jobProgress.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
@@ -116,8 +117,12 @@ const canOperate = computed(() => authStore.hasAnyRole(['admin', 'manager', 'pro
 const canArchiveJobs = computed(() => authStore.hasAnyRole(['admin', 'manager']))
 const canManageStartupAnalysis = computed(() => authStore.hasAnyRole(['admin', 'manager']))
 const canInspectHashes = computed(() => authStore.hasAnyRole(['admin', 'auditor']))
-const canReadCoc = computed(() => authStore.hasAnyRole(['admin', 'manager', 'processor', 'auditor']))
+const hasCocAccess = computed(() => authStore.hasAnyRole(['admin', 'manager', 'processor', 'auditor']))
 const currentStatus = computed(() => String(job.value?.status || '').toUpperCase())
+const canReadCoc = computed(() => canReadJobCoc({
+  hasAccess: hasCocAccess.value,
+  jobStatus: currentStatus.value,
+}))
 const hasPendingCocHandoff = computed(() => (cocReport.value?.reports || []).some((report) => !report?.custody_complete))
 const canRefreshCoc = computed(() => authStore.hasAnyRole(['admin', 'manager'])
   && currentStatus.value !== 'ARCHIVED'
@@ -205,14 +210,18 @@ function fileErrorPreview(row) {
 }
 
 const canEdit = computed(() => {
-  return canOperate.value
-    && ['PENDING', 'PAUSED', 'FAILED'].includes(currentStatus.value)
-    && currentStartupAnalysisStatus.value !== 'ANALYZING'
+  return canOperateOnInactiveJob({
+    canOperate: canOperate.value,
+    jobStatus: currentStatus.value,
+    startupAnalysisStatus: currentStartupAnalysisStatus.value,
+  })
 })
 const canComplete = computed(() => {
-  return canOperate.value
-    && ['PENDING', 'PAUSED', 'FAILED'].includes(currentStatus.value)
-    && currentStartupAnalysisStatus.value !== 'ANALYZING'
+  return canOperateOnInactiveJob({
+    canOperate: canOperate.value,
+    jobStatus: currentStatus.value,
+    startupAnalysisStatus: currentStartupAnalysisStatus.value,
+  })
 })
 const showDelete = computed(() => canOperate.value && currentStatus.value === 'PENDING')
 const canDelete = computed(() => {
@@ -221,9 +230,11 @@ const canDelete = computed(() => {
     && currentStartupAnalysisStatus.value !== 'ANALYZING'
 })
 const canAnalyze = computed(() => {
-  return canOperate.value
-    && ['PENDING', 'PAUSED', 'FAILED'].includes(currentStatus.value)
-    && currentStartupAnalysisStatus.value !== 'ANALYZING'
+  return canOperateOnInactiveJob({
+    canOperate: canOperate.value,
+    jobStatus: currentStatus.value,
+    startupAnalysisStatus: currentStartupAnalysisStatus.value,
+  })
 })
 const showClearStartupAnalysisCache = computed(() => {
   return canManageStartupAnalysis.value && !!job.value?.startup_analysis_cached
@@ -354,10 +365,11 @@ const progressActive = computed(() => {
 })
 
 const canStart = computed(() => {
-  const status = String(job.value?.status || '').toUpperCase()
-  return canOperate.value
-    && ['PENDING', 'FAILED', 'PAUSED'].includes(status)
-    && currentStartupAnalysisStatus.value !== 'ANALYZING'
+  return canStartJobAction({
+    canOperate: canOperate.value,
+    jobStatus: job.value?.status,
+    startupAnalysisStatus: currentStartupAnalysisStatus.value,
+  })
 })
 
 const canRetryFailed = computed(() => {
@@ -368,7 +380,10 @@ const canRetryFailed = computed(() => {
     && (Number(job.value?.files_failed || 0) > 0 || Number(job.value?.files_timed_out || 0) > 0)
 })
 
-const canPause = computed(() => canOperate.value && currentStatus.value === 'RUNNING')
+const canPause = computed(() => canPauseJobAction({
+  canOperate: canOperate.value,
+  jobStatus: currentStatus.value,
+}))
 const isJobFullyComplete = computed(() => {
   const status = currentStatus.value
   if (status !== 'COMPLETED') return false
@@ -380,23 +395,11 @@ const hasGeneratedManifest = computed(() => Boolean(job.value?.latest_manifest_c
 const canDownloadManifest = computed(() => canOperate.value && isJobFullyComplete.value && hasGeneratedManifest.value)
 
 const primaryActionKeys = computed(() => {
-  const status = currentStatus.value
-
-  if (['PENDING', 'FAILED', 'PAUSED'].includes(status)) {
-    return ['edit', 'analyze', 'start']
-  }
-  if (status === 'RUNNING' || status === 'PAUSING') {
-    return ['pause']
-  }
-  if (status === 'COMPLETED') {
-    return canRetryFailed.value ? ['retry-failed', 'coc'] : ['verify', 'manifest', 'coc']
-  }
-
-  if (status === 'ARCHIVED') {
-    return ['edit', 'analyze', 'start']
-  }
-
-  return ['edit', 'analyze', 'start']
+  return getJobDetailPrimaryActionKeys({
+    jobStatus: currentStatus.value,
+    canRetryFailed: canRetryFailed.value,
+    canReadCoc: canReadCoc.value,
+  })
 })
 
 const actionItems = computed(() => {
@@ -1440,19 +1443,7 @@ watch(() => debug.value.files, (files) => {
 }, { deep: false })
 
 function buildJobError(err) {
-  const status = err?.response?.status
-  const detail = normalizeErrorMessage(err?.response?.data, '')
-
-  if (err instanceof TypeError && String(err.message || '').includes('Invalid job id')) {
-    return t('common.errors.invalidRequest')
-  }
-  if (!status) return t('common.errors.networkError')
-  if (status === 403) return detail || t('common.errors.insufficientPermissions')
-  if (status === 404) return detail || t('common.errors.notFound')
-  if (status === 409) return detail || t('common.errors.requestConflict')
-  if (status === 422) return detail || t('common.errors.validationFailed')
-  if (status >= 500) return t('common.errors.serverError', { status })
-  return detail || t('common.errors.serverErrorGeneric')
+  return buildJobErrorMessage(err, t, { includeInvalidId: true })
 }
 
 async function runAction(action) {
