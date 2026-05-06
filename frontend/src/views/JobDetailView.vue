@@ -990,6 +990,10 @@ function buildEditSourcePath(currentJob, mount) {
   return sourcePath
 }
 
+function displaySourcePath(currentJob) {
+  return buildEditSourcePath(currentJob, inferMountForJob(currentJob))
+}
+
 function trapFocusWithin(event, container) {
   if (!container) return
   const focusable = Array.from(
@@ -1776,7 +1780,7 @@ onUnmounted(() => {
 
       <div class="hash-grid">
         <span>{{ t('jobs.destinationGroup') }}</span><strong class="mono wrap-anywhere">{{ resolveJobDestinationLabel(job) }}</strong>
-        <span>{{ t('jobs.sourcePath') }}</span><strong class="mono wrap-anywhere">{{ job.source_path || '-' }}</strong>
+        <span>{{ t('jobs.sourcePath') }}</span><strong class="mono wrap-anywhere">{{ displaySourcePath(job) || '-' }}</strong>
         <span>{{ t('drives.availableSpace') }}</span><strong>{{ formatBytes(job.drive?.available_bytes) }}</strong>
         <span>{{ t('jobs.callbackUrl') }}</span><strong class="mono wrap-anywhere">{{ job.callback_url || '-' }}</strong>
       </div>
