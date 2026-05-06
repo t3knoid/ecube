@@ -1,5 +1,6 @@
 import os
 import time
+from unittest.mock import patch
 
 import jwt
 import pytest
@@ -144,9 +145,13 @@ def integration_client(integration_db, integration_auth_headers):
             pass
 
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as client:
-        client.headers.update(integration_auth_headers)
-        yield client
+    with patch(
+        "app.services.reconciliation_service.run_startup_reconciliation",
+        return_value={"identity": {}, "mounts": {}, "jobs": {}, "drives": {}},
+    ):
+        with TestClient(app) as client:
+            client.headers.update(integration_auth_headers)
+            yield client
     app.dependency_overrides.clear()
 
 
@@ -159,6 +164,10 @@ def integration_unauthenticated_client(integration_db):
             pass
 
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as client:
-        yield client
+    with patch(
+        "app.services.reconciliation_service.run_startup_reconciliation",
+        return_value={"identity": {}, "mounts": {}, "jobs": {}, "drives": {}},
+    ):
+        with TestClient(app) as client:
+            yield client
     app.dependency_overrides.clear()
