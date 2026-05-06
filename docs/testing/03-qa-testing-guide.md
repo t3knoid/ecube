@@ -1122,6 +1122,8 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 | 6 | Initialize an `AVAILABLE` drive that is not mounted even though the project share is `MOUNTED` | 409, `CONFLICT`; audit `INIT_REJECTED_NOT_MOUNTED` recorded |
 | 7 | Mount an `AVAILABLE` or `IN_USE` drive with a recognized filesystem | 200, `mount_path` is populated |
 | 8 | Mount a drive with `filesystem_type=unknown`, `unformatted`, or `NULL` | 409, `CONFLICT` — must have recognized filesystem |
+| 8a | Mount a drive when the host lacks filesystem runtime support for that filesystem | 500 with a safe remediation message telling the operator to install the required filesystem runtime and retry; response must not expose device paths |
+| 8b | Mount a drive when the managed mount root is not writable by the ECUBE service account | 500 with a safe remediation message telling the operator to fix host permissions and retry; response must not expose mount paths |
 | 9 | Prepare-eject an `IN_USE` drive | 200, state → `AVAILABLE`, `mount_path` cleared |
 | 10 | Prepare-eject with an assigned job in `RUNNING`, `PAUSING`, `PAUSED`, or `VERIFYING` | 409, `CONFLICT`; drive remains `IN_USE`; provider eject is not called |
 | 11 | Prepare-eject with incomplete active-assignment files (first attempt) | 409, `CONFLICT` with confirmation-required detail; drive remains `IN_USE` |
