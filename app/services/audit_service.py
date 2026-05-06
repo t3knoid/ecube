@@ -154,6 +154,8 @@ _ACTION_LABELS = {
     "MOUNT_SHARE_DISCOVERY_FAILED": "Mount share discovery failed",
     "MOUNT_UPDATED": "Mount updated",
     "DRIVE_DISCOVERED": "Drive discovered",
+    "DRIVE_MOUNT_FAILED": "Drive mount failed",
+    "DRIVE_MOUNTED": "Drive mounted",
     "DRIVE_INITIALIZED": "Drive initialized",
     "JOB_CREATED": "Job created",
     "JOB_STARTED": "Copy operation started",

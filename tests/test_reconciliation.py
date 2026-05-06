@@ -1200,7 +1200,10 @@ class TestRunManualManagedMountReconciliation:
                 actor="manager-user",
             )
 
-        reconcile_mounts_mock.assert_called_once_with(db, provider, drive_provider)
+        reconcile_mounts_mock.assert_called_once()
+        reconcile_call = reconcile_mounts_mock.call_args
+        assert reconcile_call.args == (db, provider, drive_provider)
+        assert reconcile_call.kwargs.get("operation_id")
         reconcile_jobs_mock.assert_not_called()
         reconcile_drives_mock.assert_not_called()
         reconcile_groups_mock.assert_not_called()
@@ -1208,6 +1211,7 @@ class TestRunManualManagedMountReconciliation:
 
         assert result["status"] == "ok"
         assert result["scope"] == "managed_mounts_only"
+        assert result["operation_id"] == reconcile_call.kwargs["operation_id"]
         assert result["network_mounts_checked"] == 2
         assert result["network_mounts_corrected"] == 1
         assert result["usb_mounts_checked"] == 1
@@ -1218,6 +1222,7 @@ class TestRunManualManagedMountReconciliation:
         assert audit is not None
         assert audit.details["status"] == "ok"
         assert audit.details["failure_count"] == 0
+        assert audit.details["operation_id"] == result["operation_id"]
 
     def test_reports_partial_when_corrective_operations_fail(self, db: Session):
         provider = FakeMountProvider(mounted_paths=set())
@@ -1319,13 +1324,12 @@ class TestRunStartupReconciliation:
 
         assert "identity" in result
         assert "groups" in result["identity"]
-        assert "demo" in result["identity"]
+        assert "demo" not in result["identity"]
         assert "users" in result["identity"]
         assert "mounts" in result
         assert "jobs" in result
         assert "drives" in result
         assert result["identity"]["groups"]["groups_created"] == 1
-        assert result["identity"]["demo"]["users_seeded"] == 4
         assert result["mounts"]["mounts_corrected"] == 1
 
     def test_startup_reconciliation_seeds_demo_accounts_from_runtime_settings(self, db: Session, monkeypatch):
@@ -1381,11 +1385,40 @@ class TestRunStartupReconciliation:
             if record.getMessage() == "Startup reconciliation: jobs result"
         ]
         assert len(matches) == 1
+        operation_id = getattr(matches[0], "operation_id", None)
+        assert operation_id
+        checking_jobs = next(
+            record for record in caplog.records
+            if record.getMessage() == "Startup reconciliation: checking jobs"
+        )
+        completed = next(
+            record for record in caplog.records
+            if record.getMessage().startswith("Startup reconciliation complete:")
+        )
+        assert checking_jobs.operation_id == operation_id
+        assert completed.operation_id == operation_id
         assert getattr(matches[0], "status", None) == "ok"
         assert getattr(matches[0], "jobs_checked", None) == 1
         assert getattr(matches[0], "jobs_corrected", None) == 1
         assert getattr(matches[0], "startup_analysis_checked", None) == 0
         assert getattr(matches[0], "startup_analysis_corrected", None) == 0
+
+    def test_usb_mount_reconciliation_audit_includes_operation_id(self, db: Session):
+        drive = _make_drive(db, device_identifier="USB-TRACE-001", state=DriveState.AVAILABLE)
+        drive_provider = FakeDriveMountProvider()
+
+        result = reconcile_mounts(
+            db,
+            FakeMountProvider(),
+            drive_provider,
+            operation_id="startup-op-123",
+        )
+
+        assert result["usb_mounts_corrected"] == 1
+        audit = db.query(AuditLog).filter(AuditLog.action == "DRIVE_MOUNT_RECONCILED").first()
+        assert audit is not None
+        assert audit.drive_id == drive.id
+        assert audit.details["operation_id"] == "startup-op-123"
 
     def test_identity_failure_does_not_block_other_passes(self, db: Session):
         _make_mount(db, MountStatus.MOUNTED, "/mnt/stale")

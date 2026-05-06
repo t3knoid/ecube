@@ -516,12 +516,16 @@ def test_mount_drive_provider_failure_is_audited(manager_client, db):
 
     assert response.status_code == 500
     assert response.json()["message"] == "Drive mount failed"
+    trace_id = response.json()["trace_id"]
+    assert trace_id
+    assert response.headers["X-Trace-Id"] == trace_id
 
     audit = db.query(AuditLog).filter(AuditLog.action == "DRIVE_MOUNT_FAILED").first()
     assert audit is not None
     assert audit.details["drive_id"] == drive.id
     assert audit.details["error_code"] == "MOUNT_FAILED"
     assert audit.details["message"] == "Provider mount operation failed"
+    assert audit.details["trace_id"] == trace_id
     assert "error" not in audit.details
     assert "/dev/sdd" not in str(audit.details)
     assert "/mnt/ecube/4" not in str(audit.details)
