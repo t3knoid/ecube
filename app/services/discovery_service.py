@@ -39,6 +39,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import logging
+import uuid
 from typing import Callable, List, Optional
 
 from sqlalchemy.orm import Session
@@ -58,6 +59,18 @@ from app.utils.drive_identity import (
 from app.utils.sanitize import normalize_project_id
 
 logger = logging.getLogger(__name__)
+
+
+def _operation_extra(operation_id: Optional[str], **extra) -> dict:
+    if operation_id:
+        return {"operation_id": operation_id, **extra}
+    return extra
+
+
+def _details_with_operation_id(details: dict, operation_id: Optional[str]) -> dict:
+    if operation_id:
+        return {**details, "operation_id": operation_id}
+    return details
 
 
 def _serial_number_from_identifier(device_identifier: Optional[str], port_system_path: Optional[str]) -> Optional[str]:
@@ -153,6 +166,7 @@ def run_discovery_sync(
     topology_source: Callable[[], DiscoveredTopology] = _default_topology_source,
     filesystem_detector: FilesystemDetector,
     client_ip: Optional[str] = None,
+    operation_id: Optional[str] = None,
 ) -> dict:
     """Discover USB hardware state and synchronise the database.
 
@@ -179,7 +193,9 @@ def run_discovery_sync(
     dict
         Summary with counts of hubs, ports, drives inserted/updated/removed.
     """
-    logger.info("USB discovery sync started", extra={"actor": actor or "system"})
+    operation_id = operation_id or str(uuid.uuid4())
+
+    logger.info("USB discovery sync started", extra=_operation_extra(operation_id, actor=actor or "system"))
     topology = topology_source()
 
     hub_repo = HubRepository(db)
@@ -330,13 +346,16 @@ def run_discovery_sync(
             drives_inserted.append(discovered_drive.device_identifier)
             metadata = _build_discovered_drive_metadata(discovered_drive, discovered_port, drive_id=drive.id)
             observed_drive_metadata.append({"action": "inserted", **metadata})
-            logger.info("USB discovery inserted drive", extra=metadata)
+            logger.info("USB discovery inserted drive", extra=_operation_extra(operation_id, **metadata))
             try:
                 audit_repo.add(
                     action="DRIVE_DISCOVERED",
                     user=actor,
                     drive_id=drive.id,
-                    details=_build_drive_discovered_audit_details(drive, actor=actor),
+                    details=_details_with_operation_id(
+                        _build_drive_discovered_audit_details(drive, actor=actor),
+                        operation_id,
+                    ),
                     client_ip=client_ip,
                 )
             except Exception:
@@ -433,7 +452,7 @@ def run_discovery_sync(
                 drives_updated.append(discovered_drive.device_identifier)
                 metadata = _build_persisted_drive_metadata(existing)
                 observed_drive_metadata.append({"action": "updated", **metadata})
-                logger.info("USB discovery updated drive", extra=metadata)
+                logger.info("USB discovery updated drive", extra=_operation_extra(operation_id, **metadata))
             else:
                 observed_drive_metadata.append({
                     "action": "observed",
@@ -473,7 +492,7 @@ def run_discovery_sync(
                     drives_removed.append(drive.device_identifier)
                     removed_metadata = _build_persisted_drive_metadata(drive)
                     removed_drive_metadata.append(removed_metadata)
-                    logger.info("USB discovery removed drive", extra=removed_metadata)
+                    logger.info("USB discovery removed drive", extra=_operation_extra(operation_id, **removed_metadata))
                     try:
                         audit_repo.add(
                             action="DRIVE_REMOVED",
@@ -481,6 +500,7 @@ def run_discovery_sync(
                             details={
                                 "drive_id": drive.id,
                                 "device_identifier": drive.device_identifier,
+                                "operation_id": operation_id,
                             },
                             client_ip=client_ip,
                         )
@@ -504,7 +524,7 @@ def run_discovery_sync(
         audit_repo.add(
             action="USB_DISCOVERY_SYNC",
             user=actor,
-            details=summary,
+            details=_details_with_operation_id(summary, operation_id),
             client_ip=client_ip,
         )
     except Exception:
@@ -512,14 +532,14 @@ def run_discovery_sync(
 
     logger.info(
         "USB discovery sync completed",
-        extra={
+        extra=_operation_extra(operation_id, **{
             "actor": actor or "system",
             "hubs_upserted": summary["hubs_upserted"],
             "ports_upserted": summary["ports_upserted"],
             "drives_inserted": summary["drives_inserted"],
             "drives_updated": summary["drives_updated"],
             "drives_removed": summary["drives_removed"],
-        },
+        }),
     )
 
     return summary

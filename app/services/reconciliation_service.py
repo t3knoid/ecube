@@ -23,6 +23,7 @@ stale to other workers.
 
 import logging
 import os
+import uuid
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from typing import Any, Callable, Dict, Optional
@@ -52,6 +53,18 @@ from app.constants import ECUBE_GROUP_ROLE_MAP
 from app.utils.sanitize import normalize_project_id
 
 logger = logging.getLogger(__name__)
+
+
+def _operation_extra(operation_id: Optional[str], **extra) -> dict:
+    if operation_id:
+        return {"operation_id": operation_id, **extra}
+    return extra
+
+
+def _details_with_operation_id(details: dict[str, Any], operation_id: Optional[str]) -> dict[str, Any]:
+    if operation_id:
+        return {**details, "operation_id": operation_id}
+    return details
 
 
 class ManualReconciliationInProgressError(ConflictError):
@@ -349,6 +362,7 @@ def _reconcile_usb_mounts(
     drive_mount_provider: DriveMountProvider,
     *,
     audit_repo: AuditRepository,
+    operation_id: Optional[str] = None,
 ) -> Dict[str, int]:
     checked = 0
     corrected = 0
@@ -413,7 +427,7 @@ def _reconcile_usb_mounts(
                     failures += 1
                     logger.info(
                         "Startup USB owner release failed",
-                        extra={"drive_id": drive.id, "reason": release_reason},
+                        extra=_operation_extra(operation_id, drive_id=drive.id, reason=release_reason),
                     )
                     logger.debug(
                         "Startup USB owner release raw error",
@@ -464,7 +478,7 @@ def _reconcile_usb_mounts(
                 failures += 1
                 logger.info(
                     "Startup USB mount cleanup failed",
-                    extra={"drive_id": drive.id, "reason": "cleanup_failed"},
+                    extra=_operation_extra(operation_id, drive_id=drive.id, reason="cleanup_failed"),
                 )
                 logger.debug(
                     "Startup USB mount cleanup raw error",
@@ -506,7 +520,7 @@ def _reconcile_usb_mounts(
             failures += 1
             logger.info(
                 "Startup USB remount failed",
-                extra={"drive_id": drive.id, "reason": "remount_failed"},
+                extra=_operation_extra(operation_id, drive_id=drive.id, reason="remount_failed"),
             )
             logger.debug(
                 "Startup USB remount raw error",
@@ -533,7 +547,7 @@ def _reconcile_usb_mounts(
             failures += 1
             logger.info(
                 "Startup orphan USB mount cleanup failed",
-                extra={"reason": "cleanup_failed"},
+                extra=_operation_extra(operation_id, reason="cleanup_failed"),
             )
             logger.debug(
                 "Startup orphan USB mount cleanup raw error",
@@ -559,7 +573,10 @@ def _reconcile_usb_mounts(
 
     if audit_entries:
         try:
-            audit_repo.add_many(audit_entries)
+            audit_repo.add_many([
+                {**entry, "details": _details_with_operation_id(entry.get("details", {}), operation_id)}
+                for entry in audit_entries
+            ])
         except Exception:
             db.rollback()
             db.expire_all()
@@ -575,6 +592,7 @@ def reconcile_mounts(
     db: Session,
     mount_provider: MountProvider,
     drive_mount_provider: DriveMountProvider | None = None,
+    operation_id: Optional[str] = None,
 ) -> Dict[str, int]:
     """Converge managed network and USB mounts toward ECUBE's expected state.
 
@@ -623,6 +641,7 @@ def reconcile_mounts(
                 logger.exception(
                     "OS check failed for mount %s during startup reconciliation",
                     mount.id,
+                    extra=_operation_extra(operation_id),
                 )
                 result = None
 
@@ -702,7 +721,7 @@ def reconcile_mounts(
             failures += 1
             logger.debug(
                 "Startup orphan network mount cleanup raw error",
-                extra={"mount_point": normalized_target, "raw_error": unmount_error},
+                 extra=_operation_extra(operation_id, mount_point=normalized_target, raw_error=unmount_error),
             )
             continue
         corrected += 1
@@ -728,7 +747,7 @@ def reconcile_mounts(
         audit_repo = AuditRepository(db)
         try:
             audit_repo.add_many([
-                {"action": "MOUNT_RECONCILED", "user": "system", "details": d}
+                {"action": "MOUNT_RECONCILED", "user": "system", "details": _details_with_operation_id(d, operation_id)}
                 for d in audit_entries
             ])
         except Exception:
@@ -744,7 +763,7 @@ def reconcile_mounts(
         "mount_failures": failures,
     }
     if drive_mount_provider is not None:
-        summary.update(_reconcile_usb_mounts(db, drive_mount_provider, audit_repo=AuditRepository(db)))
+        summary.update(_reconcile_usb_mounts(db, drive_mount_provider, audit_repo=AuditRepository(db), operation_id=operation_id))
     return summary
 
 
@@ -761,16 +780,23 @@ def run_manual_managed_mount_reconciliation(
     reconciliation. It only converges managed network mounts and managed USB
     mount slots.
     """
+    operation_id = str(uuid.uuid4())
+
     if not _acquire_reconciliation_lock(db):
         raise ManualReconciliationInProgressError()
 
     logger.info(
         "Manual managed-mount reconciliation requested",
-        extra={"actor": actor, "scope": "managed_mounts_only"},
+        extra=_operation_extra(operation_id, actor=actor, scope="managed_mounts_only"),
     )
 
     try:
-        summary = reconcile_mounts(db, mount_provider, drive_mount_provider)
+        summary = reconcile_mounts(
+            db,
+            mount_provider,
+            drive_mount_provider,
+            operation_id=operation_id,
+        )
         network_checked = int(summary.get("mounts_checked", 0))
         network_corrected = int(summary.get("mounts_corrected", 0))
         usb_checked = int(summary.get("usb_mounts_checked", 0))
@@ -781,6 +807,7 @@ def run_manual_managed_mount_reconciliation(
         details = {
             "status": status,
             "scope": "managed_mounts_only",
+            "operation_id": operation_id,
             "network_mounts_checked": network_checked,
             "network_mounts_corrected": network_corrected,
             "usb_mounts_checked": usb_checked,
@@ -801,16 +828,17 @@ def run_manual_managed_mount_reconciliation(
     except Exception as exc:
         logger.info(
             "Manual managed-mount reconciliation failed",
-            extra={
-                "actor": actor,
-                "scope": "managed_mounts_only",
-                "status": "failed",
-                "reason": "manual_reconciliation_failed",
-            },
+            extra=_operation_extra(
+                operation_id,
+                actor=actor,
+                scope="managed_mounts_only",
+                status="failed",
+                reason="manual_reconciliation_failed",
+            ),
         )
         logger.debug(
             "Manual managed-mount reconciliation raw failure",
-            extra={"actor": actor, "raw_error": str(exc)},
+            extra=_operation_extra(operation_id, actor=actor, raw_error=str(exc)),
         )
         try:
             AuditRepository(db).add(
@@ -820,6 +848,7 @@ def run_manual_managed_mount_reconciliation(
                     "status": "failed",
                     "scope": "managed_mounts_only",
                     "reason": "manual_reconciliation_failed",
+                    "operation_id": operation_id,
                 },
             )
         except Exception:
@@ -1039,6 +1068,7 @@ def reconcile_drives(
     *,
     topology_source: Callable[[], DiscoveredTopology],
     filesystem_detector: FilesystemDetector,
+    operation_id: Optional[str] = None,
 ) -> Dict[str, int]:
     """Run USB discovery and reconcile DB drive state with hardware.
 
@@ -1058,6 +1088,7 @@ def reconcile_drives(
         actor="system",
         topology_source=topology_source,
         filesystem_detector=filesystem_detector,
+        operation_id=operation_id,
     )
 
     return summary
@@ -1235,8 +1266,10 @@ def run_startup_reconciliation(
     ``jobs``, ``drives``).  Each value is either a counts dict on success or an
     ``{"error": "..."}`` dict on failure.
     """
+    operation_id = str(uuid.uuid4())
+
     if not _acquire_reconciliation_lock(db):
-        logger.info("Another worker is running startup reconciliation — skipping")
+        logger.info("Another worker is running startup reconciliation — skipping", extra=_operation_extra(operation_id))
         return {"skipped": True}
 
     try:
@@ -1245,7 +1278,7 @@ def run_startup_reconciliation(
         if os_user_provider is not None:
             results["identity"] = {}
 
-            logger.info("Startup reconciliation: ensuring default ECUBE OS groups")
+            logger.info("Startup reconciliation: ensuring default ECUBE OS groups", extra=_operation_extra(operation_id))
             try:
                 results["identity"]["groups"] = reconcile_identity_groups(os_user_provider)
             except Exception as exc:
@@ -1259,7 +1292,7 @@ def run_startup_reconciliation(
             _refresh_reconciliation_lock(db)
 
             if settings.is_demo_mode_enabled():
-                logger.info("Startup reconciliation: ensuring demo accounts")
+                logger.info("Startup reconciliation: ensuring demo accounts", extra=_operation_extra(operation_id))
                 try:
                     demo_result = seed_runtime_demo_environment(
                         db,
@@ -1281,7 +1314,7 @@ def run_startup_reconciliation(
 
                 _refresh_reconciliation_lock(db)
 
-            logger.info("Startup reconciliation: reconciling DB users to OS users")
+            logger.info("Startup reconciliation: reconciling DB users to OS users", extra=_operation_extra(operation_id))
             try:
                 results["identity"]["users"] = reconcile_identity_users(db, os_user_provider)
             except Exception as exc:
@@ -1294,22 +1327,22 @@ def run_startup_reconciliation(
 
             _refresh_reconciliation_lock(db)
 
-        logger.info("Startup reconciliation: checking mounts")
+        logger.info("Startup reconciliation: checking mounts", extra=_operation_extra(operation_id))
         try:
-            results["mounts"] = reconcile_mounts(db, mount_provider, drive_mount_provider)
+            results["mounts"] = reconcile_mounts(db, mount_provider, drive_mount_provider, operation_id=operation_id)
         except Exception as exc:
             db.rollback()
             db.expire_all()
             hint = _schema_mismatch_hint(exc)
             if hint:
-                logger.error("Mount reconciliation failed: %s", hint)
+                logger.error("Mount reconciliation failed: %s", hint, extra=_operation_extra(operation_id))
             else:
-                logger.exception("Mount reconciliation failed")
+                logger.exception("Mount reconciliation failed", extra=_operation_extra(operation_id))
             results["mounts"] = {"error": hint or "mount reconciliation failed"}
 
         _refresh_reconciliation_lock(db)
 
-        logger.info("Startup reconciliation: checking jobs")
+        logger.info("Startup reconciliation: checking jobs", extra=_operation_extra(operation_id))
         try:
             results["jobs"] = reconcile_jobs(db)
         except Exception as exc:
@@ -1317,14 +1350,15 @@ def run_startup_reconciliation(
             db.expire_all()
             hint = _schema_mismatch_hint(exc)
             if hint:
-                logger.error("Job reconciliation failed: %s", hint)
+                logger.error("Job reconciliation failed: %s", hint, extra=_operation_extra(operation_id))
             else:
-                logger.exception("Job reconciliation failed")
+                logger.exception("Job reconciliation failed", extra=_operation_extra(operation_id))
             results["jobs"] = {"error": hint or "job reconciliation failed"}
         if "error" in results["jobs"]:
             logger.info(
                 "Startup reconciliation: jobs result",
                 extra={
+                    "operation_id": operation_id,
                     "status": "failed",
                     "reason": "job_reconciliation_failed",
                 },
@@ -1333,6 +1367,7 @@ def run_startup_reconciliation(
             logger.info(
                 "Startup reconciliation: jobs result",
                 extra={
+                    "operation_id": operation_id,
                     "status": "ok",
                     "jobs_checked": results["jobs"].get("jobs_checked", 0),
                     "jobs_corrected": results["jobs"].get("jobs_corrected", 0),
@@ -1343,24 +1378,25 @@ def run_startup_reconciliation(
 
         _refresh_reconciliation_lock(db)
 
-        logger.info("Startup reconciliation: checking USB drives")
+        logger.info("Startup reconciliation: checking USB drives", extra=_operation_extra(operation_id))
         try:
             results["drives"] = reconcile_drives(
                 db,
                 topology_source=topology_source,
                 filesystem_detector=filesystem_detector,
+                operation_id=operation_id,
             )
         except Exception as exc:
             db.rollback()
             db.expire_all()
             hint = _schema_mismatch_hint(exc)
             if hint:
-                logger.error("Drive reconciliation failed: %s", hint)
+                logger.error("Drive reconciliation failed: %s", hint, extra=_operation_extra(operation_id))
             else:
-                logger.exception("Drive reconciliation failed")
+                logger.exception("Drive reconciliation failed", extra=_operation_extra(operation_id))
             results["drives"] = {"error": hint or "drive reconciliation failed"}
 
-        logger.info("Startup reconciliation complete: %s", results)
+        logger.info("Startup reconciliation complete: %s", results, extra=_operation_extra(operation_id))
         return results
     finally:
         _release_reconciliation_lock(db)

@@ -310,6 +310,12 @@ def test_initial_sync_emits_app_log_lines(db, caplog):
     completed_record = next(record for record in caplog.records if record.getMessage() == "USB discovery sync completed")
     assert start_record.actor == "admin-user"
     assert completed_record.actor == "admin-user"
+    assert getattr(start_record, "operation_id", None)
+    assert start_record.operation_id == completed_record.operation_id
+
+    audit = db.query(AuditLog).filter(AuditLog.action == "USB_DISCOVERY_SYNC").order_by(AuditLog.id.desc()).first()
+    assert audit is not None
+    assert audit.details["operation_id"] == start_record.operation_id
 
 
 # ---------------------------------------------------------------------------

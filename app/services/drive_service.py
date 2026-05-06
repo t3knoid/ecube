@@ -411,6 +411,7 @@ def mount_drive(
     actor: Optional[str] = None,
     mount_provider: Optional[DriveMountProvider] = None,
     client_ip: Optional[str] = None,
+    trace_id: Optional[str] = None,
 ) -> UsbDrive:
     drive_repo = DriveRepository(db)
     audit_repo = AuditRepository(db)
@@ -496,6 +497,7 @@ def mount_drive(
             extra={
                 **_safe_drive_log_context(drive, reason=sanitize_error_message(error, "Mount provider reported failure")),
                 "filesystem_type": drive.filesystem_type,
+                "trace_id": trace_id,
             },
         )
         try:
@@ -511,6 +513,7 @@ def mount_drive(
                     "error_code": "MOUNT_FAILED",
                     "message": "Provider mount operation failed",
                     "details": sanitize_error_message(error, "Mount provider reported failure"),
+                    "trace_id": trace_id,
                 },
                 client_ip=client_ip,
             )

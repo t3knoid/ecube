@@ -102,6 +102,7 @@ def mount_drive(
         actor=current_user.username,
         mount_provider=get_drive_mount(),
         client_ip=get_client_ip(request),
+        trace_id=getattr(request.state, "trace_id", None),
     )
 
 

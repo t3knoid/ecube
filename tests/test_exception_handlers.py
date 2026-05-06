@@ -128,6 +128,30 @@ def test_401_custom_exception_emits_sanitized_info_log(exception_routes, caplog)
     assert info_record.failure_summary == "Token has expired"
 
 
+def test_401_custom_exception_reuses_inbound_trace_id(exception_routes, caplog):
+    caplog.set_level(logging.INFO, logger="app.main")
+    supplied_trace_id = "trace-from-client-123"
+
+    with TestClient(app, raise_server_exceptions=False) as safe_client:
+        response = safe_client.get(
+            "/test-exceptions/401-custom",
+            headers={"X-Trace-Id": supplied_trace_id},
+        )
+
+    data = response.json()
+    info_record = next(
+        record
+        for record in caplog.records
+        if record.levelname == "INFO"
+        and getattr(record, "error_code", None) == "TOKEN_EXPIRED"
+    )
+
+    assert response.status_code == 401
+    assert data["trace_id"] == supplied_trace_id
+    assert response.headers["X-Trace-Id"] == supplied_trace_id
+    assert info_record.trace_id == supplied_trace_id
+
+
 def test_401_http_exception_schema(client, exception_routes):
     response = client.get("/test-exceptions/401-http")
     assert response.status_code == 401

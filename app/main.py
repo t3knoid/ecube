@@ -636,10 +636,14 @@ async def fallback_status_logging(request: Request, call_next):
     if not db_module.is_database_configured() and _is_browser_navigation_request(request) and _should_redirect_to_setup(request):
         return RedirectResponse(url="/setup", status_code=307)
 
+    request.state.trace_id = request.headers.get("X-Trace-Id") or str(uuid.uuid4())
     response = await call_next(request)
     if request.method == "GET" and request.url.path.endswith("/audit/chain-of-custody"):
         response.headers["Cache-Control"] = "no-store"
     if "X-Trace-Id" not in response.headers:
+        response.headers["X-Trace-Id"] = request.state.trace_id
+
+    if response.status_code in (405, 413):
         if response.status_code == 405:
             logger.info("405 HTTP_405 path=%s method=%s", request.url.path, request.method)
         elif response.status_code == 413:
@@ -1022,7 +1026,7 @@ def _safe_http_exception_summary(status_code: int, code: str, detail: str) -> st
 
 @app.exception_handler(AuthenticationError)
 async def authentication_error_handler(request: Request, exc: AuthenticationError) -> JSONResponse:
-    trace_id = str(uuid.uuid4())
+    trace_id = getattr(request.state, "trace_id", None) or str(uuid.uuid4())
     _log_exception_info(
         request,
         status_code=401,
@@ -1038,7 +1042,7 @@ async def authentication_error_handler(request: Request, exc: AuthenticationErro
 
 @app.exception_handler(AuthorizationError)
 async def authorization_error_handler(request: Request, exc: AuthorizationError) -> JSONResponse:
-    trace_id = str(uuid.uuid4())
+    trace_id = getattr(request.state, "trace_id", None) or str(uuid.uuid4())
     _log_exception_info(
         request,
         status_code=403,
@@ -1053,7 +1057,7 @@ async def authorization_error_handler(request: Request, exc: AuthorizationError)
 
 @app.exception_handler(ConflictError)
 async def conflict_error_handler(request: Request, exc: ConflictError) -> JSONResponse:
-    trace_id = str(uuid.uuid4())
+    trace_id = getattr(request.state, "trace_id", None) or str(uuid.uuid4())
     _log_exception_info(
         request,
         status_code=409,
@@ -1068,7 +1072,7 @@ async def conflict_error_handler(request: Request, exc: ConflictError) -> JSONRe
 
 @app.exception_handler(ECUBEException)
 async def ecube_exception_handler(request: Request, exc: ECUBEException) -> JSONResponse:
-    trace_id = str(uuid.uuid4())
+    trace_id = getattr(request.state, "trace_id", None) or str(uuid.uuid4())
     _log_exception_info(
         request,
         status_code=exc.status_code,
@@ -1083,7 +1087,7 @@ async def ecube_exception_handler(request: Request, exc: ECUBEException) -> JSON
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
-    trace_id = str(uuid.uuid4())
+    trace_id = getattr(request.state, "trace_id", None) or str(uuid.uuid4())
     messages = []
     for error in exc.errors():
         loc = " -> ".join(str(part) for part in error["loc"])
@@ -1113,7 +1117,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
     }
     code = code_map.get(exc.status_code, f"HTTP_{exc.status_code}")
     detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
-    trace_id = str(uuid.uuid4())
+    trace_id = getattr(request.state, "trace_id", None) or str(uuid.uuid4())
     safe_summary = _safe_http_exception_summary(exc.status_code, code, detail)
     _log_exception_info(
         request,
@@ -1141,7 +1145,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    trace_id = str(uuid.uuid4())
+    trace_id = getattr(request.state, "trace_id", None) or str(uuid.uuid4())
     if is_encoding_error(exc):
         _log_exception_info(
             request,

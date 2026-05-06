@@ -186,7 +186,7 @@ All error responses use a uniform JSON payload:
 |------------|-----------------|-------------|
 | `code`     | string          | Machine-readable error code (e.g. `CONFLICT`, `NOT_FOUND`, `UNAUTHORIZED`, `ENCODING_ERROR`) |
 | `message`  | string          | Human-readable description of the error |
-| `trace_id` | string          | Correlation ID for log tracing (always present; a UUID generated per error) |
+| `trace_id` | string          | Correlation ID for request log tracing (always present on error responses; reused across the request and echoed via the `X-Trace-Id` response header) |
 
 The Pydantic schema for this payload is `ErrorResponse` in `app/schemas/errors.py`.
 
