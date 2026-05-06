@@ -226,6 +226,24 @@ def _recoverable_prepare_eject_detail(
     return None
 
 
+def _drive_mount_failure_response(error: Optional[str]) -> tuple[int, str]:
+    safe_message = sanitize_error_message(error, "Mount provider reported failure")
+    normalized_error = (error or "").lower()
+
+    if safe_message == "Filesystem type is not supported by the host":
+        return 500, "Host filesystem support for this drive is unavailable; install the required filesystem runtime and retry"
+
+    if safe_message == "Target device or path was not found":
+        return 409, "Drive device path is stale or unavailable; refresh drive status and retry mount"
+
+    if safe_message == "Permission or authentication failure":
+        if "create mount point" in normalized_error or "mount point" in normalized_error:
+            return 500, "Managed mount root is not writable by the ECUBE service account; fix host permissions and retry"
+        return 500, "Mount operation is not permitted by the current host configuration"
+
+    return 500, "Drive mount failed"
+
+
 def get_all_drives(
     db: Session,
     project_id: Optional[str] = None,
@@ -624,9 +642,10 @@ def mount_drive(
             )
         except Exception:
             logger.exception("Failed to write audit log for DRIVE_MOUNT_FAILED")
+        failure_status, failure_detail = _drive_mount_failure_response(error)
         raise HTTPException(
-            status_code=500,
-            detail="Drive mount failed",
+            status_code=failure_status,
+            detail=failure_detail,
         )
 
     # Re-lock only after the OS mount completes so the DB lock window stays short.

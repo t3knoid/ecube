@@ -150,6 +150,32 @@ def _with_host_mount_namespace(cmd: list[str]) -> list[str]:
     return _with_sudo(cmd)
 
 
+def _ensure_managed_mount_point(mount_point: str) -> tuple[bool, str | None]:
+    try:
+        os.makedirs(mount_point, exist_ok=True)
+        return True, None
+    except PermissionError as exc:
+        if settings.use_sudo and os.geteuid() != 0:
+            try:
+                subprocess.run(
+                    _with_sudo(["mkdir", "-p", mount_point]),
+                    check=True,
+                    capture_output=True,
+                    timeout=settings.subprocess_timeout_seconds,
+                )
+                return True, None
+            except subprocess.TimeoutExpired:
+                return False, f"failed to create mount point {mount_point}: timed out after {settings.subprocess_timeout_seconds}s"
+            except subprocess.CalledProcessError as sudo_exc:
+                stderr = (sudo_exc.stderr or b"").decode(errors="replace").strip()
+                if stderr:
+                    return False, f"failed to create mount point {mount_point}: {stderr}"
+                return False, f"failed to create mount point {mount_point}: sudo mkdir failed"
+        return False, f"failed to create mount point {mount_point}: {exc}"
+    except OSError as exc:
+        return False, f"failed to create mount point {mount_point}: {exc}"
+
+
 def _find_mountable_device(device_path: str) -> str:
     """Return the first partition path if partitions exist, else the raw device.
 
@@ -292,22 +318,21 @@ class LinuxDriveMount:
             os.path.basename(mount_point.rstrip("/")),
         )
 
-        try:
-            os.makedirs(mount_point, exist_ok=True)
-        except OSError as exc:
+        mount_point_ok, mount_point_error = _ensure_managed_mount_point(mount_point)
+        if not mount_point_ok:
             _log_drive_mount_safe_warning(
                 "Drive mount root preparation failed",
                 phase="mount_root_prepare",
                 mount_point=mount_point,
-                raw_error=exc,
+                raw_error=mount_point_error,
             )
             _log_drive_mount_debug_failure(
                 "Drive mount root preparation details",
                 device_path=mountable,
                 mount_point=mount_point,
-                raw_error=exc,
+                raw_error=mount_point_error,
             )
-            return False, f"failed to create mount point {mount_point}: {exc}"
+            return False, mount_point_error
 
         mount_command = [
             settings.mount_binary_path,

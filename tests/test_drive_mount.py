@@ -306,6 +306,32 @@ def test_mount_drive_logs_managed_mount_root_failure_with_safe_warning(caplog):
     assert any("Drive mount root preparation details" in message and "/mnt/ecube/7" in message for message in debug_messages)
 
 
+def test_mount_drive_uses_sudo_to_create_managed_mount_point_when_base_is_root_owned():
+    dm = LinuxDriveMount()
+
+    with patch("app.infrastructure.drive_mount.settings") as mock_settings:
+        mock_settings.usb_mount_base_path = _BASE
+        mock_settings.sysfs_block_path = "/sys/block"
+        mock_settings.mount_binary_path = "/bin/mount"
+        mock_settings.use_sudo = True
+        mock_settings.subprocess_timeout_seconds = 10
+        mock_settings.drive_mount_timeout_seconds = 45
+        mock_settings.procfs_mounts_path = "/proc/mounts"
+        with patch("os.path.realpath", side_effect=lambda p: p):
+            with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
+                with patch("app.infrastructure.drive_mount.LinuxFilesystemDetector.detect", return_value="ext4"):
+                    with patch("os.geteuid", return_value=1000):
+                        with patch("os.makedirs", side_effect=PermissionError("[Errno 13] Permission denied: '/mnt/ecube/7'")):
+                            with patch("os.access", return_value=True):
+                                with patch("subprocess.run") as mock_run:
+                                    ok, err = dm.mount_drive(_VALID_DEVICE, f"{_BASE}/7")
+
+    assert ok is True
+    assert err is None
+    assert mock_run.call_args_list[0].args[0] == ["sudo", "-n", "mkdir", "-p", f"{_BASE}/7"]
+    assert mock_run.call_args_list[1].args[0][:3] == ["sudo", "-n", "/bin/mount"]
+
+
 def test_mount_drive_logs_access_repair_failure_with_safe_warning(caplog):
     """Post-mount access repair failures should be classifiable without leaking raw details at warning level."""
     dm = LinuxDriveMount()

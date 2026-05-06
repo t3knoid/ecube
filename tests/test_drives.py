@@ -670,6 +670,48 @@ def test_mount_drive_provider_failure_is_audited(manager_client, db):
     assert "mount_path" not in audit.details
 
 
+def test_mount_drive_reports_host_filesystem_support_failure_safely(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-004AA",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="exfat",
+        filesystem_path="/dev/sdb",
+    )
+    db.add(drive)
+    db.commit()
+
+    provider = MagicMock()
+    provider.mount_drive.return_value = (False, "mount failed for /dev/sdb: unknown filesystem type 'exfat'")
+
+    with patch("app.routers.drives.get_drive_mount", return_value=provider):
+        response = manager_client.post(f"/drives/{drive.id}/mount")
+
+    assert response.status_code == 500
+    assert response.json()["message"] == "Host filesystem support for this drive is unavailable; install the required filesystem runtime and retry"
+    assert "/dev/sdb" not in response.json()["message"]
+
+
+def test_mount_drive_reports_managed_mount_root_permission_failure_safely(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-004AB",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+        filesystem_path="/dev/sdb",
+    )
+    db.add(drive)
+    db.commit()
+
+    provider = MagicMock()
+    provider.mount_drive.return_value = (False, "failed to create mount point /mnt/ecube/1: [Errno 13] Permission denied: '/mnt/ecube/1'")
+
+    with patch("app.routers.drives.get_drive_mount", return_value=provider):
+        response = manager_client.post(f"/drives/{drive.id}/mount")
+
+    assert response.status_code == 500
+    assert response.json()["message"] == "Managed mount root is not writable by the ECUBE service account; fix host permissions and retry"
+    assert "/mnt/ecube/1" not in response.json()["message"]
+
+
 def test_mount_drive_failure_redacts_provider_paths_from_client(manager_client, db):
     drive = UsbDrive(
         device_identifier="USB-MOUNT-004B",
