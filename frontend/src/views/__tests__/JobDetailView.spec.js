@@ -1762,7 +1762,8 @@ describe('JobDetailView start action', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('Source path')
-    expect(wrapper.text()).toContain('/nfs/project-001/evidence')
+    expect(wrapper.text()).toContain('/evidence')
+    expect(wrapper.text()).not.toContain('/nfs/project-001/evidence')
     expect(wrapper.text()).toContain('Notes')
     expect(wrapper.text()).toContain('Operator handoff note')
     expect(wrapper.text()).toContain('Overflow drives')
@@ -1770,6 +1771,27 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).toContain('Active Overflow Device')
     expect(wrapper.text()).toContain('Reserved')
     expect(wrapper.text()).toContain('Active')
+  })
+
+  it('shows the source path as slash when the job source is the mount root', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'RUNNING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 0,
+      total_bytes: 0,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Source path')
+    expect(wrapper.text()).toContain('/')
+    expect(wrapper.text()).not.toContain('/nfs/project-001')
   })
 
   it('does not show live copy summary while the job is verifying', async () => {

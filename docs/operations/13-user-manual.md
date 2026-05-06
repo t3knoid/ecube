@@ -640,7 +640,7 @@ Archived jobs remain readable from Job Detail, but they are intentionally treate
 
 The job detail page provides deeper inspection and follow-up controls.
 
-Near the top of the page, Job Detail also shows the selected destination, the trusted source path, the last known available space for the related drive when ECUBE has one, the current job-specific webhook callback URL, any operator notes captured when the job was created, and the current reserved or active overflow drive assignments for that job.
+Near the top of the page, Job Detail also shows the selected destination, the trusted source path, the last known available space for the related drive when ECUBE has one, the current job-specific webhook callback URL, any operator notes captured when the job was created, and the current reserved or active overflow drive assignments for that job. Source paths are shown relative to the selected mounted share so they match the browse workflow; `/` means the root of that share, and nested folders appear under that root such as `/evidence`.
 
 Typical functions include:
 
