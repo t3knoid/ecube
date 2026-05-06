@@ -1,7 +1,17 @@
-from pydantic import BaseModel, Field
+from datetime import datetime, timezone
 from typing import Literal, Optional
+
+from pydantic import BaseModel, Field, field_serializer
 from app.models.hardware import DriveState
 from app.utils.sanitize import ProjectIdStr, SafeStr
+
+
+def _serialize_utc_datetime(dt: Optional[datetime]) -> Optional[str]:
+    if dt is None:
+        return None
+    if dt.tzinfo is None or dt.utcoffset() is None:
+        return f"{dt.isoformat()}Z"
+    return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 class UsbHubSchema(BaseModel):
@@ -27,6 +37,23 @@ class UsbPortSchema(BaseModel):
     speed: Optional[str] = Field(default=None, description="Port speed in Mbps (e.g. '480', '5000')")
 
     model_config = {"from_attributes": True}
+
+
+class DriveRelatedJobSchema(BaseModel):
+    job_id: Optional[int] = Field(default=None, description="Related job ID for the current drive lifecycle")
+    evidence_number: Optional[str] = Field(default=None, description="Evidence number for the related job")
+    custody_status: Literal["HANDOFF_RECORDED", "PENDING_HANDOFF", "STATUS_UNAVAILABLE", "NO_RELATED_JOB"] = Field(
+        ...,
+        description="Trusted custody status for the related job drive lifecycle",
+    )
+    delivery_time: Optional[datetime] = Field(
+        default=None,
+        description="Recorded handoff delivery time in RFC 3339 UTC when custody is complete",
+    )
+
+    @field_serializer("delivery_time")
+    def _serialize_delivery_time(self, dt: Optional[datetime]) -> Optional[str]:
+        return _serialize_utc_datetime(dt)
 
 
 class UsbDriveSchema(BaseModel):
@@ -64,6 +91,10 @@ class UsbDriveSchema(BaseModel):
     current_state: DriveState = Field(..., description="Current drive state (DISCONNECTED, DISABLED, AVAILABLE, IN_USE)")
     current_project_id: Optional[str] = Field(default=None, description="Bound project ID if IN_USE, enforces isolation")
     mount_path: Optional[str] = Field(default=None, description="Active mount path for this drive (e.g. /mnt/ecube/7); null when not mounted")
+    related_job: Optional[DriveRelatedJobSchema] = Field(
+        default=None,
+        description="Trusted related job context for this drive lifecycle when requested",
+    )
 
     model_config = {"from_attributes": True}
 

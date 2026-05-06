@@ -383,13 +383,15 @@ The `Drive ID` value on the Drives page also acts as the direct navigation entry
 Selecting a drive opens a detail view showing:
 
 - The drive ID, the port-based `Device` value, filesystem type, total capacity, last known available space, and current status
-- Current project assignment together with the related evidence number and job ID when a job is associated with the drive
+- Current project assignment together with the related evidence number, job ID, and `Custody Status` when a job is associated with the drive
 - Current status badge
 - Available actions such as format, initialize, and prepare eject
 
 If ECUBE does not yet have a current mounted-drive free-space reading for that drive, the available-space field shows `-` instead of blocking the page.
 
-If a related job exists, the `Job ID` value on Drive Detail uses the same direct Job Detail navigation pattern as the clickable job context on the Drives page. When you open browse from Drive Detail, the panel title also uses the visible device identifier and the breadcrumb stays root-relative instead of showing the host mount path.
+If a related job exists, the `Job ID` value on Drive Detail uses the same direct Job Detail navigation pattern as the clickable job context on the Drives page. `Custody Status` is sourced from trusted backend chain-of-custody data for that drive's related job lifecycle and can show `Handoff recorded`, `Pending handoff`, `Status unavailable`, or `No related job`. When a recorded handoff timestamp is available, Drive Detail shows it as secondary read-only detail. This field is informational only; use `Chain of Custody` from Job Detail to review the full report or record handoff.
+
+When you open browse from Drive Detail, the panel title also uses the visible device identifier and the breadcrumb stays root-relative instead of showing the host mount path.
 
 Reference screen:
 

@@ -456,14 +456,15 @@ Sort results
 <ul><li>
 The drive ID, the port-based <code>Device</code> value, filesystem type, total capacity, last known available space, and current status
 </li><li>
-Current project assignment together with the related evidence number and job ID when a job is associated with the drive
+Current project assignment together with the related evidence number, job ID, and <code>Custody Status</code> when a job is associated with the drive
 </li><li>
 Current status badge
 </li><li>
 Available actions such as format, initialize, and prepare eject
 </li></ul>
 <p>If ECUBE does not yet have a current mounted-drive free-space reading for that drive, the available-space field shows <code>-</code> instead of blocking the page.</p>
-<p>If a related job exists, the <code>Job ID</code> value on Drive Detail uses the same direct Job Detail navigation pattern as the clickable job context on the Drives page. When you open browse from Drive Detail, the panel title also uses the visible device identifier and the breadcrumb stays root-relative instead of showing the host mount path.</p>
+<p>If a related job exists, the <code>Job ID</code> value on Drive Detail uses the same direct Job Detail navigation pattern as the clickable job context on the Drives page. <code>Custody Status</code> is sourced from trusted backend chain-of-custody data for that drive's related job lifecycle and can show <code>Handoff recorded</code>, <code>Pending handoff</code>, <code>Status unavailable</code>, or <code>No related job</code>. When a recorded handoff timestamp is available, Drive Detail shows it as secondary read-only detail. This field is informational only; use <code>Chain of Custody</code> from Job Detail to review the full report or record handoff.</p>
+<p>When you open browse from Drive Detail, the panel title also uses the visible device identifier and the breadcrumb stays root-relative instead of showing the host mount path.</p>
 <p>Reference screen:</p>
 <h2 id="4-4-formatting-a-drive">4.4 Formatting a Drive</h2>
 <p>If your role allows it, you can format a drive from the detail page.</p>

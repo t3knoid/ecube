@@ -372,3 +372,45 @@ test('drives mobile mounted rows browse from the device label without expanding 
   expect(rowBoxAfter).not.toBeNull()
   expect(Math.abs(rowBoxAfter.height - rowBoxBefore.height)).toBeLessThanOrEqual(1)
 })
+
+test('drive detail shows trusted custody status and related job link on mobile', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await setupAuthenticatedPage(page, ['manager'])
+
+  const drive = {
+    id: 7,
+    device_identifier: '/dev/sdg',
+    display_device_label: 'Kingston DataTraveler - Port 8',
+    manufacturer: 'Kingston',
+    product_name: 'DataTraveler',
+    port_number: 8,
+    port_system_path: '2-8',
+    serial_number: 'SER-007',
+    filesystem_path: '/mnt/usb7',
+    filesystem_type: 'ext4',
+    capacity_bytes: 1073741824,
+    available_bytes: 536870912,
+    current_state: 'IN_USE',
+    current_project_id: 'PRJ-777',
+    mount_path: '/mnt/ecube/7',
+    port_id: 8,
+    related_job: {
+      job_id: 44,
+      evidence_number: 'EV-007',
+      custody_status: 'HANDOFF_RECORDED',
+      delivery_time: '2026-05-02T18:30:00Z',
+    },
+  }
+
+  await routeJson(page, '**/api/drives**', () => [drive])
+  await routeJson(page, '**/api/mounts', [])
+
+  await gotoDriveDetail(page, 7)
+
+  await expect(page.getByText('Custody Status')).toBeVisible()
+  await expect(page.getByText('Handoff recorded')).toBeVisible()
+  await expect(page.getByText('Recorded at')).toBeVisible()
+  await expect(page.getByRole('button', { name: '44' })).toBeVisible()
+
+  await expectNoCriticalA11yViolations(page)
+})

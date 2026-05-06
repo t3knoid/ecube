@@ -481,6 +481,31 @@ def get_job_chain_of_custody_report(
     )
 
 
+def get_job_drive_custody_summary(
+    db: Session,
+    *,
+    job_id: int,
+    drive_id: int,
+) -> Tuple[Optional[bool], Optional[datetime]]:
+    job = JobRepository(db).get(job_id)
+    if job is None:
+        return None, None
+
+    if job.status == JobStatus.ARCHIVED:
+        snapshot = JobChainOfCustodySnapshotRepository(db).get_by_job_id(job.id)
+        if snapshot is None:
+            return None, None
+        report = ChainOfCustodyReportSchema.model_validate(snapshot.payload)
+    else:
+        report = _build_job_chain_of_custody_report(db, job)
+
+    drive_report = next((entry for entry in report.reports if entry.drive_id == drive_id), None)
+    if drive_report is None:
+        return None, None
+
+    return drive_report.custody_complete, drive_report.delivery_time
+
+
 def refresh_job_chain_of_custody_report(
     db: Session,
     *,

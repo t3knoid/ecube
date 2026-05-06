@@ -37,6 +37,10 @@ def list_drives(
         default=False,
         description="When no state filter is provided, include DISCONNECTED drives in the default response. Has no effect when state is explicitly provided.",
     ),
+    include_related_job_custody: bool = Query(
+        default=False,
+        description="When true, include trusted related-job custody status for each drive lifecycle.",
+    ),
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(_ALL_ROLES),
 ):
@@ -59,7 +63,11 @@ def list_drives(
             raise EncodingError("project_id is empty after removing invalid characters")
         project_id = sanitized
     return drive_service.get_all_drives(
-        db, project_id=project_id, states=state, include_disconnected=include_disconnected,
+        db,
+        project_id=project_id,
+        states=state,
+        include_disconnected=include_disconnected,
+        include_related_job_custody=include_related_job_custody,
     )
 
 @router.post("/{drive_id}/initialize", response_model=UsbDriveSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500})

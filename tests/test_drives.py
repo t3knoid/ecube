@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -5,8 +6,9 @@ from sqlalchemy import text
 
 from app.exceptions import ConflictError
 from app.infrastructure.drive_eject import EjectResult
+from app.models.audit import AuditLog
 from app.models.hardware import UsbDrive, DriveState, UsbHub, UsbPort
-from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus
+from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobChainOfCustodySnapshot, JobStatus
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.services import drive_service
 from app.utils.drive_identity import build_persistent_device_identifier
@@ -206,6 +208,141 @@ def test_list_drives_include_disconnected(client, db):
     assert "USB-1" in ids
     assert "USB-2" in ids
     assert "USB-3" in ids
+
+
+def test_list_drives_include_related_job_custody_complete(client, db):
+    drive = UsbDrive(device_identifier="USB-CUSTODY-1", current_state=DriveState.IN_USE, current_project_id="PROJ-001")
+    job = ExportJob(project_id="PROJ-001", evidence_number="EV-001", status=JobStatus.COMPLETED)
+    db.add_all([drive, job])
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id, activated_at=datetime.now(timezone.utc)))
+    db.add(
+        AuditLog(
+            action="COC_HANDOFF_CONFIRMED",
+            project_id="PROJ-001",
+            drive_id=drive.id,
+            job_id=job.id,
+            details={"delivery_time": "2026-05-02T18:30:00Z"},
+        )
+    )
+    db.commit()
+
+    response = client.get("/drives", params={"include_related_job_custody": "true"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    match = next(item for item in payload if item["id"] == drive.id)
+    assert match["related_job"] == {
+        "job_id": job.id,
+        "evidence_number": "EV-001",
+        "custody_status": "HANDOFF_RECORDED",
+        "delivery_time": "2026-05-02T18:30:00Z",
+    }
+
+
+def test_list_drives_include_related_job_custody_pending(client, db):
+    drive = UsbDrive(device_identifier="USB-CUSTODY-2", current_state=DriveState.IN_USE, current_project_id="PROJ-002")
+    job = ExportJob(project_id="PROJ-002", evidence_number="EV-002", status=JobStatus.COMPLETED)
+    db.add_all([drive, job])
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id, activated_at=datetime.now(timezone.utc)))
+    db.commit()
+
+    response = client.get("/drives", params={"include_related_job_custody": "true"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    match = next(item for item in payload if item["id"] == drive.id)
+    assert match["related_job"] == {
+        "job_id": job.id,
+        "evidence_number": "EV-002",
+        "custody_status": "PENDING_HANDOFF",
+        "delivery_time": None,
+    }
+
+
+def test_list_drives_include_related_job_custody_unavailable_without_snapshot(client, db):
+    drive = UsbDrive(device_identifier="USB-CUSTODY-3", current_state=DriveState.IN_USE, current_project_id="PROJ-003")
+    job = ExportJob(project_id="PROJ-003", evidence_number="EV-003", status=JobStatus.ARCHIVED)
+    db.add_all([drive, job])
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id, activated_at=datetime.now(timezone.utc)))
+    db.commit()
+
+    response = client.get("/drives", params={"include_related_job_custody": "true"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    match = next(item for item in payload if item["id"] == drive.id)
+    assert match["related_job"] == {
+        "job_id": job.id,
+        "evidence_number": "EV-003",
+        "custody_status": "STATUS_UNAVAILABLE",
+        "delivery_time": None,
+    }
+
+
+def test_list_drives_include_related_job_custody_from_archived_snapshot(client, db):
+    drive = UsbDrive(device_identifier="USB-CUSTODY-4", current_state=DriveState.IN_USE, current_project_id="PROJ-004")
+    job = ExportJob(project_id="PROJ-004", evidence_number="EV-004", status=JobStatus.ARCHIVED)
+    db.add_all([drive, job])
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id, activated_at=datetime.now(timezone.utc)))
+    db.add(
+        JobChainOfCustodySnapshot(
+            job_id=job.id,
+            payload={
+                "selector_mode": "JOB",
+                "project_id": "PROJ-004",
+                "reports": [{
+                    "drive_id": drive.id,
+                    "drive_sn": drive.device_identifier,
+                    "drive_manufacturer": None,
+                    "drive_model": None,
+                    "project_id": "PROJ-004",
+                    "evidence_number": "EV-004",
+                    "custody_complete": True,
+                    "delivery_time": "2026-05-03T12:00:00Z",
+                    "chain_of_custody_events": [],
+                    "manifest_summary": [],
+                }],
+            },
+        )
+    )
+    db.commit()
+
+    response = client.get("/drives", params={"include_related_job_custody": "true"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    match = next(item for item in payload if item["id"] == drive.id)
+    assert match["related_job"] == {
+        "job_id": job.id,
+        "evidence_number": "EV-004",
+        "custody_status": "HANDOFF_RECORDED",
+        "delivery_time": "2026-05-03T12:00:00Z",
+    }
+
+
+def test_list_drives_include_related_job_custody_no_related_job_after_binding_clears(client, db):
+    drive = UsbDrive(device_identifier="USB-CUSTODY-5", current_state=DriveState.AVAILABLE, current_project_id=None)
+    job = ExportJob(project_id="PROJ-005", evidence_number="EV-005", status=JobStatus.COMPLETED)
+    db.add_all([drive, job])
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id, activated_at=datetime.now(timezone.utc)))
+    db.commit()
+
+    response = client.get("/drives", params={"include_related_job_custody": "true"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    match = next(item for item in payload if item["id"] == drive.id)
+    assert match["related_job"] == {
+        "job_id": None,
+        "evidence_number": None,
+        "custody_status": "NO_RELATED_JOB",
+        "delivery_time": None,
+    }
 
 
 

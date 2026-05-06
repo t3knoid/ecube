@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
 import { getPublicAuthConfig } from '@/api/auth.js'
 import { getDrives, formatDrive, initializeDrive, mountDrive, prepareEjectDrive, refreshDrives } from '@/api/drives.js'
-import { getJobChainOfCustody, listAllJobs, listJobs } from '@/api/jobs.js'
+import { getJobChainOfCustody, listJobs } from '@/api/jobs.js'
 import { getMounts } from '@/api/mounts.js'
 import { enablePort } from '@/api/admin.js'
 import { normalizeErrorMessage } from '@/api/client.js'
@@ -15,7 +15,6 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 import { formatDriveIdentity } from '@/utils/driveIdentity.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
-import { buildDriveJobMap, buildProjectEvidenceMap, getDriveJob, getProjectEvidence, getProjectEvidenceJobId } from '@/utils/projectEvidence.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -28,8 +27,6 @@ const saving = ref(false)
 const error = ref('')
 const infoMessage = ref('')
 const warnMessage = ref('')
-const currentProjectEvidenceNumber = ref('')
-const relatedJobId = ref(null)
 
 function clearBanners() {
   error.value = ''
@@ -133,6 +130,17 @@ const canEject = computed(
 )
 const canBrowse = computed(() => !!drive.value?.mount_path && canBrowseContents.value)
 const hasMountedProjectOptions = computed(() => mountedProjectOptions.value.length > 0)
+const relatedJob = computed(() => drive.value?.related_job || null)
+const currentProjectEvidenceNumber = computed(() => relatedJob.value?.evidence_number || '')
+const relatedJobId = computed(() => relatedJob.value?.job_id ?? null)
+const relatedJobCustodyStatus = computed(() => relatedJob.value?.custody_status || 'STATUS_UNAVAILABLE')
+const relatedJobCustodyDetail = computed(() => {
+  if (relatedJobCustodyStatus.value !== 'HANDOFF_RECORDED' || !relatedJob.value?.delivery_time) {
+    return ''
+  }
+  const parsed = new Date(relatedJob.value.delivery_time)
+  return Number.isNaN(parsed.getTime()) ? '' : parsed.toLocaleString()
+})
 
 function formatBytes(value) {
   if (typeof value !== 'number' || value < 0) return '-'
@@ -158,6 +166,19 @@ function protectedValue(value) {
 function isValidJobId(value) {
   const normalizedJobId = Number(value)
   return Number.isInteger(normalizedJobId) && normalizedJobId > 0
+}
+
+function custodyStatusLabel(status) {
+  switch (String(status || '').toUpperCase()) {
+    case 'HANDOFF_RECORDED':
+      return t('drives.custodyStatusRecorded')
+    case 'PENDING_HANDOFF':
+      return t('drives.custodyStatusPending')
+    case 'NO_RELATED_JOB':
+      return t('drives.custodyStatusNone')
+    default:
+      return t('drives.custodyStatusUnavailable')
+  }
 }
 
 function resolveDriveMountTimeoutMs(configurationResponse) {
@@ -199,33 +220,12 @@ async function loadDrive() {
   loading.value = true
   clearBanners()
   try {
-    const [driveResult, jobResult] = await Promise.allSettled([
-      getDrives({ include_disconnected: true }),
-      listAllJobs({ include_archived: true }),
-    ])
-
-    if (driveResult.status !== 'fulfilled') {
-      throw driveResult.reason
-    }
-
-    const drives = driveResult.value || []
-    const jobs = jobResult.status === 'fulfilled' ? (jobResult.value || []) : []
-    const jobsByDrive = buildDriveJobMap(jobs)
-    const evidenceByProject = buildProjectEvidenceMap(jobs)
+    const drives = await getDrives({
+      include_disconnected: true,
+      include_related_job_custody: true,
+    })
     const next = drives.find((item) => item.id === driveId.value) || null
     drive.value = next ? normalizeProjectRecord(next, ['current_project_id']) : null
-    const hasActiveProjectBinding = Boolean(normalizeProjectId(drive.value?.current_project_id))
-    const assignedJob = drive.value && hasActiveProjectBinding ? getDriveJob(drive.value.id, jobsByDrive) : null
-    currentProjectEvidenceNumber.value = drive.value
-      ? hasActiveProjectBinding
-        ? assignedJob?.evidenceNumber || getProjectEvidence(drive.value.current_project_id, evidenceByProject)
-        : ''
-      : ''
-    relatedJobId.value = drive.value
-      ? hasActiveProjectBinding
-        ? assignedJob?.jobId || getProjectEvidenceJobId(drive.value.current_project_id, evidenceByProject)
-        : null
-      : null
     if (!drive.value) {
       error.value = t('drives.notFound')
     }
@@ -259,8 +259,6 @@ async function runFormat() {
       await formatDrive(drive.value.id, { filesystem_type: filesystemType.value }, { timeout: 0 }),
       ['current_project_id'],
     )
-    currentProjectEvidenceNumber.value = ''
-    relatedJobId.value = null
     infoMessage.value = t('drives.formatSuccess')
     showFormatDialog.value = false
   } catch (err) {
@@ -640,6 +638,11 @@ onBeforeUnmount(() => {
             <template v-else>-</template>
           </span>
         </div>
+        <div>
+          <strong>{{ t('audit.custodyStatusTitle') }}</strong>
+          <span>{{ custodyStatusLabel(relatedJobCustodyStatus) }}</span>
+          <p v-if="relatedJobCustodyDetail" class="detail-secondary muted">{{ t('drives.custodyStatusRecordedAt', { timestamp: relatedJobCustodyDetail }) }}</p>
+        </div>
         <div><strong>{{ t('common.labels.status') }}</strong><StatusBadge :status="drive.current_state" :label="driveStateLabel(drive.current_state)" /></div>
       </div>
 
@@ -804,6 +807,10 @@ onBeforeUnmount(() => {
 
 .detail-grid > div > strong {
   font-weight: var(--font-weight-bold);
+}
+
+.detail-secondary {
+  margin: 0;
 }
 
 .cell-link {

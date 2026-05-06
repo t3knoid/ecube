@@ -9,7 +9,6 @@ const mocks = vi.hoisted(() => ({
   getPublicAuthConfig: vi.fn(),
   getDrives: vi.fn(),
   getJobChainOfCustody: vi.fn(),
-  listAllJobs: vi.fn(),
   listJobs: vi.fn(),
   getMounts: vi.fn(),
   formatDrive: vi.fn(),
@@ -46,7 +45,6 @@ vi.mock('@/api/drives.js', () => ({
 
 vi.mock('@/api/jobs.js', () => ({
   getJobChainOfCustody: (...args) => mocks.getJobChainOfCustody(...args),
-  listAllJobs: (...args) => mocks.listAllJobs(...args),
   listJobs: (...args) => mocks.listJobs(...args),
 }))
 
@@ -74,6 +72,12 @@ function buildDrive(overrides = {}) {
     capacity_bytes: 1024,
     available_bytes: 512,
     port_id: 1,
+    related_job: {
+      job_id: null,
+      evidence_number: null,
+      custody_status: 'NO_RELATED_JOB',
+      delivery_time: null,
+    },
     ...overrides,
   }
 }
@@ -116,7 +120,6 @@ describe('DriveDetailView mount workflow', () => {
     mocks.getPublicAuthConfig.mockReset()
     mocks.getDrives.mockReset()
     mocks.getJobChainOfCustody.mockReset()
-    mocks.listAllJobs.mockReset()
     mocks.listJobs.mockReset()
     mocks.getMounts.mockReset()
     mocks.formatDrive.mockReset()
@@ -131,7 +134,6 @@ describe('DriveDetailView mount workflow', () => {
       drive_mount_timeout_seconds: 120,
     })
     mocks.getDrives.mockResolvedValue([buildDrive()])
-    mocks.listAllJobs.mockResolvedValue([])
     mocks.getJobChainOfCustody.mockResolvedValue({ selector_mode: 'JOB', reports: [] })
     mocks.listJobs.mockResolvedValue([])
     mocks.getMounts.mockResolvedValue([
@@ -316,10 +318,17 @@ describe('DriveDetailView mount workflow', () => {
   })
 
   it('shows the evidence number for the drive assigned job when multiple drives share a project', async () => {
-    mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-007', mount_path: '/mnt/ecube/7' })])
-    mocks.listAllJobs.mockResolvedValue([
-      { id: 21, project_id: 'PROJ-007', evidence_number: 'EV-OTHER-DRIVE', drive: { id: 8 } },
-      { id: 20, project_id: 'PROJ-007', evidence_number: 'EV-007', drive: { id: 7 } },
+    mocks.getDrives.mockResolvedValue([
+      buildDrive({
+        current_project_id: 'PROJ-007',
+        mount_path: '/mnt/ecube/7',
+        related_job: {
+          job_id: 20,
+          evidence_number: 'EV-007',
+          custody_status: 'PENDING_HANDOFF',
+          delivery_time: null,
+        },
+      }),
     ])
 
     const wrapper = mountView()
@@ -331,10 +340,17 @@ describe('DriveDetailView mount workflow', () => {
   })
 
   it('shows the related job ID for the drive assigned job and links to Job Detail', async () => {
-    mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-007', mount_path: '/mnt/ecube/7' })])
-    mocks.listAllJobs.mockResolvedValue([
-      { id: 21, project_id: 'PROJ-007', evidence_number: 'EV-OTHER-DRIVE', drive: { id: 8 } },
-      { id: 20, project_id: 'PROJ-007', evidence_number: 'EV-007', drive: { id: 7 } },
+    mocks.getDrives.mockResolvedValue([
+      buildDrive({
+        current_project_id: 'PROJ-007',
+        mount_path: '/mnt/ecube/7',
+        related_job: {
+          job_id: 20,
+          evidence_number: 'EV-007',
+          custody_status: 'PENDING_HANDOFF',
+          delivery_time: null,
+        },
+      }),
     ])
 
     const wrapper = mountView()
@@ -351,25 +367,20 @@ describe('DriveDetailView mount workflow', () => {
     expect(mocks.push).toHaveBeenCalledWith({ name: 'job-detail', params: { id: 20 } })
   })
 
-  it('uses jobs beyond the first backend page when resolving detail evidence', async () => {
+  it('requests trusted related job custody data when loading drive detail', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-007', mount_path: '/mnt/ecube/7' })])
-    mocks.listAllJobs.mockResolvedValue([
-      { id: 21, project_id: 'PROJ-007', evidence_number: 'EV-OTHER-DRIVE', drive: { id: 8 } },
-      { id: 20, project_id: 'PROJ-007', evidence_number: 'EV-007', drive: { id: 7 } },
-    ])
 
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.text()).toContain('EV-007')
-    expect(wrapper.text()).not.toContain('EV-OTHER-DRIVE')
+    expect(mocks.getDrives).toHaveBeenCalledWith({
+      include_disconnected: true,
+      include_related_job_custody: true,
+    })
   })
 
   it('does not show stale evidence after format clears the drive project binding', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: null, mount_path: null })])
-    mocks.listAllJobs.mockResolvedValue([
-      { id: 44, project_id: 'PROJ-007', evidence_number: 'EV-STALE', drive: { id: 7 } },
-    ])
 
     const wrapper = mountView()
     await flushPromises()
@@ -377,12 +388,21 @@ describe('DriveDetailView mount workflow', () => {
     expect(wrapper.text()).not.toContain('EV-STALE')
     expect(wrapper.text()).toContain(`${i18n.global.t('jobs.evidence')}-`)
     expect(wrapper.text()).toContain(`${i18n.global.t('jobs.jobId')}-`)
+    expect(wrapper.text()).toContain(i18n.global.t('drives.custodyStatusNone'))
   })
 
   it('clears stale evidence immediately after formatting without leaving the page', async () => {
-    mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-007', mount_path: null })])
-    mocks.listAllJobs.mockResolvedValue([
-      { id: 44, project_id: 'PROJ-007', evidence_number: 'EV-STALE', drive: { id: 7 } },
+    mocks.getDrives.mockResolvedValue([
+      buildDrive({
+        current_project_id: 'PROJ-007',
+        mount_path: null,
+        related_job: {
+          job_id: 44,
+          evidence_number: 'EV-STALE',
+          custody_status: 'PENDING_HANDOFF',
+          delivery_time: null,
+        },
+      }),
     ])
     mocks.formatDrive.mockResolvedValue(buildDrive({ current_project_id: null, mount_path: null }))
 
@@ -407,7 +427,66 @@ describe('DriveDetailView mount workflow', () => {
     expect(wrapper.text()).toContain(`${i18n.global.t('jobs.evidence')}-`)
     expect(wrapper.text()).not.toContain('44')
     expect(wrapper.text()).toContain(`${i18n.global.t('jobs.jobId')}-`)
+    expect(wrapper.text()).toContain(i18n.global.t('drives.custodyStatusNone'))
     expect(wrapper.find('.cell-link').exists()).toBe(false)
+  })
+
+  it('shows pending handoff when trusted backend data reports incomplete custody', async () => {
+    mocks.getDrives.mockResolvedValue([
+      buildDrive({
+        related_job: {
+          job_id: 44,
+          evidence_number: 'EV-007',
+          custody_status: 'PENDING_HANDOFF',
+          delivery_time: null,
+        },
+      }),
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('drives.custodyStatusPending'))
+  })
+
+  it('shows recorded handoff and delivery time when trusted backend data confirms custody handoff', async () => {
+    const recordedAt = '2026-05-02T18:30:00Z'
+    mocks.getDrives.mockResolvedValue([
+      buildDrive({
+        related_job: {
+          job_id: 44,
+          evidence_number: 'EV-007',
+          custody_status: 'HANDOFF_RECORDED',
+          delivery_time: recordedAt,
+        },
+      }),
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('drives.custodyStatusRecorded'))
+    expect(wrapper.text()).toContain(i18n.global.t('drives.custodyStatusRecordedAt', {
+      timestamp: new Date(recordedAt).toLocaleString(),
+    }))
+  })
+
+  it('shows status unavailable when trusted backend data cannot provide custody state', async () => {
+    mocks.getDrives.mockResolvedValue([
+      buildDrive({
+        related_job: {
+          job_id: 44,
+          evidence_number: 'EV-007',
+          custody_status: 'STATUS_UNAVAILABLE',
+          delivery_time: null,
+        },
+      }),
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('drives.custodyStatusUnavailable'))
   })
 
   it('shows sanitized backend detail when drive formatting fails', async () => {
@@ -638,9 +717,16 @@ describe('DriveDetailView mount workflow', () => {
   })
 
   it('suppresses the CoC prompt after prepare eject when a stored job CoC snapshot already exists', async () => {
-    mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'IN_USE' })])
-    mocks.listAllJobs.mockResolvedValue([
-      { id: 44, project_id: 'PROJ-007', evidence_number: 'EV-007', drive: { id: 7 } },
+    mocks.getDrives.mockResolvedValue([
+      buildDrive({
+        current_state: 'IN_USE',
+        related_job: {
+          job_id: 44,
+          evidence_number: 'EV-007',
+          custody_status: 'PENDING_HANDOFF',
+          delivery_time: null,
+        },
+      }),
     ])
     mocks.prepareEjectDrive.mockResolvedValue(buildDrive({ current_state: 'AVAILABLE', mount_path: null }))
     mocks.getJobChainOfCustody.mockResolvedValue({ selector_mode: 'JOB', reports: [{}] })
@@ -663,9 +749,16 @@ describe('DriveDetailView mount workflow', () => {
   })
 
   it('shows the CoC prompt when the related job has no stored snapshot and routes Open CoC Report to job detail', async () => {
-    mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'IN_USE' })])
-    mocks.listAllJobs.mockResolvedValue([
-      { id: 44, project_id: 'PROJ-007', evidence_number: 'EV-007', drive: { id: 7 } },
+    mocks.getDrives.mockResolvedValue([
+      buildDrive({
+        current_state: 'IN_USE',
+        related_job: {
+          job_id: 44,
+          evidence_number: 'EV-007',
+          custody_status: 'PENDING_HANDOFF',
+          delivery_time: null,
+        },
+      }),
     ])
     mocks.prepareEjectDrive.mockResolvedValue(buildDrive({ current_state: 'AVAILABLE', mount_path: null }))
     mocks.getJobChainOfCustody.mockRejectedValue({ response: { status: 404 } })
@@ -696,9 +789,16 @@ describe('DriveDetailView mount workflow', () => {
   })
 
   it('keeps the CoC prompt available after prepare eject when the CoC lookup fails unexpectedly', async () => {
-    mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'IN_USE' })])
-    mocks.listAllJobs.mockResolvedValue([
-      { id: 44, project_id: 'PROJ-007', evidence_number: 'EV-007', drive: { id: 7 } },
+    mocks.getDrives.mockResolvedValue([
+      buildDrive({
+        current_state: 'IN_USE',
+        related_job: {
+          job_id: 44,
+          evidence_number: 'EV-007',
+          custody_status: 'PENDING_HANDOFF',
+          delivery_time: null,
+        },
+      }),
     ])
     mocks.prepareEjectDrive.mockResolvedValue(buildDrive({ current_state: 'AVAILABLE', mount_path: null }))
     mocks.getJobChainOfCustody.mockRejectedValue({ response: { status: 500 } })

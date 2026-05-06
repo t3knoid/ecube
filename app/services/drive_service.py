@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from fastapi import HTTPException
 from sqlalchemy import text
@@ -17,7 +17,8 @@ from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, 
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
 from app.repositories.mount_repository import MountRepository
-from app.services.audit_service import log_and_audit
+from app.schemas.hardware import DriveRelatedJobSchema
+from app.services.audit_service import get_job_drive_custody_summary, log_and_audit
 from app.services.drive_space_service import request_available_space_refresh_for_drive
 from app.utils.drive_identity import mask_serial_number
 from app.utils.sanitize import normalize_project_id, sanitize_error_message
@@ -92,6 +93,108 @@ def _default_mount_provider() -> DriveMountProvider:
     return get_drive_mount()
 
 
+def _attach_related_job_contexts(
+    db: Session,
+    drives: List[UsbDrive],
+    *,
+    include_related_job_custody: bool,
+) -> List[UsbDrive]:
+    if not drives or not include_related_job_custody:
+        return drives
+
+    drive_by_id: Dict[int, UsbDrive] = {drive.id: drive for drive in drives}
+    drive_ids = list(drive_by_id)
+    assignment_rows = (
+        db.query(
+            DriveAssignment.drive_id,
+            DriveAssignment.job_id,
+            ExportJob.project_id,
+            ExportJob.evidence_number,
+        )
+        .join(ExportJob, ExportJob.id == DriveAssignment.job_id)
+        .filter(
+            DriveAssignment.drive_id.in_(drive_ids),
+            DriveAssignment.released_at.is_(None),
+        )
+        .order_by(
+            DriveAssignment.drive_id,
+            DriveAssignment.assigned_at.desc(),
+            DriveAssignment.id.desc(),
+        )
+        .all()
+    )
+
+    selected_jobs: Dict[int, tuple[int, Optional[str]]] = {}
+    for drive_id, job_id, job_project_id, evidence_number in assignment_rows:
+        if drive_id in selected_jobs:
+            continue
+        drive = drive_by_id.get(drive_id)
+        if drive is None:
+            continue
+        current_project_id = normalize_project_id(getattr(drive, "current_project_id", None))
+        if not current_project_id or current_project_id != normalize_project_id(job_project_id):
+            continue
+        selected_jobs[drive_id] = (job_id, evidence_number)
+
+    for drive in drives:
+        selected = selected_jobs.get(drive.id)
+        if selected is None:
+            setattr(
+                drive,
+                "related_job",
+                DriveRelatedJobSchema(
+                    custody_status="NO_RELATED_JOB",
+                ),
+            )
+            continue
+
+        job_id, evidence_number = selected
+        try:
+            custody_complete, delivery_time = get_job_drive_custody_summary(
+                db,
+                job_id=job_id,
+                drive_id=drive.id,
+            )
+        except Exception as exc:
+            logger.info(
+                "Drive related-job custody status unavailable",
+                extra={
+                    "drive_id": drive.id,
+                    "job_id": job_id,
+                    "failure_class": "related_job_custody_unavailable",
+                },
+            )
+            logger.debug(
+                "Drive related-job custody status lookup failed",
+                extra={
+                    "drive_id": drive.id,
+                    "job_id": job_id,
+                    "raw_error": str(exc),
+                },
+            )
+            custody_complete = None
+            delivery_time = None
+
+        setattr(
+            drive,
+            "related_job",
+            DriveRelatedJobSchema(
+                job_id=job_id,
+                evidence_number=evidence_number,
+                custody_status=(
+                    "HANDOFF_RECORDED"
+                    if custody_complete is True
+                    else "PENDING_HANDOFF"
+                    if custody_complete is False
+                    else "STATUS_UNAVAILABLE"
+                ),
+                delivery_time=delivery_time,
+            ),
+        )
+
+    return drives
+
+
 def _recoverable_prepare_eject_detail(
     mount_path: Optional[str],
     unmount_error: Optional[str],
@@ -128,13 +231,14 @@ def get_all_drives(
     project_id: Optional[str] = None,
     states: Optional[List[str]] = None,
     include_disconnected: bool = False,
+    include_related_job_custody: bool = False,
 ) -> List[UsbDrive]:
     repo = DriveRepository(db)
     if project_id is not None:
         drives = repo.list_by_project(project_id)
         for drive in drives:
             request_available_space_refresh_for_drive(drive)
-        return drives
+        return _attach_related_job_contexts(db, drives, include_related_job_custody=include_related_job_custody)
     if states:
         try:
             parsed = [DriveState(s) for s in states]
@@ -147,16 +251,16 @@ def get_all_drives(
         drives = repo.list_by_states(parsed)
         for drive in drives:
             request_available_space_refresh_for_drive(drive)
-        return drives
+        return _attach_related_job_contexts(db, drives, include_related_job_custody=include_related_job_custody)
     if include_disconnected:
         drives = repo.list_all()
         for drive in drives:
             request_available_space_refresh_for_drive(drive)
-        return drives
+        return _attach_related_job_contexts(db, drives, include_related_job_custody=include_related_job_custody)
     drives = repo.list_by_states([DriveState.DISABLED, DriveState.AVAILABLE, DriveState.IN_USE])  # DISCONNECTED excluded by default
     for drive in drives:
         request_available_space_refresh_for_drive(drive)
-    return drives
+    return _attach_related_job_contexts(db, drives, include_related_job_custody=include_related_job_custody)
 
 
 def initialize_drive(
@@ -402,6 +506,7 @@ def initialize_drive(
         )
     except Exception:
         logger.exception("Failed to write audit log for DRIVE_INITIALIZED")
+    _attach_related_job_contexts(db, [drive], include_related_job_custody=True)
     return drive
 
 
@@ -657,6 +762,7 @@ def mount_drive(
         },
     )
 
+    _attach_related_job_contexts(db, [drive], include_related_job_custody=True)
     return drive
 
 
@@ -954,6 +1060,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
             detail="Drive eject preparation failed",
         )
 
+    _attach_related_job_contexts(db, [drive], include_related_job_custody=True)
     return drive
 
 
@@ -1109,4 +1216,5 @@ def format_drive(
     except Exception:
         logger.exception("Failed to write audit log for DRIVE_FORMATTED")
 
+    _attach_related_job_contexts(db, [drive], include_related_job_custody=True)
     return drive
