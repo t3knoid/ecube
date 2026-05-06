@@ -80,7 +80,7 @@ async function mockCoreApis(page) {
   }])
   await routeJson(page, '**/api/users', { users: [{ username: 'frank', roles: ['admin'] }] })
   await routeJson(page, '**/api/admin/os-users', { users: [{ uid: 1001, username: 'frank', groups: ['ecube-admin'] }] })
-  await routeJson(page, '**/api/jobs**', [{ id: 55, project_id: 'PRJ', status: 'RUNNING', copied_bytes: 20, total_bytes: 100, evidence_number: 'EV-055', drive: { id: 1, port_system_path: '2-1', device_identifier: '/dev/sdb' } }])
+  await routeJson(page, /\/api\/jobs(?:\?.*)?$/, [{ id: 55, project_id: 'PRJ', status: 'RUNNING', copied_bytes: 20, total_bytes: 100, evidence_number: 'EV-055', drive: { id: 1, port_system_path: '2-1', device_identifier: '/dev/sdb' } }])
   await routeJson(page, '**/api/audit/options', {
     actions: ['LOGIN'],
     users: ['frank'],
@@ -128,7 +128,7 @@ async function mockCoreApis(page) {
     difok: 5,
     retry: 3,
   })
-  await routeJson(page, '**/api/jobs/55', { id: 55, project_id: 'PRJ', evidence_number: 'EV', status: 'RUNNING', copied_bytes: 20, total_bytes: 100, drive: { id: 1, port_system_path: '2-1', device_identifier: '/dev/sdb' } })
+  await routeJson(page, /\/api\/jobs\/55(?:\?.*)?$/, { id: 55, project_id: 'PRJ', evidence_number: 'EV', status: 'RUNNING', copied_bytes: 20, total_bytes: 100, drive: { id: 1, port_system_path: '2-1', device_identifier: '/dev/sdb' } })
   await routeJson(page, '**/api/jobs/55/files', { files: [] })
   await routeJson(page, '**/api/jobs/55/chain-of-custody', {
     selector_mode: 'PROJECT',
@@ -195,6 +195,15 @@ async function openCreateJobDialog(page) {
 }
 
 async function openCocDialog(page) {
+  await routeJson(page, /\/api\/jobs\/55(?:\?.*)?$/, {
+    id: 55,
+    project_id: 'PRJ',
+    evidence_number: 'EV',
+    status: 'COMPLETED',
+    copied_bytes: 100,
+    total_bytes: 100,
+    drive: { id: 1, port_system_path: '2-1', device_identifier: '/dev/sdb' },
+  })
   await gotoVisualPage(page, '/jobs/55')
   await expect(page.getByRole('heading', { name: 'Job Detail #55' })).toBeVisible()
   await page.getByRole('button', { name: 'Chain of Custody' }).click()

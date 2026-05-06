@@ -657,7 +657,10 @@ def _log_startup_analysis_failure(
 def _calculate_transfer_rate_mbps(transferred_bytes: int, elapsed_seconds: float) -> Optional[float]:
     if transferred_bytes <= 0 or elapsed_seconds <= 0:
         return None
-    return round((transferred_bytes / (1024 * 1024)) / elapsed_seconds, 2)
+    rate_mbps = (transferred_bytes / (1024 * 1024)) / elapsed_seconds
+    if rate_mbps <= 0:
+        return None
+    return max(0.01, round(rate_mbps, 2))
 
 
 def _estimate_startup_analysis_duration_seconds(
