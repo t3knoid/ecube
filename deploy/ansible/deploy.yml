@@ -4,9 +4,14 @@
 # =============================================================================
 # Deploys the ECUBE application from a GitHub release to a Linux VM.
 #
+# This playbook assumes:
+# - PostgreSQL is installed by a separate role or process.
+# - ECUBE is installed by running the packaged install.sh script.
+# - First-run database provisioning and admin creation are completed via the
+#   local setup API after the service starts.
+#
 # PREREQUISITES (control machine):
 #   pip install ansible              # Ansible 2.14+
-#   ansible-galaxy collection install community.postgresql  # only if install_postgres: true
 #
 # USAGE:
 #   # Deploy (prompted interactively for version — hit Enter for latest)
@@ -65,303 +70,169 @@
       debug:
         msg: "Deploying ECUBE {{ ecube_version }}"
 
+    - name: Set ECUBE installer facts
+      set_fact:
+        ecube_setup_package_name: "ecube-package-{{ ecube_version }}"
+        ecube_setup_archive_name: "ecube-package-{{ ecube_version }}.tar.gz"
+        ecube_setup_checksum_name: "ecube-package-{{ ecube_version }}.sha256"
+        ecube_setup_package_url: "https://github.com/{{ github_owner }}/{{ github_repo }}/releases/download/{{ ecube_version }}/ecube-package-{{ ecube_version }}.tar.gz"
+        ecube_setup_checksum_url: "https://github.com/{{ github_owner }}/{{ github_repo }}/releases/download/{{ ecube_version }}/ecube-package-{{ ecube_version }}.sha256"
+        ecube_setup_archive_path: "{{ ecube_setup_download_dir }}/ecube-package-{{ ecube_version }}.tar.gz"
+        ecube_setup_checksum_path: "{{ ecube_setup_download_dir }}/ecube-package-{{ ecube_version }}.sha256"
+        ecube_setup_package_dir: "{{ ecube_setup_extract_dir }}/ecube-package-{{ ecube_version }}"
+        ecube_setup_install_script_path: "{{ ecube_setup_extract_dir }}/ecube-package-{{ ecube_version }}/install.sh"
+
   # --------------------------------------------------------------------------
   tasks:
 
-  # --- Optional: install PostgreSQL locally --------------------------------
-  - name: Install PostgreSQL {{ postgres_version }}
-    when: install_postgres | bool
-    block:
-      - name: Install PostgreSQL packages
-        apt:
-          name:
-            - "postgresql-{{ postgres_version }}"
-            - python3-psycopg2
-          state: present
-          update_cache: true
-
-      - name: Ensure PostgreSQL is started and enabled
-        service:
-          name: postgresql
-          state: started
-          enabled: true
-
-      - name: Create PostgreSQL application user
-        become_user: postgres
-        community.postgresql.postgresql_user:
-          name: "{{ postgres_user }}"
-          password: "{{ postgres_password }}"
-          state: present
-
-      - name: Create PostgreSQL application database
-        become_user: postgres
-        community.postgresql.postgresql_db:
-          name: "{{ postgres_db }}"
-          owner: "{{ postgres_user }}"
-          state: present
-
-  # --- System dependencies --------------------------------------------------
-  - name: Install system packages
+  # --- Installer prerequisites ----------------------------------------------
+  - name: Install ECUBE installer prerequisites
     apt:
       name:
-        - python3.11
-        - python3.11-venv
-        - python3.11-dev
-        - python3-pip
-        - openssl
-        - curl
         - ca-certificates
-        # USB / mount utilities used by ECUBE at runtime
-        - usbutils
-        - util-linux
-        - exfatprogs
-        - passwd
-        - libpam-pwquality
-        - nfs-common
-        - cifs-utils
-        - smbclient
+        - tar
       state: present
       update_cache: true
 
-  # --- Service account & directories ----------------------------------------
-  - name: Create ecube OS group
-    group:
-      name: "{{ ecube_group }}"
-      system: true
-      state: present
-
-  - name: Create ecube OS user
-    user:
-      name: "{{ ecube_user }}"
-      group: "{{ ecube_group }}"
-      system: true
-      create_home: true
-      shell: /bin/bash
-      state: present
-
-  - name: Create install and cert directories
+  - name: Create ECUBE download and extraction directories
     file:
       path: "{{ item }}"
       state: directory
-      owner: "{{ ecube_user }}"
-      group: "{{ ecube_group }}"
       mode: "0755"
     loop:
-      - "{{ ecube_install_dir }}"
-      - "{{ ecube_certs_dir }}"
+      - "{{ ecube_setup_download_dir }}"
+      - "{{ ecube_setup_extract_dir }}"
 
-  # --- Download & verify release package ------------------------------------
-  - name: Set package filename
-    set_fact:
-      _pkg_name: "ecube-package-{{ ecube_version }}.tar.gz"
-      _sha_name: "ecube-package-{{ ecube_version }}.sha256"
-      _pkg_url:  "https://github.com/{{ github_owner }}/{{ github_repo }}/releases/download/{{ ecube_version }}/ecube-package-{{ ecube_version }}.tar.gz"
-      _sha_url:  "https://github.com/{{ github_owner }}/{{ github_repo }}/releases/download/{{ ecube_version }}/ecube-package-{{ ecube_version }}.sha256"
-
-  - name: Download release package
+  - name: Download ECUBE package checksum
     get_url:
-      url: "{{ _pkg_url }}"
-      dest: "/tmp/{{ _pkg_name }}"
+      url: "{{ ecube_setup_checksum_url }}"
+      dest: "{{ ecube_setup_checksum_path }}"
       mode: "0644"
 
-  - name: Download checksum file
-    get_url:
-      url: "{{ _sha_url }}"
-      dest: "/tmp/{{ _sha_name }}"
-      mode: "0644"
-
-  - name: Read expected checksum
+  - name: Read ECUBE package checksum
     slurp:
-      src: "/tmp/{{ _sha_name }}"
-    register: _sha_file
+      src: "{{ ecube_setup_checksum_path }}"
+    register: ecube_setup_checksum_file
 
-  - name: Parse expected SHA-256 hash
+  - name: Set ECUBE package checksum fact
     set_fact:
-      _expected_sha: "{{ (_sha_file.content | b64decode).split()[0] }}"
+      ecube_setup_package_sha256: >-
+        {{ (ecube_setup_checksum_file.content | b64decode).split()[0] }}
 
-  - name: Compute actual SHA-256 of downloaded package
-    stat:
-      path: "/tmp/{{ _pkg_name }}"
-      checksum_algorithm: sha256
-      get_checksum: true
-    register: _pkg_stat
+  - name: Download ECUBE package archive
+    get_url:
+      url: "{{ ecube_setup_package_url }}"
+      dest: "{{ ecube_setup_archive_path }}"
+      checksum: "sha256:{{ ecube_setup_package_sha256 }}"
+      mode: "0644"
 
-  - name: Verify package checksum
-    assert:
-      that: _pkg_stat.stat.checksum == _expected_sha
-      fail_msg: >
-        Checksum mismatch for {{ _pkg_name }}!
-        Expected: {{ _expected_sha }}
-        Got:      {{ _pkg_stat.stat.checksum }}
-      success_msg: "Checksum OK."
-
-  - name: Extract release package to {{ ecube_install_dir }}
+  - name: Extract ECUBE package archive
     unarchive:
-      src: "/tmp/{{ _pkg_name }}"
-      dest: "{{ ecube_install_dir }}"
+      src: "{{ ecube_setup_archive_path }}"
+      dest: "{{ ecube_setup_extract_dir }}"
       remote_src: true
-      owner: "{{ ecube_user }}"
-      group: "{{ ecube_group }}"
-      extra_opts: ["--strip-components=1"]
 
-  # --- Python virtual environment & package install -------------------------
-  - name: Create Python virtual environment
-    become_user: "{{ ecube_user }}"
+  - name: Run ECUBE installer
     command:
-      cmd: python3.11 -m venv {{ ecube_venv }}
-      creates: "{{ ecube_venv }}/bin/python"
+      argv: >-
+        {{
+          [
+            ecube_setup_install_script_path,
+            '--yes',
+            '--install-dir',
+            ecube_install_dir,
+            '--pg-superuser-name',
+            postgres_admin_username,
+            '--pg-superuser-pass',
+            postgres_admin_password
+          ]
+          + (['--no-tls'] if ecube_setup_no_tls else [])
+          + (['--demo'] if ecube_setup_demo else [])
+        }}
+    args:
+      chdir: "{{ ecube_setup_package_dir }}"
+    register: ecube_setup_install_result
+    changed_when: ecube_setup_install_result.rc == 0
 
-  - name: Upgrade pip inside venv
-    become_user: "{{ ecube_user }}"
-    pip:
-      name: [pip, setuptools, wheel]
-      state: latest
-      virtualenv: "{{ ecube_venv }}"
-
-  - name: Install ECUBE package from extracted source
-    become_user: "{{ ecube_user }}"
-    pip:
-      name: "{{ ecube_install_dir }}"
-      extra_args: "-e"
-      virtualenv: "{{ ecube_venv }}"
-
-  # --- TLS certificates -----------------------------------------------------
-  - name: Copy provided TLS certificate to VM
-    when: ecube_cert_src != ""
-    copy:
-      src: "{{ ecube_cert_src }}"
-      dest: "{{ ecube_certs_dir }}/cert.pem"
-      owner: "{{ ecube_user }}"
-      group: "{{ ecube_group }}"
-      mode: "0644"
-
-  - name: Copy provided TLS private key to VM
-    when: ecube_key_src != ""
-    copy:
-      src: "{{ ecube_key_src }}"
-      dest: "{{ ecube_certs_dir }}/key.pem"
-      owner: "{{ ecube_user }}"
-      group: "{{ ecube_group }}"
-      mode: "0600"
-
-  - name: Generate self-signed certificate (if no cert provided)
-    when: ecube_cert_src == ""
-    become_user: "{{ ecube_user }}"
-    command:
-      cmd: >
-        openssl req -newkey rsa:2048 -nodes
-        -keyout {{ ecube_certs_dir }}/key.pem
-        -x509 -days 365
-        -out {{ ecube_certs_dir }}/cert.pem
-        -subj "/CN={{ ecube_tls_cn }}"
-      creates: "{{ ecube_certs_dir }}/cert.pem"
-
-  - name: Restrict private key permissions
-    file:
-      path: "{{ ecube_certs_dir }}/key.pem"
-      owner: "{{ ecube_user }}"
-      group: "{{ ecube_group }}"
-      mode: "0600"
-
-  # --- sudoers for OS user management ---------------------------------------
-  - name: Install password policy writer helper
-    copy:
-      src: "{{ playbook_dir }}/../../deploy/ecube-write-pwquality-conf"
-      dest: /usr/local/bin/ecube-write-pwquality-conf
-      owner: root
-      group: root
-      mode: "0755"
-
-  - name: Install ecube sudoers file
-    copy:
-      src: "{{ playbook_dir }}/../../deploy/ecube-sudoers"
-      dest: /etc/sudoers.d/ecube-user-mgmt
-      owner: root
-      group: root
-      mode: "0440"
-      validate: "visudo -cf %s"
-
-  # --- Application configuration (.env) ------------------------------------
-  - name: Deploy .env configuration
-    template:
-      src: templates/ecube.env.j2
-      dest: "{{ ecube_install_dir }}/.env"
-      owner: "{{ ecube_user }}"
-      group: "{{ ecube_group }}"
-      mode: "0640"
-    notify: Restart ecube
-
-  # --- Database migrations --------------------------------------------------
-  - name: Run Alembic migrations
-    become_user: "{{ ecube_user }}"
-    command:
-      cmd: "{{ ecube_venv }}/bin/alembic upgrade head"
-      chdir: "{{ ecube_install_dir }}"
-    environment:
-      DATABASE_URL: "postgresql://{{ postgres_user }}:{{ postgres_password }}@localhost/{{ postgres_db }}"
-
-  # --- Systemd service ------------------------------------------------------
-  - name: Install systemd service unit
-    template:
-      src: templates/ecube.service.j2
-      dest: /etc/systemd/system/ecube.service
-      owner: root
-      group: root
-      mode: "0644"
-    notify:
-      - Reload systemd
-      - Restart ecube
-
-  - name: Enable and start ecube service
-    service:
-      name: ecube
-      state: started
-      enabled: true
-
-  # Flush handlers NOW so the service is running before the setup wizard step.
-  - name: Flush handlers before setup wizard
-    meta: flush_handlers
-
-  # --- First-run setup wizard -----------------------------------------------
-  - name: Check if ECUBE is already initialized
+  - name: Wait for ECUBE setup status endpoint
     uri:
-      url: "https://localhost:{{ ecube_port }}/setup/status"
+      url: "{{ ecube_setup_base_url }}/setup/status"
       validate_certs: false
       status_code: 200
     register: _setup_status
-    retries: 10
+    retries: 20
     delay: 3
     until: _setup_status.status == 200
 
-  - name: Run first-run initialization via API
+  - name: Check if ECUBE database is already provisioned
+    uri:
+      url: "{{ ecube_setup_base_url }}/setup/database/provision-status"
+      validate_certs: false
+      status_code: 200
+    register: _provision_status
+
+  - name: Provision ECUBE database via setup API
     when:
       - run_setup_wizard | bool
-      - not _setup_status.json.initialized
+      - not _provision_status.json.provisioned
     uri:
-      url: "https://localhost:{{ ecube_port }}/setup/initialize"
+      url: "{{ ecube_setup_base_url }}/setup/database/provision"
+      method: POST
+      validate_certs: false
+      body_format: json
+      body:
+        host: "{{ postgres_host }}"
+        port: "{{ postgres_port }}"
+        admin_username: "{{ postgres_admin_username }}"
+        admin_password: "{{ postgres_admin_password }}"
+        app_database: "{{ postgres_db }}"
+        app_username: "{{ postgres_user }}"
+        app_password: "{{ postgres_password }}"
+      status_code: 200
+    register: _database_provision_result
+
+  - name: Re-check if ECUBE is already initialized
+    uri:
+      url: "{{ ecube_setup_base_url }}/setup/status"
+      validate_certs: false
+      status_code: 200
+    register: _setup_status_after_provision
+
+  - name: Run first-run initialization via setup API
+    when:
+      - run_setup_wizard | bool
+      - not _setup_status_after_provision.json.initialized
+    uri:
+      url: "{{ ecube_setup_base_url }}/setup/initialize"
       method: POST
       validate_certs: false
       body_format: json
       body:
         username: "{{ ecube_admin_username }}"
         password: "{{ ecube_admin_password }}"
+        trust_proxy_headers: "{{ ecube_trust_proxy_headers }}"
       status_code: 200
     register: _setup_result
 
-  - name: Show setup result
+  - name: Show database provision result
     when:
       - run_setup_wizard | bool
-      - not _setup_status.json.initialized
+      - _database_provision_result is defined
+    debug:
+      var: _database_provision_result.json
+
+  - name: Show setup initialization result
+    when:
+      - run_setup_wizard | bool
+      - _setup_result is defined
     debug:
       var: _setup_result.json
 
-  # --------------------------------------------------------------------------
-  handlers:
-    - name: Reload systemd
-      systemd:
-        daemon_reload: true
-
-    - name: Restart ecube
-      service:
-        name: ecube
-        state: restarted
+  - name: Remove ECUBE downloaded package artifacts
+    when: ecube_setup_cleanup_downloads | bool
+    file:
+      path: "{{ item }}"
+      state: absent
+    loop:
+      - "{{ ecube_setup_download_dir }}"
+      - "{{ ecube_setup_extract_dir }}"
