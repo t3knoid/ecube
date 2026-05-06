@@ -6,13 +6,14 @@ import { useAuthStore } from '@/stores/auth.js'
 import { hasArchivedJobs, listJobs, createJob, startJob, pauseJob } from '@/api/jobs.js'
 import { getDrives } from '@/api/drives.js'
 import { getMounts } from '@/api/mounts.js'
-import { normalizeErrorMessage } from '@/api/client.js'
 import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import { useStatusLabels } from '@/composables/useStatusLabels.js'
 import { formatDriveIdentity } from '@/utils/driveIdentity.js'
+import { buildJobErrorMessage } from '@/utils/jobErrors.js'
+import { getJobListLifecycleActions, normalizeJobStatus, normalizeStartupAnalysisStatus, shouldPollJobListEntry } from '@/utils/jobActions.js'
 import { calculateJobProgress } from '@/utils/jobProgress.js'
 import { classifySourcePathOverlap, resolveMountedSourcePath } from '@/utils/pathOverlap.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
@@ -87,14 +88,6 @@ const columns = computed(() => {
   return nextColumns
 })
 
-function normalizeJobStatus(status) {
-  return String(status || '').toUpperCase()
-}
-
-function normalizeStartupAnalysisStatus(status) {
-  return String(status || '').toUpperCase()
-}
-
 function jobStatusTone(status) {
   const value = normalizeJobStatus(status)
 
@@ -129,11 +122,36 @@ function isRowActionBusy(job) {
 }
 
 function canStartJob(job) {
-  return canOperate.value && ['PENDING', 'FAILED', 'PAUSED'].includes(normalizeJobStatus(job?.status))
+  return getJobListLifecycleActions({
+    canOperate: canOperate.value,
+    jobStatus: job?.status,
+    startupAnalysisStatus: job?.startup_analysis_status,
+  }).find((action) => action.key === 'start')?.enabled === true
 }
 
 function canPauseJob(job) {
-  return canOperate.value && normalizeJobStatus(job?.status) === 'RUNNING'
+  return getJobListLifecycleActions({
+    canOperate: canOperate.value,
+    jobStatus: job?.status,
+    startupAnalysisStatus: job?.startup_analysis_status,
+  }).find((action) => action.key === 'pause')?.enabled === true
+}
+
+function rowLifecycleActions(job) {
+  return getJobListLifecycleActions({
+    canOperate: canOperate.value,
+    jobStatus: job?.status,
+    startupAnalysisStatus: job?.startup_analysis_status,
+  }).map((action) => ({
+    ...action,
+    label: t(`jobs.${action.key}`),
+    disabled: !action.enabled || isRowActionBusy(job),
+  }))
+}
+
+function handleLifecycleAction(job, action, event) {
+  closeRowActionsMenu(event)
+  void runJobAction(job, action)
 }
 
 const pausePendingJob = computed(() => (
@@ -418,10 +436,10 @@ function buildStartupAnalysisCompletionMessage(previousJobs, nextJobs) {
 
 function syncJobsRefreshTimer() {
   stopJobsRefreshTimer()
-  const hasActiveJobs = jobs.value.some((job) => (
-    ['RUNNING', 'PAUSING', 'VERIFYING'].includes(normalizeJobStatus(job?.status))
-      || normalizeStartupAnalysisStatus(job?.startup_analysis_status) === 'ANALYZING'
-  ))
+  const hasActiveJobs = jobs.value.some((job) => shouldPollJobListEntry({
+    jobStatus: job?.status,
+    startupAnalysisStatus: job?.startup_analysis_status,
+  }))
   if (!hasActiveJobs) return
   jobsRefreshTimer.value = window.setInterval(() => {
     void refreshJobsPage()
@@ -534,16 +552,7 @@ function findSourceOverlapConflict(candidateJobs) {
 }
 
 function buildJobError(err) {
-  const status = err?.response?.status
-  const detail = normalizeErrorMessage(err?.response?.data, '')
-
-  if (!status) return t('common.errors.networkError')
-  if (status === 403) return detail || t('common.errors.insufficientPermissions')
-  if (status === 404) return detail || t('common.errors.notFound')
-  if (status === 409) return detail || t('common.errors.requestConflict')
-  if (status === 422) return detail || t('common.errors.validationFailed')
-  if (status >= 500) return t('common.errors.serverError', { status })
-  return detail || t('common.errors.serverErrorGeneric')
+  return buildJobErrorMessage(err, t)
 }
 
 async function submitCreateJob() {
@@ -767,11 +776,14 @@ onBeforeUnmount(() => {
       <template #cell-progress="{ row }">{{ progressLabel(row) }}</template>
       <template #cell-actions="{ row }">
         <div v-if="!isMobileViewport" class="row-actions">
-          <button class="btn" :disabled="!canStartJob(row) || isRowActionBusy(row)" @click="runJobAction(row, 'start')">
-            {{ t('jobs.start') }}
-          </button>
-          <button class="btn" :disabled="!canPauseJob(row) || isRowActionBusy(row)" @click="runJobAction(row, 'pause')">
-            {{ t('jobs.pause') }}
+          <button
+            v-for="action in rowLifecycleActions(row)"
+            :key="action.key"
+            class="btn"
+            :disabled="action.disabled"
+            @click="runJobAction(row, action.key)"
+          >
+            {{ action.label }}
           </button>
         </div>
         <details v-else class="row-actions-menu">
@@ -787,18 +799,14 @@ onBeforeUnmount(() => {
               {{ t('jobs.details') }}
             </button>
             <button
-              class="btn row-action-menu-start"
-              :disabled="!canStartJob(row) || isRowActionBusy(row)"
-              @click="handleMenuStart(row, $event)"
+              v-for="action in rowLifecycleActions(row)"
+              :key="action.key"
+              class="btn"
+              :class="`row-action-menu-${action.key}`"
+              :disabled="action.disabled"
+              @click="handleLifecycleAction(row, action.key, $event)"
             >
-              {{ t('jobs.start') }}
-            </button>
-            <button
-              class="btn row-action-menu-pause"
-              :disabled="!canPauseJob(row) || isRowActionBusy(row)"
-              @click="handleMenuPause(row, $event)"
-            >
-              {{ t('jobs.pause') }}
+              {{ action.label }}
             </button>
           </div>
         </details>

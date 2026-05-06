@@ -49,22 +49,11 @@ from app.repositories.audit_repository import AuditRepository
 from app.services.callback_service import deliver_callback
 from app.services.demo_seed_service import seed_runtime_demo_environment
 from app.services.mount_check_utils import check_mounted_with_configured_timeout
+from app.services.operation_context import details_with_operation_id as _details_with_operation_id, operation_extra as _operation_extra
 from app.constants import ECUBE_GROUP_ROLE_MAP
 from app.utils.sanitize import normalize_project_id
 
 logger = logging.getLogger(__name__)
-
-
-def _operation_extra(operation_id: Optional[str], **extra) -> dict:
-    if operation_id:
-        return {"operation_id": operation_id, **extra}
-    return extra
-
-
-def _details_with_operation_id(details: dict[str, Any], operation_id: Optional[str]) -> dict[str, Any]:
-    if operation_id:
-        return {**details, "operation_id": operation_id}
-    return details
 
 
 class ManualReconciliationInProgressError(ConflictError):
