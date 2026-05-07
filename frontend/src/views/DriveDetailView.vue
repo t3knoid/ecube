@@ -72,6 +72,7 @@ const showIncompleteEjectDialog = ref(false)
 const showInitializeDialog = ref(false)
 const browseExpanded = ref(false)
 const showCocPrompt = ref(false)
+const cocPromptJobId = ref(null)
 const showActiveJobWarning = ref(false)
 const activeJobId = ref(null)
 const activeJobWarningMessage = ref('')
@@ -515,6 +516,7 @@ async function runPrepareEject(confirmIncomplete = false) {
   showEjectDialog.value = false
   showIncompleteEjectDialog.value = false
   showCocPrompt.value = false
+  cocPromptJobId.value = null
   showActiveJobWarning.value = false
   activeJobId.value = null
   activeJobWarningMessage.value = ''
@@ -525,6 +527,7 @@ async function runPrepareEject(confirmIncomplete = false) {
     )
     infoMessage.value = t('drives.ejectSuccess')
     showCocPrompt.value = await shouldShowCocPromptForJob(targetJobId)
+    cocPromptJobId.value = showCocPrompt.value ? Number(targetJobId) : null
   } catch (err) {
     const status = err?.response?.status
     const detail = normalizeErrorMessage(err?.response?.data, null)
@@ -555,7 +558,7 @@ async function runPrepareEject(confirmIncomplete = false) {
 }
 
 function openChainOfCustody() {
-  const targetJobId = Number(relatedJobId.value)
+  const targetJobId = Number(cocPromptJobId.value ?? relatedJobId.value)
   if (!Number.isInteger(targetJobId) || targetJobId <= 0) return
   router.push({
     name: 'job-detail',
