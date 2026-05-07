@@ -39,6 +39,7 @@ const showCreateDialog = ref(false)
 const showSourceBrowser = ref(false)
 const showPausePendingDialog = ref(false)
 const pausePendingJobId = ref(null)
+const pausePendingJobSnapshot = ref(null)
 const createDialogRef = ref(null)
 const createDialogTriggerRef = ref(null)
 
@@ -154,9 +155,16 @@ function handleLifecycleAction(job, action, event) {
   void runJobAction(job, action)
 }
 
-const pausePendingJob = computed(() => (
-  jobs.value.find((job) => Number(job.id) === Number(pausePendingJobId.value)) || null
-))
+const pausePendingJob = computed(() => {
+  const matchedJob = jobs.value.find((job) => Number(job.id) === Number(pausePendingJobId.value)) || null
+  return matchedJob || pausePendingJobSnapshot.value || null
+})
+
+function closePausePendingDialog() {
+  pausePendingJobId.value = null
+  pausePendingJobSnapshot.value = null
+  showPausePendingDialog.value = false
+}
 
 async function runJobAction(job, action) {
   if (!job || isRowActionBusy(job)) return
@@ -178,11 +186,11 @@ async function runJobAction(job, action) {
     jobs.value = jobs.value.map((item) => (Number(item.id) === Number(updated.id) ? updated : item))
     if (action === 'pause' && normalizeJobStatus(updated.status) === 'PAUSING') {
       pausePendingJobId.value = updated.id
+      pausePendingJobSnapshot.value = updated
       showPausePendingDialog.value = true
     }
     if (action === 'start') {
-      pausePendingJobId.value = null
-      showPausePendingDialog.value = false
+      closePausePendingDialog()
     }
     await loadJobs()
   } catch (err) {
@@ -691,10 +699,11 @@ watch(showCreateDialog, async (open) => {
 watch(jobs, () => {
   syncJobsRefreshTimer()
   if (pausePendingJobId.value == null) return
-  const status = normalizeJobStatus(pausePendingJob.value?.status)
-  if (!status || status !== 'PAUSING') {
-    pausePendingJobId.value = null
-    showPausePendingDialog.value = false
+  const matchedJob = jobs.value.find((job) => Number(job.id) === Number(pausePendingJobId.value)) || null
+  if (!matchedJob) return
+  pausePendingJobSnapshot.value = matchedJob
+  if (normalizeJobStatus(matchedJob.status) !== 'PAUSING') {
+    closePausePendingDialog()
   }
 })
 
@@ -816,13 +825,13 @@ onBeforeUnmount(() => {
     <Pagination v-model:page="page" :page-size="pageSize" :total="filtered.length" />
 
     <teleport to="body">
-      <div v-if="showPausePendingDialog" class="dialog-overlay" @click.self="showPausePendingDialog = false">
+      <div v-if="showPausePendingDialog" class="dialog-overlay" @click.self="closePausePendingDialog()">
         <div class="dialog-panel pause-wait-dialog" role="dialog" aria-modal="true" aria-labelledby="pause-wait-title">
           <h2 id="pause-wait-title">{{ t('jobs.pauseRequestedTitle') }}</h2>
           <p>{{ t('jobs.pauseRequestedMessage') }}</p>
           <p v-if="pausePendingJob" class="muted">#{{ pausePendingJob.id }} • {{ jobStatusLabel(pausePendingJob.status) }}</p>
           <div class="dialog-actions">
-            <button class="btn" @click="showPausePendingDialog = false">{{ t('common.actions.close') }}</button>
+            <button class="btn" @click="closePausePendingDialog()">{{ t('common.actions.close') }}</button>
           </div>
         </div>
       </div>

@@ -1041,6 +1041,27 @@ describe('JobsView grouped create dialog', () => {
     expect(refreshedButtons[1].attributes('disabled')).toBeDefined()
   })
 
+  it('keeps the waiting dialog open when the refresh temporarily omits the pausing job', async () => {
+    mocks.listJobs
+      .mockResolvedValueOnce([
+        { id: 45, project_id: 'PROJ-001', evidence_number: 'EV-045', status: 'RUNNING', source_path: '/nfs/project-001', thread_count: 2 },
+      ])
+      .mockResolvedValueOnce([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const runningButtons = wrapper.findAll('.row-actions-stub')[0].findAll('button')
+    await runningButtons[1].trigger('click')
+    await flushPromises()
+
+    expect(mocks.pauseJob).toHaveBeenCalledWith(45)
+    expect(wrapper.text()).toContain('Pause in progress')
+    expect(wrapper.text()).toContain('Waiting for active copy threads to finish')
+    expect(wrapper.text()).toContain('#45')
+    expect(wrapper.text()).toContain('Pausing')
+  })
+
   it('starts and pauses a selected job from the list', async () => {
     mocks.listJobs.mockResolvedValue([
       { id: 44, project_id: 'PROJ-001', evidence_number: 'EV-044', status: 'PENDING', source_path: '/nfs/project-001', thread_count: 4 },
