@@ -1,6 +1,9 @@
 # Version control
 .git
 .gitignore
+.githooks
+.github
+.cursor
 
 # Python artifacts
 .venv
@@ -8,6 +11,10 @@ __pycache__
 *.pyc
 *.pyo
 *.egg-info
+.coverage
+.hypothesis
+.pytest_cache
+.ruff_cache
 
 # Node / frontend build artifacts (rebuilt inside the image)
 node_modules
@@ -47,3 +54,6 @@ Thumbs.db
 # Build artifacts
 *.tar.gz
 dist
+logs
+website
+schemathesis-output.txt
