@@ -77,6 +77,11 @@ DEMO_EFFECTIVE_SHARED_PASSWORD=""
 DEMO_INSTALL_MODE=""
 DEMO_INSTALLED_METADATA_PATH=""
 DEFAULT_DATABASE_URL="postgresql://ecube:ecube@localhost/ecube"
+MIN_PYTHON_MAJOR=3
+MIN_PYTHON_MINOR=11
+PYTHON_BIN=""
+PYTHON_VERSION_MM=""
+PYTHON_VENV_PACKAGE=""
 
 # Credentials for the PostgreSQL superuser created during installation.
 # Populated by _provision_pg_superuser and printed in the post-install summary
@@ -86,6 +91,55 @@ PG_SUPERUSER_PASS=""
 
 GITHUB_OWNER="t3knoid"
 GITHUB_REPO="ecube"
+
+_python_meets_min_version() {
+  local candidate="$1"
+  "${candidate}" -c "import sys; raise SystemExit(0 if sys.version_info >= (${MIN_PYTHON_MAJOR}, ${MIN_PYTHON_MINOR}) else 1)" >/dev/null 2>&1
+}
+
+_python_version_mm() {
+  local candidate="$1"
+  "${candidate}" -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")'
+}
+
+_select_python_bin() {
+  local candidate="$1"
+  command -v "${candidate}" &>/dev/null || return 1
+  _python_meets_min_version "${candidate}" || return 1
+
+  PYTHON_BIN="${candidate}"
+  PYTHON_VERSION_MM="$(_python_version_mm "${candidate}")" || return 1
+  PYTHON_VENV_PACKAGE="python${PYTHON_VERSION_MM}-venv"
+  return 0
+}
+
+_resolve_compatible_python_bin() {
+  if [[ -n "${PYTHON_BIN}" ]] && _select_python_bin "${PYTHON_BIN}"; then
+    return 0
+  fi
+
+  local candidate
+  while IFS= read -r candidate; do
+    if _select_python_bin "${candidate}"; then
+      return 0
+    fi
+  done < <(compgen -c | grep -E '^python3(\.[0-9]+)?$' | awk '!seen[$0]++' | sort -V -r)
+
+  return 1
+}
+
+_python_has_venv() {
+  local candidate="$1"
+  "${candidate}" -m venv --help >/dev/null 2>&1
+}
+
+_run_python() {
+  if [[ -z "${PYTHON_BIN}" ]]; then
+    error "Python runtime was not resolved before use."
+    exit 1
+  fi
+  "${PYTHON_BIN}" "$@"
+}
 
 # Runtime state
 
@@ -192,7 +246,7 @@ _upsert_env_value() {
   install -d -m 0755 "$(dirname "${env_file}")"
   [[ -f "${env_file}" ]] || : > "${env_file}"
 
-  python3.11 - <<'PY' "${env_file}" "${var_name}" "${var_value}"
+  _run_python - <<'PY' "${env_file}" "${var_name}" "${var_value}"
 from pathlib import Path
 import sys
 
@@ -225,7 +279,7 @@ PY
 }
 
 _metadata_shared_password() {
-  python3.11 - <<'PY' "$1"
+  _run_python - <<'PY' "$1"
 import json
 import sys
 from pathlib import Path
@@ -243,7 +297,7 @@ PY
 }
 
 _generate_demo_shared_password() {
-  python3.11 - <<'PY'
+  _run_python - <<'PY'
 from pathlib import Path
 import secrets
 
@@ -326,7 +380,7 @@ _install_demo_metadata() {
   local target_metadata="$2"
   local shared_password="$3"
 
-  python3.11 - <<'PY' "${source_metadata}" "${target_metadata}" "${shared_password}"
+  _run_python - <<'PY' "${source_metadata}" "${target_metadata}" "${shared_password}"
 import json
 import sys
 from pathlib import Path
@@ -352,7 +406,7 @@ _sync_demo_runtime_env() {
   local source_metadata="$2"
   local shared_password="$3"
 
-  python3.11 - <<'PY' "${env_file}" "${source_metadata}" "${shared_password}"
+  _run_python - <<'PY' "${env_file}" "${source_metadata}" "${shared_password}"
 import json
 import sys
 from pathlib import Path
@@ -497,7 +551,7 @@ _ensure_database_url() {
 }
 
 _database_provision_values() {
-  python3.11 - <<'PY' "$1"
+  _run_python - <<'PY' "$1"
 from urllib.parse import urlparse
 import sys
 
@@ -763,8 +817,10 @@ _cleanup_application_database() {
   fi
 
   local py_bin
-  if command -v python3.11 &>/dev/null; then
-    py_bin="python3.11"
+  if [[ -n "${PYTHON_BIN}" ]]; then
+    py_bin="${PYTHON_BIN}"
+  elif _resolve_compatible_python_bin; then
+    py_bin="${PYTHON_BIN}"
   elif command -v python3 &>/dev/null; then
     py_bin="python3"
   else
@@ -907,7 +963,7 @@ _is_valid_db_pass() {
 # set (A-Za-z0-9 - _ . ~) so any valid password produces a valid connection URL.
 # The value is passed via stdin so it never appears in the process argument list.
 _url_encode() {
-  printf '%s' "$1" | python3.11 -c \
+  printf '%s' "$1" | _run_python -c \
     "import sys, urllib.parse; sys.stdout.write(urllib.parse.quote(sys.stdin.read(), safe=''))"
 }
 
@@ -1396,7 +1452,7 @@ preflight() {
     ok "Command found: ip"
   fi
 
-  # Python 3.11
+  # Python >= 3.11
   # Privilege-drop tool: runuser (preferred) or sudo
     if ! command -v runuser &>/dev/null && ! command -v sudo &>/dev/null; then
       error "Neither 'runuser' nor 'sudo' was found. One of these is required to"
@@ -1410,12 +1466,12 @@ preflight() {
       ok "Privilege-drop tool: sudo (runuser not found)"
     fi
 
-    if ! command -v python3.11 &>/dev/null; then
-      warn "python3.11 not found."
+    if ! _resolve_compatible_python_bin; then
+      warn "No compatible Python >= ${MIN_PYTHON_MAJOR}.${MIN_PYTHON_MINOR} interpreter found."
       if [[ "${ID}" == "ubuntu" ]]; then
-        local prompt_msg="Install python3.11 via the deadsnakes PPA (ppa:deadsnakes/ppa)?"
+        local prompt_msg="Install python3.11 via the deadsnakes PPA (ppa:deadsnakes/ppa) as a fallback interpreter?"
       else
-        local prompt_msg="Install python3.11 from official Debian repositories (backports if needed)?"
+        local prompt_msg="Install python3.11 from official Debian repositories (backports if needed) as a fallback interpreter?"
       fi
       if _confirm "${prompt_msg}"; then
         run apt-get update -qq
@@ -1458,35 +1514,53 @@ preflight() {
         else
           info "python3-distutils not available in configured apt repositories; skipping (optional package)."
         fi
-        ok "python3.11 installed"
+        if ! _resolve_compatible_python_bin; then
+          error "python3.11 was installed, but no compatible interpreter could be resolved afterwards."
+          exit 1
+        fi
+        ok "Using ${PYTHON_BIN}: $(${PYTHON_BIN} --version 2>&1)"
       else
-        error "python3.11 is required. Aborting."
+        error "A compatible Python >= ${MIN_PYTHON_MAJOR}.${MIN_PYTHON_MINOR} interpreter is required. Aborting."
         exit 1
       fi
     else
-      # python3.11 is present; ensure the 'venv' module is available
-      if python3.11 -m venv --help >/dev/null 2>&1; then
-        ok "python3.11: $(python3.11 --version 2>&1) (venv available)"
-      else
-        warn "python3.11 is installed but the 'venv' module is not available."
-        if [[ "${ID}" == "ubuntu" || "${ID}" == "debian" ]]; then
-          if _confirm "Install python3.11-venv so virtual environments can be created?"; then
-            apt-get update
-            apt-get install -y python3.11-venv
-            if python3.11 -m venv --help >/dev/null 2>&1; then
-              ok "python3.11-venv installed; 'venv' module is now available."
-            else
-              error "python3.11-venv was installed but 'python3.11 -m venv' still fails. Aborting."
-              exit 1
-            fi
+      ok "Using ${PYTHON_BIN}: $(${PYTHON_BIN} --version 2>&1)"
+    fi
+
+    if _python_has_venv "${PYTHON_BIN}"; then
+      ok "${PYTHON_BIN}: venv available"
+    else
+      warn "${PYTHON_BIN} is installed but the 'venv' module is not available."
+      if [[ "${ID}" == "ubuntu" || "${ID}" == "debian" ]]; then
+        local venv_pkg=""
+        if apt-cache policy "${PYTHON_VENV_PACKAGE}" 2>/dev/null | grep -qv 'Candidate: (none)'; then
+          venv_pkg="${PYTHON_VENV_PACKAGE}"
+        elif apt-cache policy python3-venv 2>/dev/null | grep -qv 'Candidate: (none)'; then
+          venv_pkg="python3-venv"
+        fi
+
+        if [[ -z "${venv_pkg}" ]]; then
+          error "No installable apt package was found to provide the 'venv' module for ${PYTHON_BIN}."
+          error "Please install the appropriate package for Python ${PYTHON_VERSION_MM} manually and re-run."
+          exit 1
+        fi
+
+        if _confirm "Install ${venv_pkg} so virtual environments can be created?"; then
+          run apt-get update -qq
+          run apt-get install -y "${venv_pkg}"
+          if _python_has_venv "${PYTHON_BIN}"; then
+            ok "${venv_pkg} installed; 'venv' module is now available for ${PYTHON_BIN}."
           else
-            error "The 'venv' module for python3.11 is required to continue. Aborting."
+            error "${venv_pkg} was installed but '${PYTHON_BIN} -m venv' still fails. Aborting."
             exit 1
           fi
         else
-          error "The 'venv' module for python3.11 is missing. Please install the appropriate package for your distribution (e.g. python3.11-venv on Debian/Ubuntu)."
+          error "The 'venv' module for ${PYTHON_BIN} is required to continue. Aborting."
           exit 1
         fi
+      else
+        error "The 'venv' module for ${PYTHON_BIN} is missing. Please install the appropriate package for Python ${PYTHON_VERSION_MM} and re-run."
+        exit 1
       fi
     fi
 
@@ -2152,7 +2226,7 @@ install_backend() {
   local venv_dir="${INSTALL_DIR}/venv"
   if [[ ! -d "${venv_dir}" ]]; then
     info "Creating Python virtual environment..."
-    _run_as_ecube python3.11 -m venv "${venv_dir}"
+    _run_as_ecube "${PYTHON_BIN}" -m venv "${venv_dir}"
   fi
   info "Installing Python dependencies..."
   _run_as_ecube "${venv_dir}/bin/pip" install --quiet --upgrade pip setuptools wheel
