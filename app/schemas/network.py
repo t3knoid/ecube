@@ -52,6 +52,10 @@ class MountRelatedJobSchema(BaseModel):
         ...,
         description="Trusted lifecycle status for the related job, or a safe fallback when no authoritative job status is available",
     )
+    custody_status: Literal["HANDOFF_RECORDED", "PENDING_HANDOFF", "STATUS_UNAVAILABLE", "NO_RELATED_JOB"] = Field(
+        default="STATUS_UNAVAILABLE",
+        description="Trusted custody status for the related job workflow when available",
+    )
 
 
 class NetworkMountSchema(BaseModel):

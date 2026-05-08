@@ -10,6 +10,7 @@ from app.models.audit import AuditLog
 from app.models.hardware import UsbDrive, DriveState, UsbHub, UsbPort
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobChainOfCustodySnapshot, JobStatus, Manifest, StartupAnalysisStatus
 from app.models.network import MountStatus, MountType, NetworkMount
+from app.services import audit_service
 from app.services.reconciliation_service import reconcile_jobs
 
 
@@ -1283,6 +1284,65 @@ def test_get_job_chain_of_custody_active_job_prefers_stored_snapshot_over_live_s
     assert report["manifest_summary"][0]["processor_notes"] == "Stored intake note"
     assert report["manifest_summary"][0]["total_files"] == 1
     assert report["manifest_summary"][0]["total_bytes"] == 128
+
+
+def test_get_job_custody_summaries_degrades_per_archived_job_snapshot(db, caplog):
+    valid_job = ExportJob(
+        project_id="PROJ-COC-BULK-OK",
+        evidence_number="EV-COC-BULK-OK",
+        source_path="/data/coc-bulk-ok",
+        status=JobStatus.ARCHIVED,
+    )
+    invalid_job = ExportJob(
+        project_id="PROJ-COC-BULK-BAD",
+        evidence_number="EV-COC-BULK-BAD",
+        source_path="/data/coc-bulk-bad",
+        status=JobStatus.ARCHIVED,
+    )
+    db.add_all([valid_job, invalid_job])
+    db.flush()
+    db.add_all(
+        [
+            JobChainOfCustodySnapshot(
+                job_id=valid_job.id,
+                stored_by="manager-user",
+                payload={
+                    "selector_mode": "JOB",
+                    "project_id": "PROJ-COC-BULK-OK",
+                    "reports": [
+                        {
+                            "drive_id": 1,
+                            "drive_sn": "USB-COC-BULK-OK-001",
+                            "drive_manufacturer": "SanDisk",
+                            "drive_model": "Extreme",
+                            "project_id": "PROJ-COC-BULK-OK",
+                            "custody_complete": True,
+                            "delivery_time": None,
+                            "chain_of_custody_events": [],
+                            "manifest_summary": [],
+                        }
+                    ],
+                },
+            ),
+            JobChainOfCustodySnapshot(
+                job_id=invalid_job.id,
+                stored_by="manager-user",
+                payload={
+                    "selector_mode": "JOB",
+                    "project_id": "PROJ-COC-BULK-BAD",
+                    "reports": [{"drive_id": 2}],
+                },
+            ),
+        ]
+    )
+    db.commit()
+
+    with caplog.at_level(logging.INFO):
+        summaries = audit_service.get_job_custody_summaries(db, job_ids=[valid_job.id, invalid_job.id])
+
+    assert summaries[valid_job.id] is True
+    assert summaries[invalid_job.id] is None
+    assert "Job custody summary unavailable for archived snapshot" in caplog.text
 
 
 def test_get_job_chain_of_custody_normalizes_snapshot_timestamps_to_utc(manager_client, db):

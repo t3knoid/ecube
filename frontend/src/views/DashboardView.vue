@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { getSystemHealth } from '@/api/introspection.js'
 import { getDrives } from '@/api/drives.js'
 import { listJobs } from '@/api/jobs.js'
+import { getMounts } from '@/api/mounts.js'
 import { usePolling } from '@/composables/usePolling.js'
 import DataTable from '@/components/common/DataTable.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
@@ -21,6 +22,7 @@ const PASSWORD_WARNING_DISMISS_KEY = 'ecube-password-warning-dismissed-days'
 
 const health = ref({ status: 'unknown', database: 'unknown', active_jobs: 0 })
 const drives = ref([])
+const mounts = ref([])
 const jobs = ref([])
 const loading = ref(true)
 const error = ref('')
@@ -43,6 +45,45 @@ const driveCounts = computed(() => {
   for (const drive of drives.value) {
     const key = String(drive.current_state || '').toUpperCase()
     if (counts[key] !== undefined) counts[key] += 1
+  }
+  return counts
+})
+
+const mountCounts = computed(() => {
+  const counts = { UNASSIGNED: 0, ASSIGNED: 0, IN_PROGRESS: 0, COMPLETED: 0, UNAVAILABLE: 0 }
+  for (const mount of mounts.value) {
+    const key = String(mount.related_job?.status || '').toUpperCase()
+    const custodyStatus = String(mount.related_job?.custody_status || 'STATUS_UNAVAILABLE').toUpperCase()
+    if (!key || key === 'STATUS_UNAVAILABLE') {
+      counts.UNAVAILABLE += 1
+      continue
+    }
+
+    if (key === 'NO_RELATED_JOB') {
+      counts.UNASSIGNED += 1
+      continue
+    }
+
+    if (key === 'PENDING') {
+      counts.ASSIGNED += 1
+      continue
+    }
+    if (['RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING', 'FAILED'].includes(key)) {
+      counts.IN_PROGRESS += 1
+      continue
+    }
+    if (['COMPLETED', 'ARCHIVED'].includes(key)) {
+      if (custodyStatus === 'HANDOFF_RECORDED') {
+        counts.COMPLETED += 1
+      } else if (custodyStatus === 'PENDING_HANDOFF') {
+        counts.IN_PROGRESS += 1
+      } else {
+        counts.UNAVAILABLE += 1
+      }
+      continue
+    }
+
+    counts.UNAVAILABLE += 1
   }
   return counts
 })
@@ -86,7 +127,11 @@ function progressActive(job) {
 
 async function refreshSnapshot() {
   const warnings = []
-  const results = await Promise.allSettled([getDrives({ include_disconnected: true }), listJobs({ limit: 200 })])
+  const results = await Promise.allSettled([
+    getDrives({ include_disconnected: true }),
+    getMounts(),
+    listJobs({ limit: 200 }),
+  ])
 
   if (results[0].status === 'fulfilled') {
     drives.value = Array.isArray(results[0].value)
@@ -97,8 +142,16 @@ async function refreshSnapshot() {
   }
 
   if (results[1].status === 'fulfilled') {
-    jobs.value = Array.isArray(results[1].value)
+    mounts.value = Array.isArray(results[1].value)
       ? results[1].value.map((item) => normalizeProjectRecord(item, ['project_id']))
+      : []
+  } else {
+    warnings.push(t('dashboard.loadMountsError'))
+  }
+
+  if (results[2].status === 'fulfilled') {
+    jobs.value = Array.isArray(results[2].value)
+      ? results[2].value.map((item) => normalizeProjectRecord(item, ['project_id']))
       : []
   } else {
     // Backward compatibility for servers that do not yet expose GET /jobs.
@@ -170,6 +223,15 @@ onUnmounted(() => {
         <div class="summary-row"><span>{{ t('drives.states.disabled') }}</span><strong>{{ driveCounts.DISABLED }}</strong></div>
         <div class="summary-row"><span>{{ t('drives.states.available') }}</span><strong>{{ driveCounts.AVAILABLE }}</strong></div>
         <div class="summary-row"><span>{{ t('drives.states.inUse') }}</span><strong>{{ driveCounts.IN_USE }}</strong></div>
+      </article>
+
+      <article v-if="canViewOperationalSummary" class="summary-card">
+        <h2>{{ t('dashboard.mountsSummary') }}</h2>
+        <div class="summary-row"><span>{{ t('dashboard.mountUnassigned') }}</span><strong>{{ mountCounts.UNASSIGNED }}</strong></div>
+        <div class="summary-row"><span>{{ t('dashboard.mountAssigned') }}</span><strong>{{ mountCounts.ASSIGNED }}</strong></div>
+        <div class="summary-row"><span>{{ t('dashboard.mountInProgress') }}</span><strong>{{ mountCounts.IN_PROGRESS }}</strong></div>
+        <div class="summary-row"><span>{{ t('dashboard.mountCompleted') }}</span><strong>{{ mountCounts.COMPLETED }}</strong></div>
+        <div class="summary-row"><span>{{ t('dashboard.mountUnavailable') }}</span><strong>{{ mountCounts.UNAVAILABLE }}</strong></div>
       </article>
     </div>
 

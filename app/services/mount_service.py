@@ -14,7 +14,7 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models.jobs import ExportJob
+from app.models.jobs import ExportJob, JobStatus
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.infrastructure.mount_namespace import shares_host_mount_namespace
 from app.repositories.audit_repository import AuditRepository
@@ -24,6 +24,7 @@ from app.config import settings
 from app.exceptions import ConflictError, EncodingError
 from app.services.mount_credentials_service import decrypt_mount_secret, encrypt_mount_secret
 from app.services.mount_check_utils import check_mounted_with_configured_timeout
+from app.services.audit_service import get_job_custody_summaries
 
 from app.utils.sanitize import is_encoding_error, normalize_project_id, sanitize_error_message
 
@@ -61,7 +62,7 @@ def _attach_related_job_contexts(db: Session, mounts: list[NetworkMount]) -> lis
     }
     if not project_ids:
         for mount in mounts:
-            setattr(mount, "related_job", MountRelatedJobSchema(status="NO_RELATED_JOB"))
+            setattr(mount, "related_job", MountRelatedJobSchema(status="NO_RELATED_JOB", custody_status="NO_RELATED_JOB"))
         return mounts
 
     try:
@@ -89,20 +90,66 @@ def _attach_related_job_contexts(db: Session, mounts: list[NetworkMount]) -> lis
             },
         )
         for mount in mounts:
-            setattr(mount, "related_job", MountRelatedJobSchema(status="STATUS_UNAVAILABLE"))
+            setattr(mount, "related_job", MountRelatedJobSchema(status="STATUS_UNAVAILABLE", custody_status="STATUS_UNAVAILABLE"))
         return mounts
+
+    completed_job_ids = [
+        job_id
+        for job_id, _project_id, status in job_rows
+        if status in (JobStatus.COMPLETED, JobStatus.ARCHIVED)
+    ]
+    custody_by_job_id: dict[int, Optional[bool]] = {}
+    if completed_job_ids:
+        try:
+            custody_by_job_id = get_job_custody_summaries(db, job_ids=completed_job_ids)
+        except Exception as exc:
+            logger.info(
+                "Mount related-job custody status unavailable",
+                extra={
+                    "context": {
+                        "failure_class": "mount_related_job_custody_unavailable",
+                        "job_count": len(completed_job_ids),
+                    }
+                },
+            )
+            logger.debug(
+                "Mount related-job custody status batch lookup failed",
+                extra={
+                    "job_count": len(completed_job_ids),
+                    "raw_error": str(exc),
+                },
+            )
 
     selected_jobs: dict[str, MountRelatedJobSchema] = {}
     for job_id, project_id, status in job_rows:
         normalized_project_id = normalize_project_id(project_id)
         if not isinstance(normalized_project_id, str) or not normalized_project_id or normalized_project_id in selected_jobs:
             continue
-        selected_jobs[normalized_project_id] = MountRelatedJobSchema(job_id=job_id, status=status)
+        custody_status = "PENDING_HANDOFF"
+        if status in (JobStatus.COMPLETED, JobStatus.ARCHIVED):
+            custody_complete = custody_by_job_id.get(job_id)
+            custody_status = (
+                "HANDOFF_RECORDED"
+                if custody_complete is True
+                else "PENDING_HANDOFF"
+                if custody_complete is False
+                else "STATUS_UNAVAILABLE"
+            )
+
+        selected_jobs[normalized_project_id] = MountRelatedJobSchema(
+            job_id=job_id,
+            status=status,
+            custody_status=custody_status,
+        )
 
     for mount in mounts:
         normalized_project_id = normalize_project_id(getattr(mount, "project_id", None))
         related_job = selected_jobs.get(normalized_project_id) if isinstance(normalized_project_id, str) else None
-        setattr(mount, "related_job", related_job or MountRelatedJobSchema(status="NO_RELATED_JOB"))
+        setattr(
+            mount,
+            "related_job",
+            related_job or MountRelatedJobSchema(status="NO_RELATED_JOB", custody_status="NO_RELATED_JOB"),
+        )
 
     return mounts
 

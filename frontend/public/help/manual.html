@@ -365,9 +365,11 @@ Number of active jobs
 </li><li>
 Drive state summary (<code>DISCONNECTED</code>, <code>DISABLED</code>, <code>AVAILABLE</code>, <code>IN_USE</code>)
 </li><li>
+Mount workflow summary (<code>Unassigned</code>, <code>Assigned</code>, <code>In Progress</code>, <code>Completed</code>, <code>Unavailable</code>), where <code>Assigned</code> means a job exists but has not started, <code>In Progress</code> includes started, paused, failed, or handoff-pending work, and <code>Unavailable</code> marks mounts whose trusted related-job or custody state could not be derived
+</li><li>
 Table of active jobs
 </li></ul>
-<p>Auditor users see the dashboard with only the system-health summary card; drive summary and active-job counts/tables are hidden.</p>
+<p>Auditor users see the dashboard with only the system-health summary card; drive summary, mounts summary, and active-job counts/tables are hidden.</p>
 <p>If your password is nearing expiration, the dashboard shows a dismissible warning banner with the remaining days. Dismissing the banner hides it only for the current browser session.</p>
 <p>Use the dashboard when you need a quick answer to questions such as:</p>
 <ul><li>
@@ -376,6 +378,8 @@ Is the system healthy?
 Are any jobs currently running or verifying?
 </li><li>
 How many drives are ready for use?
+</li><li>
+How many source mounts are unassigned, assigned but not started, already underway, fully complete including custody handoff, or currently unavailable for trusted workflow classification?
 </li></ul>
 <p>The dashboard is intended for situational awareness, not full task execution. Use the dedicated pages for detailed operations.</p>
 <p class="help-back-to-top"><a href="#help-toc-title">Back to top</a></p>
@@ -561,7 +565,7 @@ Credentials file
 <ul><li>
 The dialog pre-fills the current type, remote path, and project ID.
 </li><li>
-Mount Detail shows Type, Project, NFS Client version, Last Checked, Job ID, Job Status, and mount Status before you open the dialog. <code>Job Status</code> is sourced from trusted backend job data when a related job exists, falls back to <code>No related job</code> when the project has no current related job, and falls back to <code>Status unavailable</code> instead of guessing when authoritative job status cannot be determined. <code>admin</code> and <code>manager</code> users also see the raw Remote Path and Local Mount Point values there; read-only roles see those path fields redacted.
+Mount Detail shows Type, Project, NFS Client version, Last Checked, Job ID, Job Status, and mount Status before you open the dialog. <code>Job Status</code> is sourced from trusted backend job data when a related job exists, falls back to <code>No related job</code> when the project has no current related job, and falls back to <code>Status unavailable</code> instead of guessing when authoritative job status cannot be determined. The dashboard mount workflow summary separately considers trusted related-job custody status, so a <code>COMPLETED</code> or <code>ARCHIVED</code> job can still appear under <code>In Progress</code> there until custody handoff is recorded, and it uses <code>Unavailable</code> when trusted related-job or custody classification cannot be derived for that mount. <code>admin</code> and <code>manager</code> users also see the raw Remote Path and Local Mount Point values there; read-only roles see those path fields redacted.
 </li><li>
 The local mount point is shown as read-only informational context and is not directly editable.
 </li><li>

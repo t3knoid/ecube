@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
-from app.models.jobs import DriveAssignment, ExportJob, JobStatus, Manifest
+from app.models.jobs import DriveAssignment, ExportJob, JobChainOfCustodySnapshot, JobStatus, Manifest
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
 from app.repositories.job_repository import JobChainOfCustodySnapshotRepository, JobRepository
@@ -504,6 +504,152 @@ def get_job_drive_custody_summary(
         return None, None
 
     return drive_report.custody_complete, drive_report.delivery_time
+
+
+def get_job_custody_summary(
+    db: Session,
+    *,
+    job_id: int,
+) -> Optional[bool]:
+    return get_job_custody_summaries(db, job_ids=[job_id]).get(job_id)
+
+
+def get_job_custody_summaries(
+    db: Session,
+    *,
+    job_ids: List[int],
+) -> Dict[int, Optional[bool]]:
+    normalized_job_ids = sorted({int(job_id) for job_id in job_ids if isinstance(job_id, int) and job_id > 0})
+    if not normalized_job_ids:
+        return {}
+
+    jobs = db.query(ExportJob).filter(ExportJob.id.in_(normalized_job_ids)).all()
+    jobs_by_id = {job.id: job for job in jobs}
+    results: Dict[int, Optional[bool]] = {job_id: None for job_id in normalized_job_ids}
+
+    archived_job_ids = [job.id for job in jobs if job.status == JobStatus.ARCHIVED]
+    if archived_job_ids:
+        snapshots = (
+            db.query(JobChainOfCustodySnapshot)
+            .filter(JobChainOfCustodySnapshot.job_id.in_(archived_job_ids))
+            .all()
+        )
+        for snapshot in snapshots:
+            try:
+                report = ChainOfCustodyReportSchema.model_validate(snapshot.payload)
+            except Exception as exc:
+                logger.info(
+                    "Job custody summary unavailable for archived snapshot",
+                    extra={
+                        "context": {
+                            "failure_class": "job_custody_snapshot_unavailable",
+                            "job_id": snapshot.job_id,
+                        }
+                    },
+                )
+                logger.debug(
+                    "Archived job custody snapshot validation failed",
+                    extra={
+                        "job_id": snapshot.job_id,
+                        "raw_error": str(exc),
+                    },
+                )
+                continue
+
+            if report.reports:
+                results[snapshot.job_id] = all(entry.custody_complete for entry in report.reports)
+
+    active_job_ids = [job.id for job in jobs if job.status != JobStatus.ARCHIVED]
+    if not active_job_ids:
+        return results
+
+    assignments = (
+        db.query(DriveAssignment)
+        .filter(DriveAssignment.job_id.in_(active_job_ids))
+        .order_by(DriveAssignment.assigned_at.asc(), DriveAssignment.id.asc())
+        .all()
+    )
+
+    assignments_by_job_and_drive: Dict[tuple[int, int], DriveAssignment] = {}
+    drive_ids: set[int] = set()
+    project_ids: set[str] = set()
+    for assignment in assignments:
+        job = jobs_by_id.get(assignment.job_id)
+        if job is None:
+            continue
+        assignments_by_job_and_drive[(assignment.job_id, assignment.drive_id)] = assignment
+        drive_ids.add(assignment.drive_id)
+        if job.project_id:
+            project_ids.add(job.project_id)
+
+    if not assignments_by_job_and_drive:
+        return results
+
+    handoff_events = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.action == "COC_HANDOFF_CONFIRMED",
+            AuditLog.drive_id.in_(sorted(drive_ids)),
+            AuditLog.project_id.in_(sorted(project_ids)),
+            or_(AuditLog.job_id.is_(None), AuditLog.job_id.in_(active_job_ids)),
+        )
+        .order_by(AuditLog.timestamp.asc(), AuditLog.id.asc())
+        .all()
+    )
+
+    events_by_drive: Dict[int, List[AuditLog]] = {}
+    for event in handoff_events:
+        if event.drive_id is None:
+            continue
+        events_by_drive.setdefault(event.drive_id, []).append(event)
+
+    drive_ids_by_job: Dict[int, List[int]] = {}
+    for job_id, drive_id in assignments_by_job_and_drive:
+        drive_ids_by_job.setdefault(job_id, []).append(drive_id)
+
+    for job_id, drive_ids_for_job in drive_ids_by_job.items():
+        job = jobs_by_id.get(job_id)
+        if job is None:
+            continue
+
+        try:
+            drive_custody_states: List[bool] = []
+            for drive_id in sorted(set(drive_ids_for_job)):
+                assignment = assignments_by_job_and_drive.get((job_id, drive_id))
+                lifecycle_start_at = _job_drive_lifecycle_start_at(job=job, assignment=assignment)
+                matched = any(
+                    event.project_id == job.project_id
+                    and _handoff_event_matches_job_lifecycle(
+                        event,
+                        job_id=job.id,
+                        lifecycle_start_at=lifecycle_start_at,
+                    )
+                    for event in events_by_drive.get(drive_id, [])
+                )
+                drive_custody_states.append(matched)
+        except Exception as exc:
+            logger.info(
+                "Job custody summary unavailable for active job",
+                extra={
+                    "context": {
+                        "failure_class": "job_custody_summary_unavailable",
+                        "job_id": job_id,
+                    }
+                },
+            )
+            logger.debug(
+                "Active job custody summary evaluation failed",
+                extra={
+                    "job_id": job_id,
+                    "raw_error": str(exc),
+                },
+            )
+            continue
+
+        if drive_custody_states:
+            results[job_id] = all(drive_custody_states)
+
+    return results
 
 
 def refresh_job_chain_of_custody_report(

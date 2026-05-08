@@ -127,6 +127,8 @@ Project identifiers are canonicalized by trimming surrounding whitespace and con
 
 `POST /mounts/discover` is a trusted helper for the Add Mount dialog. It accepts the selected mount type plus the entered server seed and optional credentials, returns sanitized remote paths suitable for populating the dialog even in demo mode, and can return actionable `500` guidance when the ECUBE host is missing required discovery tools such as `smbclient` or `showmount`.
 
+`GET /mounts` now returns `related_job.status` together with `related_job.custody_status` when trusted related-job context is available. The custody field uses `HANDOFF_RECORDED`, `PENDING_HANDOFF`, `STATUS_UNAVAILABLE`, or `NO_RELATED_JOB` so operator-facing surfaces can distinguish copy completion from final custody handoff completion.
+
 `PATCH /mounts/{mount_id}` attempts to apply the edited configuration immediately. When the target share is currently mounted, ECUBE unmounts it first and remounts it with the updated options, including any explicit per-share `nfs_client_version` override.
 
 ---

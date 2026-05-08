@@ -58,6 +58,40 @@ def test_list_mounts_includes_related_job_status(client, db):
     assert data[0]["related_job"] == {
         "job_id": newer_job.id,
         "status": "RUNNING",
+        "custody_status": "PENDING_HANDOFF",
+    }
+
+
+def test_list_mounts_includes_related_job_custody_status_for_completed_jobs(client, db, monkeypatch):
+    mount = NetworkMount(
+        type=MountType.SMB,
+        remote_path="//server/share",
+        project_id="PROJ-012",
+        local_mount_point="/smb/project-012",
+        status=MountStatus.MOUNTED,
+    )
+    job = ExportJob(
+        project_id="PROJ-012",
+        evidence_number="EV-012",
+        source_path="/source/completed",
+        status=JobStatus.COMPLETED,
+    )
+    db.add_all([mount, job])
+    db.commit()
+
+    monkeypatch.setattr(
+        "app.services.mount_service.get_job_custody_summaries",
+        lambda *_args, **_kwargs: {job.id: False},
+    )
+
+    response = client.get("/mounts")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data[0]["related_job"] == {
+        "job_id": job.id,
+        "status": "COMPLETED",
+        "custody_status": "PENDING_HANDOFF",
     }
 
 
@@ -79,6 +113,7 @@ def test_list_mounts_uses_no_related_job_fallback(client, db):
     assert data[0]["related_job"] == {
         "job_id": None,
         "status": "NO_RELATED_JOB",
+        "custody_status": "NO_RELATED_JOB",
     }
 
 
@@ -109,6 +144,7 @@ def test_list_mounts_uses_status_unavailable_fallback_when_related_job_lookup_fa
     assert data[0]["related_job"] == {
         "job_id": None,
         "status": "STATUS_UNAVAILABLE",
+        "custody_status": "STATUS_UNAVAILABLE",
     }
 
 

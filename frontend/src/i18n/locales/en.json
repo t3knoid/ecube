@@ -561,11 +561,18 @@
     "systemHealth": "System Health",
     "passwordExpiryWarning": "Your password will expire in {days} day | Your password will expire in {days} days",
     "driveSummary": "Drive Summary",
+    "mountsSummary": "Mounts Summary",
+    "mountUnassigned": "Unassigned",
+    "mountAssigned": "Assigned",
+    "mountInProgress": "In Progress",
+    "mountCompleted": "Completed",
+    "mountUnavailable": "Unavailable",
     "project": "Project",
     "progress": "Progress",
     "noActiveJobs": "No active jobs",
     "jobId": "Job ID",
-    "loadDrivesError": "Failed to load drive data."
+    "loadDrivesError": "Failed to load drive data.",
+    "loadMountsError": "Failed to load mount data."
   },
   "setup": {
     "stepCounter": "Step {step} of {total}",
