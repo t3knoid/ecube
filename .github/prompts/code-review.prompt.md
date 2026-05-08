@@ -8,6 +8,8 @@ agent: "agent"
 
 Review all changes in the current branch.
 
+This prompt also includes the documentation-audit requirements from `.github/prompts/documentation-sync.prompt.md`. Treat required documentation updates as first-class review findings when code changes are not fully documented.
+
 Use the repository instruction sources below as the authoritative review policy. Do not restate or reinterpret them loosely. When two sources overlap, prefer the more specific scoped rule for the files being reviewed, while preserving global security, trust-boundary, auditability, and project-isolation constraints.
 
 ## Mandatory instruction sources
@@ -58,23 +60,56 @@ Review for at least the following:
 
 ## Documentation review requirement
 
-Always evaluate documentation impact.
+Always evaluate documentation impact using concrete evidence from the branch diff, changed behavior, or affected files.
+
+Primary task:
+
+- inspect the current code changes, affected files, and any related UI or API behavior
+- determine which documentation must be updated so the docs stay accurate for operators, developers, reviewers, and QA
+
+Documentation focus areas:
+
+- user-facing behavior
+- developer-facing behavior
+- architectural behavior
+- validation rules and error messages
+- role-based permissions visible in the UI
+- drive, job, mount, browse, audit, evidence export, and directory-browser workflows
+- new or changed buttons, dialogs, menus, navigation paths, loading states, empty states, and error states
+- setup, configuration, deployment, or operational guidance
+
+Check nearby documentation and comments when relevant, including:
+
+- `README.md`
+- relevant files under the `docs` tree
+- API reference sections
+- architecture diagrams or design docs
+- setup and deployment instructions
+- ECUBE-specific operator and workflow documentation
+- prompt files, review prompts, and in-repo operator/developer guidance
+- updated screenshots or UI mockups
+
+For each required documentation update:
+
+1. Show the exact diff lines, changed behavior, or concrete evidence that triggered the documentation need.
+2. Name the document that must be updated and explain why.
+3. Propose the minimal documentation change in 1 to 3 sentences.
+4. If the change introduces a new UI state or workflow, propose a QA test case.
+
+Documentation review constraints:
+
+- be evidence-based; do not suggest speculative documentation work
+- keep recommendations modular, concise, contributor-friendly, and onboarding-first
+- prefer small targeted edits over broad rewrites
+- keep formatting print-ready and easy to scan
+- if no update is needed for an area, say so briefly
 
 Report one of the following explicitly:
 
 - `documentation is already aligned with the code changes`
 - `documentation updates are required`
 
-If documentation updates are required, name the affected documents and describe the behavior that now needs to be documented or corrected.
-
-Check nearby documentation and comments when relevant, including:
-
-- `README.md`
-- `docs/operations/`
-- `docs/testing/`
-- `docs/design/`
-- `docs/development/`
-- prompt files, review prompts, and in-repo operator/developer guidance
+If documentation updates are required, name the affected documents, describe the behavior that now needs to be documented or corrected, and include the evidence that triggered the documentation finding.
 
 ## Output format
 
@@ -91,6 +126,22 @@ For each finding:
 - cite the specific file and line
 - describe the expected behavior or rule being violated
 
+When documentation findings exist, include them under architecture, security, testing, or documentation issues using the same severity and evidence standard as code findings.
+
 If there are no findings, say so explicitly and mention any residual risk or test/documentation gaps.
+
+After the findings section, always include these documentation-review sections exactly:
+
+#### Required Documentation Updates
+- Group by document or feature area.
+
+#### Suggested Additions to QA Testing Guide
+- Include manual verification scenarios when relevant.
+
+#### Suggested Additions to UI Use Cases
+- Include any new operator workflows, states, or role-dependent behavior.
+
+#### Confidence (High / Medium / Low)
+- Give a short reason for the confidence level.
 
 Keep the review concise and specific. Prefer concrete findings over summaries.
