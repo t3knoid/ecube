@@ -51,7 +51,7 @@ Add the following manual checks when a release includes the archived-job workflo
 | Jobs list shows archived jobs on demand | On `Jobs`, enable `Show Archived Jobs` and optionally choose the `Archived` status filter | Archived jobs appear without requiring a page reload outside the normal list refresh, and the `Archived` status label is available in the filter control |
 | Prepare Eject before Archive is enforced | Sign in as `manager` or `admin`, open a `COMPLETED` or `FAILED` job whose related drive is still in active use | The Archive action stays unavailable and the page instructs the operator to use `Prepare Eject` first so the media can move into chain of custody |
 | Archive confirmation flow is role-gated | After `Prepare Eject` has been completed for the related drive, open the same `COMPLETED` or `FAILED` job, click `Archive`, then confirm | The confirmation dialog explains that archiving sunsets the job and allows recreation of the same work definition, and the job transitions to `ARCHIVED` |
-| Archived Job Detail is read-only for lifecycle actions | Open an archived job in Job Detail | The job remains viewable, but lifecycle actions such as Edit, Analyze, and Start are disabled, and the Archive action itself is no longer offered |
+| Archived Job Detail is read-only for lifecycle actions | Open an archived job in Job Detail | The job remains viewable, Edit and Analyze stay visible but disabled, the lifecycle toggle is hidden, and the Archive action itself is no longer offered |
 | Processor cannot archive jobs | Sign in as `processor`, open a completed job in Job Detail | No Archive action is shown in the UI, and direct API use should return `403` |
 
 
@@ -688,12 +688,12 @@ For the current Jobs page UI, verify the grouped `Create Job` dialog behaves as 
 - After selecting a mounted source, `Browse folders` opens an inline folder browser for that mount only, shows directories without mixing in files, updates the existing `Source path` field as the operator traverses folders, and shows a `..` row whenever the operator can move to the parent folder.
 - If `Run job immediately` is checked, the created job transitions directly into the start flow after successful creation.
 - If the selected drive or mount becomes unavailable, the operator sees a specific conflict or availability message instead of a generic validation error.
-- The visible `Job ID` value navigates to Job Detail, and desktop row actions expose `Start` and `Pause` with state-aware enablement.
+- The visible `Job ID` value navigates to Job Detail, and desktop row actions expose one stateful lifecycle toggle that shows `Start` for startable or resumable jobs and `Pause` for pausable jobs.
 - A newly started job can show `Preparing...` in the Jobs list before a numeric percentage is available.
 - Opening Job Detail during that startup phase shows `Preparing copy...` together with explanatory text that ECUBE is still scanning the source files and calculating totals.
 - If a manual analyze run finishes while the Jobs page stays open, verify the page shows a completion banner identifying the job and final startup-analysis state.
-- Pressing `Pause` on a running job shows a `Pause in progress` dialog while the system waits for in-flight copy threads to finish.
-- The `Start` action remains disabled during `PAUSING` and becomes available again once the job reaches `PAUSED`.
+- Pressing the lifecycle toggle while it shows `Pause` on a running job opens a `Pause in progress` dialog while the system waits for in-flight copy threads to finish.
+- The lifecycle toggle remains unavailable during `PAUSING` and returns to `Start` once the job reaches `PAUSED`.
 - After a pause and resume cycle, the final duration and copy-rate summary remain additive across the full run rather than resetting to only the most recent segment.
 - For a failed or paused job with cached startup analysis, `admin` and `manager` see `Clear startup analysis cache`, processor-only users do not, and the confirmation dialog explains that the next restart will rescan the source.
 - After confirming cleanup, the success message appears, the cleanup action disappears, and later restart behavior performs a fresh startup analysis.
@@ -1289,7 +1289,7 @@ These tests exercise real hardware paths that must be validated during manual QA
 | 3 | Delete pending job requires confirmation | Open a `PENDING` job, click `Delete`, confirm the dialog | The job is removed, the UI returns to the Jobs list, and the drive assignment is released |
 | 4 | Verify and Manifest are gated by real completion | Open a job that is still copying and watch the action bar, then open the same job after it reaches `COMPLETED` with 100% progress and no failed or timed-out files | `Verify` and `Download Manifest` stay disabled until the job is truly complete, then become available |
 | 4a | Verify and Manifest stay blocked for partial-success completion | Open a `COMPLETED` job that still has one or more failed or timed-out files | `Verify` and `Download Manifest` remain disabled, and direct API calls to `/jobs/{job_id}/verify` or `/jobs/{job_id}/manifest` return `409 Conflict` |
-| 5 | Pause-in-progress feedback appears on Job Detail | Pause a running job from the detail page | A `Pause in progress` dialog appears until the job transitions to `PAUSED`, and `Start` stays unavailable during `PAUSING` |
+| 5 | Pause-in-progress feedback appears on Job Detail | Use the lifecycle toggle while it shows `Pause` on a running job from the detail page | A `Pause in progress` dialog appears until the job transitions to `PAUSED`, and the lifecycle toggle stays unavailable during `PAUSING` before returning to `Start` |
 | 6 | Source versus destination compare is clear | Click `View Hashes` for a file, then run the compare action from Job Detail | Results show `Source`, `Destination`, and match details for path, size, and checksum; missing sides produce a sanitized conflict message |
 | 7 | Manifest download uses the stable file path | Let a job finish cleanly, then click `Download Manifest` from Job Detail | The browser starts a `manifest.json` download and the UI shows the stable destination path on the assigned drive |
 | 8 | Persisted failure reason outranks file summary | Open a failed job that has both a persisted job-level failure reason and file error rows | Job Detail shows the persisted failure reason first and does not replace it with the derived `error_summary` |

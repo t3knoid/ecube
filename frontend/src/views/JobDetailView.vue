@@ -16,7 +16,7 @@ import ProgressBar from '@/components/common/ProgressBar.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import { formatDriveIdentity } from '@/utils/driveIdentity.js'
 import { buildJobErrorMessage } from '@/utils/jobErrors.js'
-import { canOperateOnInactiveJob, canPauseJob as canPauseJobAction, canReadJobCoc, canStartJob as canStartJobAction, getJobDetailPrimaryActionKeys } from '@/utils/jobActions.js'
+import { canOperateOnInactiveJob, canReadJobCoc, getJobDetailPrimaryActionKeys, getJobLifecycleToggleAction } from '@/utils/jobActions.js'
 import { calculateJobProgress, isJobProgressActive } from '@/utils/jobProgress.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
@@ -364,12 +364,19 @@ const progressActive = computed(() => {
   return isJobProgressActive(job.value)
 })
 
-const canStart = computed(() => {
-  return canStartJobAction({
+const lifecycleToggleAction = computed(() => {
+  const action = getJobLifecycleToggleAction({
     canOperate: canOperate.value,
-    jobStatus: job.value?.status,
+    jobStatus: currentStatus.value,
     startupAnalysisStatus: currentStartupAnalysisStatus.value,
   })
+
+  if (!action) return null
+
+  return {
+    ...action,
+    label: t(`jobs.${action.key}`),
+  }
 })
 
 const canRetryFailed = computed(() => {
@@ -380,10 +387,6 @@ const canRetryFailed = computed(() => {
     && (Number(job.value?.files_failed || 0) > 0 || Number(job.value?.files_timed_out || 0) > 0)
 })
 
-const canPause = computed(() => canPauseJobAction({
-  canOperate: canOperate.value,
-  jobStatus: currentStatus.value,
-}))
 const isJobFullyComplete = computed(() => {
   const status = currentStatus.value
   if (status !== 'COMPLETED') return false
@@ -419,11 +422,11 @@ const actionItems = computed(() => {
       visible: true,
     },
     {
-      key: 'start',
-      label: t('jobs.start'),
-      disabled: !canStart.value || acting.value,
-      run: () => runAction('start'),
-      visible: true,
+      key: 'lifecycle-toggle',
+      label: lifecycleToggleAction.value?.label || t('jobs.start'),
+      disabled: !lifecycleToggleAction.value?.enabled || acting.value,
+      run: () => runAction(lifecycleToggleAction.value?.key),
+      visible: lifecycleToggleAction.value != null,
     },
     {
       key: 'overflow',
@@ -437,13 +440,6 @@ const actionItems = computed(() => {
       label: t('jobs.retryFailedFiles'),
       disabled: !canRetryFailed.value || acting.value,
       run: () => runAction('retry-failed'),
-      visible: true,
-    },
-    {
-      key: 'pause',
-      label: t('jobs.pause'),
-      disabled: !canPause.value || acting.value,
-      run: () => runAction('pause'),
       visible: true,
     },
     {
@@ -1447,7 +1443,7 @@ function buildJobError(err) {
 }
 
 async function runAction(action) {
-  if (!job.value) return
+  if (!job.value || !action) return
   acting.value = true
   error.value = ''
   infoMessage.value = ''

@@ -9,6 +9,7 @@ export function normalizeStartupAnalysisStatus(status) {
 const INACTIVE_JOB_STATUSES = ['PENDING', 'FAILED', 'PAUSED']
 const COC_READABLE_JOB_STATUSES = ['COMPLETED', 'ARCHIVED']
 const ACTIVE_JOB_POLLING_STATUSES = ['RUNNING', 'PAUSING', 'VERIFYING']
+const PAUSE_VISIBLE_JOB_STATUSES = ['RUNNING', 'PAUSING']
 
 export function canOperateOnInactiveJob({ canOperate, jobStatus, startupAnalysisStatus }) {
   return Boolean(canOperate)
@@ -24,17 +25,29 @@ export function canPauseJob({ canOperate, jobStatus }) {
   return Boolean(canOperate) && normalizeJobStatus(jobStatus) === 'RUNNING'
 }
 
-export function getJobListLifecycleActions({ canOperate, jobStatus, startupAnalysisStatus }) {
-  return [
-    {
+export function getJobLifecycleToggleAction({ canOperate, jobStatus, startupAnalysisStatus }) {
+  const status = normalizeJobStatus(jobStatus)
+
+  if (INACTIVE_JOB_STATUSES.includes(status)) {
+    return {
       key: 'start',
       enabled: canStartJob({ canOperate, jobStatus, startupAnalysisStatus }),
-    },
-    {
+    }
+  }
+
+  if (PAUSE_VISIBLE_JOB_STATUSES.includes(status)) {
+    return {
       key: 'pause',
       enabled: canPauseJob({ canOperate, jobStatus }),
-    },
-  ]
+    }
+  }
+
+  return null
+}
+
+export function getJobListLifecycleActions({ canOperate, jobStatus, startupAnalysisStatus }) {
+  const action = getJobLifecycleToggleAction({ canOperate, jobStatus, startupAnalysisStatus })
+  return action ? [action] : []
 }
 
 export function shouldPollJobListEntry({ jobStatus, startupAnalysisStatus }) {
@@ -50,15 +63,15 @@ export function getJobDetailPrimaryActionKeys({ jobStatus, canRetryFailed, canRe
   const status = normalizeJobStatus(jobStatus)
 
   if (INACTIVE_JOB_STATUSES.includes(status) || status === 'ARCHIVED') {
-    return ['edit', 'analyze', 'start']
+    return ['edit', 'analyze', 'lifecycle-toggle']
   }
   if (status === 'RUNNING' || status === 'PAUSING') {
-    return ['pause']
+    return ['lifecycle-toggle']
   }
   if (status === 'COMPLETED') {
     const keys = canRetryFailed ? ['retry-failed'] : ['verify', 'manifest']
     return canReadCoc ? [...keys, 'coc'] : keys
   }
 
-  return ['edit', 'analyze', 'start']
+  return ['edit', 'analyze', 'lifecycle-toggle']
 }

@@ -587,7 +587,7 @@ Common statuses include:
 - `COMPLETED`
 - `FAILED`
 
-The `Job ID` value on the Jobs page acts as the direct navigation entry point into Job Detail. On desktop, authorized rows keep `Start` and `Pause` actions with state-aware availability instead of a separate `Details` button. `PAUSING` means ECUBE is waiting for in-flight copy threads to finish their current work before the job becomes fully `PAUSED`.
+The `Job ID` value on the Jobs page acts as the direct navigation entry point into Job Detail. On desktop, authorized rows keep one stateful lifecycle action instead of separate `Start` and `Pause` buttons. That action shows `Start` when the job can begin or resume, shows `Pause` when the job can safely stop after current work finishes, and stays disabled or hidden for ineligible states. `PAUSING` means ECUBE is waiting for in-flight copy threads to finish their current work before the job becomes fully `PAUSED`.
 
 ### 9.2 Creating a Job
 
@@ -638,7 +638,7 @@ Archived jobs remain readable from Job Detail, but they are intentionally treate
 
 > **Access Summary**
 > **Page visibility:** `admin`, `manager`, `processor`, `auditor`
-> **Restricted actions:** `Analyze`, `Edit`, `Start`, `Continue on Another Drive`, `Retry Failed Files`, `Pause`, `Complete`, `Verify`, and `Manifest` are enabled for `admin`, `manager`, and `processor` when the current job state allows them. `Chain of Custody` becomes available to authorized roles after the job reaches `COMPLETED` and remains available on archived job detail pages for stored-report review. Within that report, `Custody Handoff` appears only for `admin` and `manager` when the loaded report still shows incomplete custody. `Archive` and `Clear startup analysis cache` remain limited to `admin` and `manager` when the current job state allows them. `Delete` is shown only for eligible pending jobs. Hash inspection and source/destination comparison remain available to `admin` and `auditor`.
+> **Restricted actions:** `Analyze`, `Edit`, the lifecycle toggle (`Start` or `Pause` depending on trusted job state), `Continue on Another Drive`, `Retry Failed Files`, `Complete`, `Verify`, and `Manifest` are enabled for `admin`, `manager`, and `processor` when the current job state allows them. `Chain of Custody` becomes available to authorized roles after the job reaches `COMPLETED` and remains available on archived job detail pages for stored-report review. Within that report, `Custody Handoff` appears only for `admin` and `manager` when the loaded report still shows incomplete custody. `Archive` and `Clear startup analysis cache` remain limited to `admin` and `manager` when the current job state allows them. `Delete` is shown only for eligible pending jobs. Hash inspection and source/destination comparison remain available to `admin` and `auditor`.
 
 The job detail page provides deeper inspection and follow-up controls.
 
@@ -648,10 +648,9 @@ Typical functions include:
 
 - Run manual startup analysis before copy starts so the operator can review discovered files and estimated bytes
 - Edit a pending, paused, or failed job before resuming work
-- Start a pending job or resume a paused one
+- Use the lifecycle toggle to start a pending job, resume a paused one, or pause a running one
 - Continue remaining work on another mounted destination drive when the original destination fills or a partial-success run must move to new media
 - Retry only the failed or timed-out files from a partial-success completed job
-- Pause a running job and resume it later
 - Manually complete a safe non-active job when required by the workflow
 - Use `Chain of Custody` as the standard sunset path when custody is being transferred
 - Use `Archive` only as an exceptional administrative or non-handoff closure path after `Prepare Eject` when the related drive is still attached
@@ -661,7 +660,7 @@ Typical functions include:
 - Inspect hashes for individual files
 - Compare a file's source version against its copied destination version
 
-#### 9.4.1 Editing, Starting, Retrying Failed Files, Pausing, Completing, Verifying, and Generating a Manifest
+#### 9.4.1 Editing, Lifecycle Actions, Retrying Failed Files, Completing, Verifying, and Generating a Manifest
 
 Action buttons are shown near the top of the job detail screen.
 
@@ -669,10 +668,9 @@ Use them when appropriate:
 
 - `Analyze` to run startup analysis for an eligible job without starting copy
 - `Edit` to adjust evidence number, source path, drive, thread count, or the job-specific webhook callback URL for a `PENDING`, `PAUSED`, or `FAILED` job
-- `Start` to begin a new job or resume a paused one
+- The lifecycle toggle to show `Start` when a job can begin or resume, or `Pause` when a running job can safely stop after its current copy work finishes
 - `Continue on Another Drive` to choose a different mounted destination drive and continue the remaining work for an eligible `PENDING`, `PAUSED`, `FAILED`, or partial-success `COMPLETED` job
 - `Retry Failed Files` to re-queue only `ERROR` and `TIMEOUT` file rows on a `COMPLETED` job that finished with partial-success results
-- `Pause` to request a safe stop after the current copy work finishes
 - `Complete` to manually mark a pending, paused, or failed job as complete when the operational workflow requires it
 - `Chain of Custody` to open the job-scoped chain-of-custody report as the normal closeout step once the job is completed and custody is being transferred
 - `Archive` to sunset a completed or failed job after confirmation when an exceptional administrative or non-handoff closure is required; this action is limited to `admin` and `manager` and requires `Prepare Eject` first when the job still has a related drive assignment
@@ -680,7 +678,7 @@ Use them when appropriate:
 - `Verify` to run verification checks once the job is fully complete with no failed or timed-out files
 - `Manifest` to generate the manifest output once the job is fully complete with no failed or timed-out files
 
-When a pause is requested, the Jobs list and Job Detail page can show a `Pause in progress` dialog while ECUBE waits for active copy threads to drain. The Start action remains unavailable during `PAUSING` and becomes available again once the job reaches `PAUSED`.
+When a pause is requested, the Jobs list and Job Detail page can show a `Pause in progress` dialog while ECUBE waits for active copy threads to drain. The lifecycle toggle remains unavailable during `PAUSING` and returns to `Start` once the job reaches `PAUSED`.
 
 While a job is actively copying, Job Detail shows a live summary with the current run `Started at` timestamp and a `Duration` field that reflects cumulative active runtime only. The displayed duration continues updating while the job is `RUNNING`, does not add paused time while the job is `PAUSED`, and resumes from the previously stored active runtime after a later restart instead of resetting to zero.
 

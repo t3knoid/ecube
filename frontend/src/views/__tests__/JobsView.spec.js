@@ -927,7 +927,7 @@ describe('JobsView grouped create dialog', () => {
     expect(wrapper.find('.row-actions-toggle-dots').exists()).toBe(true)
   })
 
-  it('routes compact row actions through the existing detail, start, and pause handlers', async () => {
+  it('routes compact row actions through the existing detail and lifecycle toggle handlers', async () => {
     viewportState.mobile = true
     installMatchMediaMock()
     mocks.listJobs.mockResolvedValue([
@@ -980,7 +980,7 @@ describe('JobsView grouped create dialog', () => {
     expect(wrapper.find('.row-values-stub').text()).not.toContain('USB-001')
   })
 
-  it('shows Start and Pause controls with state-aware availability', async () => {
+  it('shows one lifecycle toggle control with state-aware availability', async () => {
     mocks.listJobs.mockResolvedValue([
       { id: 44, project_id: 'PROJ-001', evidence_number: 'EV-044', status: 'PENDING', source_path: '/nfs/project-001' },
       { id: 45, project_id: 'PROJ-001', evidence_number: 'EV-045', status: 'RUNNING', source_path: '/nfs/project-001' },
@@ -995,25 +995,23 @@ describe('JobsView grouped create dialog', () => {
     const rowActions = wrapper.findAll('.row-actions-stub')
 
     const pendingButtons = rowActions[0].findAll('button')
-    expect(pendingButtons.map((button) => button.text())).toEqual(['Start', 'Pause'])
+    expect(pendingButtons.map((button) => button.text())).toEqual(['Start'])
     expect(pendingButtons[0].attributes('disabled')).toBeUndefined()
-    expect(pendingButtons[1].attributes('disabled')).toBeDefined()
 
     const runningButtons = rowActions[1].findAll('button')
-    expect(runningButtons[0].attributes('disabled')).toBeDefined()
-    expect(runningButtons[1].attributes('disabled')).toBeUndefined()
+    expect(runningButtons.map((button) => button.text())).toEqual(['Pause'])
+    expect(runningButtons[0].attributes('disabled')).toBeUndefined()
 
     const pausingButtons = rowActions[2].findAll('button')
     expect(pausingButtons[0].attributes('disabled')).toBeDefined()
-    expect(pausingButtons[1].attributes('disabled')).toBeDefined()
+    expect(pausingButtons[0].text()).toBe('Pause')
 
     const pausedButtons = rowActions[3].findAll('button')
+    expect(pausedButtons.map((button) => button.text())).toEqual(['Start'])
     expect(pausedButtons[0].attributes('disabled')).toBeUndefined()
-    expect(pausedButtons[1].attributes('disabled')).toBeDefined()
 
     const completedButtons = rowActions[4].findAll('button')
-    expect(completedButtons[0].attributes('disabled')).toBeDefined()
-    expect(completedButtons[1].attributes('disabled')).toBeDefined()
+    expect(completedButtons).toHaveLength(0)
   })
 
   it('shows a waiting dialog while a pause request is completing', async () => {
@@ -1029,7 +1027,7 @@ describe('JobsView grouped create dialog', () => {
     await flushPromises()
 
     const runningButtons = wrapper.findAll('.row-actions-stub')[0].findAll('button')
-    await runningButtons[1].trigger('click')
+    await runningButtons[0].trigger('click')
     await flushPromises()
 
     expect(mocks.pauseJob).toHaveBeenCalledWith(45)
@@ -1038,7 +1036,6 @@ describe('JobsView grouped create dialog', () => {
 
     const refreshedButtons = wrapper.findAll('.row-actions-stub')[0].findAll('button')
     expect(refreshedButtons[0].attributes('disabled')).toBeDefined()
-    expect(refreshedButtons[1].attributes('disabled')).toBeDefined()
   })
 
   it('keeps the waiting dialog open when the refresh temporarily omits the pausing job', async () => {
@@ -1052,7 +1049,7 @@ describe('JobsView grouped create dialog', () => {
     await flushPromises()
 
     const runningButtons = wrapper.findAll('.row-actions-stub')[0].findAll('button')
-    await runningButtons[1].trigger('click')
+    await runningButtons[0].trigger('click')
     await flushPromises()
 
     expect(mocks.pauseJob).toHaveBeenCalledWith(45)
@@ -1062,7 +1059,7 @@ describe('JobsView grouped create dialog', () => {
     expect(wrapper.text()).toContain('Pausing')
   })
 
-  it('starts and pauses a selected job from the list', async () => {
+  it('runs the lifecycle toggle for startable and pausable jobs from the list', async () => {
     mocks.listJobs.mockResolvedValue([
       { id: 44, project_id: 'PROJ-001', evidence_number: 'EV-044', status: 'PENDING', source_path: '/nfs/project-001', thread_count: 4 },
       { id: 45, project_id: 'PROJ-001', evidence_number: 'EV-045', status: 'RUNNING', source_path: '/nfs/project-001', thread_count: 2 },
@@ -1079,7 +1076,7 @@ describe('JobsView grouped create dialog', () => {
     await flushPromises()
     expect(mocks.startJob).toHaveBeenCalledWith(44, { thread_count: 4 })
 
-    await runningButtons[1].trigger('click')
+    await runningButtons[0].trigger('click')
     await flushPromises()
     expect(mocks.pauseJob).toHaveBeenCalledWith(45)
     expect(mocks.listJobs).toHaveBeenCalledTimes(3)

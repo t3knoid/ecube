@@ -649,7 +649,7 @@ Progress label or percentage
 </li><li>
 <code>FAILED</code>
 </li></ul>
-<p>The <code>Job ID</code> value on the Jobs page acts as the direct navigation entry point into Job Detail. On desktop, authorized rows keep <code>Start</code> and <code>Pause</code> actions with state-aware availability instead of a separate <code>Details</code> button. <code>PAUSING</code> means ECUBE is waiting for in-flight copy threads to finish their current work before the job becomes fully <code>PAUSED</code>.</p>
+<p>The <code>Job ID</code> value on the Jobs page acts as the direct navigation entry point into Job Detail. On desktop, authorized rows keep one stateful lifecycle action instead of separate <code>Start</code> and <code>Pause</code> buttons. That action shows <code>Start</code> when the job can begin or resume, shows <code>Pause</code> when the job can safely stop after current work finishes, and stays disabled or hidden for ineligible states. <code>PAUSING</code> means ECUBE is waiting for in-flight copy threads to finish their current work before the job becomes fully <code>PAUSED</code>.</p>
 <h2 id="6-2-creating-a-job">6.2 Creating a Job</h2>
 <p>The current job-creation flow uses a grouped dialog instead of a four-step wizard.</p>
 <p>The dialog is organized into four sections:</p>
@@ -695,7 +695,7 @@ If you enable <code>Run job immediately</code>, the job will start as soon as cr
 <h2 id="6-4-job-detail-verification-and-file-review">6.4 Job Detail, Verification, and File Review</h2>
 <blockquote><p><strong>Access Summary</strong></p></blockquote>
 <blockquote><p><strong>Page visibility:</strong> <code>admin</code>, <code>manager</code>, <code>processor</code>, <code>auditor</code></p></blockquote>
-<blockquote><p><strong>Restricted actions:</strong> <code>Analyze</code>, <code>Edit</code>, <code>Start</code>, <code>Continue on Another Drive</code>, <code>Retry Failed Files</code>, <code>Pause</code>, <code>Complete</code>, <code>Verify</code>, and <code>Manifest</code> are enabled for <code>admin</code>, <code>manager</code>, and <code>processor</code> when the current job state allows them. <code>Chain of Custody</code> becomes available to authorized roles after the job reaches <code>COMPLETED</code> and remains available on archived job detail pages for stored-report review. Within that report, <code>Custody Handoff</code> appears only for <code>admin</code> and <code>manager</code> when the loaded report still shows incomplete custody. <code>Archive</code> and <code>Clear startup analysis cache</code> remain limited to <code>admin</code> and <code>manager</code> when the current job state allows them. <code>Delete</code> is shown only for eligible pending jobs. Hash inspection and source/destination comparison remain available to <code>admin</code> and <code>auditor</code>.</p></blockquote>
+<blockquote><p><strong>Restricted actions:</strong> <code>Analyze</code>, <code>Edit</code>, the lifecycle toggle (<code>Start</code> or <code>Pause</code> depending on trusted job state), <code>Continue on Another Drive</code>, <code>Retry Failed Files</code>, <code>Complete</code>, <code>Verify</code>, and <code>Manifest</code> are enabled for <code>admin</code>, <code>manager</code>, and <code>processor</code> when the current job state allows them. <code>Chain of Custody</code> becomes available to authorized roles after the job reaches <code>COMPLETED</code> and remains available on archived job detail pages for stored-report review. Within that report, <code>Custody Handoff</code> appears only for <code>admin</code> and <code>manager</code> when the loaded report still shows incomplete custody. <code>Archive</code> and <code>Clear startup analysis cache</code> remain limited to <code>admin</code> and <code>manager</code> when the current job state allows them. <code>Delete</code> is shown only for eligible pending jobs. Hash inspection and source/destination comparison remain available to <code>admin</code> and <code>auditor</code>.</p></blockquote>
 <p>The job detail page provides deeper inspection and follow-up controls.</p>
 <p>Near the top of the page, Job Detail also shows the selected destination, the trusted source path, the last known available space for the related drive when ECUBE has one, the current job-specific webhook callback URL, any operator notes captured when the job was created, and the current reserved or active overflow drive assignments for that job. Source paths are shown relative to the selected mounted share so they match the browse workflow; <code>/</code> means the root of that share, and nested folders appear under that root such as <code>/evidence</code>.</p>
 <p>Typical functions include:</p>
@@ -704,13 +704,11 @@ Run manual startup analysis before copy starts so the operator can review discov
 </li><li>
 Edit a pending, paused, or failed job before resuming work
 </li><li>
-Start a pending job or resume a paused one
+Use the lifecycle toggle to start a pending job, resume a paused one, or pause a running one
 </li><li>
 Continue remaining work on another mounted destination drive when the original destination fills or a partial-success run must move to new media
 </li><li>
 Retry only the failed or timed-out files from a partial-success completed job
-</li><li>
-Pause a running job and resume it later
 </li><li>
 Manually complete a safe non-active job when required by the workflow
 </li><li>
@@ -728,7 +726,7 @@ Inspect hashes for individual files
 </li><li>
 Compare a file's source version against its copied destination version
 </li></ul>
-<h3 id="6-4-1-editing-starting-retrying-failed-files-pausing-completing-verifying-and-generating-a-manifest">6.4.1 Editing, Starting, Retrying Failed Files, Pausing, Completing, Verifying, and Generating a Manifest</h3>
+<h3 id="6-4-1-editing-lifecycle-actions-retrying-failed-files-completing-verifying-and-generating-a-manifest">6.4.1 Editing, Lifecycle Actions, Retrying Failed Files, Completing, Verifying, and Generating a Manifest</h3>
 <p>Action buttons are shown near the top of the job detail screen.</p>
 <p>Use them when appropriate:</p>
 <ul><li>
@@ -736,13 +734,11 @@ Compare a file's source version against its copied destination version
 </li><li>
 <code>Edit</code> to adjust evidence number, source path, drive, thread count, or the job-specific webhook callback URL for a <code>PENDING</code>, <code>PAUSED</code>, or <code>FAILED</code> job
 </li><li>
-<code>Start</code> to begin a new job or resume a paused one
+The lifecycle toggle to show <code>Start</code> when a job can begin or resume, or <code>Pause</code> when a running job can safely stop after its current copy work finishes
 </li><li>
 <code>Continue on Another Drive</code> to choose a different mounted destination drive and continue the remaining work for an eligible <code>PENDING</code>, <code>PAUSED</code>, <code>FAILED</code>, or partial-success <code>COMPLETED</code> job
 </li><li>
 <code>Retry Failed Files</code> to re-queue only <code>ERROR</code> and <code>TIMEOUT</code> file rows on a <code>COMPLETED</code> job that finished with partial-success results
-</li><li>
-<code>Pause</code> to request a safe stop after the current copy work finishes
 </li><li>
 <code>Complete</code> to manually mark a pending, paused, or failed job as complete when the operational workflow requires it
 </li><li>
@@ -756,7 +752,7 @@ Compare a file's source version against its copied destination version
 </li><li>
 <code>Manifest</code> to generate the manifest output once the job is fully complete with no failed or timed-out files
 </li></ul>
-<p>When a pause is requested, the Jobs list and Job Detail page can show a <code>Pause in progress</code> dialog while ECUBE waits for active copy threads to drain. The Start action remains unavailable during <code>PAUSING</code> and becomes available again once the job reaches <code>PAUSED</code>.</p>
+<p>When a pause is requested, the Jobs list and Job Detail page can show a <code>Pause in progress</code> dialog while ECUBE waits for active copy threads to drain. The lifecycle toggle remains unavailable during <code>PAUSING</code> and returns to <code>Start</code> once the job reaches <code>PAUSED</code>.</p>
 <p>While a job is actively copying, Job Detail shows a live summary with the current run <code>Started at</code> timestamp and a <code>Duration</code> field that reflects cumulative active runtime only. The displayed duration continues updating while the job is <code>RUNNING</code>, does not add paused time while the job is <code>PAUSED</code>, and resumes from the previously stored active runtime after a later restart instead of resetting to zero.</p>
 <p>Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner for the latest refreshed <code>manifest.json</code> file and immediately starts a browser download of that generated manifest without an extra confirmation step. For jobs that used overflow media, ECUBE refreshes a separate <code>manifest.json</code> on each drive that received successful copies, and each file lists only the files written to that specific drive.</p>
 <p>For a partial-success <code>COMPLETED</code> job, Job Detail can show <code>Retry Failed Files</code> instead of exposing Verify or Manifest too early. This action is available only to <code>admin</code>, <code>manager</code>, and <code>processor</code>, moves the job back into <code>RUNNING</code>, re-queues only failed or timed-out files, and preserves already successful copies.</p>

@@ -13,7 +13,7 @@ import StatusBadge from '@/components/common/StatusBadge.vue'
 import { useStatusLabels } from '@/composables/useStatusLabels.js'
 import { formatDriveIdentity } from '@/utils/driveIdentity.js'
 import { buildJobErrorMessage } from '@/utils/jobErrors.js'
-import { getJobListLifecycleActions, normalizeJobStatus, normalizeStartupAnalysisStatus, shouldPollJobListEntry } from '@/utils/jobActions.js'
+import { getJobListLifecycleActions, getJobLifecycleToggleAction, normalizeJobStatus, normalizeStartupAnalysisStatus, shouldPollJobListEntry } from '@/utils/jobActions.js'
 import { calculateJobProgress } from '@/utils/jobProgress.js'
 import { classifySourcePathOverlap, resolveMountedSourcePath } from '@/utils/pathOverlap.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
@@ -122,20 +122,12 @@ function isRowActionBusy(job) {
   return Number(actingJobId.value) === Number(job?.id)
 }
 
-function canStartJob(job) {
-  return getJobListLifecycleActions({
+function getLifecycleAction(job) {
+  return getJobLifecycleToggleAction({
     canOperate: canOperate.value,
     jobStatus: job?.status,
     startupAnalysisStatus: job?.startup_analysis_status,
-  }).find((action) => action.key === 'start')?.enabled === true
-}
-
-function canPauseJob(job) {
-  return getJobListLifecycleActions({
-    canOperate: canOperate.value,
-    jobStatus: job?.status,
-    startupAnalysisStatus: job?.startup_analysis_status,
-  }).find((action) => action.key === 'pause')?.enabled === true
+  })
 }
 
 function rowLifecycleActions(job) {
@@ -169,9 +161,8 @@ function closePausePendingDialog() {
 async function runJobAction(job, action) {
   if (!job || isRowActionBusy(job)) return
 
-  const allowStart = action === 'start' && canStartJob(job)
-  const allowPause = action === 'pause' && canPauseJob(job)
-  if (!allowStart && !allowPause) return
+  const lifecycleAction = getLifecycleAction(job)
+  if (!lifecycleAction || lifecycleAction.key !== action || !lifecycleAction.enabled) return
 
   actingJobId.value = job.id
   pageError.value = ''
@@ -240,16 +231,6 @@ function closeRowActionsMenu(event) {
 function openJobDetails(job, event) {
   closeRowActionsMenu(event)
   router.push({ name: 'job-detail', params: { id: job.id } })
-}
-
-function handleMenuStart(job, event) {
-  closeRowActionsMenu(event)
-  void runJobAction(job, 'start')
-}
-
-function handleMenuPause(job, event) {
-  closeRowActionsMenu(event)
-  void runJobAction(job, 'pause')
 }
 
 function formatMountLabel(mount) {

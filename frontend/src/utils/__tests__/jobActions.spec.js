@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { canOperateOnInactiveJob, canPauseJob, canReadJobCoc, canStartJob, getJobDetailPrimaryActionKeys, getJobListLifecycleActions, shouldPollJobListEntry } from '../jobActions.js'
+import { canOperateOnInactiveJob, canPauseJob, canReadJobCoc, canStartJob, getJobDetailPrimaryActionKeys, getJobLifecycleToggleAction, getJobListLifecycleActions, shouldPollJobListEntry } from '../jobActions.js'
 import { buildJobErrorMessage } from '../jobErrors.js'
 
 describe('job action helpers', () => {
@@ -25,6 +25,22 @@ describe('job action helpers', () => {
     expect(canPauseJob({ canOperate: true, jobStatus: 'PAUSED' })).toBe(false)
   })
 
+  it('derives one lifecycle toggle action from the trusted job status', () => {
+    expect(getJobLifecycleToggleAction({ canOperate: true, jobStatus: 'PENDING', startupAnalysisStatus: 'READY' })).toEqual({
+      key: 'start',
+      enabled: true,
+    })
+    expect(getJobLifecycleToggleAction({ canOperate: true, jobStatus: 'RUNNING', startupAnalysisStatus: 'READY' })).toEqual({
+      key: 'pause',
+      enabled: true,
+    })
+    expect(getJobLifecycleToggleAction({ canOperate: true, jobStatus: 'PAUSING', startupAnalysisStatus: 'READY' })).toEqual({
+      key: 'pause',
+      enabled: false,
+    })
+    expect(getJobLifecycleToggleAction({ canOperate: true, jobStatus: 'COMPLETED', startupAnalysisStatus: 'READY' })).toBeNull()
+  })
+
   it('gates CoC access to completed and archived jobs', () => {
     expect(canReadJobCoc({ hasAccess: true, jobStatus: 'COMPLETED' })).toBe(true)
     expect(canReadJobCoc({ hasAccess: true, jobStatus: 'ARCHIVED' })).toBe(true)
@@ -34,16 +50,14 @@ describe('job action helpers', () => {
   it('derives Jobs list lifecycle actions from one shared helper', () => {
     expect(getJobListLifecycleActions({ canOperate: true, jobStatus: 'PENDING', startupAnalysisStatus: 'READY' })).toEqual([
       { key: 'start', enabled: true },
-      { key: 'pause', enabled: false },
     ])
     expect(getJobListLifecycleActions({ canOperate: true, jobStatus: 'RUNNING', startupAnalysisStatus: 'READY' })).toEqual([
-      { key: 'start', enabled: false },
       { key: 'pause', enabled: true },
     ])
     expect(getJobListLifecycleActions({ canOperate: true, jobStatus: 'PAUSED', startupAnalysisStatus: 'ANALYZING' })).toEqual([
       { key: 'start', enabled: false },
-      { key: 'pause', enabled: false },
     ])
+    expect(getJobListLifecycleActions({ canOperate: true, jobStatus: 'COMPLETED', startupAnalysisStatus: 'READY' })).toEqual([])
   })
 
   it('shares the Jobs list polling rule for active and analyzing jobs', () => {
@@ -54,8 +68,8 @@ describe('job action helpers', () => {
   })
 
   it('derives primary Job Detail actions from one shared status helper', () => {
-    expect(getJobDetailPrimaryActionKeys({ jobStatus: 'PENDING', canRetryFailed: false, canReadCoc: false })).toEqual(['edit', 'analyze', 'start'])
-    expect(getJobDetailPrimaryActionKeys({ jobStatus: 'RUNNING', canRetryFailed: false, canReadCoc: false })).toEqual(['pause'])
+    expect(getJobDetailPrimaryActionKeys({ jobStatus: 'PENDING', canRetryFailed: false, canReadCoc: false })).toEqual(['edit', 'analyze', 'lifecycle-toggle'])
+    expect(getJobDetailPrimaryActionKeys({ jobStatus: 'RUNNING', canRetryFailed: false, canReadCoc: false })).toEqual(['lifecycle-toggle'])
     expect(getJobDetailPrimaryActionKeys({ jobStatus: 'COMPLETED', canRetryFailed: false, canReadCoc: true })).toEqual(['verify', 'manifest', 'coc'])
     expect(getJobDetailPrimaryActionKeys({ jobStatus: 'COMPLETED', canRetryFailed: true, canReadCoc: true })).toEqual(['retry-failed', 'coc'])
     expect(getJobDetailPrimaryActionKeys({ jobStatus: 'COMPLETED', canRetryFailed: false, canReadCoc: false })).toEqual(['verify', 'manifest'])

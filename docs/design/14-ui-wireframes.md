@@ -803,7 +803,7 @@ Archived jobs are hidden from the default Jobs list. The list view exposes a `Sh
 │  └─────────────────────────────────────────────────────────────────────┘     │
 │                                                                              │
 │  ┌─ Actions ───────────────────────────────────────────────────────────┐     │
-│  │  [ Start ] (disabled—running)   [ Verify ]   [ Download Manifest ] │     │
+│  │  [ Pause ]   [ Verify ]   [ Download Manifest ]                     │     │
 │  │  [ Archive ] (shown only for admin/manager on eligible terminal jobs) │   │
 │  └─────────────────────────────────────────────────────────────────────┘     │
 │                                                                              │
@@ -815,14 +815,18 @@ The Job Detail monitoring view includes a duration field for cumulative active r
 
 **Action button states by job status:**
 
-| Job Status | Start | Verify | Manifest | Archive |
-|------------|-------|--------|----------|---------|
-| PENDING    | enabled | disabled | disabled | disabled |
-| RUNNING    | disabled | disabled | disabled | disabled |
-| COMPLETED  | disabled | enabled | enabled | enabled after `Prepare Eject` |
-| VERIFYING  | disabled | disabled | disabled | disabled |
-| FAILED     | disabled | enabled | enabled | enabled after `Prepare Eject` |
-| ARCHIVED   | disabled | disabled | disabled | hidden |
+The lifecycle action uses the same button slot and changes label based on trusted job state: `Start` for startable or resumable jobs, `Pause` for pausable jobs, and hidden when no lifecycle transition is allowed.
+
+| Job Status | Lifecycle Action | Verify | Manifest | Archive |
+|------------|------------------|--------|----------|---------|
+| PENDING    | `Start` enabled | disabled | disabled | disabled |
+| RUNNING    | `Pause` enabled | disabled | disabled | disabled |
+| PAUSING    | `Pause` disabled | disabled | disabled | disabled |
+| PAUSED     | `Start` enabled | disabled | disabled | disabled |
+| COMPLETED  | hidden | enabled | enabled | enabled after `Prepare Eject` |
+| VERIFYING  | hidden | disabled | disabled | disabled |
+| FAILED     | `Start` enabled | disabled | disabled | enabled after `Prepare Eject` |
+| ARCHIVED   | hidden | disabled | disabled | hidden |
 
 `Archive` is limited to `admin` and `manager`, opens a confirmation dialog, and remains unavailable until any related drive has been prepared for eject and is no longer mounted.
 
@@ -1323,7 +1327,7 @@ Used for: Format Drive (UC-4.4), Delete User (UC-3.8), Remove Mount (UC-5.4), Re
 | UC-5.2 – UC-5.3 | Screen 5b: Add Mount Dialog |
 | UC-5.4 – UC-5.6 | Screen 5a: Mount List (inline actions) |
 | UC-6.1 | Screen 6c: Create Job Dialog |
-| UC-6.2 | Screen 6b: Actions (Start button) |
+| UC-6.2 | Screen 6b: Actions (lifecycle toggle) |
 | UC-6.3 | Screen 6a: Job List, Screen 6b: Progress |
 | UC-6.4 | Screen 6b: Files table |
 | UC-6.5 – UC-6.6 | Screen 6b: Actions (Verify, Manifest) |

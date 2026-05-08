@@ -841,7 +841,7 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).not.toContain(i18n.global.t('jobs.archiveRequiresEject'))
   })
 
-  it('shows archived jobs with lifecycle actions disabled', async () => {
+  it('hides the lifecycle toggle for archived jobs while keeping other lifecycle context disabled', async () => {
     mocks.getJob.mockResolvedValue({
       id: 6,
       status: 'ARCHIVED',
@@ -868,10 +868,9 @@ describe('JobDetailView start action', () => {
 
     expect(editButton).toBeTruthy()
     expect(analyzeButton).toBeTruthy()
-    expect(startButton).toBeTruthy()
+    expect(startButton).toBeUndefined()
     expect(editButton.attributes('disabled')).toBeDefined()
     expect(analyzeButton.attributes('disabled')).toBeDefined()
-    expect(startButton.attributes('disabled')).toBeDefined()
     expect(wrapper.findAll('button').some((node) => node.text() === i18n.global.t('jobs.archiveWithoutHandoff'))).toBe(false)
   })
 
@@ -2622,7 +2621,7 @@ describe('JobDetailView start action', () => {
     expect(mocks.routerPush).toHaveBeenCalled()
   })
 
-  it('keeps pending-job edit analyze and start as primary buttons and moves the rest into overflow', async () => {
+  it('keeps pending-job edit analyze and lifecycle toggle as primary buttons and moves the rest into overflow', async () => {
     setMobileViewport(true)
     const wrapper = mountView()
     await flushPromises()
@@ -2691,7 +2690,6 @@ describe('JobDetailView start action', () => {
       i18n.global.t('jobs.start'),
       i18n.global.t('jobs.continueOverflow'),
       i18n.global.t('jobs.retryFailedFiles'),
-      i18n.global.t('jobs.pause'),
       i18n.global.t('jobs.complete'),
       i18n.global.t('jobs.verify'),
       i18n.global.t('jobs.manifest'),
