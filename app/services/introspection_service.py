@@ -19,6 +19,15 @@ from app.utils.sanitize import sanitize_error_message
 
 logger = logging.getLogger(__name__)
 
+_EXFAT_RUNTIME_WARNING_CODE = "exfat_runtime_kernel_mismatch"
+_EXFAT_RUNTIME_WARNING_MESSAGE = (
+    "exFAT formatting tools are available, but runtime mount support for exFAT is unavailable on this host. "
+    "After a kernel change, the matching runtime package can be missing even though formatting still works."
+)
+_EXFAT_RUNTIME_WARNING_REMEDIATION = (
+    "Verify exFAT runtime support for the current kernel, including the documented exfatprogs and linux-modules-extra-$(uname -r) prerequisites, then retry the mount."
+)
+
 _PROCESS_CPU_SAMPLER: Any | None = None
 _PROCESS_CPU_SAMPLER_PID: int | None = None
 _PROCESS_CPU_SAMPLER_PRIMED = False
@@ -93,6 +102,7 @@ def get_system_health(
     *,
     psutil_available: bool,
     psutil_module: Any | None,
+    filesystem_runtime_inspector: Any | None = None,
 ) -> dict[str, Any]:
     """Return host and ECUBE-owned runtime diagnostics for the System page."""
 
@@ -145,8 +155,10 @@ def get_system_health(
         except Exception:
             pass
 
+    warnings = _build_runtime_warnings(filesystem_runtime_inspector)
+
     return {
-        "status": "ok" if db_status == "connected" else "degraded",
+        "status": "ok" if db_status == "connected" and not warnings else "degraded",
         "database": db_status,
         "database_error": db_error,
         "active_jobs": active_jobs,
@@ -157,6 +169,7 @@ def get_system_health(
         "disk_read_bytes": disk_read_bytes,
         "disk_write_bytes": disk_write_bytes,
         "worker_queue_size": worker_queue_size,
+        "warnings": warnings,
         "ecube_process": _build_ecube_process_metrics(
             db,
             db_status=db_status,
@@ -164,6 +177,36 @@ def get_system_health(
             psutil_module=psutil_module,
         ),
     }
+
+
+def _build_runtime_warnings(filesystem_runtime_inspector: Any | None) -> list[dict[str, str]]:
+    if filesystem_runtime_inspector is None:
+        return []
+
+    try:
+        formatting_available = bool(filesystem_runtime_inspector.exfat_formatting_available())
+        mount_runtime_available = filesystem_runtime_inspector.exfat_mount_runtime_available()
+    except Exception:
+        logger.info(
+            "System health runtime diagnostics unavailable",
+            extra={"failure_class": "filesystem_runtime_diagnostics_unavailable"},
+        )
+        logger.debug(
+            "Filesystem runtime diagnostics probe failed",
+            exc_info=True,
+        )
+        return []
+
+    if formatting_available and mount_runtime_available is False:
+        return [{
+            "code": _EXFAT_RUNTIME_WARNING_CODE,
+            "severity": "warning",
+            "component": "filesystem_runtime",
+            "message": _EXFAT_RUNTIME_WARNING_MESSAGE,
+            "remediation": _EXFAT_RUNTIME_WARNING_REMEDIATION,
+        }]
+
+    return []
 
 
 def _build_ecube_process_metrics(

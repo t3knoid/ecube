@@ -839,6 +839,9 @@ Pagination behavior:
 
 - On wider screens, the Audit page shows numbered shortcuts for the current 10-page window and jump controls to the next or previous 10 pages.
 - On smaller screens, the same controls shrink to a 5-page window so the page shortcuts remain usable without crowding the layout.
+- A summary line above the table shows how many audit entries are currently displayed on the page and the total number of matching records for the active filter set.
+
+If the current filters return no matching rows, the Audit page shows a filter-specific empty state instead of a generic blank table so operators can distinguish "no audit data exists" from "the current filters are too narrow."
 
 The audit page is useful for review, compliance, and incident follow-up.
 
@@ -912,7 +915,7 @@ This page is useful when:
 
 End users who only perform evidence exports may rarely need this page. Administrators and support personnel are more likely to use it during troubleshooting.
 
-In the `System Health` tab, ECUBE separates host metrics from ECUBE-owned process diagnostics. The ECUBE process section shows ECUBE CPU and memory usage, the total ECUBE thread count, the number of active copy workers, and a table that correlates each active copy thread to its parent job and project, including status, configured threads, elapsed time, and CPU time.
+In the `System Health` tab, ECUBE separates host metrics from ECUBE-owned process diagnostics. When the backend reports degraded but non-fatal runtime conditions, the same tab now shows a `Runtime Warnings` panel with the sanitized warning summary, remediation guidance, and stable warning code so operators can investigate issues such as exFAT runtime support missing for the currently running kernel. The ECUBE process section shows ECUBE CPU and memory usage, the total ECUBE thread count, the number of active copy workers, and a table that correlates each active copy thread to its parent job and project, including status, configured threads, elapsed time, and CPU time.
 
 For `admin`, `manager`, and `processor` users, the `USB Topology` tab shows a sorted device table and hides rows with no meaningful USB metadata so the list stays focused on useful hardware entries. On smaller screens, the table tightens to primary columns such as `Device` and `Product`, and the remaining hardware details move into a per-row overflow menu.
 
@@ -978,6 +981,7 @@ If the Logs tab shows an error or is unavailable:
 - Verify you have the `admin` or `manager` role (other users will not see this tab).
 - Check that the selected log file still exists on the ECUBE host.
 - Verify the ECUBE service account has read permissions on the selected log file.
+- If ECUBE reports that no application log files are available at the configured backend log path, verify file logging is enabled and that the configured log directory contains `app.log` or an eligible rotated file.
 - If you selected a rotated file, confirm the file has not been removed or replaced during log rotation.
 - Consult [16. Troubleshooting](#16-troubleshooting) for service-level issues.
 

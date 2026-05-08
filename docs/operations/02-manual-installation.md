@@ -157,7 +157,9 @@ The ECUBE service depends on several non-standard OS packages for USB formatting
 | `usbutils` | Provides `lsusb` and USB enumeration support. |
 | `util-linux` | Provides core block and session utilities such as `lsblk`, `blkid`, and `runuser`. |
 
-On minimal Ubuntu installs, ensure `linux-modules-extra-$(uname -r)` is installed so the native exFAT kernel module is available at runtime. On Ubuntu 20.04 hosts using the 5.4 kernel series, install `exfat-fuse` instead of the native module package.
+On minimal Ubuntu installs, ensure `linux-modules-extra-$(uname -r)` is installed so the native exFAT kernel module is available at runtime.
+
+Troubleshooting note: this prerequisite check is tied to the current kernel when you install or provision the host. After a later kernel change, `mkfs.exfat` can still be present from `exfatprogs` while exFAT mount/runtime support is missing for the newly running kernel. If exFAT formatting succeeds but later mount attempts fail, re-verify the documented `exfatprogs` and `linux-modules-extra-$(uname -r)` prerequisites for the current kernel.
 
 ```bash
 sudo apt-get update

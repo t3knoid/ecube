@@ -231,7 +231,7 @@ def _drive_mount_failure_response(error: Optional[str]) -> tuple[int, str]:
     normalized_error = (error or "").lower()
 
     if safe_message == "Filesystem type is not supported by the host":
-        return 500, "Host filesystem support for this drive is unavailable; install the required filesystem runtime and retry"
+        return 500, "Host filesystem support for this drive is unavailable; verify the required filesystem runtime and retry"
 
     if safe_message == "Target device or path was not found":
         return 409, "Drive device path is stale or unavailable; refresh drive status and retry mount"

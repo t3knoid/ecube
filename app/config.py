@@ -358,6 +358,9 @@ class Settings(BaseSettings):
     #: Path to the ``lsblk`` binary (filesystem detection fallback).
     lsblk_binary_path: str = "/bin/lsblk"
 
+    #: Path to the kernel filesystem registry used for runtime diagnostics.
+    procfs_filesystems_path: str = "/proc/filesystems"
+
     #: Path to the ``mkfs.ext4`` binary.
     mkfs_ext4_path: str = "/sbin/mkfs.ext4"
 

@@ -50,7 +50,7 @@ from sqlalchemy.orm import Session
 from app.auth import CurrentUser, require_roles
 from app.config import settings
 from app.database import get_db
-from app.infrastructure import get_drive_mount, get_mount_provider
+from app.infrastructure import get_drive_mount, get_filesystem_runtime_inspector, get_mount_provider
 from app.models.hardware import UsbDrive
 from app.schemas.errors import R_401, R_403, R_404, R_409, R_422, R_500
 from app.schemas.introspection import (
@@ -221,6 +221,7 @@ def system_health(
         db,
         psutil_available=_PSUTIL_AVAILABLE,
         psutil_module=_psutil if _PSUTIL_AVAILABLE else None,
+        filesystem_runtime_inspector=get_filesystem_runtime_inspector(),
     )
 
 

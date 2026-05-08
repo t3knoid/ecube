@@ -110,7 +110,9 @@ The ECUBE service depends on several non-standard OS packages for USB formatting
 | `passwd` | Provides `chage` for per-account password aging inspection and enforcement. |
 | `libpam-pwquality` | Provides PAM password-complexity enforcement for local accounts and admin resets. |
 
-On minimal Ubuntu installs, ECUBE now attempts to install `linux-modules-extra-$(uname -r)` when that package is available so the native exFAT kernel module is present at runtime. On Ubuntu 20.04 hosts using the 5.4 kernel series, install `exfat-fuse` instead of the native module package.
+On minimal Ubuntu installs, ECUBE now attempts to install `linux-modules-extra-$(uname -r)` when that package is available so the native exFAT kernel module is present at runtime.
+
+Troubleshooting note: this package check happens only at install time for the then-current kernel. After a later kernel upgrade, exFAT formatting can still succeed because `exfatprogs` provides `mkfs.exfat`, while exFAT mount attempts can start failing if the matching current-kernel runtime support is no longer present. When that happens, verify the documented `exfatprogs` and `linux-modules-extra-$(uname -r)` prerequisites again for the running kernel.
 
 ```bash
 sudo apt-get update

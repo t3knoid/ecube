@@ -48,6 +48,26 @@ const columns = computed(() => [
 
 const paginationWindowSize = computed(() => (isMobileViewport.value ? 5 : 10))
 
+const hasActiveFilters = computed(() => Boolean(
+  filters.value.user
+  || filters.value.action
+  || filters.value.job_id
+  || filters.value.search.trim()
+  || filters.value.since
+  || filters.value.until,
+))
+
+const auditResultsSummary = computed(() => {
+  if (loading.value) return ''
+  if (total.value > 0) {
+    return t('audit.resultsSummary', {
+      shown: logs.value.length,
+      total: total.value,
+    })
+  }
+  return hasActiveFilters.value ? t('audit.emptyFiltered') : t('audit.empty')
+})
+
 function toggleDetails(id) {
   if (expanded.value.has(id)) {
     expanded.value.delete(id)
@@ -251,8 +271,10 @@ onUnmounted(() => {
     <section class="audit-log-section">
       <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
       <p v-if="error" class="error-banner">{{ error }}</p>
+      <p v-else class="muted">{{ auditResultsSummary }}</p>
 
       <DataTable :columns="columns" :rows="logs" :empty-text="t('audit.empty')">
+        <template #empty>{{ hasActiveFilters ? t('audit.emptyFiltered') : t('audit.empty') }}</template>
         <template #cell-timestamp="{ row }">{{ asLocalDate(row.timestamp) }}</template>
         <template #cell-action="{ row }"><StatusBadge :status="row.action" /></template>
         <template #cell-details="{ row }">

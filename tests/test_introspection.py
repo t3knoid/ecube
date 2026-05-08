@@ -6,8 +6,19 @@ from app.exceptions import ConflictError
 from app.models.hardware import DriveState, UsbDrive, UsbHub, UsbPort
 
 
+def _runtime_inspector(*, formatting_available=False, mount_runtime_available=True):
+    return SimpleNamespace(
+        exfat_formatting_available=lambda: formatting_available,
+        exfat_mount_runtime_available=lambda: mount_runtime_available,
+    )
+
+
 def test_system_health(client, db):
-    response = client.get("/introspection/system-health")
+    inspector = _runtime_inspector()
+
+    with patch("app.routers.introspection.get_filesystem_runtime_inspector", return_value=inspector):
+        response = client.get("/introspection/system-health")
+
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
@@ -21,7 +32,49 @@ def test_system_health(client, db):
     assert "memory_total_bytes" in data
     assert "disk_read_bytes" in data
     assert "disk_write_bytes" in data
+    assert data["warnings"] == []
+    assert "warnings" in data
     assert "ecube_process" in data
+
+
+def test_system_health_reports_exfat_runtime_warning_when_formatting_is_available_but_mount_support_is_missing(client, db):
+    inspector = _runtime_inspector(formatting_available=True, mount_runtime_available=False)
+
+    with patch("app.routers.introspection.get_filesystem_runtime_inspector", return_value=inspector):
+        response = client.get("/introspection/system-health")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "degraded"
+    assert data["warnings"] == [{
+        "code": "exfat_runtime_kernel_mismatch",
+        "severity": "warning",
+        "component": "filesystem_runtime",
+        "message": "exFAT formatting tools are available, but runtime mount support for exFAT is unavailable on this host. After a kernel change, the matching runtime package can be missing even though formatting still works.",
+        "remediation": "Verify exFAT runtime support for the current kernel, including the documented exfatprogs and linux-modules-extra-$(uname -r) prerequisites, then retry the mount.",
+    }]
+
+
+def test_system_health_skips_exfat_runtime_warning_when_runtime_probe_is_unavailable(client, db):
+    inspector = _runtime_inspector(formatting_available=True, mount_runtime_available=None)
+
+    with patch("app.routers.introspection.get_filesystem_runtime_inspector", return_value=inspector):
+        response = client.get("/introspection/system-health")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["warnings"] == []
+    assert data["status"] == "ok"
+
+
+def test_linux_filesystem_runtime_inspector_returns_none_when_procfs_probe_is_unavailable(monkeypatch):
+    from app.infrastructure.filesystem_runtime import LinuxFilesystemRuntimeInspector
+
+    inspector = LinuxFilesystemRuntimeInspector()
+
+    monkeypatch.setattr("app.infrastructure.filesystem_runtime.settings.procfs_filesystems_path", "/missing/proc/filesystems")
+
+    assert inspector.exfat_mount_runtime_available() is None
 
 
 def test_system_health_psutil_metrics(client, db):
@@ -38,6 +91,7 @@ def test_system_health_psutil_metrics(client, db):
     with (
         patch("app.routers.introspection._PSUTIL_AVAILABLE", True),
         patch("app.routers.introspection._psutil") as mock_psutil,
+        patch("app.routers.introspection.get_filesystem_runtime_inspector", return_value=_runtime_inspector()),
     ):
         mock_psutil.cpu_percent.return_value = 12.5
         mock_psutil.virtual_memory.return_value = fake_vm
@@ -62,7 +116,10 @@ def test_system_health_psutil_metrics(client, db):
 
 def test_system_health_psutil_unavailable(client, db):
     """When psutil is not installed all metric fields are null."""
-    with patch("app.routers.introspection._PSUTIL_AVAILABLE", False):
+    with (
+        patch("app.routers.introspection._PSUTIL_AVAILABLE", False),
+        patch("app.routers.introspection.get_filesystem_runtime_inspector", return_value=_runtime_inspector()),
+    ):
         response = client.get("/introspection/system-health")
 
     assert response.status_code == 200
@@ -112,6 +169,7 @@ def test_system_health_reports_ecube_process_metrics_and_active_copy_threads(cli
     with (
         patch("app.routers.introspection._PSUTIL_AVAILABLE", True),
         patch("app.routers.introspection._psutil") as mock_psutil,
+        patch("app.routers.introspection.get_filesystem_runtime_inspector", return_value=_runtime_inspector()),
         patch("app.services.introspection_service._PROCESS_CPU_SAMPLER", None),
         patch("app.services.introspection_service._PROCESS_CPU_SAMPLER_PID", None),
         patch("app.services.introspection_service._PROCESS_CPU_SAMPLER_PRIMED", False),
@@ -177,6 +235,7 @@ def test_system_health_hides_unprimed_process_cpu_percent_until_a_baseline_exist
     with (
         patch("app.routers.introspection._PSUTIL_AVAILABLE", True),
         patch("app.routers.introspection._psutil") as mock_psutil,
+        patch("app.routers.introspection.get_filesystem_runtime_inspector", return_value=_runtime_inspector()),
         patch("app.services.introspection_service._PROCESS_CPU_SAMPLER", None),
         patch("app.services.introspection_service._PROCESS_CPU_SAMPLER_PID", None),
         patch("app.services.introspection_service._PROCESS_CPU_SAMPLER_PRIMED", False),
@@ -213,6 +272,7 @@ def test_prime_cpu_sampler_primes_process_cpu_sampler():
 def test_system_health_marks_thread_metrics_unavailable_when_runtime_data_cannot_be_matched(client, db):
     with (
         patch("app.routers.introspection._PSUTIL_AVAILABLE", False),
+        patch("app.routers.introspection.get_filesystem_runtime_inspector", return_value=_runtime_inspector()),
         patch(
             "app.services.introspection_service.list_active_copy_workers",
             return_value=[
@@ -241,6 +301,7 @@ def test_system_health_marks_thread_metrics_unavailable_when_runtime_data_cannot
 def test_system_health_degrades_safely_when_active_worker_job_correlation_fails(client, db):
     with (
         patch("app.routers.introspection._PSUTIL_AVAILABLE", False),
+        patch("app.routers.introspection.get_filesystem_runtime_inspector", return_value=_runtime_inspector()),
         patch(
             "app.services.introspection_service.list_active_copy_workers",
             return_value=[
@@ -283,6 +344,7 @@ def test_system_health_falls_back_to_running_jobs_when_active_workers_live_in_an
 
     with (
         patch("app.routers.introspection._PSUTIL_AVAILABLE", False),
+        patch("app.routers.introspection.get_filesystem_runtime_inspector", return_value=_runtime_inspector()),
         patch("app.services.introspection_service.list_active_copy_workers", return_value=[]),
     ):
         response = client.get("/introspection/system-health")
@@ -317,7 +379,8 @@ def test_system_health_worker_queue_size(client, db):
     db.add(job)
     db.commit()
 
-    response = client.get("/introspection/system-health")
+    with patch("app.routers.introspection.get_filesystem_runtime_inspector", return_value=_runtime_inspector()):
+        response = client.get("/introspection/system-health")
     assert response.status_code == 200
     assert response.json()["worker_queue_size"] >= 1
 
@@ -336,9 +399,14 @@ def test_system_health_worker_queue_size_null_on_count_failure(client, db):
 
     # side_effect list: first call (RUNNING / active_jobs) returns 0;
     # second call (PENDING / worker_queue_size) raises.
-    with patch(
-        "sqlalchemy.orm.Query.count",
-        side_effect=[0, OperationalError("", {}, None)],
+    inspector = _runtime_inspector()
+
+    with (
+        patch(
+            "sqlalchemy.orm.Query.count",
+            side_effect=[0, OperationalError("", {}, None)],
+        ),
+        patch("app.routers.introspection.get_filesystem_runtime_inspector", return_value=inspector),
     ):
         response = client.get("/introspection/system-health")
 
@@ -430,7 +498,10 @@ def test_system_health_degraded(client, db):
     from unittest.mock import patch
     from sqlalchemy.exc import OperationalError
 
-    with patch("sqlalchemy.orm.Session.execute", side_effect=OperationalError("", {}, None)):
+    with (
+        patch("sqlalchemy.orm.Session.execute", side_effect=OperationalError("", {}, None)),
+        patch("app.routers.introspection.get_filesystem_runtime_inspector", return_value=_runtime_inspector()),
+    ):
         response = client.get("/introspection/system-health")
     assert response.status_code == 200
     data = response.json()

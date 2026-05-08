@@ -216,6 +216,36 @@ describe('SystemView USB topology tab', () => {
     expect(wrapper.text()).not.toContain('Metrics Note')
   })
 
+  it('renders explicit system-health warnings when the backend returns them', async () => {
+    mocks.getSystemHealth.mockResolvedValue({
+      status: 'degraded',
+      database: 'connected',
+      active_jobs: 0,
+      warnings: [
+        {
+          code: 'exfat_runtime_kernel_mismatch',
+          severity: 'warning',
+          component: 'filesystem_runtime',
+          message: 'exFAT formatting tools are available, but runtime mount support for exFAT is unavailable on this host.',
+          remediation: 'Verify exFAT runtime support for the current kernel, then retry the mount.',
+        },
+      ],
+      ecube_process: {
+        active_copy_thread_count: 0,
+        active_copy_threads: [],
+      },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('system.healthWarnings'))
+    expect(wrapper.text()).toContain('exFAT formatting tools are available, but runtime mount support for exFAT is unavailable on this host.')
+    expect(wrapper.text()).toContain(`${i18n.global.t('system.warningRemediation')}: Verify exFAT runtime support for the current kernel, then retry the mount.`)
+    expect(wrapper.text()).toContain(`${i18n.global.t('system.warningComponent')}: filesystem_runtime`)
+    expect(wrapper.text()).toContain(`${i18n.global.t('system.warningCode')}: exfat_runtime_kernel_mismatch`)
+  })
+
   it('shows a clear empty state when no ECUBE copy threads are active', async () => {
     mocks.getSystemHealth.mockResolvedValue({
       status: 'ok',
@@ -452,6 +482,20 @@ describe('SystemView logs tab', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain(i18n.global.t('system.logsNotConfigured'))
+  })
+
+  it('shows an explicit message when no log files are available at the configured path', async () => {
+    mocks.getLogFiles.mockResolvedValue({ log_files: [] })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const logsButton = wrapper.findAll('button').find((b) => b.text() === i18n.global.t('system.tabs.logs'))
+    await logsButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.getLogLines).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain(i18n.global.t('system.logsEmpty'))
   })
 
   it('shows a distinct message when log access is configured but unavailable', async () => {

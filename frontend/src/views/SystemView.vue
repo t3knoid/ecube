@@ -261,6 +261,33 @@ const workerQueueDisplay = computed(() => {
   return q
 })
 
+const hasAvailableLogFiles = computed(() => Array.isArray(logs.value) && logs.value.length > 0)
+
+const healthWarnings = computed(() => {
+  const warnings = health.value?.warnings
+  if (!Array.isArray(warnings)) return []
+
+  return warnings
+    .map((warning, index) => {
+      const message = String(warning?.message || '').trim()
+      if (!message) return null
+
+      const remediation = String(warning?.remediation || '').trim()
+      const component = String(warning?.component || '').trim()
+      const severity = String(warning?.severity || '').trim() || 'warning'
+      const code = String(warning?.code || '').trim() || `warning-${index + 1}`
+
+      return {
+        code,
+        severity,
+        component,
+        message,
+        remediation,
+      }
+    })
+    .filter(Boolean)
+})
+
 const ecubeProcess = computed(() => {
   const value = health.value?.ecube_process
   if (!value || typeof value !== 'object') {
@@ -445,6 +472,8 @@ async function loadTabData() {
         } else {
           error.value = resolveLogViewError(err, t('system.logsUnavailable'))
         }
+      } else if (!availableSourceNames.length) {
+        error.value = t('system.logsEmpty')
       }
     }
   } catch (err) {
@@ -641,6 +670,25 @@ onBeforeUnmount(() => {
           <span>{{ t('system.diskIo') }}</span><strong>{{ diskIoDisplay }}</strong>
           <span>{{ t('system.workerQueue') }}</span><strong>{{ workerQueueDisplay }}</strong>
         </div>
+
+        <div v-if="healthWarnings.length" class="health-warning-panel" role="status" aria-live="polite">
+          <h3 class="health-warning-panel-title">{{ t('system.healthWarnings') }}</h3>
+          <ul class="health-warning-list">
+            <li v-for="warning in healthWarnings" :key="warning.code" class="health-warning-item">
+              <div class="health-warning-item-header">
+                <StatusBadge :status="warning.severity" />
+                <strong>{{ warning.message }}</strong>
+              </div>
+              <p v-if="warning.remediation" class="health-warning-item-copy">
+                {{ t('system.warningRemediation') }}: {{ warning.remediation }}
+              </p>
+              <p class="health-warning-item-meta">
+                <span>{{ t('system.warningComponent') }}: {{ warning.component || t('common.labels.notAvailable') }}</span>
+                <span>{{ t('system.warningCode') }}: {{ warning.code }}</span>
+              </p>
+            </li>
+          </ul>
+        </div>
       </section>
 
       <section class="health-section">
@@ -727,7 +775,7 @@ onBeforeUnmount(() => {
       </div>
 
       <div ref="logViewerElement" class="log-viewer" tabindex="0" @scroll="onLogViewerScroll">
-        <pre class="log-viewer-content">{{ logViewerText || t('system.logViewerEmpty') }}</pre>
+        <pre class="log-viewer-content">{{ logViewerText || (hasAvailableLogFiles ? t('system.logViewerEmpty') : t('system.logsEmpty')) }}</pre>
       </div>
     </article>
 
@@ -864,6 +912,59 @@ onBeforeUnmount(() => {
 
 .health-thread-table-empty {
   color: var(--color-text-secondary);
+}
+
+.health-warning-panel {
+  display: grid;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border: 1px solid var(--color-alert-warning-border);
+  border-radius: var(--border-radius);
+  background: var(--color-alert-warning-bg);
+  color: var(--color-alert-warning-text);
+}
+
+.health-warning-panel-title {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.health-warning-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.health-warning-item {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.health-warning-item + .health-warning-item {
+  padding-top: var(--space-sm);
+  border-top: 1px solid color-mix(in srgb, var(--color-alert-warning-border) 70%, transparent);
+}
+
+.health-warning-item-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.health-warning-item-copy,
+.health-warning-item-meta {
+  margin: 0;
+}
+
+.health-warning-item-meta {
+  display: flex;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  color: color-mix(in srgb, var(--color-alert-warning-text) 82%, var(--color-text-secondary));
+  font-size: 0.92rem;
 }
 
 .log-meta {

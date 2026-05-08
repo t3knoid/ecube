@@ -46,7 +46,7 @@ function mountView() {
       stubs: {
         DataTable: {
           props: ['rows', 'columns'],
-          template: '<div class="data-table-shell"><slot v-for="row in rows" name="cell-details" :row="row" /><slot /></div>',
+          template: '<div class="data-table-shell"><template v-if="rows.length"><div v-for="row in rows" :key="row.id || row.timestamp" class="row-shell"><span class="row-action">{{ row.action }}</span><slot name="cell-details" :row="row" /></div></template><div v-else class="empty-shell"><slot name="empty" /></div><slot /></div>',
         },
         Pagination: {
           props: ['page', 'pageSize', 'total', 'showPageWindow', 'windowSize', 'jumpSize'],
@@ -105,9 +105,62 @@ describe('AuditView audit log page', () => {
     expect(wrapper.find('.pagination').attributes('data-jump-size')).toBe('10')
     expect(wrapper.text()).toContain(i18n.global.t('audit.title'))
     expect(wrapper.text()).toContain(i18n.global.t('audit.exportAuditCsv'))
+    expect(wrapper.text()).toContain(i18n.global.t('audit.resultsSummary', { shown: 1, total: 41 }))
     expect(wrapper.text()).not.toContain(i18n.global.t('audit.chainTitle'))
     expect(wrapper.text()).not.toContain(i18n.global.t('audit.loadCoc'))
     expect(wrapper.text()).toContain(i18n.global.t('audit.showDetails'))
+  })
+
+  it('shows a filtered empty state when the current filters match no audit rows', async () => {
+    mocks.getAudit.mockResolvedValueOnce({
+      entries: [
+        {
+          id: 10,
+          timestamp: '2026-04-01T13:00:00.000Z',
+          user: 'auditor-user',
+          action: 'JOB_CREATED',
+          job_id: 12,
+          client_ip: '127.0.0.1',
+          details: { project_id: 'PRJ-001' },
+        },
+      ],
+      total: 41,
+      limit: 20,
+      offset: 0,
+      has_more: true,
+    })
+    mocks.getAudit.mockResolvedValueOnce({
+      entries: [],
+      total: 0,
+      limit: 20,
+      offset: 0,
+      has_more: false,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.find(`input[aria-label="${i18n.global.t('audit.searchFilter')}"]`).setValue('no-match')
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('audit.applyFilters')).trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('audit.emptyFiltered'))
+  })
+
+  it('shows the default empty state when no audit rows exist and no filters are active', async () => {
+    mocks.getAudit.mockResolvedValueOnce({
+      entries: [],
+      total: 0,
+      limit: 20,
+      offset: 0,
+      has_more: false,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('audit.empty'))
+    expect(wrapper.text()).not.toContain(i18n.global.t('audit.emptyFiltered'))
   })
 
   it('uses 5-page shortcuts on smaller screens', async () => {

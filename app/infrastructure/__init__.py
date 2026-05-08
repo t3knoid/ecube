@@ -15,6 +15,7 @@ from typing import Callable
 from app.config import settings
 from app.infrastructure.device_path import validate_device_path
 from app.infrastructure.filesystem_detection import FilesystemDetector
+from app.infrastructure.filesystem_runtime import FilesystemRuntimeInspector
 from app.infrastructure.drive_format import DriveFormatter
 from app.infrastructure.drive_space import DriveSpaceProbe
 from app.infrastructure.usb_discovery import DriveDiscoveryProvider
@@ -31,6 +32,7 @@ from app.infrastructure.password_policy_protocol import PasswordPolicyProvider
 
 __all__ = [
     "FilesystemDetector",
+    "FilesystemRuntimeInspector",
     "DriveFormatter",
     "DriveSpaceProbe",
     "DriveDiscoveryProvider",
@@ -43,6 +45,7 @@ __all__ = [
     "PamAuthenticator",
     "PasswordPolicyProvider",
     "get_filesystem_detector",
+    "get_filesystem_runtime_inspector",
     "get_drive_formatter",
     "get_drive_space_probe",
     "get_drive_discovery",
@@ -64,6 +67,11 @@ __all__ = [
 def _linux_filesystem_detector() -> type[FilesystemDetector]:
     from app.infrastructure.filesystem_detection import LinuxFilesystemDetector
     return LinuxFilesystemDetector
+
+
+def _linux_filesystem_runtime_inspector() -> type[FilesystemRuntimeInspector]:
+    from app.infrastructure.filesystem_runtime import LinuxFilesystemRuntimeInspector
+    return LinuxFilesystemRuntimeInspector
 
 def _linux_drive_formatter() -> type[DriveFormatter]:
     from app.infrastructure.drive_format import LinuxDriveFormatter
@@ -105,6 +113,10 @@ def _linux_password_policy_provider() -> type[PasswordPolicyProvider]:
 
 _FILESYSTEM_DETECTOR_REGISTRY: dict[str, Callable[[], type[FilesystemDetector]]] = {
     "linux": _linux_filesystem_detector,
+}
+
+_FILESYSTEM_RUNTIME_INSPECTOR_REGISTRY: dict[str, Callable[[], type[FilesystemRuntimeInspector]]] = {
+    "linux": _linux_filesystem_runtime_inspector,
 }
 
 _DRIVE_FORMATTER_REGISTRY: dict[str, Callable[[], type[DriveFormatter]]] = {
@@ -155,6 +167,11 @@ def _resolve(registry: dict, label: str):
 def get_filesystem_detector() -> FilesystemDetector:
     """Return the platform-appropriate :class:`FilesystemDetector`."""
     return _resolve(_FILESYSTEM_DETECTOR_REGISTRY, "FilesystemDetector")
+
+
+def get_filesystem_runtime_inspector() -> FilesystemRuntimeInspector:
+    """Return the platform-appropriate :class:`FilesystemRuntimeInspector`."""
+    return _resolve(_FILESYSTEM_RUNTIME_INSPECTOR_REGISTRY, "FilesystemRuntimeInspector")
 
 
 def get_drive_formatter() -> DriveFormatter:

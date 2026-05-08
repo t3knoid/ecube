@@ -186,6 +186,16 @@ class EcubeProcessMetricsResponse(BaseModel):
     active_copy_threads: List[EcubeCopyThreadResponse] = Field(default_factory=list, description="Active ECUBE copy workers correlated to their parent export job")
 
 
+class SystemHealthWarning(BaseModel):
+    """Operator-safe runtime warning shown in authenticated diagnostics."""
+
+    code: str = Field(..., description="Stable warning code")
+    severity: str = Field(..., description="Warning severity label")
+    component: str = Field(..., description="Subsystem associated with the warning")
+    message: str = Field(..., description="Operator-safe warning summary")
+    remediation: str = Field(..., description="Operator-safe remediation guidance")
+
+
 class SystemHealthResponse(BaseModel):
     """Response for ``GET /introspection/system-health``."""
 
@@ -200,6 +210,7 @@ class SystemHealthResponse(BaseModel):
     disk_read_bytes: Optional[int] = Field(default=None, description="Cumulative disk read bytes since boot")
     disk_write_bytes: Optional[int] = Field(default=None, description="Cumulative disk write bytes since boot")
     worker_queue_size: Optional[int] = Field(default=None, description="Number of pending (queued) export jobs; null when the database is unreachable or the count query fails")
+    warnings: List[SystemHealthWarning] = Field(default_factory=list, description="Operator-safe runtime warnings for degraded but non-fatal host conditions")
     ecube_process: EcubeProcessMetricsResponse = Field(..., description="ECUBE-process diagnostics and active copy worker correlation")
 
 

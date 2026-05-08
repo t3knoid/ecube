@@ -712,7 +712,7 @@ def test_mount_drive_reports_host_filesystem_support_failure_safely(manager_clie
         response = manager_client.post(f"/drives/{drive.id}/mount")
 
     assert response.status_code == 500
-    assert response.json()["message"] == "Host filesystem support for this drive is unavailable; install the required filesystem runtime and retry"
+    assert response.json()["message"] == "Host filesystem support for this drive is unavailable; verify the required filesystem runtime and retry"
     assert "/dev/sdb" not in response.json()["message"]
 
 

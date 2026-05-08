@@ -742,7 +742,15 @@ For the current System page Logs tab UI, verify the authorized log workflow beha
 - Changing the selected source loads that file automatically without a second action.
 - Pressing `Download` exports the currently selected source file for `admin` users.
 - Scrolling to the bottom of the log viewer loads older lines for the selected source, and scrolling back to the top loads newer lines when available.
+- If no eligible log files exist at the configured backend log path, the UI shows the explicit `No application log files are currently available...` empty state instead of a generic load failure.
 - If a selected rotated file is missing, unreadable, or rejected, the UI shows a non-generic error state instead of stale content.
+
+For the current Audit page UI, verify the server-backed result-state messaging behaves as follows:
+
+- When no audit rows exist and no filters are active, the page shows the default `No audit log entries are currently available.` empty state.
+- When the backend returns matching rows, the page shows the `Showing X audit entries on this page out of Y total.` summary above the table.
+- When the active filters or search return no rows, the page shows the explicit filtered empty state instead of the default empty-table message.
+- Clearing or relaxing the active filters restores the default empty state when the audit store is still empty, or restores both the table rows and the results summary when matching data exists.
 
 For the `/admin/logs/view` API, verify the explicit rollover-source safeguards behave as follows:
 

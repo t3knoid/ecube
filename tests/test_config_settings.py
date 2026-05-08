@@ -140,6 +140,10 @@ class TestSettingsDefaults:
         s = Settings(database_url="sqlite://")
         assert s.procfs_mounts_path == "/proc/mounts"
 
+    def test_procfs_filesystems_path_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.procfs_filesystems_path == "/proc/filesystems"
+
     def test_sysfs_usb_devices_path_default(self):
         s = Settings(database_url="sqlite://")
         assert s.sysfs_usb_devices_path == "/sys/bus/usb/devices"
