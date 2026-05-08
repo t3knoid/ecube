@@ -15,7 +15,7 @@ ECUBE is a secure evidence export platform designed to copy eDiscovery data onto
 - **System Layer API:** Python 3.11+, FastAPI
 - **Data Layer:** PostgreSQL 14+ with SQLAlchemy + Alembic
 - **Background Processing:** FastAPI `BackgroundTasks` with a bounded `ThreadPoolExecutor` for copy, verification, and manifest tasks
-- **UI Layer:** React, Vue, or server-rendered templates (HTTPS-only)
+- **UI Layer:** Vue 3 SPA served by FastAPI (HTTPS-only)
 - **Runtime Platform:** Linux-based copy machine with USB hub integration and NFS/SMB mount support
 
 ## Quick Start
