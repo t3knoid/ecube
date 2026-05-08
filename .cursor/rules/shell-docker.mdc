@@ -1,5 +1,5 @@
 ---
-description: "Shell, subprocess, Docker, Compose, and environment handling rules for ECUBE infrastructure changes."
+description: "Shell, subprocess, Docker, Compose, and environment-handling rules for ECUBE infrastructure and system-layer execution."
 alwaysApply: false
 globs:
   - "**/*.sh"
@@ -11,51 +11,147 @@ globs:
   - "scripts/**/*"
 ---
 
-# ECUBE — Shell and Docker Addendum
+# ECUBE — Shell & Docker Addendum (Full Rewrite)
 
-Apply when touching shell scripts, subprocess code, Dockerfiles, entrypoints, Compose, or environment-file handling.
+Apply when touching shell scripts, subprocess code, Dockerfiles, entrypoints, Compose files, or environment-file handling.
 
-## Shell and Command Safety
+This file governs **system-layer execution safety**, **subprocess correctness**, **container hardening**, and **deployment hygiene**.  
+Backend business logic, OS abstraction boundaries, and audit/logging rules live in `backend.mdc` and `core.mdc`.
+
+---
+
+## 1. Shell & Subprocess Safety (Global System-Layer Rules)
+
+### 1.1 Forbidden Patterns
 
 Never:
-- use `shell=True`
-- use backticks for command substitution
-- use unquoted variable expansion in destructive or path-sensitive commands
-- use GNU-only flags unless documented and acceptable for the target environment
-- perform silent destructive operations
+
+- use `shell=True` in Python subprocess calls  
+- use backticks for command substitution  
+- use unquoted variable expansion in path-sensitive or destructive commands  
+- rely on GNU-only flags unless explicitly documented as supported  
+- perform silent destructive operations  
+- parse `.env` files with whitespace-collapsing or unsafe splitting  
+- embed secrets in scripts or Dockerfiles  
+- assume interactive shells or TTY availability  
+
+### 1.2 Required Patterns
 
 Always:
-- quote environment variable expansions
-- construct paths with `pathlib` or a safe equivalent in Python
-- use `$(cmd)` instead of backticks
-- use `set -euo pipefail` in Bash
-- use `|| exit 1` in POSIX `sh` where needed
-- avoid whitespace-collapsing parsing for `.env` files
 
-## Dockerfile Rules
+- quote all variable expansions (`"$VAR"`)  
+- use `$(cmd)` instead of backticks  
+- use `set -euo pipefail` in Bash  
+- use `|| exit 1` in POSIX `sh` where needed  
+- use `pathlib` or safe equivalents for path construction in Python  
+- validate and sanitize all paths before use  
+- use explicit argument lists for subprocess calls  
+- enforce timeouts for subprocess operations  
+- log sanitized error information (raw provider errors only allowed in debug logs)  
 
-- Pin base images
-- Use multi-stage builds
-- Keep production images free of compilers
-- Prefer minimal base images
-- Avoid `COPY . .` unless justified
-- Exclude heavy or sensitive paths in `.dockerignore`
-- Use `pip --no-cache-dir`
-- Set an explicit `USER`
-- Do not embed secrets
-- Do not use `chmod -R 777`
-- Define healthchecks
+### 1.3 Subprocess Execution Rules
 
-## Entrypoints and Compose
+- All subprocess calls must go through infrastructure wrappers.  
+- Commands must be passed as lists, not strings.  
+- No command may rely on implicit PATH resolution; use absolute paths when possible.  
+- All subprocess failures must be surfaced as structured errors, not raw stderr.  
+- Subprocess output must be sanitized before logging or returning upward.  
 
-Entrypoints:
-- Use exec form
-- Use `set -euo pipefail`
-- Quote variables
+---
 
-Compose:
-- Do not use nested variable interpolation
-- Document env vars in `.env.example`
-- Define healthchecks and resource limits
-- Do not mount the Docker socket
-- Do not bind-mount sensitive host paths
+## 2. Dockerfile Rules (Container Hardening)
+
+### 2.1 Base Image & Build Hygiene
+
+- Pin base images to specific versions or digests.  
+- Use multi-stage builds to keep production images minimal.  
+- Production images must not contain compilers or build toolchains.  
+- Prefer minimal base images (e.g., `python:slim`, `alpine` only when compatible).  
+- Avoid `COPY . .` unless explicitly justified; copy only required paths.  
+- Exclude heavy or sensitive paths via `.dockerignore`.  
+
+### 2.2 Security Requirements
+
+- Do not embed secrets, tokens, or credentials.  
+- Do not use `chmod -R 777`.  
+- Set an explicit non-root `USER` unless root is required and documented.  
+- Use `pip install --no-cache-dir`.  
+- Do not install unnecessary packages.  
+- Define Dockerfile `HEALTHCHECK` for long-running services.  
+
+### 2.3 Determinism & Reproducibility
+
+- Avoid non-deterministic build steps.  
+- Avoid downloading unpinned remote artifacts.  
+- Document any required build arguments in `README` or `deploy/`.  
+
+---
+
+## 3. Entrypoints & Startup Scripts
+
+### 3.1 Entrypoint Rules
+
+Entrypoints must:
+
+- use exec form (`exec "$@"`)  
+- use `set -euo pipefail`  
+- quote all variables  
+- validate environment variables before use  
+- avoid inline logic that belongs in Python services  
+- avoid infinite loops without sleep/backoff  
+- log sanitized startup failures  
+
+### 3.2 Environment Handling
+
+- Environment variables must be documented in `.env.example`.  
+- Scripts must not assume variables are set; validate explicitly.  
+- Avoid parsing `.env` files manually; prefer tooling or safe parsing.  
+- Never echo secrets or sensitive values.  
+
+---
+
+## 4. Docker Compose Rules
+
+### 4.1 Safety & Security
+
+- Do not mount the Docker socket.  
+- Do not bind-mount sensitive host paths.  
+- Use explicit resource limits (`cpus`, `mem_limit`).  
+- Define healthchecks for all long-running services.  
+- Avoid privileged containers unless explicitly required and documented.  
+
+### 4.2 Environment & Configuration
+
+- Do not use nested variable interpolation (Compose does not support it).  
+- Document all environment variables in `.env.example`.  
+- Avoid environment-variable defaults that mask configuration errors.  
+
+### 4.3 Networking & Volumes
+
+- Use named volumes instead of bind mounts unless bind mounts are required.  
+- Avoid exposing ports unnecessarily.  
+- Use internal networks for inter-service communication.  
+
+---
+
+## 5. Deployment & Script Hygiene
+
+- Deployment scripts must be idempotent.  
+- Scripts must fail fast and loudly on unexpected conditions.  
+- No script may assume a specific working directory; use absolute paths.  
+- All destructive operations must require explicit confirmation or flags.  
+- Deployment artifacts must not contain secrets or environment-specific paths.  
+
+---
+
+## 6. Out of Scope (Handled Elsewhere)
+
+The following belong to other rule files and must **not** be redefined here:
+
+- backend business logic, OS abstraction, mount/USB rules → `backend.mdc`  
+- global security/logging/audit rules → `core.mdc`  
+- schema and migration rules → `migrations.mdc`  
+- frontend rules → `frontend.mdc`  
+
+This file governs **only** shell, subprocess, Docker, Compose, and environment-handling safety.
+

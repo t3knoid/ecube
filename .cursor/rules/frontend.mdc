@@ -1,5 +1,5 @@
 ---
-description: "Frontend ECUBE rules for Vue UI work, accessibility, tree views, templates, and frontend validation."
+description: "Frontend ECUBE rules for Vue UI work, accessibility, tree views, templates, state management, API usage, and frontend validation."
 alwaysApply: false
 globs:
   - "frontend/**/*"
@@ -7,42 +7,221 @@ globs:
   - "app/spa/**/*.py"
 ---
 
-# ECUBE — Frontend Addendum
+# ECUBE — Frontend Addendum (Full Rewrite)
 
-Apply when touching Vue, frontend components, templates, CSS, frontend tests, or browser interactions.
+Apply when touching Vue components, templates, CSS, frontend tests, routing, state management, or browser interactions.
 
-## Trust Boundary
+This file governs **untrusted UI behavior**, **accessibility**, **component patterns**, **API usage**, and **frontend validation**.  
+Global security, audit, and backend rules live in `core.mdc` and `backend.mdc`.
 
-- The frontend is untrusted
-- The frontend is a Vue 3 SPA served by FastAPI
-- The frontend communicates only through the HTTPS API
-- The frontend must never touch hardware or the database directly
+---
 
-## Accessibility
+## 1. Trust Boundary (Frontend Is Untrusted)
 
-- All interactive elements must be keyboard operable
-- Prefer native elements such as `button`, `a`, and `input`
-- Focus order must be logical
-- ARIA must be correct
-- Inputs must have labels
-- Modals must trap focus
-- Icons must have accessible labels
+- The frontend is **untrusted** and must assume all backend responses are authoritative.
+- The frontend is a **Vue 3 SPA** served by FastAPI.
+- The frontend communicates **only** through the HTTPS API.
+- The frontend must **never**:
+  - touch hardware  
+  - touch the database  
+  - infer internal OS details  
+  - bypass backend role checks  
+- All sensitive logic must remain in the backend.
 
-## Directory Browser and Tree View
+---
 
-- Rows must be keyboard accessible
-- Do not rely on `<tr @click>` without keyboard handlers
-- Support arrow-key navigation
-- Screen readers must distinguish files from directories
+## 2. Same-Origin SPA Routing
 
-## CSS and Templates
+When FastAPI serves the Vue SPA and backend routes on the same origin:
 
-- Before creating new UI styling, inspect the closest existing component with the same visual or interaction pattern and match it unless the task explicitly asks for a new variant
-- Reuse the same design tokens, spacing, scrollbar styling, button treatment, panel treatment, and hover or focus states from the existing component when those patterns already exist nearby
-- Remove unused styles
-- Keep class names aligned with template usage
+- Direct browser navigation to frontend-owned routes must load the SPA entrypoint, not a bare backend API response.
+- Do not introduce or keep route collisions where a frontend page path can be consumed by a backend route before SPA fallback runs.
+- Frontend routes must remain refresh-safe even when backend API routes share the same path prefix or a similar path shape.
+- Real API requests must preserve backend behavior, especially under `/api/...`, including:
+  - authentication and session handling
+  - role enforcement
+  - shared error responses
+  - existing 401 vs 403 semantics
+- When touching SPA fallback, router registration order, API-prefix stripping, or same-origin navigation behavior, add regression tests for:
+  - direct browser navigation to colliding routes
+  - direct browser navigation to at least one colliding detail route
+  - confirmation that API requests still reach backend routes instead of the SPA
 
-## Frontend Validation
+---
 
-- Test keyboard interaction and accessibility-sensitive behavior for changed components
-- Preserve API-only trust boundaries in UI flows
+## 3. API Usage & Error Handling
+
+### 3.1 API Client Rules
+
+- All API calls must go through a **centralized API client** (no inline `fetch` or `axios` in components).
+- API URLs must not be hard-coded inside components.
+- API client must:
+  - attach auth/session headers consistently  
+  - normalize errors  
+  - return typed responses  
+  - avoid leaking raw provider errors  
+
+### 3.2 Error Surfaces
+
+- UI must show **safe**, user-friendly error messages.
+- Never display:
+  - raw exceptions  
+  - raw provider errors  
+  - absolute paths  
+  - device identifiers  
+- Errors must be categorized (e.g., validation, permission, unavailable, conflict).
+
+### 3.3 Loading & Empty States
+
+- All API-driven components must implement:
+  - loading state  
+  - empty state  
+  - error state  
+  - retry behavior where appropriate  
+
+---
+
+## 4. State Management (Pinia/Vuex)
+
+- Stores must not mutate state unpredictably.
+- Derived state must be computed, not stored.
+- Stores must not contain business logic; only UI state and API orchestration.
+- Avoid global stores unless the state is truly global.
+- Clear store state on logout or project switch where relevant.
+
+---
+
+## 5. Routing & Navigation
+
+- SPA routing must support **direct navigation** to all routes (no 404 on refresh).
+- No collisions with backend API paths.
+- Protected routes must check backend roles via API, not frontend assumptions.
+- Navigation guards must:
+  - handle expired sessions  
+  - handle missing roles  
+  - redirect safely without loops  
+
+---
+
+## 6. Accessibility (A11y)
+
+### 6.1 Interactive Elements
+
+- All interactive elements must be keyboard operable.
+- Prefer native elements (`button`, `a`, `input`) over div/button hybrids.
+- Focus order must be logical and predictable.
+- All inputs must have labels.
+- Icons must have accessible labels or `aria-hidden="true"`.
+
+### 6.2 ARIA & Semantics
+
+- ARIA must be correct and minimal.
+- Do not use ARIA when native semantics suffice.
+- Regions (dialogs, alerts, navigation) must use correct roles.
+
+### 6.3 Modals & Dialogs
+
+- Modals must:
+  - trap focus  
+  - restore focus on close  
+  - support Escape to close  
+  - be announced to screen readers  
+
+---
+
+## 7. Directory Browser & Tree View Rules
+
+These components are **high-risk** for accessibility and keyboard navigation.
+
+- Rows must be keyboard accessible.
+- Do not rely on `<tr @click>` without keyboard handlers.
+- Support:
+  - arrow-key navigation  
+  - Enter/Space activation  
+  - Home/End navigation where appropriate  
+- Screen readers must distinguish:
+  - files vs directories  
+  - expanded vs collapsed states  
+- Avoid rendering extremely large directories all at once; use virtualization when needed.
+
+---
+
+## 8. CSS, Templates & Component Patterns
+
+### 8.1 Design Consistency
+
+Before creating new UI styling:
+
+- Inspect the closest existing component with the same visual or interaction pattern.
+- Match its:
+  - design tokens  
+  - spacing  
+  - scrollbar styling  
+  - button treatment  
+  - panel treatment  
+  - hover/focus states  
+
+### 8.2 Template Hygiene
+
+- Remove unused styles.
+- Keep class names aligned with template usage.
+- Avoid deeply nested selectors.
+- Prefer utility classes or component-scoped styles over global overrides.
+
+### 8.3 Component Architecture
+
+- Components must be small, focused, and composable.
+- Avoid monolithic components with mixed responsibilities.
+- Use props and emits with explicit typing.
+- Avoid implicit two-way binding unless required.
+
+---
+
+## 9. Frontend Validation
+
+- Validate user input before sending to the backend.
+- Validation must mirror backend rules but not replace them.
+- Test keyboard interaction and accessibility-sensitive behavior for changed components.
+- Do not rely on frontend validation for security; backend is authoritative.
+
+---
+
+## 10. Frontend Testing Expectations
+
+When modifying components, tests must cover:
+
+- keyboard accessibility  
+- focus management  
+- ARIA correctness  
+- error surfaces  
+- loading/empty states  
+- API error handling  
+- role-based UI visibility  
+- directory browser/tree view navigation  
+- edge cases (empty lists, long names, large directories)  
+
+Use:
+
+- Vitest or Jest  
+- Vue Testing Library  
+- Playwright for E2E when relevant  
+
+Tests must not:
+
+- mock backend behavior incorrectly  
+- assume internal OS details  
+- rely on timing hacks  
+
+---
+
+## 11. Out of Scope (Handled Elsewhere)
+
+Do **not** redefine:
+
+- backend business logic rules → `backend.mdc`
+- global security/logging/audit rules → `core.mdc`
+- schema/migration rules → `migrations.mdc`
+- shell/subprocess/Docker rules → `shell-docker.mdc`
+
+This file governs **only** frontend behavior, accessibility, UI patterns, and API usage.
+

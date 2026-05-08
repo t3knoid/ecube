@@ -1,3 +1,5 @@
+# ECUBE Copilot Instructions
+
 ## 1. Global Principles
 
 - ECUBE is a secure evidence export platform. All generated code must preserve:
@@ -15,7 +17,23 @@
 - When extending an existing UI surface, inspect the closest existing component that already solves the same visual or interaction problem and match its styling patterns before introducing a new variant.
 - For UI styling work, prefer reusing the same tokens, spacing, scrollbar, button, panel, and state treatments from the existing component unless the task explicitly requires a different design.
 
-## 1.1 Alembic Release Migration Workflow
+### 1.1 Code Review Global Expectations
+
+Copilot must evaluate and generate code consistent with the following enterprise review principles:
+
+- Maintain strict separation of concerns:
+  - routers → thin
+  - services → business logic
+  - infrastructure → OS, USB, SMB/NFS, subprocess, mounts
+  - persistence → DB access only
+- Never introduce blocking I/O inside async FastAPI endpoints.
+- Never leak raw OS errors, device identifiers, or absolute paths outside debug logs.
+- All new code must be safe under concurrency, retries, and partial failures.
+- All new code must be observable: structured logs, metrics, and clear failure paths.
+- All new code must be secure by default: sanitized inputs, validated paths, safe mount options, no shell injection, no traversal.
+- All new code must preserve chain‑of‑custody integrity and auditability.
+
+## 1.2 Alembic Release Migration Workflow
 
 - Treat issue 280 as a binding repository workflow rule.
 - Do not run `alembic revision` directly for normal ECUBE feature work.
@@ -32,15 +50,21 @@
 - Writes audit logs.
 - Enforces project isolation and role checks.
 - Only component allowed to touch hardware and the database.
+- Must expose stable, minimal interfaces; no business logic leakage upward.
+- Must validate all mount paths, device identities, and OS interactions before execution.
 
 ### UI Layer (untrusted)
 - Vue 3 SPA served by FastAPI.
 - Communicates via HTTPS API only.
 - Never touches hardware or the database.
+- Must not assume backend invariants; must handle all error states gracefully.
+- Must not hard‑code API URLs inside components; use centralized API client.
 
 ### Database
 - PostgreSQL in production; SQLite in-memory for tests.
 - Only reachable from system-layer network segment.
+- Schema must use strong types, constraints, and foreign keys.
+- Migrations must match models; no drift allowed.
 
 ### Roles
 | Role | Permissions |
@@ -68,6 +92,15 @@ Use `require_roles(*roles)` for every endpoint.
 - Unsafe file operations must be guarded.
 - Endpoints must declare error responses using shared `R_*` schemas.
 
+### 3.1 Additional Security Review Rules
+
+- All filesystem paths must be normalized and validated as direct children of allowed base directories.
+- All subprocess calls must use explicit argument lists; never build shell strings.
+- All SMB/NFS mounts must use safe options (`noexec`, `nodev`, `nosuid`).
+- All USB device identities must be composite (VID/PID/serial/port‑path/fs‑UUID).
+- All endpoints must enforce role checks using `require_roles`.
+- No endpoint may return internal OS details, raw exceptions, or sensitive metadata.
+
 ## 4. Logging Rules (General Logging)
 
 - Use `logger.info`, `logger.debug`, `logger.warning`, `logger.error`.
@@ -80,16 +113,15 @@ Use `require_roles(*roles)` for every endpoint.
 - Do not rely only on unhandled-exception logging. Handled failures and suspicious outcomes must be logged at the point they are detected.
 - Unexpected failures that can surface to operators or UI users must emit layered logs:
   - `logger.info` should record a safe failure classification, request or operation surface, and correlation identifier without exposing internal paths, raw SQL, credentials, or other unsafe host details.
-  - `logger.debug` should record additional actionable diagnostic detail for troubleshooting, so an operator or end user working from debug logs can understand the likely remediation path without reading application code.
-- For new failure handling, `logger.info` should make it easy to audit that an unexpected failure, silent bug, or logic error occurred even when the exception is caught or the operation only partially fails.
-- Prefer classifying common operational failure categories when they can be derived safely, such as configuration errors, permission failures, unavailable dependencies, or schema drift.
+  - `logger.debug` should record additional actionable diagnostic detail for troubleshooting.
+- Prefer classifying common operational failure categories when they can be derived safely.
 
 ### Debug logging (allowed to contain sensitive details)
 Debug logs **may include**:
-- system paths  
-- device identifiers  
-- raw provider errors  
-- raw exception strings  
+- system paths
+- device identifiers
+- raw provider errors
+- raw exception strings
 
 ### Info/warning/error logging (strict)
 These levels must **not** include:
@@ -99,15 +131,7 @@ These levels must **not** include:
 - sensitive OS details
 
 Exception:
-- application logs may mirror structured audit metadata for operator-visible audit events when each mirrored field is already sanitized, redacted, or otherwise safe for normal logs. This allows info/warning/error log output to carry the same safe context as the persisted audit record for events such as drive lifecycle or formatting actions.
-- under this exception, paths must still be redacted rather than emitted as raw host paths, and device identity must still be masked, summarized, or replaced with a safe operator label rather than logged verbatim.
-
-Examples:
-```python
-logger.debug("Provider error", {"raw_error": str(err)})
-logger.debug("Resolved mount path", {"path": mount_path})
-logger.debug("Device node", {"dev": "/dev/sdb1"})
-```
+- application logs may mirror structured audit metadata when sanitized.
 
 ## 5. Audit Log Redaction & Provider Error Safety
 
@@ -117,7 +141,68 @@ logger.debug("Device node", {"dev": "/dev/sdb1"})
   - absolute filesystem paths
   - unredacted mount paths
 - Exception:
-  - audit records may include stable drive-identifying or USB-topology metadata when the purpose of the event is chain-of-custody, discovery, or hardware traceability. This includes fields such as a drive identifier, port identifier, vendor/product identifiers, or other non-secret hardware identity attributes needed to reconstruct which device was observed.
-  - under this exception, host filesystem paths and mount paths must still be redacted, and provider/error text must still be sanitized rather than stored verbatim.
-
+  - audit records may include stable drive-identifying or USB-topology metadata needed for chain-of-custody.
 - Audit logs must use structured, sanitized, or redacted error information.
+
+## 6. Backend Code Review Rules
+
+### 6.1 API Layer
+- Endpoints must use Pydantic models for all inputs/outputs.
+- Endpoints must not contain business logic.
+- Endpoints must return consistent error schemas (`R_*`).
+- Endpoints must not block the event loop.
+
+### 6.2 Services Layer
+- Must implement all business logic.
+- Must enforce project isolation before any write.
+- Must handle retries, partial failures, and cleanup.
+- Must never call OS functions directly—only via infrastructure.
+
+### 6.3 Infrastructure Layer
+- Must validate all mount paths and device identities.
+- Must sanitize all provider errors before returning them upward.
+- Must wrap subprocess calls with timeouts and safe argument lists.
+- Must handle USB disconnect‑mid‑copy safely.
+
+## 7. Frontend (Vue) Code Review Rules
+
+### 7.1 API Usage
+- All API calls must go through a centralized client.
+- All API errors must be surfaced with user‑safe messages.
+- No component may hard‑code URLs.
+
+### 7.2 Routing
+- SPA routing must support direct navigation to all frontend routes.
+- No collisions with backend API paths.
+
+### 7.3 State Management
+- Stores must not mutate state unpredictably.
+- Derived state must be computed, not stored.
+
+### 7.4 UI/UX Safety
+- Destructive actions require confirmation.
+- Buttons must disable when hardware state is unsafe.
+- Frontend validation must mirror backend validation.
+
+## 8. Database Review Rules
+
+- All tables must use strong types, constraints, and foreign keys.
+- All migrations must be reversible.
+- No unbounded growth tables without retention policies.
+- Indexes must exist for high‑traffic queries (jobs, drives, audit logs).
+- No JSONB dumping unless justified and documented.
+
+## 9. Reliability & Performance Rules
+
+- All long‑running operations must be async‑safe or offloaded.
+- All copy operations must handle disk‑full, disconnect, and partial writes.
+- All mount operations must include retries and timeouts.
+- All job state transitions must be atomic.
+- No synchronous heavy operations inside request handlers.
+
+## 10. Observability Rules
+
+- All major operations must emit structured logs.
+- Metrics must exist for job duration, copy speed, mount failures.
+- Trace IDs must propagate across backend and frontend.
+- Health checks must validate USB subsystem and SMB/NFS availability.

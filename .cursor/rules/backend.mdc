@@ -1,55 +1,212 @@
 ---
-description: "Backend ECUBE rules for FastAPI, services, models, repositories, filesystem pagination, and backend tests."
+description: "Backend ECUBE rules for FastAPI, services, models, repositories, filesystem pagination, hardware interaction, and backend tests."
 alwaysApply: false
 globs:
   - "app/**/*.py"
   - "tests/**/*.py"
 ---
 
-# ECUBE — Backend Addendum
+# ECUBE — Backend Addendum (Full Rewrite)
 
-Apply when touching Python backend code, API endpoints, services, models, repositories, or backend tests.
+Apply when touching Python backend code, API endpoints, services, models, repositories, infrastructure, filesystem behavior, hardware interaction, or backend tests.
 
-## API Rules
+---
 
-- Routers handle validation, role enforcement, and delegation only
-- Services own business logic
-- Endpoints must declare error responses
-- No long-running synchronous work in endpoints
-- No CPU-heavy work on the event loop
-- Background tasks must use bounded thread pools
+## 1. Architectural & Trust Boundary Rules
 
-## Database and Model Rules
+- **System vs UI:**
+  - Backend code runs in the **trusted system layer**.
+  - The UI layer is **untrusted** and may not access hardware or the database directly.
+- **Layered responsibilities:**
+  - **Routers:** validation, role enforcement, and delegation only.
+  - **Services:** business logic, project isolation, and orchestration.
+  - **Repositories/ORM:** database access only.
+  - **Infrastructure (`app/infrastructure`):** OS, USB, SMB/NFS, subprocess, mounts, filesystem.
+- **OS abstraction:**
+  - All OS-level operations (mounts, copies, subprocess, USB, SMB/NFS) must go through `app/infrastructure` interfaces.
+  - Services and routers must not call `os`, `subprocess`, or low-level libraries directly.
+- **Project isolation:**
+  - All write operations must enforce project isolation before any copy or mutation begins.
+  - Violations must be rejected and logged.
 
-- PostgreSQL in production
-- SQLite in-memory for tests
-- Enum columns use `native_enum=False`
-- JSON fields use SQLAlchemy `JSON` in models and PostgreSQL `JSONB` in migrations
-- Index tables by project, status, and timestamps
+---
 
-## Domain Rules
+## 2. API & FastAPI Rules
 
-- Drive lifecycle transitions must be atomic
-- Drive FSM is `DISCONNECTED -> DISABLED -> AVAILABLE -> IN_USE`
-- Background copy tasks must not starve the system
+- **Router responsibilities:**
+  - Handle request/response validation with Pydantic models.
+  - Enforce roles using `require_roles(*roles)` on every endpoint.
+  - Delegate to services for all business logic.
+- **Error responses:**
+  - Endpoints must declare error responses using shared `R_*` schemas.
+  - Do not leak raw exceptions, provider errors, or internal OS details in responses.
+- **Async & performance:**
+  - No long-running synchronous work in endpoints.
+  - No CPU-heavy work on the event loop.
+  - Use background tasks or worker mechanisms for heavy or blocking operations.
+  - Background tasks must use bounded thread pools or equivalent limits.
+- **Security:**
+  - All user input used in filesystem paths or shell commands must be sanitized.
+  - Directory traversal must be prevented via normalization and base-path checks.
+  - `eval`, `exec`, and dynamic code execution are forbidden.
+  - Insecure defaults (e.g., `debug=True`, wide-open CORS) are forbidden.
 
-## Filesystem and Pagination
+---
+
+## 3. Services, Domain Logic & Concurrency
+
+- **Service responsibilities:**
+  - Own all business logic and domain rules.
+  - Enforce project isolation and role-based constraints before performing operations.
+  - Coordinate repositories, infrastructure, and job lifecycle transitions.
+- **Concurrency & retries:**
+  - Design services to be safe under retries and partial failures.
+  - Ensure idempotency where operations may be retried.
+  - Avoid race conditions around drive state, mounts, and job lifecycle.
+- **Drive lifecycle:**
+  - Drive lifecycle transitions must be atomic.
+  - Drive FSM is: `DISCONNECTED -> DISABLED -> AVAILABLE -> IN_USE`.
+  - State transitions must be validated and logged.
+- **Background work:**
+  - Background copy tasks must not starve the system.
+  - Long-running operations must be offloaded from request handlers.
+  - Ensure bounded concurrency for copy, hash, and verification tasks.
+
+---
+
+## 4. Database & Model Rules
+
+- **Database engines:**
+  - PostgreSQL in production.
+  - SQLite in-memory for tests.
+- **Schema & types:**
+  - Use strong types and constraints (NOT NULL, foreign keys, unique, check).
+  - Enum columns use `native_enum=False`.
+  - JSON fields use SQLAlchemy `JSON` in models and PostgreSQL `JSONB` in migrations.
+- **Indexing & access patterns:**
+  - Index tables by project, status, and timestamps where relevant.
+  - Ensure indexes exist for high-traffic queries (jobs, drives, audit logs).
+- **Migrations:**
+  - Follow the release-scoped Alembic workflow defined in the global instructions.
+  - Migrations must match models; no schema drift.
+  - Migrations must be reversible.
+- **Repositories:**
+  - Repositories must not contain business logic.
+  - Repositories must encapsulate query patterns and pagination behavior.
+
+---
+
+## 5. Filesystem, Mounts & Pagination
+
+### 5.1 Filesystem & Mount Safety
+
+- All filesystem paths must be normalized and validated as direct children of allowed base directories.
+- All mount paths must be validated and sanitized before use.
+- All SMB/NFS mounts must use safe options (`noexec`, `nodev`, `nosuid`) unless explicitly justified.
+- USB device identities must be composite (e.g., VID/PID/serial/port-path/fs-UUID) and handled via infrastructure.
+- Infrastructure must handle USB disconnect-mid-copy safely and report structured errors upward.
+- No direct use of `subprocess` or shell strings in services/routers; use infrastructure wrappers with explicit argument lists and timeouts.
+
+### 5.2 Directory Listing & Pagination
 
 When touching browse, listing, or large-directory behavior:
-- Use streaming iteration such as `os.scandir`
-- Return `has_more` instead of computing full totals when possible
-- Avoid memory-heavy directory materialization
-- Do not materialize entire directories for paginated endpoints
-- Do not globally sort very large directories unless explicitly required
-- Do not introduce `O(n)` or `O(n log n)` work on each page request for large mount points
 
-## Backend Test Expectations
+- Use streaming iteration such as `os.scandir` or equivalent.
+- Avoid materializing entire directories for paginated endpoints.
+- Return `has_more` instead of computing full totals when possible.
+- Do not globally sort very large directories unless explicitly required.
+- Do not introduce `O(n)` or `O(n log n)` work on each page request for large mount points.
+- Ensure pagination is stable and deterministic given the chosen ordering.
 
-When adding or changing endpoints, cover:
-- role checks
-- input validation
-- pagination where relevant
-- redaction
-- derived fields
-- error conditions
-- edge cases
+---
+
+## 6. Logging & Audit Rules (Backend Focus)
+
+- Use `logger.info`, `logger.debug`, `logger.warning`, `logger.error` with **message + structured context**.
+- Do not use printf-style formatting unless explicitly supported.
+- Logging wrappers must forward all arguments and not drop context.
+- All new code must log:
+  - failure paths
+  - degraded behavior
+  - retry attempts and exhaustion
+  - unexpected states
+  - logic inconsistencies that could otherwise fail silently
+- Do not rely only on unhandled-exception logging; handled failures must be logged at the point they are detected.
+
+### 6.1 Debug Logging (allowed to contain sensitive details)
+
+Debug logs **may include**:
+- system paths
+- device identifiers
+- raw provider errors
+- raw exception strings
+
+### 6.2 Info/Warning/Error Logging (strict)
+
+Info/warning/error logs must **not** include:
+- raw provider errors
+- absolute filesystem paths
+- device identifiers
+- sensitive OS details
+
+Exception:
+- Application logs may mirror structured audit metadata when each mirrored field is already sanitized, redacted, or otherwise safe for normal logs.
+- Under this exception, paths must still be redacted and device identity must be masked, summarized, or replaced with a safe operator label.
+
+---
+
+## 7. Audit Log Redaction & Provider Error Safety
+
+- Audit logs must never contain:
+  - raw provider errors
+  - raw exception strings
+  - absolute filesystem paths
+  - unredacted mount paths
+- Exception:
+  - Audit records may include stable drive-identifying or USB-topology metadata needed for chain-of-custody and hardware traceability.
+  - Host filesystem paths and mount paths must still be redacted.
+  - Provider/error text must be sanitized rather than stored verbatim.
+- Audit logs must use structured, sanitized, or redacted error information.
+
+---
+
+## 8. Reliability, Performance & Observability
+
+- All long-running operations must be async-safe or offloaded to workers.
+- Copy operations must handle:
+  - disk-full conditions
+  - disconnects
+  - partial writes
+  - resumability or safe failure semantics
+- Mount operations must include retries and timeouts.
+- Job state transitions must be atomic and logged.
+- No synchronous heavy operations inside request handlers.
+
+### Observability
+
+- Major operations (mount, copy, verify, job lifecycle) must emit structured logs.
+- Metrics should exist for:
+  - job duration
+  - copy speed
+  - mount failures
+- Trace or correlation IDs should propagate through backend flows.
+- Health checks should validate:
+  - USB subsystem availability
+  - SMB/NFS reachability (where applicable)
+
+---
+
+## 9. Backend Test Expectations
+
+When adding or changing endpoints, services, or infrastructure, tests must cover:
+
+- **Role checks:** correct enforcement of `require_roles`.
+- **Input validation:** including path normalization and sanitization.
+- **Pagination:** including `has_more` behavior and edge cases.
+- **Redaction:** logs and responses must not leak sensitive data.
+- **Derived fields:** computed fields and status indicators.
+- **Error conditions:** provider failures, OS errors, mount failures, disk-full, disconnects.
+- **Edge cases:** empty directories, large directories, missing devices, repeated retries, race conditions around drive and job state.
+- **Project isolation:** attempts to cross project boundaries must be rejected and logged.
+
+All new behavior must include tests aligned with these expectations.
