@@ -121,6 +121,8 @@ describe("LoginView logo behavior", () => {
 
     const passwordInput = wrapper.find("#password");
     expect(passwordInput.element.value).toBe("Demo#123456");
+    expect(passwordInput.attributes("readonly")).toBeDefined();
+    expect(passwordInput.attributes("aria-readonly")).toBe("true");
   });
 
   it("shows an informational banner when setup redirects an already initialized system to login", async () => {

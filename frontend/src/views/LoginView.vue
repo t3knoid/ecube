@@ -79,6 +79,14 @@ const showDemoLoginPanel = computed(() => {
       config.demo_accounts.length),
   );
 });
+const isDemoPasswordReadOnly = computed(() => {
+  const config = publicAuthConfig.value;
+  return Boolean(
+    config.demo_mode_enabled &&
+      typeof config.shared_password === "string" &&
+      config.shared_password.trim(),
+  );
+});
 
 function isDemoPasswordLockedUser(usernameValue) {
   if (
@@ -352,6 +360,8 @@ async function handlePasswordChangeConfirm() {
             type="password"
             autocomplete="current-password"
             required
+            :readonly="isDemoPasswordReadOnly"
+            :aria-readonly="isDemoPasswordReadOnly ? 'true' : 'false'"
             :disabled="loading"
           />
         </div>
