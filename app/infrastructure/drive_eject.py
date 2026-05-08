@@ -11,6 +11,7 @@ without requiring physical hardware.
 """
 from __future__ import annotations
 
+import logging
 import os
 import os.path
 import re
@@ -20,7 +21,10 @@ from typing import List, Optional, Protocol, Tuple
 
 from app.config import settings
 from app.infrastructure.device_path import validate_device_path
-from app.infrastructure.mount_info import unescape_mountpoint
+from app.infrastructure.mount_info import _mounts_path_for_current_context, unescape_mountpoint
+from app.infrastructure.mount_namespace import shares_host_mount_namespace
+
+logger = logging.getLogger(__name__)
 
 # Absolute paths to system utilities so PATH manipulation cannot redirect them.
 # Actual values come from settings; these module-level names kept for readability.
@@ -32,6 +36,39 @@ def _with_sudo(cmd: list[str]) -> list[str]:
     if settings.use_sudo and os.geteuid() != 0:
         return ["sudo", "-n", *cmd]
     return cmd
+
+
+def _with_mount_namespace_flag(cmd: list[str]) -> list[str] | None:
+    if not cmd:
+        return None
+
+    binary = os.path.basename(cmd[0])
+    if binary in ("mount", "umount"):
+        return [cmd[0], "-N", "/proc/1/ns/mnt", *cmd[1:]]
+    return None
+
+
+def _in_host_mount_namespace() -> bool:
+    return shares_host_mount_namespace(
+        on_self_read_error=True,
+        on_host_read_error=False,
+        on_host_read_error_callback=lambda _exc: logger.warning(
+            "Unable to read host mount namespace; assuming namespace differs"
+        ),
+    )
+
+
+def _with_host_mount_namespace(cmd: list[str]) -> list[str]:
+    if _in_host_mount_namespace():
+        return _with_sudo(cmd)
+
+    ns_flag_cmd = _with_mount_namespace_flag(cmd)
+    if ns_flag_cmd is not None:
+        logger.warning("Mount namespace differs from host; using util-linux namespace flag")
+        return _with_sudo(ns_flag_cmd)
+
+    logger.warning("Mount namespace differs from host but no namespace helper is available; using current namespace")
+    return _with_sudo(cmd)
 
 
 # ---------------------------------------------------------------------------
@@ -196,8 +233,9 @@ def _resolve_mapper_device_to_parent(mapper_path: str) -> List[str]:
 def _find_device_mountpoints(device_base: str) -> Tuple[List[str], Optional[str]]:
     """Find all mountpoints for a device and its partitions from /proc/mounts.
     
-    Parses /proc/mounts to locate mount points (e.g., /media/usb, /media/usb1)
-    for a given block device and any partitions. Handles:
+    Parses the authoritative mount table for the current runtime context to
+    locate mount points (e.g., /media/usb, /media/usb1) for a given block
+    device and any partitions. Handles:
     - Traditional partition naming: sdb -> sdb1, sdb2 (partitions)
     - NVMe partition naming: nvme0n1 -> nvme0n1p1, nvme0n1p2
     - MMC partition naming: mmcblk0 -> mmcblk0p1, mmcblk0p2
@@ -209,7 +247,7 @@ def _find_device_mountpoints(device_base: str) -> Tuple[List[str], Optional[str]
     Returns:
         Tuple of (mountpoints_list, error_message):
         - On success: (["/media/usb", "/media/usb1"], None)
-        - On read failure: ([], "could not read /proc/mounts: <reason>")
+        - On read failure: ([], "could not read <authoritative mount table path>: <reason>")
         - If no mounts found: ([], None)
         
     Note:
@@ -219,52 +257,45 @@ def _find_device_mountpoints(device_base: str) -> Tuple[List[str], Optional[str]
         device not found or sysfs inaccessible); only mounts via direct device
         or partition paths are reported in such cases.
     """
+    mounts_path = _mounts_path_for_current_context()
     try:
-        with open(settings.procfs_mounts_path, "r") as f:
-            mountpoints = []
-            device_prefix = f"/dev/{device_base}"
-            
-            for line in f:
+        with open(mounts_path, encoding="utf-8", errors="replace") as fh:
+            mount_table = {}
+            for line in fh:
                 parts = line.split()
                 if len(parts) >= 2:
-                    source = parts[0]
-                    mount_point_escaped = parts[1]
-                    
-                    # Normalize source path to handle symlinks like /dev/disk/by-id/*
-                    normalized_source = _normalize_device_path(source)
-                    normalized_prefix = _normalize_device_path(device_prefix)
-                    
-                    # Unescape mount point (handles \040 for space, \011 for tab, etc.)
-                    mount_point = unescape_mountpoint(mount_point_escaped)
-                    
-                    # Match the device itself (exact match)
-                    if normalized_source == normalized_prefix:
+                    source = unescape_mountpoint(parts[0])
+                    mount_point = unescape_mountpoint(parts[1])
+                    mount_table[mount_point] = source
+
+        mountpoints = []
+        device_prefix = f"/dev/{device_base}"
+
+        for mount_point, source in mount_table.items():
+            normalized_source = _normalize_device_path(source)
+            normalized_prefix = _normalize_device_path(device_prefix)
+
+            if normalized_source == normalized_prefix:
+                mountpoints.append(mount_point)
+            elif normalized_source.startswith(normalized_prefix) and len(normalized_source) > len(normalized_prefix):
+                suffix = normalized_source[len(normalized_prefix):]
+                if re.match(r"^(p?\d+)$", suffix):
+                    mountpoints.append(mount_point)
+            elif normalized_source.startswith("/dev/mapper/") or normalized_source.startswith("/dev/dm-"):
+                parent_devices = _resolve_mapper_device_to_parent(normalized_source)
+                for parent_device in parent_devices:
+                    if parent_device == device_base:
                         mountpoints.append(mount_point)
-                    # Match partitions: suffix must be either digits (sdb1) or p+digits (nvme0n1p1)
-                    elif normalized_source.startswith(normalized_prefix) and len(normalized_source) > len(normalized_prefix):
-                        suffix = normalized_source[len(normalized_prefix):]
-                        # Match traditional (1, 2, 3...) or modern p-prefixed (p1, p2, p3...)
+                        break
+                    elif parent_device.startswith(device_base) and len(parent_device) > len(device_base):
+                        suffix = parent_device[len(device_base):]
                         if re.match(r"^(p?\d+)$", suffix):
                             mountpoints.append(mount_point)
-                    # Match device-mapper devices (LUKS, LVM) backed by this device or its partitions
-                    elif normalized_source.startswith("/dev/mapper/") or normalized_source.startswith("/dev/dm-"):
-                        parent_devices = _resolve_mapper_device_to_parent(normalized_source)
-                        for parent_device in parent_devices:
-                            # Exact base-device match (e.g., parent 'sdb' for /dev/sdb)
-                            if parent_device == device_base:
-                                mountpoints.append(mount_point)
-                                break
-                            # Partition-backed mapper (e.g., parent 'sdb1' or 'nvme0n1p2')
-                            elif parent_device.startswith(device_base) and len(parent_device) > len(device_base):
-                                suffix = parent_device[len(device_base):]
-                                if re.match(r"^(p?\d+)$", suffix):
-                                    mountpoints.append(mount_point)
-                                    break
-            
-            return mountpoints, None
+                            break
+
+        return mountpoints, None
     except OSError as exc:
-        # Return read error in tuple; caller decides whether to treat as fatal or no-op
-        return [], f"could not read {settings.procfs_mounts_path}: {exc}"
+        return [], f"could not read {mounts_path}: {exc}"
 
 
 def unmount_device(device_path: str) -> Tuple[bool, Optional[str]]:
@@ -307,7 +338,7 @@ def unmount_device(device_path: str) -> Tuple[bool, Optional[str]]:
     for mount_point in sorted_mountpoints:
         try:
             subprocess.run(
-                _with_sudo([_UMOUNT_BIN, mount_point]),
+                _with_host_mount_namespace([_UMOUNT_BIN, mount_point]),
                 check=True,
                 capture_output=True,
                 timeout=settings.subprocess_timeout_seconds,
