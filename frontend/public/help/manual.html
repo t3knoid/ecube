@@ -927,7 +927,7 @@ Export follows the active filters and retrieves all matching pages, not only the
 Treat exported audit data as sensitive operational evidence
 </li></ul>
 <h2 id="7-1-chain-of-custody-workflow">7.1 Chain of Custody Workflow</h2>
-<p>Use the <code>Chain of Custody</code> action on <code>Job Detail</code> to open the job-scoped CoC dialog. This is the standard closeout path when media is being transferred. The dialog loads the last stored CoC snapshot for that job, shows the formatted report content directly, allows authorized users to refresh and store a new snapshot while custody is still incomplete or when no stored snapshot exists yet, and provides print/export controls plus a separate <code>Custody Handoff</code> action when the current role and custody state allow it.</p>
+<p>Use the <code>Chain of Custody</code> action on <code>Job Detail</code> to open the job-scoped CoC dialog. This action becomes available only after the job reaches <code>COMPLETED</code> and remains available on archived job detail pages for stored-report review. It is the standard closeout path when media is being transferred. The dialog loads the last stored CoC snapshot for that job, shows the formatted report content directly, allows authorized users to refresh and store a new snapshot while custody is still incomplete or when no stored snapshot exists yet, and provides print/export controls plus a separate <code>Custody Handoff</code> action when the current role and custody state allow it.</p>
 <p>Typical workflow:</p>
 <ol><li>
 Open the relevant job in <code>Job Detail</code>.

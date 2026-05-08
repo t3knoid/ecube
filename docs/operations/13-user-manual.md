@@ -852,7 +852,7 @@ When exporting CSV:
 
 ### 10.1 Chain of Custody Workflow
 
-Use the `Chain of Custody` action on `Job Detail` to open the job-scoped CoC dialog. This is the standard closeout path when media is being transferred. The dialog loads the last stored CoC snapshot for that job, shows the formatted report content directly, allows authorized users to refresh and store a new snapshot while custody is still incomplete or when no stored snapshot exists yet, and provides print/export controls plus a separate `Custody Handoff` action when the current role and custody state allow it.
+Use the `Chain of Custody` action on `Job Detail` to open the job-scoped CoC dialog. This action becomes available only after the job reaches `COMPLETED` and remains available on archived job detail pages for stored-report review. It is the standard closeout path when media is being transferred. The dialog loads the last stored CoC snapshot for that job, shows the formatted report content directly, allows authorized users to refresh and store a new snapshot while custody is still incomplete or when no stored snapshot exists yet, and provides print/export controls plus a separate `Custody Handoff` action when the current role and custody state allow it.
 
 Typical workflow:
 
