@@ -159,6 +159,8 @@ Exception:
 - Must enforce project isolation before any write.
 - Must handle retries, partial failures, and cleanup.
 - Must never call OS functions directly—only via infrastructure.
+- When exposing System-page runtime warning repairs or similar operator remediation actions, keep the router and frontend generic. New repairable warning types must plug in through a service-layer registry/definition model and trusted infrastructure adapters rather than new warning-specific branches scattered across the router or UI.
+- Read-only refresh flows must stay read-only. Host mutations for warning remediation must remain explicit, auditable `POST` actions with confirmation, and any new repair action should be addable by registering warning metadata, activation logic, and execution logic in one service-owned extension point.
 
 ### 6.3 Infrastructure Layer
 - Must validate all mount paths and device identities.

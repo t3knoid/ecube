@@ -16,6 +16,7 @@ from app.config import settings
 from app.infrastructure.device_path import validate_device_path
 from app.infrastructure.filesystem_detection import FilesystemDetector
 from app.infrastructure.filesystem_runtime import FilesystemRuntimeInspector
+from app.infrastructure.runtime_repair import RuntimeRepairProvider
 from app.infrastructure.drive_format import DriveFormatter
 from app.infrastructure.drive_space import DriveSpaceProbe
 from app.infrastructure.usb_discovery import DriveDiscoveryProvider
@@ -33,6 +34,7 @@ from app.infrastructure.password_policy_protocol import PasswordPolicyProvider
 __all__ = [
     "FilesystemDetector",
     "FilesystemRuntimeInspector",
+    "RuntimeRepairProvider",
     "DriveFormatter",
     "DriveSpaceProbe",
     "DriveDiscoveryProvider",
@@ -46,6 +48,7 @@ __all__ = [
     "PasswordPolicyProvider",
     "get_filesystem_detector",
     "get_filesystem_runtime_inspector",
+    "get_runtime_repair_provider",
     "get_drive_formatter",
     "get_drive_space_probe",
     "get_drive_discovery",
@@ -72,6 +75,11 @@ def _linux_filesystem_detector() -> type[FilesystemDetector]:
 def _linux_filesystem_runtime_inspector() -> type[FilesystemRuntimeInspector]:
     from app.infrastructure.filesystem_runtime import LinuxFilesystemRuntimeInspector
     return LinuxFilesystemRuntimeInspector
+
+
+def _linux_runtime_repair_provider() -> type[RuntimeRepairProvider]:
+    from app.infrastructure.runtime_repair import LinuxRuntimeRepairProvider
+    return LinuxRuntimeRepairProvider
 
 def _linux_drive_formatter() -> type[DriveFormatter]:
     from app.infrastructure.drive_format import LinuxDriveFormatter
@@ -117,6 +125,10 @@ _FILESYSTEM_DETECTOR_REGISTRY: dict[str, Callable[[], type[FilesystemDetector]]]
 
 _FILESYSTEM_RUNTIME_INSPECTOR_REGISTRY: dict[str, Callable[[], type[FilesystemRuntimeInspector]]] = {
     "linux": _linux_filesystem_runtime_inspector,
+}
+
+_RUNTIME_REPAIR_PROVIDER_REGISTRY: dict[str, Callable[[], type[RuntimeRepairProvider]]] = {
+    "linux": _linux_runtime_repair_provider,
 }
 
 _DRIVE_FORMATTER_REGISTRY: dict[str, Callable[[], type[DriveFormatter]]] = {
@@ -172,6 +184,11 @@ def get_filesystem_detector() -> FilesystemDetector:
 def get_filesystem_runtime_inspector() -> FilesystemRuntimeInspector:
     """Return the platform-appropriate :class:`FilesystemRuntimeInspector`."""
     return _resolve(_FILESYSTEM_RUNTIME_INSPECTOR_REGISTRY, "FilesystemRuntimeInspector")
+
+
+def get_runtime_repair_provider() -> RuntimeRepairProvider:
+    """Return the platform-appropriate :class:`RuntimeRepairProvider`."""
+    return _resolve(_RUNTIME_REPAIR_PROVIDER_REGISTRY, "RuntimeRepairProvider")
 
 
 def get_drive_formatter() -> DriveFormatter:

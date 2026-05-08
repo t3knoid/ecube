@@ -4,12 +4,14 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   getSystemHealth,
+  runSystemHealthAction,
   getUsbTopology,
   getBlockDevices,
   getSystemMounts,
   reconcileManagedMounts,
 } from '@/api/introspection.js'
 import { downloadLogFile, getLogFiles, getLogLines } from '@/api/admin.js'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
@@ -26,6 +28,7 @@ const canViewSystemTopology = computed(() => (
 const canViewLogs = computed(() => authStore.hasRole('admin') || authStore.hasRole('manager'))
 const canDownloadLogs = computed(() => authStore.hasRole('admin'))
 const canRunManagedMountReconciliation = computed(() => authStore.hasRole('admin') || authStore.hasRole('manager'))
+const canRunSystemHealthActions = computed(() => authStore.hasRole('admin'))
 const tabs = computed(() => {
   const items = ['health']
   if (canViewSystemTopology.value) {
@@ -39,7 +42,11 @@ const tabs = computed(() => {
 const activeTab = ref('health')
 const loading = ref(false)
 const error = ref('')
+const successMessage = ref('')
 const reconcilingManagedMounts = ref(false)
+const runningSystemHealthAction = ref(false)
+const showSystemHealthActionDialog = ref(false)
+const selectedSystemHealthAction = ref(null)
 
 const health = ref(null)
 const usbDevices = ref([])
@@ -276,6 +283,22 @@ const healthWarnings = computed(() => {
       const component = String(warning?.component || '').trim()
       const severity = String(warning?.severity || '').trim() || 'warning'
       const code = String(warning?.code || '').trim() || `warning-${index + 1}`
+      const actions = Array.isArray(warning?.actions)
+        ? warning.actions
+            .map((action) => {
+              const actionCode = String(action?.code || '').trim()
+              const label = String(action?.label || '').trim()
+              if (!actionCode || !label) return null
+              return {
+                code: actionCode,
+                label,
+                description: String(action?.description || '').trim(),
+                confirmTitle: String(action?.confirm_title || '').trim(),
+                confirmMessage: String(action?.confirm_message || '').trim(),
+              }
+            })
+            .filter(Boolean)
+        : []
 
       return {
         code,
@@ -283,10 +306,15 @@ const healthWarnings = computed(() => {
         component,
         message,
         remediation,
+        actions,
       }
     })
     .filter(Boolean)
 })
+
+const systemHealthActionDialogTitle = computed(() => selectedSystemHealthAction.value?.confirmTitle || '')
+const systemHealthActionDialogMessage = computed(() => selectedSystemHealthAction.value?.confirmMessage || '')
+const systemHealthActionDialogConfirmLabel = computed(() => selectedSystemHealthAction.value?.label || t('common.actions.confirm'))
 
 const ecubeProcess = computed(() => {
   const value = health.value?.ecube_process
@@ -412,6 +440,43 @@ async function runManagedMountReconciliation() {
     error.value = extractApiMessage(err) || t('common.errors.requestConflict')
   } finally {
     reconcilingManagedMounts.value = false
+  }
+}
+
+function openSystemHealthActionDialog(action) {
+  if (!canRunSystemHealthActions.value || runningSystemHealthAction.value || !action?.code) {
+    return
+  }
+
+  error.value = ''
+  successMessage.value = ''
+  selectedSystemHealthAction.value = action
+  showSystemHealthActionDialog.value = true
+}
+
+function closeSystemHealthActionDialog() {
+  showSystemHealthActionDialog.value = false
+  selectedSystemHealthAction.value = null
+}
+
+async function confirmSystemHealthAction() {
+  const action = selectedSystemHealthAction.value
+  if (!action?.code || runningSystemHealthAction.value) {
+    return
+  }
+
+  runningSystemHealthAction.value = true
+  error.value = ''
+  successMessage.value = ''
+  try {
+    const result = await runSystemHealthAction(action.code)
+    closeSystemHealthActionDialog()
+    await loadTabData()
+    successMessage.value = String(result?.message || '').trim() || action.label
+  } catch (err) {
+    error.value = extractApiMessage(err) || t('common.errors.requestConflict')
+  } finally {
+    runningSystemHealthAction.value = false
   }
 }
 
@@ -591,6 +656,7 @@ async function onLogViewerScroll(event) {
 watch(activeTab, async () => {
   page.value = 1
   error.value = ''
+  successMessage.value = ''
   await loadTabData()
 })
 
@@ -657,6 +723,7 @@ onBeforeUnmount(() => {
 
     <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
     <p v-if="error" class="error-banner">{{ error }}</p>
+    <p v-if="successMessage" class="success-banner" role="status" aria-live="polite">{{ successMessage }}</p>
 
     <article v-if="activeTab === 'health'" class="panel">
       <section class="health-section">
@@ -682,6 +749,17 @@ onBeforeUnmount(() => {
               <p v-if="warning.remediation" class="health-warning-item-copy">
                 {{ t('system.warningRemediation') }}: {{ warning.remediation }}
               </p>
+              <div v-if="canRunSystemHealthActions && warning.actions.length" class="health-warning-actions">
+                <button
+                  v-for="action in warning.actions"
+                  :key="action.code"
+                  class="btn"
+                  :disabled="loading || runningSystemHealthAction"
+                  @click="openSystemHealthActionDialog(action)"
+                >
+                  {{ action.label }}
+                </button>
+              </div>
               <p class="health-warning-item-meta">
                 <span>{{ t('system.warningComponent') }}: {{ warning.component || t('common.labels.notAvailable') }}</span>
                 <span>{{ t('system.warningCode') }}: {{ warning.code }}</span>
@@ -835,6 +913,17 @@ onBeforeUnmount(() => {
       </DataTable>
       <Pagination v-model:page="page" :page-size="pageSize" :total="tabRows.length" />
     </article>
+
+    <ConfirmDialog
+      v-model="showSystemHealthActionDialog"
+      :title="systemHealthActionDialogTitle"
+      :message="systemHealthActionDialogMessage"
+      :confirm-label="systemHealthActionDialogConfirmLabel"
+      :cancel-label="t('common.actions.cancel')"
+      :busy="runningSystemHealthAction"
+      @confirm="confirmSystemHealthAction"
+      @cancel="selectedSystemHealthAction = null"
+    />
   </section>
 </template>
 
@@ -957,6 +1046,12 @@ onBeforeUnmount(() => {
 .health-warning-item-copy,
 .health-warning-item-meta {
   margin: 0;
+}
+
+.health-warning-actions {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
 }
 
 .health-warning-item-meta {
@@ -1193,6 +1288,14 @@ input,
   color: var(--color-alert-danger-text);
   background: var(--color-alert-danger-bg);
   border: 1px solid var(--color-alert-danger-border);
+  border-radius: var(--border-radius);
+  padding: var(--space-sm);
+}
+
+.success-banner {
+  color: var(--color-alert-success-text);
+  background: var(--color-alert-success-bg);
+  border: 1px solid var(--color-alert-success-border);
   border-radius: var(--border-radius);
   padding: var(--space-sm);
 }

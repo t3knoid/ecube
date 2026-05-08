@@ -45,6 +45,14 @@ class AuthorizationError(ECUBEException):
     default_message = "You do not have permission to perform this action."
 
 
+class NotFoundError(ECUBEException):
+    """Raised when a requested resource or action does not exist (HTTP 404)."""
+
+    status_code = 404
+    default_code = "NOT_FOUND"
+    default_message = "The requested resource was not found."
+
+
 class ConflictError(ECUBEException):
     """Raised when a request conflicts with the current state of a resource (HTTP 409)."""
 

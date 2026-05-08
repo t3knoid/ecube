@@ -917,7 +917,7 @@ This page is useful when:
 
 End users who only perform evidence exports may rarely need this page. Administrators and support personnel are more likely to use it during troubleshooting.
 
-In the `System Health` tab, ECUBE separates host metrics from ECUBE-owned process diagnostics. When the backend reports degraded but non-fatal runtime conditions, the same tab now shows a `Runtime Warnings` panel with the sanitized warning summary, remediation guidance, and stable warning code so operators can investigate issues such as exFAT runtime support missing for the currently running kernel. The ECUBE process section shows ECUBE CPU and memory usage, the total ECUBE thread count, the number of active copy workers, and a table that correlates each active copy thread to its parent job and project, including status, configured threads, elapsed time, and CPU time.
+In the `System Health` tab, ECUBE separates host metrics from ECUBE-owned process diagnostics. When the backend reports degraded but non-fatal runtime conditions, the same tab now shows a `Runtime Warnings` panel with the sanitized warning summary, remediation guidance, stable warning code, and any explicit operator repair actions that are safe to expose for that warning. For example, when exFAT formatting tools are present but the running kernel has not loaded exFAT runtime support, `admin` users can trigger the explicit repair action from the warning itself instead of relying on `Refresh` to mutate host state. The ECUBE process section shows ECUBE CPU and memory usage, the total ECUBE thread count, the number of active copy workers, and a table that correlates each active copy thread to its parent job and project, including status, configured threads, elapsed time, and CPU time.
 
 For `admin`, `manager`, and `processor` users, the `USB Topology` tab shows a sorted device table and hides rows with no meaningful USB metadata so the list stays focused on useful hardware entries. On smaller screens, the table tightens to primary columns such as `Device` and `Product`, and the remaining hardware details move into a per-row overflow menu.
 
@@ -1028,6 +1028,26 @@ Status meanings:
 - If reconciliation returns no mount or drive rows, ECUBE shows `No reconciliation data available. Run reconciliation to see results.`
 
 Use the `Back` button on the results page to return to the System page.
+
+### 11.3 Runtime Repair Actions
+
+**Access:** `admin` role
+
+Use a runtime repair action only when the `Runtime Warnings` panel offers one for the currently active warning. These actions are explicit host changes and are intentionally separate from the read-only `Refresh` control.
+
+#### Run a Runtime Repair Action from the System Page
+
+1. Open the `System` page and stay on the `Health` tab.
+2. In the `Runtime Warnings` panel, review the warning summary and remediation guidance.
+3. If ECUBE provides a warning-specific repair action, click its action button.
+4. Review the confirmation dialog and confirm the action.
+5. ECUBE reruns the Health tab request after the action completes and shows the returned operator-safe result message.
+
+#### Interpret Runtime Repair Results
+
+- If the warning clears after refresh, the host accepted the repair and ECUBE no longer reports that degraded condition.
+- If ECUBE reports that the action was not needed, the runtime condition had already cleared before the action ran.
+- If the warning remains or the action fails, verify the documented host prerequisite for that warning. For the exFAT runtime warning, confirm the current kernel exposes the matching exFAT runtime module and that the ECUBE service has permission to run the required host repair step.
 
 ---
 

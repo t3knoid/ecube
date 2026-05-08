@@ -189,7 +189,7 @@ Compatibility note: To support project-to-source-path policy, use project source
 
 **Chain-of-Custody Snapshot Semantics:** `GET /jobs/{job_id}/chain-of-custody` returns only the stored snapshot for that job. If no snapshot has been stored yet, the endpoint returns **404 Not Found** with guidance to refresh the report first. `POST /jobs/{job_id}/chain-of-custody/refresh` is the only API path that regenerates and persists the snapshot, returns snapshot metadata including the last on-disk update timestamp, and records the write in both the audit trail and the application log. Archived jobs remain readable through `GET /jobs/{job_id}/chain-of-custody` but cannot be refreshed.
 
-**System Health Runtime Warnings:** `GET /introspection/system-health` can include operator-safe `warnings` entries for degraded host runtime conditions. For example, ECUBE can report that exFAT formatting tools are present while exFAT runtime mount support is unavailable for the current kernel, which commonly appears after a kernel change leaves the matching runtime package missing.
+**System Health Runtime Warnings:** `GET /introspection/system-health` can include operator-safe `warnings` entries for degraded host runtime conditions. For example, ECUBE can report that exFAT formatting tools are present while exFAT runtime mount support is unavailable for the current kernel, which commonly appears after a kernel change leaves the matching runtime package missing. Warning entries can also include explicit `actions` metadata so the UI can render backend-approved repair actions without hardcoding warning-specific controls.
 
 **Read-Only CoC Access:** `processor` shares the same read access as `admin`, `manager`, and `auditor` for `GET /jobs/{job_id}/chain-of-custody`. Snapshot refresh and custody handoff remain limited to `admin` and `manager`.
 
@@ -426,11 +426,14 @@ Common errors for admin log endpoints: `400` (invalid filename or traversal atte
 | GET | `/introspection/block-devices` | all | Kernel block device inventory |
 | GET | `/introspection/mounts` | all | Mount inventory and status |
 | GET | `/introspection/system-health` | all | Database health plus host and ECUBE process diagnostics |
+| POST | `/introspection/system-health/actions/{action_code}` | admin | Run an explicit backend-approved runtime repair action for a current system-health warning |
 | POST | `/introspection/reconcile-managed-mounts` | admin,manager | Run a manual live-safe reconciliation pass for managed network and USB mounts |
 
 `GET /introspection/drives` includes the port-based `port_system_path` and separate `serial_number` for each registered drive. `GET /introspection/usb/topology` includes a `serial` field when sysfs exposes one.
 
-`GET /introspection/system-health` now returns the existing host-level CPU, memory, disk I/O, active-job, and worker-queue metrics plus an `ecube_process` object. That nested object includes ECUBE process CPU and memory counters, total ECUBE thread count, and an `active_copy_threads` list that correlates active copy workers to their parent jobs.
+`GET /introspection/system-health` now returns the existing host-level CPU, memory, disk I/O, active-job, and worker-queue metrics plus an `ecube_process` object. That nested object includes ECUBE process CPU and memory counters, total ECUBE thread count, and an `active_copy_threads` list that correlates active copy workers to their parent jobs. When a runtime warning has an approved explicit remediation path, the warning also includes an `actions` array with stable action codes and confirmation copy for the authenticated UI.
+
+`POST /introspection/system-health/actions/{action_code}` is admin-only and runs an explicit runtime repair action that the backend has advertised for a current warning. The response returns `code`, `status` (`ok` or `not_needed`), and an operator-safe `message`. If the action code is unknown the endpoint returns `404 Not Found` (`SYSTEM_REPAIR_ACTION_NOT_FOUND`). If the action cannot complete or does not clear the current warning condition, the endpoint returns `409 Conflict`.
 
 `POST /introspection/reconcile-managed-mounts` returns a summary payload with `status` (`ok` or `partial`), `scope` (`managed_mounts_only`), `network_mounts_checked`, `network_mounts_corrected`, `usb_mounts_checked`, `usb_mounts_corrected`, and `failure_count`. The endpoint is lock-protected and returns `409 Conflict` (`MANUAL_RECONCILIATION_IN_PROGRESS`) if another manual run is already in progress.
 

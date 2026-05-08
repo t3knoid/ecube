@@ -186,6 +186,16 @@ class EcubeProcessMetricsResponse(BaseModel):
     active_copy_threads: List[EcubeCopyThreadResponse] = Field(default_factory=list, description="Active ECUBE copy workers correlated to their parent export job")
 
 
+class SystemHealthRepairAction(BaseModel):
+    """Explicit operator-triggered repair action for a health warning."""
+
+    code: str = Field(..., description="Stable repair action code")
+    label: str = Field(..., description="Short operator-facing action label")
+    description: str = Field(..., description="Operator-safe action description")
+    confirm_title: str = Field(..., description="Confirmation dialog title")
+    confirm_message: str = Field(..., description="Confirmation dialog message")
+
+
 class SystemHealthWarning(BaseModel):
     """Operator-safe runtime warning shown in authenticated diagnostics."""
 
@@ -194,6 +204,7 @@ class SystemHealthWarning(BaseModel):
     component: str = Field(..., description="Subsystem associated with the warning")
     message: str = Field(..., description="Operator-safe warning summary")
     remediation: str = Field(..., description="Operator-safe remediation guidance")
+    actions: List[SystemHealthRepairAction] = Field(default_factory=list, description="Explicit operator actions that may remediate this warning")
 
 
 class SystemHealthResponse(BaseModel):
@@ -224,3 +235,11 @@ class ManualManagedMountReconciliationResponse(BaseModel):
     usb_mounts_checked: int = Field(default=0, description="Managed USB mount slots inspected")
     usb_mounts_corrected: int = Field(default=0, description="Managed USB mount slots corrected")
     failure_count: int = Field(default=0, description="Number of corrective operations that failed")
+
+
+class SystemHealthRepairActionResponse(BaseModel):
+    """Response for ``POST /introspection/system-health/actions/{action_code}``."""
+
+    code: str = Field(..., description="Stable repair action code")
+    status: str = Field(..., description="Repair action status ('ok' or 'not_needed')")
+    message: str = Field(..., description="Operator-safe action result summary")

@@ -411,6 +411,10 @@ class Settings(BaseSettings):
     #: Path to the ``chage`` binary (must match sudoers whitelist).
     chage_binary_path: str = "/usr/bin/chage"
 
+    #: Path to the ``modprobe`` binary used by explicit runtime repair actions.
+    #: Must match the sudoers whitelist when ``use_sudo`` is enabled.
+    modprobe_binary_path: str = "/usr/sbin/modprobe"
+
     #: Path to the host ``pwquality.conf`` file.
     pwquality_conf_path: str = "/etc/security/pwquality.conf"
 

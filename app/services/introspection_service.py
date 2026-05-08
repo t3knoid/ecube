@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
+from dataclasses import dataclass
 import logging
 import os
 import time
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.exceptions import ConflictError, NotFoundError
 from app.models.jobs import ExportJob, JobStatus
+from app.repositories.audit_repository import AuditRepository
 from app.services.copy_worker_runtime import list_active_copy_workers
 from app.utils.sanitize import sanitize_error_message
 
@@ -27,10 +31,69 @@ _EXFAT_RUNTIME_WARNING_MESSAGE = (
 _EXFAT_RUNTIME_WARNING_REMEDIATION = (
     "Verify exFAT runtime support for the current kernel, including the documented exfatprogs and linux-modules-extra-$(uname -r) prerequisites, then retry the mount."
 )
+_EXFAT_LOAD_MODULE_ACTION_CODE = "load_exfat_kernel_module"
 
 _PROCESS_CPU_SAMPLER: Any | None = None
 _PROCESS_CPU_SAMPLER_PID: int | None = None
 _PROCESS_CPU_SAMPLER_PRIMED = False
+
+
+@dataclass(frozen=True)
+class _SystemHealthRepairActionDefinition:
+    code: str
+    warning_code: str
+    severity: str
+    component: str
+    warning_message: str
+    warning_remediation: str
+    label: str
+    description: str
+    confirm_title: str
+    confirm_message: str
+    success_message: str
+    not_needed_message: str
+    failure_message: str
+    is_active: Callable[[Any | None], bool]
+    execute: Callable[[Any], None]
+
+
+def _exfat_runtime_warning_is_active(filesystem_runtime_inspector: Any | None) -> bool:
+    if filesystem_runtime_inspector is None:
+        return False
+
+    try:
+        formatting_available = bool(filesystem_runtime_inspector.exfat_formatting_available())
+        mount_runtime_available = filesystem_runtime_inspector.exfat_mount_runtime_available()
+    except Exception:
+        logger.info(
+            "System health repair-action availability unavailable",
+            extra={"failure_class": "filesystem_runtime_diagnostics_unavailable"},
+        )
+        logger.debug("Filesystem runtime repair-action probe failed", exc_info=True)
+        return False
+
+    return formatting_available and mount_runtime_available is False
+
+
+_SYSTEM_HEALTH_REPAIR_ACTIONS: dict[str, _SystemHealthRepairActionDefinition] = {
+    _EXFAT_LOAD_MODULE_ACTION_CODE: _SystemHealthRepairActionDefinition(
+        code=_EXFAT_LOAD_MODULE_ACTION_CODE,
+        warning_code=_EXFAT_RUNTIME_WARNING_CODE,
+        severity="warning",
+        component="filesystem_runtime",
+        warning_message=_EXFAT_RUNTIME_WARNING_MESSAGE,
+        warning_remediation=_EXFAT_RUNTIME_WARNING_REMEDIATION,
+        label="Load exFAT runtime support",
+        description="Run the host repair step that loads the exFAT kernel module for the current running kernel.",
+        confirm_title="Load exFAT runtime support?",
+        confirm_message="This will run an explicit host repair action to load the exFAT kernel module for the current kernel. Use this only when runtime warnings show exFAT mount support is missing.",
+        success_message="exFAT runtime support reload requested. Refreshing health should now clear the warning if the host accepted the module load.",
+        not_needed_message="exFAT runtime support is already available on this host.",
+        failure_message="The host could not load exFAT runtime support.",
+        is_active=_exfat_runtime_warning_is_active,
+        execute=lambda runtime_repair_provider: runtime_repair_provider.load_kernel_module("exfat"),
+    ),
+}
 
 
 def _build_cross_process_copy_worker_fallback(job: ExportJob) -> list[dict[str, Any]]:
@@ -103,6 +166,7 @@ def get_system_health(
     psutil_available: bool,
     psutil_module: Any | None,
     filesystem_runtime_inspector: Any | None = None,
+    runtime_repair_provider: Any | None = None,
 ) -> dict[str, Any]:
     """Return host and ECUBE-owned runtime diagnostics for the System page."""
 
@@ -155,7 +219,10 @@ def get_system_health(
         except Exception:
             pass
 
-    warnings = _build_runtime_warnings(filesystem_runtime_inspector)
+    warnings = _build_runtime_warnings(
+        filesystem_runtime_inspector,
+        runtime_repair_provider=runtime_repair_provider,
+    )
 
     return {
         "status": "ok" if db_status == "connected" and not warnings else "degraded",
@@ -179,34 +246,203 @@ def get_system_health(
     }
 
 
-def _build_runtime_warnings(filesystem_runtime_inspector: Any | None) -> list[dict[str, str]]:
+def _build_runtime_warnings(
+    filesystem_runtime_inspector: Any | None,
+    *,
+    runtime_repair_provider: Any | None = None,
+) -> list[dict[str, Any]]:
     if filesystem_runtime_inspector is None:
         return []
 
+    warnings_by_code: OrderedDict[str, dict[str, Any]] = OrderedDict()
+
+    for action in _SYSTEM_HEALTH_REPAIR_ACTIONS.values():
+        if not action.is_active(filesystem_runtime_inspector):
+            continue
+
+        warning = warnings_by_code.setdefault(
+            action.warning_code,
+            {
+                "code": action.warning_code,
+                "severity": action.severity,
+                "component": action.component,
+                "message": action.warning_message,
+                "remediation": action.warning_remediation,
+                "actions": [],
+            },
+        )
+
+        if runtime_repair_provider is not None:
+            warning["actions"].append(
+                {
+                    "code": action.code,
+                    "label": action.label,
+                    "description": action.description,
+                    "confirm_title": action.confirm_title,
+                    "confirm_message": action.confirm_message,
+                }
+            )
+
+    return list(warnings_by_code.values())
+
+
+def run_system_health_repair_action(
+    db: Session,
+    *,
+    action_code: str,
+    actor: str,
+    filesystem_runtime_inspector: Any | None,
+    runtime_repair_provider: Any | None,
+) -> dict[str, str]:
+    action = _SYSTEM_HEALTH_REPAIR_ACTIONS.get(action_code)
+    if action is None:
+        raise NotFoundError(
+            message="Unknown system repair action.",
+            code="SYSTEM_REPAIR_ACTION_NOT_FOUND",
+        )
+
+    if runtime_repair_provider is None:
+        raise ConflictError(
+            message="System repair actions are unavailable on this host.",
+            code="SYSTEM_REPAIR_ACTION_UNAVAILABLE",
+        )
+
+    if not _is_system_health_repair_action_needed(action.code, filesystem_runtime_inspector):
+        result = {
+            "code": action.code,
+            "status": "not_needed",
+            "message": action.not_needed_message,
+        }
+        _write_system_repair_audit(db, actor=actor, action=action, status="not_needed")
+        return result
+
+    logger.info(
+        "System repair action requested",
+        extra={
+            "action_code": action.code,
+            "warning_code": action.warning_code,
+            "actor_username": actor,
+        },
+    )
+
     try:
-        formatting_available = bool(filesystem_runtime_inspector.exfat_formatting_available())
-        mount_runtime_available = filesystem_runtime_inspector.exfat_mount_runtime_available()
-    except Exception:
+        _execute_system_health_repair_action(action.code, runtime_repair_provider)
+    except RuntimeError as exc:
+        safe_message = sanitize_error_message(str(exc), action.failure_message)
         logger.info(
-            "System health runtime diagnostics unavailable",
-            extra={"failure_class": "filesystem_runtime_diagnostics_unavailable"},
+            "System repair action failed",
+            extra={
+                "action_code": action.code,
+                "warning_code": action.warning_code,
+                "actor_username": actor,
+                "failure_class": "system_repair_action_failed",
+            },
         )
         logger.debug(
-            "Filesystem runtime diagnostics probe failed",
-            exc_info=True,
+            "System repair action raw failure",
+            extra={
+                "action_code": action.code,
+                "warning_code": action.warning_code,
+                "actor_username": actor,
+                "raw_error": str(exc),
+            },
         )
-        return []
+        _write_system_repair_audit(db, actor=actor, action=action, status="failed", reason=safe_message)
+        raise ConflictError(
+            message=safe_message,
+            code="SYSTEM_REPAIR_ACTION_FAILED",
+        ) from exc
 
-    if formatting_available and mount_runtime_available is False:
-        return [{
-            "code": _EXFAT_RUNTIME_WARNING_CODE,
-            "severity": "warning",
-            "component": "filesystem_runtime",
-            "message": _EXFAT_RUNTIME_WARNING_MESSAGE,
-            "remediation": _EXFAT_RUNTIME_WARNING_REMEDIATION,
-        }]
+    if _is_system_health_repair_action_needed(action.code, filesystem_runtime_inspector):
+        logger.info(
+            "System repair action completed without clearing warning",
+            extra={
+                "action_code": action.code,
+                "warning_code": action.warning_code,
+                "actor_username": actor,
+                "failure_class": "system_repair_action_not_effective",
+            },
+        )
+        _write_system_repair_audit(
+            db,
+            actor=actor,
+            action=action,
+            status="failed",
+            reason="warning_persisted_after_action",
+        )
+        raise ConflictError(
+            message="The repair action completed, but the runtime warning is still active.",
+            code="SYSTEM_REPAIR_ACTION_NOT_EFFECTIVE",
+        )
 
-    return []
+    result = {
+        "code": action.code,
+        "status": "ok",
+        "message": action.success_message,
+    }
+    _write_system_repair_audit(db, actor=actor, action=action, status="ok")
+    return result
+
+
+def _is_system_health_repair_action_needed(action_code: str, filesystem_runtime_inspector: Any | None) -> bool:
+    action = _SYSTEM_HEALTH_REPAIR_ACTIONS.get(action_code)
+    if action is None:
+        return False
+    return action.is_active(filesystem_runtime_inspector)
+
+
+def _execute_system_health_repair_action(action_code: str, runtime_repair_provider: Any) -> None:
+    action = _SYSTEM_HEALTH_REPAIR_ACTIONS.get(action_code)
+    if action is None:
+        raise RuntimeError("Unsupported system repair action")
+    action.execute(runtime_repair_provider)
+
+
+def _write_system_repair_audit(
+    db: Session,
+    *,
+    actor: str,
+    action: _SystemHealthRepairActionDefinition,
+    status: str,
+    reason: str | None = None,
+) -> None:
+    details: dict[str, str] = {
+        "action_code": action.code,
+        "warning_code": action.warning_code,
+        "status": status,
+    }
+    if reason:
+        details["reason"] = reason
+
+    try:
+        AuditRepository(db).add(
+            action="SYSTEM_REPAIR_ACTION",
+            user=actor,
+            details=details,
+        )
+    except Exception as exc:
+        logger.info(
+            "System repair action audit write failed",
+            extra={
+                "action_code": action.code,
+                "warning_code": action.warning_code,
+                "actor_username": actor,
+                "failure_class": "system_repair_action_audit_write_failed",
+            },
+        )
+        logger.debug(
+            "System repair action audit write raw failure",
+            extra={
+                "action_code": action.code,
+                "warning_code": action.warning_code,
+                "actor_username": actor,
+                "raw_error": str(exc),
+            },
+        )
+        raise ConflictError(
+            message="The repair action could not be recorded in the audit log.",
+            code="SYSTEM_REPAIR_ACTION_AUDIT_FAILED",
+        ) from exc
 
 
 def _build_ecube_process_metrics(

@@ -417,7 +417,7 @@ class TestJobAuthorization:
 
 
 class TestIntrospectionAuthorization:
-    """All introspection endpoints allow all four roles; no-role is denied."""
+    """Read-only introspection endpoints allow all four roles; no-role is denied."""
 
     @pytest.mark.parametrize(
         "path",
@@ -445,6 +445,12 @@ class TestIntrospectionAuthorization:
     def test_no_role_denied(self, db, path):
         c = _client_for_role(db, [])
         _assert_forbidden(c.get(path))
+
+    def test_system_health_actions_admin_only(self, db):
+        assert _client_for_role(db, ["admin"]).post("/introspection/system-health/actions/load_exfat_kernel_module").status_code != 403
+        for role in ["manager", "processor", "auditor"]:
+            _assert_forbidden(_client_for_role(db, [role]).post("/introspection/system-health/actions/load_exfat_kernel_module"))
+        _assert_forbidden(_client_for_role(db, []).post("/introspection/system-health/actions/load_exfat_kernel_module"))
 
 # ---------------------------------------------------------------------------
 # Unauthenticated access still returns 401

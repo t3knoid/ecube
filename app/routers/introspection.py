@@ -50,7 +50,12 @@ from sqlalchemy.orm import Session
 from app.auth import CurrentUser, require_roles
 from app.config import settings
 from app.database import get_db
-from app.infrastructure import get_drive_mount, get_filesystem_runtime_inspector, get_mount_provider
+from app.infrastructure import (
+    get_drive_mount,
+    get_filesystem_runtime_inspector,
+    get_mount_provider,
+    get_runtime_repair_provider,
+)
 from app.models.hardware import UsbDrive
 from app.schemas.errors import R_401, R_403, R_404, R_409, R_422, R_500
 from app.schemas.introspection import (
@@ -58,6 +63,7 @@ from app.schemas.introspection import (
     IntrospectionDrivesResponse,
     ManualManagedMountReconciliationResponse,
     SystemHealthResponse,
+    SystemHealthRepairActionResponse,
     SystemMountsResponse,
     UsbTopologyResponse,
 )
@@ -69,7 +75,20 @@ router = APIRouter(prefix="/introspection", tags=["introspection"])
 
 _ALL_ROLES = require_roles("admin", "manager", "processor", "auditor")
 _ADMIN_AUDITOR = require_roles("admin", "auditor")
+_ADMIN_ONLY = require_roles("admin")
 _ADMIN_MANAGER = require_roles("admin", "manager")
+
+
+def _get_runtime_repair_provider_or_none():
+    try:
+        return get_runtime_repair_provider()
+    except Exception:
+        logger.info(
+            "Runtime repair provider unavailable",
+            extra={"failure_class": "runtime_repair_provider_unavailable"},
+        )
+        logger.debug("Runtime repair provider resolution failed", exc_info=True)
+        return None
 
 
 @router.get("/drives", response_model=IntrospectionDrivesResponse, responses={**R_401, **R_403})
@@ -222,6 +241,30 @@ def system_health(
         psutil_available=_PSUTIL_AVAILABLE,
         psutil_module=_psutil if _PSUTIL_AVAILABLE else None,
         filesystem_runtime_inspector=get_filesystem_runtime_inspector(),
+        runtime_repair_provider=_get_runtime_repair_provider_or_none(),
+    )
+
+
+@router.post(
+    "/system-health/actions/{action_code}",
+    response_model=SystemHealthRepairActionResponse,
+    responses={**R_401, **R_403, **R_404, **R_409, **R_500},
+)
+def run_system_health_action(
+    action_code: str,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_ONLY),
+):
+    """Run an explicit admin-approved runtime repair action for System health.
+
+    **Roles:** ``admin``
+    """
+    return introspection_service.run_system_health_repair_action(
+        db,
+        action_code=action_code,
+        actor=current_user.username,
+        filesystem_runtime_inspector=get_filesystem_runtime_inspector(),
+        runtime_repair_provider=_get_runtime_repair_provider_or_none(),
     )
 
 

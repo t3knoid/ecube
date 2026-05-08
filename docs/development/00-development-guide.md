@@ -631,6 +631,22 @@ When adding new OS-level functionality:
 - **Error responses:** All error responses use the `ErrorResponse` schema (`app/schemas/errors.py`) with `code`, `message`, and `trace_id` fields. Declare error responses on every route decorator using the reusable dicts (`R_400`, `R_401`, `R_403`, `R_404`, `R_409`, `R_422`, `R_500`, `R_503`, `R_504`) from `app/schemas/errors.py`. Combine them via `responses={**R_401, **R_403}`.
 - **Input sanitization:** Path-like fields (e.g. `remote_path`, `source_path`) use `StrictSafeStr` which rejects malformed Unicode with `422`; non-path string fields use `SafeStr` which silently strips null bytes and surrogates. Both are defined in `app/utils/sanitize.py`.
 
+### System-Health Repair Actions
+
+The System page runtime-repair mechanism is intended to be registry-driven rather than warning-specific in the router or frontend. The current extension points are:
+
+- `app/services/introspection_service.py` owns the `_SystemHealthRepairActionDefinition` registry. Each entry declares the warning metadata shown by `GET /introspection/system-health`, the action metadata shown by the UI, the predicate that decides whether the warning/action is active, and the executor used by `POST /introspection/system-health/actions/{action_code}`.
+- `app/infrastructure/runtime_repair.py` owns the trusted host mutations. Add new privileged host repair operations here instead of calling subprocesses from routers or Vue components.
+- `frontend/src/views/SystemView.vue` already renders backend-provided warning `actions` generically, so adding a new repair action should not require a new frontend branch unless the UX itself changes.
+
+To add a new repairable runtime warning:
+
+1. Add or reuse the trusted host operation in `app/infrastructure/runtime_repair.py`.
+2. Add one `_SystemHealthRepairActionDefinition` entry in `app/services/introspection_service.py` with its warning metadata, `is_active` predicate, and `execute` callback.
+3. Extend tests for both the infrastructure adapter and the system-health response/action flow.
+
+Do not hide these repairs behind `Refresh` or any `GET` endpoint. They must remain explicit, auditable `POST` actions.
+
 ---
 
 ## Related Documentation

@@ -6,6 +6,10 @@ export function getSystemHealth() {
   return toData(apiClient.get(`${API_BASE}/introspection/system-health`))
 }
 
+export function runSystemHealthAction(actionCode) {
+  return toData(apiClient.post(`${API_BASE}/introspection/system-health/actions/${encodeURIComponent(actionCode)}`))
+}
+
 export function getVersion() {
   return toData(apiClient.get(`${API_BASE}/introspection/version`))
 }

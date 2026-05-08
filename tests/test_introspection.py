@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, mock_open, patch
 
 from app.exceptions import ConflictError
+from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive, UsbHub, UsbPort
 
 
@@ -10,6 +11,15 @@ def _runtime_inspector(*, formatting_available=False, mount_runtime_available=Tr
     return SimpleNamespace(
         exfat_formatting_available=lambda: formatting_available,
         exfat_mount_runtime_available=lambda: mount_runtime_available,
+    )
+
+
+def _latest_system_repair_audit(db):
+    return (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "SYSTEM_REPAIR_ACTION")
+        .order_by(AuditLog.id.desc())
+        .first()
     )
 
 
@@ -40,7 +50,10 @@ def test_system_health(client, db):
 def test_system_health_reports_exfat_runtime_warning_when_formatting_is_available_but_mount_support_is_missing(client, db):
     inspector = _runtime_inspector(formatting_available=True, mount_runtime_available=False)
 
-    with patch("app.routers.introspection.get_filesystem_runtime_inspector", return_value=inspector):
+    with (
+        patch("app.routers.introspection.get_filesystem_runtime_inspector", return_value=inspector),
+        patch("app.routers.introspection.get_runtime_repair_provider", return_value=object()),
+    ):
         response = client.get("/introspection/system-health")
 
     assert response.status_code == 200
@@ -52,6 +65,13 @@ def test_system_health_reports_exfat_runtime_warning_when_formatting_is_availabl
         "component": "filesystem_runtime",
         "message": "exFAT formatting tools are available, but runtime mount support for exFAT is unavailable on this host. After a kernel change, the matching runtime package can be missing even though formatting still works.",
         "remediation": "Verify exFAT runtime support for the current kernel, including the documented exfatprogs and linux-modules-extra-$(uname -r) prerequisites, then retry the mount.",
+        "actions": [{
+            "code": "load_exfat_kernel_module",
+            "label": "Load exFAT runtime support",
+            "description": "Run the host repair step that loads the exFAT kernel module for the current running kernel.",
+            "confirm_title": "Load exFAT runtime support?",
+            "confirm_message": "This will run an explicit host repair action to load the exFAT kernel module for the current kernel. Use this only when runtime warnings show exFAT mount support is missing.",
+        }],
     }]
 
 
@@ -65,6 +85,177 @@ def test_system_health_skips_exfat_runtime_warning_when_runtime_probe_is_unavail
     data = response.json()
     assert data["warnings"] == []
     assert data["status"] == "ok"
+
+
+def test_run_system_health_action_requires_authentication(unauthenticated_client, db):
+    response = unauthenticated_client.post("/introspection/system-health/actions/load_exfat_kernel_module")
+    assert response.status_code == 401
+
+
+def test_run_system_health_action_forbidden_for_manager(manager_client, db):
+    response = manager_client.post("/introspection/system-health/actions/load_exfat_kernel_module")
+    assert response.status_code == 403
+
+
+def test_run_system_health_action_returns_not_found_for_unknown_action(admin_client, db):
+    response = admin_client.post("/introspection/system-health/actions/unknown-action")
+    assert response.status_code == 404
+    assert response.json()["code"] == "SYSTEM_REPAIR_ACTION_NOT_FOUND"
+
+
+def test_system_health_omits_runtime_repair_actions_when_provider_is_unavailable(client, db):
+    inspector = _runtime_inspector(formatting_available=True, mount_runtime_available=False)
+
+    with (
+        patch("app.routers.introspection.get_filesystem_runtime_inspector", return_value=inspector),
+        patch("app.routers.introspection.get_runtime_repair_provider", side_effect=ValueError("unsupported platform")),
+    ):
+        response = client.get("/introspection/system-health")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "degraded"
+    assert data["warnings"] == [{
+        "code": "exfat_runtime_kernel_mismatch",
+        "severity": "warning",
+        "component": "filesystem_runtime",
+        "message": "exFAT formatting tools are available, but runtime mount support for exFAT is unavailable on this host. After a kernel change, the matching runtime package can be missing even though formatting still works.",
+        "remediation": "Verify exFAT runtime support for the current kernel, including the documented exfatprogs and linux-modules-extra-$(uname -r) prerequisites, then retry the mount.",
+        "actions": [],
+    }]
+
+
+def test_run_system_health_action_returns_conflict_when_provider_is_unavailable(admin_client, db):
+    inspector = _runtime_inspector(formatting_available=True, mount_runtime_available=False)
+
+    with (
+        patch("app.routers.introspection.get_filesystem_runtime_inspector", return_value=inspector),
+        patch("app.routers.introspection.get_runtime_repair_provider", side_effect=ValueError("unsupported platform")),
+    ):
+        response = admin_client.post("/introspection/system-health/actions/load_exfat_kernel_module")
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "SYSTEM_REPAIR_ACTION_UNAVAILABLE"
+
+
+def test_run_system_health_action_executes_runtime_repair_for_admin(admin_client, db):
+    inspector = _runtime_inspector(formatting_available=True, mount_runtime_available=False)
+    repair_provider = MagicMock()
+    repair_provider.load_kernel_module.side_effect = lambda module_name: setattr(
+        inspector,
+        "exfat_mount_runtime_available",
+        lambda: True,
+    )
+
+    with (
+        patch("app.routers.introspection.get_filesystem_runtime_inspector", return_value=inspector),
+        patch("app.routers.introspection.get_runtime_repair_provider", return_value=repair_provider),
+    ):
+        response = admin_client.post("/introspection/system-health/actions/load_exfat_kernel_module")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "code": "load_exfat_kernel_module",
+        "status": "ok",
+        "message": "exFAT runtime support reload requested. Refreshing health should now clear the warning if the host accepted the module load.",
+    }
+    repair_provider.load_kernel_module.assert_called_once_with("exfat")
+    audit = _latest_system_repair_audit(db)
+    assert audit is not None
+    assert audit.details == {
+        "action_code": "load_exfat_kernel_module",
+        "warning_code": "exfat_runtime_kernel_mismatch",
+        "status": "ok",
+    }
+
+
+def test_run_system_health_action_returns_not_needed_when_warning_is_cleared(admin_client, db):
+    inspector = _runtime_inspector(formatting_available=True, mount_runtime_available=True)
+
+    with (
+        patch("app.routers.introspection.get_filesystem_runtime_inspector", return_value=inspector),
+        patch("app.routers.introspection.get_runtime_repair_provider", return_value=MagicMock()),
+    ):
+        response = admin_client.post("/introspection/system-health/actions/load_exfat_kernel_module")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "code": "load_exfat_kernel_module",
+        "status": "not_needed",
+        "message": "exFAT runtime support is already available on this host.",
+    }
+    audit = _latest_system_repair_audit(db)
+    assert audit is not None
+    assert audit.details == {
+        "action_code": "load_exfat_kernel_module",
+        "warning_code": "exfat_runtime_kernel_mismatch",
+        "status": "not_needed",
+    }
+
+
+def test_run_system_health_action_returns_conflict_when_repair_fails(admin_client, db):
+    inspector = _runtime_inspector(formatting_available=True, mount_runtime_available=False)
+    repair_provider = MagicMock()
+    repair_provider.load_kernel_module.side_effect = RuntimeError("permission denied")
+
+    with (
+        patch("app.routers.introspection.get_filesystem_runtime_inspector", return_value=inspector),
+        patch("app.routers.introspection.get_runtime_repair_provider", return_value=repair_provider),
+    ):
+        response = admin_client.post("/introspection/system-health/actions/load_exfat_kernel_module")
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "SYSTEM_REPAIR_ACTION_FAILED"
+    audit = _latest_system_repair_audit(db)
+    assert audit is not None
+    assert audit.details == {
+        "action_code": "load_exfat_kernel_module",
+        "warning_code": "exfat_runtime_kernel_mismatch",
+        "status": "failed",
+        "reason": "permission denied",
+    }
+
+
+def test_run_system_health_action_returns_conflict_when_warning_persists_after_repair(admin_client, db):
+    inspector = _runtime_inspector(formatting_available=True, mount_runtime_available=False)
+    repair_provider = MagicMock()
+
+    with (
+        patch("app.routers.introspection.get_filesystem_runtime_inspector", return_value=inspector),
+        patch("app.routers.introspection.get_runtime_repair_provider", return_value=repair_provider),
+    ):
+        response = admin_client.post("/introspection/system-health/actions/load_exfat_kernel_module")
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "SYSTEM_REPAIR_ACTION_NOT_EFFECTIVE"
+    audit = _latest_system_repair_audit(db)
+    assert audit is not None
+    assert audit.details == {
+        "action_code": "load_exfat_kernel_module",
+        "warning_code": "exfat_runtime_kernel_mismatch",
+        "status": "failed",
+        "reason": "warning_persisted_after_action",
+    }
+
+
+def test_run_system_health_action_returns_conflict_when_audit_write_fails(admin_client, db):
+    inspector = _runtime_inspector(formatting_available=True, mount_runtime_available=False)
+    repair_provider = MagicMock()
+    repair_provider.load_kernel_module.side_effect = lambda module_name: setattr(
+        inspector,
+        "exfat_mount_runtime_available",
+        lambda: True,
+    )
+
+    with (
+        patch("app.routers.introspection.get_filesystem_runtime_inspector", return_value=inspector),
+        patch("app.routers.introspection.get_runtime_repair_provider", return_value=repair_provider),
+        patch("app.services.introspection_service.AuditRepository.add", side_effect=RuntimeError("db down")),
+    ):
+        response = admin_client.post("/introspection/system-health/actions/load_exfat_kernel_module")
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "SYSTEM_REPAIR_ACTION_AUDIT_FAILED"
 
 
 def test_linux_filesystem_runtime_inspector_returns_none_when_procfs_probe_is_unavailable(monkeypatch):
