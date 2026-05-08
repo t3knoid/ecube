@@ -115,6 +115,11 @@
 			"key": "name",
 			"value": "sample-name",
 			"type": "string"
+		},
+		{
+			"key": "action_code",
+			"value": "sample-action_code",
+			"type": "string"
 		}
 	],
 	"item": [
@@ -3249,6 +3254,27 @@
 							]
 						},
 						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: System Health\n\noperationId: system_health_introspection_system_health_get"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /introspection/system-health/actions/{action_code}",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/introspection/system-health/actions/{{action_code}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"introspection",
+								"system-health",
+								"actions",
+								"{{action_code}}"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Run System Health Action\n\noperationId: run_system_health_action_introspection_system_health_actions__action_code__post"
 					},
 					"response": []
 				},
