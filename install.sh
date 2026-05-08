@@ -27,7 +27,7 @@ else
   C_RESET='' C_RED='' C_YELLOW='' C_GREEN='' C_CYAN='' C_BOLD=''
 fi
 
-LOG_FILE="/var/log/ecube-install.log"
+: "${LOG_FILE:=/var/log/ecube-install.log}"
 
 _log() {
   local level="$1"; shift
@@ -135,8 +135,10 @@ _python_has_venv() {
 
 _run_python() {
   if [[ -z "${PYTHON_BIN}" ]]; then
-    error "Python runtime was not resolved before use."
-    exit 1
+    if ! _resolve_compatible_python_bin; then
+      error "Python runtime was not resolved before use."
+      exit 1
+    fi
   fi
   "${PYTHON_BIN}" "$@"
 }
