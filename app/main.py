@@ -620,7 +620,8 @@ if settings.cors_allowed_origins:
 # so they match the actual FastAPI routes.
 # ---------------------------------------------------------------------------
 if settings.serve_frontend_path:
-    from app.spa import add_strip_api_prefix_middleware
+    from app.spa import add_spa_route_collision_middleware, add_strip_api_prefix_middleware
+    add_spa_route_collision_middleware(app)
     add_strip_api_prefix_middleware(app)
 
 

@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from app import database as db_module
 from app.main import app as main_app
-from app.spa import add_strip_api_prefix_middleware, mount_spa_frontend
+from app.spa import add_spa_route_collision_middleware, add_strip_api_prefix_middleware, mount_spa_frontend
 
 
 # ---------------------------------------------------------------------------
@@ -158,6 +158,50 @@ def _make_spa_app_with_strip(frontend_dir: pathlib.Path):
     return app
 
 
+def _make_spa_app_with_route_collisions(frontend_dir: pathlib.Path, *, with_strip: bool = False):
+    app = FastAPI()
+
+    add_spa_route_collision_middleware(app)
+    if with_strip:
+        add_strip_api_prefix_middleware(app)
+
+    @app.get("/audit")
+    def audit_index():
+        return {"route": "audit"}
+
+    @app.get("/jobs")
+    def jobs_index():
+        return {"route": "jobs"}
+
+    @app.get("/mounts")
+    def mounts_index():
+        return {"route": "mounts"}
+
+    @app.get("/drives")
+    def drives_index():
+        return {"route": "drives"}
+
+    @app.get("/configuration")
+    def configuration_index():
+        return {"route": "configuration"}
+
+    @app.get("/users")
+    def users_index():
+        return {"route": "users"}
+
+    @app.get("/jobs/{job_id}")
+    def job_detail(job_id: int):
+        return {"route": "job-detail", "job_id": job_id}
+
+    @app.patch("/mounts/{mount_id}")
+    def mount_detail(mount_id: int):
+        return {"route": "mount-detail", "mount_id": mount_id}
+
+    mount_spa_frontend(app, frontend_dir)
+
+    return app
+
+
 class TestSpaFrontendServing:
     """Integration tests for the SPA static-file + fallback mode.
 
@@ -284,6 +328,92 @@ class TestSpaFrontendServing:
         resp = client.get("/api/health")
         assert resp.status_code == 200
         assert resp.json() == {"status": "ok"}
+
+    @pytest.mark.parametrize(
+        "path",
+        ["/audit", "/jobs", "/mounts", "/drives", "/configuration", "/users"],
+    )
+    def test_browser_navigation_to_exact_colliding_route_serves_spa(self, tmp_path, path):
+        dist = self._build_dist(tmp_path)
+        client = TestClient(_make_spa_app_with_route_collisions(dist))
+
+        resp = client.get(path, headers={"accept": "text/html,application/xhtml+xml"})
+
+        assert resp.status_code == 200
+        assert "SPA" in resp.text
+
+    @pytest.mark.parametrize(
+        ("path", "expected_status", "expected_body"),
+        [
+            ("/audit", 200, {"route": "audit"}),
+            ("/jobs", 200, {"route": "jobs"}),
+            ("/mounts", 200, {"route": "mounts"}),
+            ("/drives", 200, {"route": "drives"}),
+            ("/configuration", 200, {"route": "configuration"}),
+            ("/users", 200, {"route": "users"}),
+        ],
+    )
+    def test_api_requests_keep_exact_colliding_backend_routes(self, tmp_path, path, expected_status, expected_body):
+        dist = self._build_dist(tmp_path)
+        client = TestClient(_make_spa_app_with_route_collisions(dist))
+
+        resp = client.get(path, headers={"accept": "application/json"})
+
+        assert resp.status_code == expected_status
+        assert resp.json() == expected_body
+
+    def test_browser_navigation_to_colliding_job_detail_serves_spa(self, tmp_path):
+        dist = self._build_dist(tmp_path)
+        client = TestClient(_make_spa_app_with_route_collisions(dist))
+
+        resp = client.get("/jobs/123", headers={"accept": "text/html,application/xhtml+xml"})
+
+        assert resp.status_code == 200
+        assert "SPA" in resp.text
+
+    def test_browser_navigation_to_non_numeric_colliding_job_detail_serves_spa(self, tmp_path):
+        dist = self._build_dist(tmp_path)
+        client = TestClient(_make_spa_app_with_route_collisions(dist))
+
+        resp = client.get("/jobs/foo", headers={"accept": "text/html,application/xhtml+xml"})
+
+        assert resp.status_code == 200
+        assert "SPA" in resp.text
+
+    def test_api_request_to_colliding_job_detail_keeps_backend_route(self, tmp_path):
+        dist = self._build_dist(tmp_path)
+        client = TestClient(_make_spa_app_with_route_collisions(dist))
+
+        resp = client.get("/jobs/123", headers={"accept": "application/json"})
+
+        assert resp.status_code == 200
+        assert resp.json() == {"route": "job-detail", "job_id": 123}
+
+    def test_browser_navigation_to_colliding_mount_detail_serves_spa(self, tmp_path):
+        dist = self._build_dist(tmp_path)
+        client = TestClient(_make_spa_app_with_route_collisions(dist))
+
+        resp = client.get("/mounts/123", headers={"accept": "text/html,application/xhtml+xml"})
+
+        assert resp.status_code == 200
+        assert "SPA" in resp.text
+
+    def test_stripped_api_request_to_mount_detail_returns_404(self, tmp_path):
+        dist = self._build_dist(tmp_path)
+        client = TestClient(_make_spa_app_with_route_collisions(dist, with_strip=True))
+
+        resp = client.get("/api/mounts/123", headers={"accept": "application/json"})
+
+        assert resp.status_code == 404
+
+    def test_stripped_api_request_to_colliding_route_keeps_backend_route(self, tmp_path):
+        dist = self._build_dist(tmp_path)
+        client = TestClient(_make_spa_app_with_route_collisions(dist, with_strip=True))
+
+        resp = client.get("/api/audit", headers={"accept": "application/json"})
+
+        assert resp.status_code == 200
+        assert resp.json() == {"route": "audit"}
 
 
 class TestMainAppSetupRedirect(TestSpaFrontendServing):

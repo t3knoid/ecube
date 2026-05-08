@@ -9,12 +9,69 @@ from __future__ import annotations
 
 import logging
 import pathlib
+import re
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import FileResponse
 
 logger = logging.getLogger(__name__)
+
+_SPA_ROUTE_COLLISION_EXACT_PATHS = frozenset({
+    "/audit",
+    "/configuration",
+    "/drives",
+    "/jobs",
+    "/mounts",
+    "/users",
+})
+_SPA_ROUTE_COLLISION_DETAIL_PATTERNS = (
+    re.compile(r"^/jobs/[^/]+$"),
+    re.compile(r"^/mounts/\d+$"),
+)
+_INTERNAL_SPA_ROUTE_PREFIX = "/__spa__"
+
+
+def _is_browser_navigation_request(request: Request) -> bool:
+    accept = (request.headers.get("accept") or "").lower()
+    return request.method == "GET" and "text/html" in accept
+
+
+def _is_spa_route_collision_path(path: str) -> bool:
+    if path in _SPA_ROUTE_COLLISION_EXACT_PATHS:
+        return True
+    return any(pattern.match(path) for pattern in _SPA_ROUTE_COLLISION_DETAIL_PATTERNS)
+
+
+def add_spa_route_collision_middleware(app: FastAPI) -> None:
+    """Rewrite direct browser navigations for known SPA/API path collisions.
+
+    When FastAPI serves both the ECUBE SPA and same-origin backend routes,
+    some browser reloads such as ``/audit`` or ``/mounts/123`` would
+    otherwise match backend routes before the SPA fallback can serve
+    ``index.html``. Only HTML navigation requests for known colliding SPA
+    routes are rewritten; API traffic and non-colliding paths are unchanged.
+    """
+
+    @app.middleware("http")
+    async def route_spa_collisions(request: Request, call_next):
+        path = request.scope.get("path") or ""
+        original_path = str(request.scope.get("_original_path") or "")
+
+        if (
+            _is_browser_navigation_request(request)
+            and not path.startswith("/api")
+            and not original_path.startswith("/api")
+            and _is_spa_route_collision_path(path)
+        ):
+            rewritten_path = f"{_INTERNAL_SPA_ROUTE_PREFIX}{path}"
+            request.scope["_spa_original_path"] = path
+            request.scope["path"] = rewritten_path
+            raw_path = request.scope.get("raw_path")
+            if isinstance(raw_path, bytes):
+                request.scope["raw_path"] = rewritten_path.encode()
+
+        return await call_next(request)
 
 
 def add_strip_api_prefix_middleware(app: FastAPI) -> None:
@@ -106,6 +163,8 @@ def mount_spa_frontend(app: FastAPI, frontend_dir: pathlib.Path) -> None:
         original_path = request.scope.get("_original_path", "")
         if full_path.startswith(("api/", "api-")) or original_path.startswith("/api"):
             raise HTTPException(status_code=404, detail="Not Found")
+        if full_path.startswith("__spa__/"):
+            full_path = str(request.scope.get("_spa_original_path") or full_path[len("__spa__") :])
         # Guard against path traversal (e.g. ../../etc/passwd).
         # First reject any path containing ".." segments so we never
         # call resolve() on a path that could escape the frontend root
