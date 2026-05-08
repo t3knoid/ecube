@@ -14,11 +14,12 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.models.jobs import ExportJob
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.infrastructure.mount_namespace import shares_host_mount_namespace
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.mount_repository import MountRepository
-from app.schemas.network import MountCreate, MountShareDiscoveryItem, MountShareDiscoveryRequest, MountShareDiscoveryResponse, MountUpdate, NetworkMountSchema
+from app.schemas.network import MountCreate, MountRelatedJobSchema, MountShareDiscoveryItem, MountShareDiscoveryRequest, MountShareDiscoveryResponse, MountUpdate, NetworkMountSchema
 from app.config import settings
 from app.exceptions import ConflictError, EncodingError
 from app.services.mount_credentials_service import decrypt_mount_secret, encrypt_mount_secret
@@ -47,6 +48,63 @@ _ENCRYPTED_CREDENTIAL_ATTRS = {
 }
 _MOUNT_PATH_VIEWER_ROLES = frozenset({"admin", "manager"})
 _REDACTED_MOUNT_PATH_VALUE = "[REDACTED]"
+
+
+def _attach_related_job_contexts(db: Session, mounts: list[NetworkMount]) -> list[NetworkMount]:
+    if not mounts:
+        return mounts
+
+    project_ids = {
+        normalized
+        for mount in mounts
+        if isinstance((normalized := normalize_project_id(getattr(mount, "project_id", None))), str) and normalized
+    }
+    if not project_ids:
+        for mount in mounts:
+            setattr(mount, "related_job", MountRelatedJobSchema(status="NO_RELATED_JOB"))
+        return mounts
+
+    try:
+        job_rows = (
+            db.query(ExportJob.id, ExportJob.project_id, ExportJob.status)
+            .filter(ExportJob.project_id.in_(sorted(project_ids)))
+            .order_by(ExportJob.created_at.desc(), ExportJob.id.desc())
+            .all()
+        )
+    except Exception as exc:
+        logger.info(
+            "Mount related-job status unavailable",
+            extra={
+                "context": {
+                    "failure_class": "mount_related_job_lookup_unavailable",
+                    "mount_count": len(mounts),
+                }
+            },
+        )
+        logger.debug(
+            "Mount related-job lookup failed",
+            extra={
+                "mount_count": len(mounts),
+                "raw_error": str(exc),
+            },
+        )
+        for mount in mounts:
+            setattr(mount, "related_job", MountRelatedJobSchema(status="STATUS_UNAVAILABLE"))
+        return mounts
+
+    selected_jobs: dict[str, MountRelatedJobSchema] = {}
+    for job_id, project_id, status in job_rows:
+        normalized_project_id = normalize_project_id(project_id)
+        if not isinstance(normalized_project_id, str) or not normalized_project_id or normalized_project_id in selected_jobs:
+            continue
+        selected_jobs[normalized_project_id] = MountRelatedJobSchema(job_id=job_id, status=status)
+
+    for mount in mounts:
+        normalized_project_id = normalize_project_id(getattr(mount, "project_id", None))
+        related_job = selected_jobs.get(normalized_project_id) if isinstance(normalized_project_id, str) else None
+        setattr(mount, "related_job", related_job or MountRelatedJobSchema(status="NO_RELATED_JOB"))
+
+    return mounts
 
 
 def _network_mount_timeout_seconds() -> int:
@@ -1875,6 +1933,7 @@ def _redact_mount_paths(mount: NetworkMount) -> NetworkMountSchema:
 
 def list_mounts(db: Session, user_roles: Optional[list[str]] = None):
     mounts = MountRepository(db).list_all()
+    _attach_related_job_contexts(db, mounts)
     if _can_view_mount_paths(user_roles):
         return mounts
     return [_redact_mount_paths(mount) for mount in mounts]

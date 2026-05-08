@@ -6,7 +6,6 @@ import MountsView from '@/views/MountsView.vue'
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   getMounts: vi.fn(),
-  listAllJobs: vi.fn(),
   createMount: vi.fn(),
   updateMount: vi.fn(),
   deleteMount: vi.fn(),
@@ -46,10 +45,6 @@ vi.mock('@/api/auth.js', () => ({
   getPublicAuthConfig: (...args) => mocks.getPublicAuthConfig(...args),
 }))
 
-vi.mock('@/api/jobs.js', () => ({
-  listAllJobs: (...args) => mocks.listAllJobs(...args),
-}))
-
 vi.mock('@/stores/auth.js', () => ({
   useAuthStore: () => ({
     hasAnyRole: (roles) => roles.some((role) => authState.roles.includes(role)),
@@ -66,6 +61,7 @@ function buildMount(overrides = {}) {
     local_mount_point: '/smb/project2',
     status: 'UNMOUNTED',
     last_checked_at: null,
+    related_job: { job_id: null, status: 'NO_RELATED_JOB' },
     ...overrides,
   }
 }
@@ -151,7 +147,6 @@ describe('MountsView removal flow', () => {
     installMatchMediaMock()
     mocks.push.mockReset()
     mocks.getMounts.mockReset()
-    mocks.listAllJobs.mockReset()
     mocks.createMount.mockReset()
     mocks.updateMount.mockReset()
     mocks.deleteMount.mockReset()
@@ -164,7 +159,6 @@ describe('MountsView removal flow', () => {
     mocks.createMount.mockResolvedValue({})
     mocks.updateMount.mockResolvedValue({})
     mocks.deleteMount.mockResolvedValue({})
-  mocks.listAllJobs.mockResolvedValue([])
     mocks.validateAllMounts.mockResolvedValue([])
     mocks.validateMountCandidate.mockResolvedValue(buildMount({ id: 999, status: 'MOUNTED' }))
     mocks.validateMount.mockResolvedValue(buildMount())
@@ -283,10 +277,7 @@ describe('MountsView removal flow', () => {
   })
 
   it('shows the related project job ID and links it to Job Detail', async () => {
-    mocks.getMounts.mockResolvedValue([buildMount({ project_id: 'PROJ-011' })])
-    mocks.listAllJobs.mockResolvedValue([
-      { id: 27, project_id: 'PROJ-011', evidence_number: 'EV-027' },
-    ])
+    mocks.getMounts.mockResolvedValue([buildMount({ project_id: 'PROJ-011', related_job: { job_id: 27, status: 'RUNNING' } })])
 
     const wrapper = mountView()
     await flushPromises()
@@ -305,6 +296,16 @@ describe('MountsView removal flow', () => {
     await flushPromises()
 
     expect(mocks.push).toHaveBeenCalledWith({ name: 'job-detail', params: { id: 27 } })
+  })
+
+  it('keeps the related job cell non-actionable when the mount payload has no related job', async () => {
+    mocks.getMounts.mockResolvedValue([buildMount({ project_id: 'PROJ-011', related_job: { job_id: null, status: 'NO_RELATED_JOB' } })])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.findAll('.cell-link').some((node) => node.text() === '27')).toBe(false)
+    expect(wrapper.text()).toContain('-')
   })
 
   it('uppercases the project ID as the operator types and submits it normalized', async () => {

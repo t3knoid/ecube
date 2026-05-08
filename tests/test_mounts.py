@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
+from app.models.jobs import ExportJob, JobStatus
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.config import settings
 from app.schemas.network import MountUpdate
@@ -25,6 +26,90 @@ def test_list_mounts_empty(client, db):
     response = client.get("/mounts")
     assert response.status_code == 200
     assert response.json() == []
+
+
+def test_list_mounts_includes_related_job_status(client, db):
+    mount = NetworkMount(
+        type=MountType.SMB,
+        remote_path="//server/share",
+        project_id="PROJ-011",
+        local_mount_point="/smb/project-011",
+        status=MountStatus.MOUNTED,
+    )
+    older_job = ExportJob(
+        project_id="PROJ-011",
+        evidence_number="EV-010",
+        source_path="/source/older",
+        status=JobStatus.PENDING,
+    )
+    newer_job = ExportJob(
+        project_id="PROJ-011",
+        evidence_number="EV-011",
+        source_path="/source/newer",
+        status=JobStatus.RUNNING,
+    )
+    db.add_all([mount, older_job, newer_job])
+    db.commit()
+
+    response = client.get("/mounts")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data[0]["related_job"] == {
+        "job_id": newer_job.id,
+        "status": "RUNNING",
+    }
+
+
+def test_list_mounts_uses_no_related_job_fallback(client, db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="server:/exports/evidence",
+        project_id="PROJ-NONE",
+        local_mount_point="/nfs/evidence",
+        status=MountStatus.UNMOUNTED,
+    )
+    db.add(mount)
+    db.commit()
+
+    response = client.get("/mounts")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data[0]["related_job"] == {
+        "job_id": None,
+        "status": "NO_RELATED_JOB",
+    }
+
+
+def test_list_mounts_uses_status_unavailable_fallback_when_related_job_lookup_fails(client, db, monkeypatch):
+    mount = NetworkMount(
+        type=MountType.SMB,
+        remote_path="//server/share",
+        project_id="PROJ-ERR",
+        local_mount_point="/smb/project-err",
+        status=MountStatus.MOUNTED,
+    )
+    db.add(mount)
+    db.commit()
+
+    original_query = db.query
+
+    def query_with_related_job_failure(*entities, **kwargs):
+        if entities and entities[0] is ExportJob.id:
+            raise RuntimeError("job lookup failed")
+        return original_query(*entities, **kwargs)
+
+    monkeypatch.setattr(db, "query", query_with_related_job_failure)
+
+    response = client.get("/mounts")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data[0]["related_job"] == {
+        "job_id": None,
+        "status": "STATUS_UNAVAILABLE",
+    }
 
 
 def test_add_mount(manager_client, db):

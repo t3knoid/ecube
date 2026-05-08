@@ -4,14 +4,12 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getMounts, updateMount, deleteMount, validateMount } from '@/api/mounts.js'
 import { getPublicAuthConfig } from '@/api/auth.js'
-import { listAllJobs } from '@/api/jobs.js'
 import { normalizeErrorMessage } from '@/api/client.js'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
-import { buildProjectEvidenceMap, getProjectEvidenceJobId } from '@/utils/projectEvidence.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -50,7 +48,6 @@ const credentialFieldState = ref({
 const editDialogRef = ref(null)
 const editDialogTriggerRef = ref(null)
 const editDialogTitleId = 'edit-mount-dialog-title'
-const relatedJobId = ref(null)
 
 const publicAuthConfig = ref({
   demo_mode_enabled: false,
@@ -89,6 +86,19 @@ const nfsClientVersionSelectOptions = computed(() => [
   },
   ...nfsClientVersionOptions.value.map((option) => ({ value: option, label: option })),
 ])
+const relatedJob = computed(() => mountRecord.value?.related_job || null)
+const relatedJobId = computed(() => relatedJob.value?.job_id ?? null)
+const relatedJobStatus = computed(() => relatedJob.value?.status || 'STATUS_UNAVAILABLE')
+const relatedJobStatusLabel = computed(() => {
+  switch (String(relatedJobStatus.value || '').toUpperCase()) {
+    case 'NO_RELATED_JOB':
+      return t('mounts.noRelatedJob')
+    case 'STATUS_UNAVAILABLE':
+      return t('mounts.jobStatusUnavailable')
+    default:
+      return String(relatedJobStatus.value || '-')
+  }
+})
 
 function networkMountTimeoutMs() {
   const seconds = Number(publicAuthConfig.value?.network_mount_timeout_seconds)
@@ -127,9 +137,8 @@ async function loadMount() {
   loading.value = true
   clearBanners()
   try {
-    const [mountResult, jobResult, configResult] = await Promise.allSettled([
+    const [mountResult, configResult] = await Promise.allSettled([
       getMounts(),
-      listAllJobs({ include_archived: true }),
       getPublicAuthConfig(),
     ])
 
@@ -148,16 +157,11 @@ async function loadMount() {
       }
     }
 
-    const jobs = jobResult.status === 'fulfilled' ? (jobResult.value || []) : []
-    const mountJobByProject = buildProjectEvidenceMap(jobs)
     const nextMount = (mountResult.value || [])
       .map((item) => normalizeProjectRecord(item, ['project_id']))
       .find((item) => item.id === mountId.value) || null
 
     mountRecord.value = nextMount
-    relatedJobId.value = nextMount
-      ? getProjectEvidenceJobId(nextMount.project_id, mountJobByProject)
-      : null
 
     if (!nextMount) {
       error.value = t('mounts.notFound')
@@ -449,6 +453,10 @@ onBeforeUnmount(() => {
             </button>
             <template v-else>-</template>
           </span>
+        </div>
+        <div>
+          <strong>{{ t('mounts.jobStatus') }}</strong>
+          <span><StatusBadge :status="relatedJobStatus" :label="relatedJobStatusLabel" /></span>
         </div>
         <div><strong>{{ t('common.labels.status') }}</strong><StatusBadge :status="mountRecord.status" /></div>
       </div>

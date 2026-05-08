@@ -3,6 +3,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from app.models.jobs import JobStatus
 from app.models.network import MountType, MountStatus
 from app.utils.sanitize import ProjectIdStr, SafeStr, StrictSafeStr
 
@@ -45,6 +46,14 @@ class MountShareDiscoveryResponse(BaseModel):
     shares: list[MountShareDiscoveryItem] = Field(default_factory=list, description="Discovered shares or exports for the requested server")
 
 
+class MountRelatedJobSchema(BaseModel):
+    job_id: Optional[int] = Field(default=None, description="Related job ID for the mount's current project workflow")
+    status: JobStatus | Literal["STATUS_UNAVAILABLE", "NO_RELATED_JOB"] = Field(
+        ...,
+        description="Trusted lifecycle status for the related job, or a safe fallback when no authoritative job status is available",
+    )
+
+
 class NetworkMountSchema(BaseModel):
     id: int = Field(..., description="Unique identifier for the mount configuration")
     type: MountType = Field(..., description="Mount protocol type (SMB, NFS, etc.)")
@@ -54,6 +63,10 @@ class NetworkMountSchema(BaseModel):
     local_mount_point: str = Field(..., description="Local filesystem path where the mount is attached")
     status: MountStatus = Field(..., description="Current mount status (MOUNTED, UNMOUNTED, ERROR)")
     last_checked_at: Optional[datetime] = Field(default=None, description="Timestamp of last connectivity check")
+    related_job: Optional[MountRelatedJobSchema] = Field(
+        default=None,
+        description="Trusted related job context for the mount's current project workflow when available",
+    )
 
     model_config = {"from_attributes": True}
 

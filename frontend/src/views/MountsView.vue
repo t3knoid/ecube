@@ -4,7 +4,6 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getMounts, createMount, updateMount, deleteMount, validateMount, validateMountCandidate, discoverMountShares } from '@/api/mounts.js'
 import { getPublicAuthConfig } from '@/api/auth.js'
-import { listAllJobs } from '@/api/jobs.js'
 import { normalizeErrorMessage } from '@/api/client.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
@@ -13,14 +12,12 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
-import { buildProjectEvidenceMap, getProjectEvidenceJobId } from '@/utils/projectEvidence.js'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
 const router = useRouter()
 
 const mounts = ref([])
-const mountJobByProject = ref(new Map())
 const loading = ref(false)
 const saving = ref(false)
 const dialogTesting = ref(false)
@@ -200,23 +197,13 @@ async function loadMounts() {
   loading.value = true
   error.value = ''
   try {
-    const [mountResult, jobResult] = await Promise.allSettled([
-      getMounts(),
-      listAllJobs({ include_archived: true }),
-    ])
+    const mountResult = await getMounts()
 
-    if (mountResult.status !== 'fulfilled') {
-      throw mountResult.reason
-    }
-
-    const jobs = jobResult.status === 'fulfilled' ? (jobResult.value || []) : []
-    mountJobByProject.value = buildProjectEvidenceMap(jobs)
-
-    mounts.value = (mountResult.value || []).map((item) => {
+    mounts.value = (mountResult || []).map((item) => {
       const mount = normalizeProjectRecord(item, ['project_id'])
       return {
         ...mount,
-        current_project_job_id: getProjectEvidenceJobId(mount.project_id, mountJobByProject.value),
+        current_project_job_id: mount.related_job?.job_id ?? null,
       }
     })
   } catch (requestError) {
