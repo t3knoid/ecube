@@ -18,6 +18,7 @@ Read and apply all of the following before any analysis, planning, code edits, o
 - `.cursor/rules/core.mdc`
 - `.cursor/rules/backend.mdc`
 - `.cursor/rules/frontend.mdc`
+- `.cursor/rules/installer.mdc`
 - `.cursor/rules/migrations.mdc`
 - `.cursor/rules/shell-docker.mdc`
 - `.github/prompts/pr-review.prompt.md`
@@ -32,6 +33,7 @@ Apply rules by file and behavior scope:
 - `core.mdc`: always-on global rules for security, trust boundaries, logging, audit safety, architecture, tests, and documentation consistency
 - `backend.mdc`: Python backend, FastAPI, services, repositories, infrastructure, models, and backend tests
 - `frontend.mdc`: Vue UI, browser interactions, routing, API usage from the UI, accessibility, frontend tests, and `app/spa.py`
+- `installer.mdc`: native installer scripts, `.env` mutation, Python resolution, privilege dropping, demo bootstrap, and installer-focused tests
 - `migrations.mdc`: Alembic migrations, schema history, and model-to-migration compatibility
 - `shell-docker.mdc`: shell scripts, subprocess usage, Dockerfiles, entrypoints, Compose, and environment handling
 

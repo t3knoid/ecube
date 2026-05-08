@@ -1,0 +1,125 @@
+---
+description: "Installer-specific ECUBE rules for native host setup, Python resolution, .env mutation, privilege dropping, demo bootstrap, and idempotent host changes."
+alwaysApply: false
+globs:
+  - "install.sh"
+  - "nuke_job.sh"
+  - "scripts/post_install_demo_setup.sh"
+  - "tests/test_install*.py"
+  - "tests/test_post_install_demo_setup.py"
+  - "tests/test_package_local.py"
+---
+
+# ECUBE — Installer Addendum
+
+Apply when touching the native installer, post-install host bootstrap scripts, destructive maintenance helpers, or installer-focused tests.
+
+This file governs **host installation safety**, **Python runtime and venv resolution**, **`.env` mutation**, **privilege dropping**, **demo install/bootstrap behavior**, and **idempotent host changes**.
+Global shell safety still lives in `shell-docker.mdc`, and backend trust-boundary rules still live in `core.mdc` and `backend.mdc`.
+
+---
+
+## 1. Installer Scope & Safety
+
+- Treat installer code as **host-mutating privileged code**.
+- Prefer the smallest change that preserves repeatability and safe re-runs.
+- Fail closed on ambiguous environment, path, user, or Python-runtime state.
+- Never trade away safety just to make unattended installs “keep going.”
+- Installer changes must preserve auditability, project isolation, and safe operator defaults.
+
+---
+
+## 2. Python Resolution & Virtual Environments
+
+### 2.1 Runtime Resolution Rules
+
+- Python-dependent installer helpers must not assume the main install flow already resolved `PYTHON_BIN`.
+- If a helper uses Python before the main installer path reaches interpreter setup, it must:
+  - resolve a compatible interpreter locally, or
+  - derive a documented installer-local fallback deterministically.
+- Do not hardcode a single interpreter path when the installer already supports compatible-version discovery.
+- Preserve the repo minimum Python version contract when resolving fallback interpreters.
+
+### 2.2 Venv Rules
+
+- Use the resolved interpreter consistently for venv creation and Python-backed helper calls.
+- Do not silently switch between unrelated Python interpreters once a compatible interpreter is selected.
+- If `venv` support is missing, fail with an explicit remediation path.
+- Installer tests must cover fallback resolution and missing-venv behavior when touched.
+
+---
+
+## 3. `.env` Mutation Rules
+
+### 3.1 Safety Requirements
+
+- `.env` updates must preserve unrelated keys and avoid lossy rewriting.
+- Do not mutate `.env` before prerequisite validation completes when failure should leave the install state unchanged.
+- Preserve testability by allowing explicitly supplied paths such as `LOG_FILE` or install-root-local `.env` files.
+- Quote or escape runtime values when needed so characters like `#`, spaces, or shell-significant bytes do not corrupt the persisted value.
+
+### 3.2 Behavioral Requirements
+
+- Re-running installer `.env` mutation must be idempotent.
+- Updating an existing key must replace only that key’s value.
+- Adding a new key must not duplicate prior entries for the same variable.
+- Ownership and permissions normalization after `.env` writes must remain best-effort and must not mask earlier validation failures.
+
+---
+
+## 4. Privilege Dropping & Host Mutation
+
+- Prefer explicit privilege transitions for app-owned operations instead of running all steps as root.
+- Support the repository’s accepted privilege-drop tools (`runuser` first, `sudo` fallback) without assuming both exist.
+- Host-mutating steps must be clearly separated from app-owned file generation and Python package execution.
+- Destructive helpers must validate operator input strictly before running privileged commands.
+- Do not rely on writable system paths in tests when a caller-supplied path is already available.
+
+---
+
+## 5. Demo Install & Bootstrap Rules
+
+- Demo install behavior must be deterministic and testable in both metadata-present and metadata-missing paths.
+- Missing demo metadata may enable runtime demo mode only when that fallback is explicit, logged safely, and leaves install state coherent.
+- Shared-password generation, metadata rewriting, and `.env` persistence must stay in sync.
+- Do not mutate runtime demo settings before validating metadata when failure should preserve the pre-demo state.
+- Demo bootstrap helpers that depend on Python-backed metadata or env rewriting must work even when called directly from tests or partial installer flows.
+
+---
+
+## 6. Idempotent Host Changes
+
+- Installer host changes must be safe to re-run.
+- Repeated runs must not duplicate repository, systemd, firewall, or `.env` state.
+- Operations such as creating users, databases, directories, service units, or demo metadata must check the current state first.
+- Cleanup and uninstall paths must determine targets explicitly from persisted configuration, not by guessing.
+- When a host change is intentionally one-way or destructive, require an explicit flag or clear operator intent.
+
+---
+
+## 7. Testing Expectations
+
+When touching installer behavior, tests should cover the changed slice with focused subprocess-driven validation where practical.
+
+At minimum, cover relevant combinations of:
+
+- resolved vs unresolved Python runtime
+- writable vs caller-overridden log path
+- metadata-present vs metadata-missing demo install
+- quoted/special-character `.env` values
+- idempotent re-run behavior
+- privilege-drop tool availability (`runuser` / `sudo`)
+
+Avoid brittle tests that depend on real host package managers, real system users, or privileged writes when fakes can validate the behavior.
+
+---
+
+## 8. Out of Scope
+
+Do not redefine here:
+
+- generic shell quoting, subprocess, Docker, and Compose rules → `shell-docker.mdc`
+- global security, logging, audit, and trust-boundary rules → `core.mdc`
+- backend business logic and OS abstraction boundaries → `backend.mdc`
+
+This file governs **installer-specific host bootstrap and maintenance behavior**.

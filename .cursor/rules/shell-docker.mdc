@@ -17,6 +17,7 @@ Apply when touching shell scripts, subprocess code, Dockerfiles, entrypoints, Co
 
 This file governs **system-layer execution safety**, **subprocess correctness**, **container hardening**, and **deployment hygiene**.  
 Backend business logic, OS abstraction boundaries, and audit/logging rules live in `backend.mdc` and `core.mdc`.
+Installer-specific host bootstrap, Python resolution, `.env` mutation, demo install behavior, and idempotent native install rules live in `installer.mdc`.
 
 ---
 
@@ -152,6 +153,7 @@ The following belong to other rule files and must **not** be redefined here:
 - global security/logging/audit rules → `core.mdc`  
 - schema and migration rules → `migrations.mdc`  
 - frontend rules → `frontend.mdc`  
+- installer-specific native install and demo bootstrap rules → `installer.mdc`  
 
 This file governs **only** shell, subprocess, Docker, Compose, and environment-handling safety.
 

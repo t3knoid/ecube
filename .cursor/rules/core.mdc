@@ -206,5 +206,6 @@ Additional scoped rules live beside this file:
 
 - `backend.mdc` — Python backend, API, services, models, repositories, infrastructure, backend tests  
 - `frontend.mdc` — Vue, templates, CSS, frontend tests  
+- `installer.mdc` — native installer scripts, `.env` mutation, Python resolution, demo bootstrap, and host-install idempotency  
 - `shell-docker.mdc` — shell scripts, subprocess code, Dockerfiles, entrypoints, Compose  
 - `migrations.mdc` — Alembic migrations and schema history  

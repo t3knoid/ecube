@@ -100,6 +100,8 @@ Use `require_roles(*roles)` for every endpoint.
 - All USB device identities must be composite (VID/PID/serial/port‑path/fs‑UUID).
 - All endpoints must enforce role checks using `require_roles`.
 - No endpoint may return internal OS details, raw exceptions, or sensitive metadata.
+- Installer and host-bootstrap helpers must not assume `PYTHON_BIN` was already resolved; any Python-backed helper that can run before the main interpreter setup path must resolve a compatible interpreter locally or fail with an explicit remediation path.
+- Installer `.env` mutations must preserve unrelated keys, remain idempotent on re-run, and honor explicitly supplied local paths such as test-provided `LOG_FILE` or install-root-local environment files instead of hardcoding privileged host paths.
 
 ## 4. Logging Rules (General Logging)
 
