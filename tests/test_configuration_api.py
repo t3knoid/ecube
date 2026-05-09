@@ -950,6 +950,36 @@ class TestConfigurationEndpoints:
         assert payload["code"] == "HTTP_500"
 
     @patch("app.routers.configuration.configuration_service.request_service_restart")
+    def test_restart_400_does_not_leak_internal_error(
+        self,
+        mock_restart,
+        admin_client,
+    ):
+        mock_restart.side_effect = ValueError("invalid restart detail /tmp/secret")
+
+        resp = admin_client.post("/admin/configuration/restart", json={"confirm": True})
+
+        assert resp.status_code == 400
+        payload = resp.json()
+        assert payload["message"] == "Configuration restart request is invalid"
+        assert payload["code"] == "HTTP_400"
+
+    @patch("app.routers.configuration.configuration_service.request_service_restart")
+    def test_restart_503_does_not_leak_internal_error(
+        self,
+        mock_restart,
+        admin_client,
+    ):
+        mock_restart.side_effect = RuntimeError("systemctl failure at /run/systemd/private")
+
+        resp = admin_client.post("/admin/configuration/restart", json={"confirm": True})
+
+        assert resp.status_code == 503
+        payload = resp.json()
+        assert payload["message"] == "Configuration restart is unavailable"
+        assert payload["code"] == "HTTP_503"
+
+    @patch("app.routers.configuration.configuration_service.request_service_restart")
     def test_restart_generic_500_does_not_leak_internal_error(
         self,
         mock_restart,

@@ -383,9 +383,15 @@ def restart_application_service(
     try:
         result = configuration_service.request_service_restart(confirm=body.confirm)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_safe_configuration_reason(exc, "Configuration restart request is invalid"),
+        )
     except RuntimeError as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_safe_configuration_reason(exc, "Configuration restart is unavailable"),
+        )
     except Exception:
         logger.exception(
             "CONFIGURATION_RESTART_UNHANDLED actor=%s",
