@@ -480,6 +480,7 @@ def run_discovery_sync(
             if drive.current_state == DriveState.IN_USE:
                 continue
 
+            previous_state = drive.current_state
             was_available = drive.current_state == DriveState.AVAILABLE
             had_stale_presence = drive.filesystem_path is not None or drive.mount_path is not None
             had_stale_port_binding = drive.port_id is not None
@@ -499,15 +500,17 @@ def run_discovery_sync(
                     )
                     continue
                 db.refresh(drive)
+                if previous_state != drive.current_state:
+                    state_change_metadata = {
+                        **_build_persisted_drive_metadata(drive),
+                        "previous_state": previous_state.value,
+                        "current_state": drive.current_state.value,
+                    }
+                    drive_state_changes.append(state_change_metadata)
                 if was_available:
                     drives_removed.append(drive.device_identifier)
                     removed_metadata = _build_persisted_drive_metadata(drive)
                     removed_drive_metadata.append(removed_metadata)
-                    drive_state_changes.append({
-                        **removed_metadata,
-                        "previous_state": DriveState.AVAILABLE.value,
-                        "current_state": drive.current_state.value,
-                    })
                     logger.info(
                         "USB discovery removed drive",
                         extra=_operation_extra(
@@ -545,15 +548,16 @@ def run_discovery_sync(
         "removed_drives": removed_drive_metadata,
     }
 
-    try:
-        audit_repo.add(
-            action="USB_DISCOVERY_SYNC",
-            user=actor,
-            details=_details_with_operation_id(summary, operation_id),
-            client_ip=client_ip,
-        )
-    except Exception:
-        logger.exception("Failed to write audit log for USB_DISCOVERY_SYNC")
+    if drive_state_changes:
+        try:
+            audit_repo.add(
+                action="USB_DISCOVERY_SYNC",
+                user=actor,
+                details=_details_with_operation_id(summary, operation_id),
+                client_ip=client_ip,
+            )
+        except Exception:
+            logger.exception("Failed to write audit log for USB_DISCOVERY_SYNC")
 
     completion_metadata = {
         "actor": actor or "system",
