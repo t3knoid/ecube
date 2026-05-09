@@ -25,6 +25,10 @@ class TestConfigurationSchemaValidation:
         req = ConfigurationUpdateRequest(copy_job_timeout=120)
         assert req.copy_job_timeout == 120
 
+    def test_update_accepts_usb_discovery_interval(self):
+        req = ConfigurationUpdateRequest(usb_discovery_interval=0)
+        assert req.usb_discovery_interval == 0
+
     def test_update_accepts_startup_analysis_batch_size(self):
         req = ConfigurationUpdateRequest(startup_analysis_batch_size=250)
         assert req.startup_analysis_batch_size == 250
@@ -137,6 +141,7 @@ class TestConfigurationEndpoints:
         "network_mount_timeout_seconds",
         "mount_share_discovery_timeout_seconds",
         "copy_job_timeout",
+        "usb_discovery_interval",
         "job_detail_files_page_size",
     }
 
@@ -467,6 +472,29 @@ class TestConfigurationEndpoints:
             assert written.get("MOUNT_SHARE_DISCOVERY_TIMEOUT_SECONDS") == "75"
         finally:
             settings.mount_share_discovery_timeout_seconds = original_value
+
+    @patch("app.services.configuration_service.database_service._write_env_settings")
+    def test_update_configuration_persists_usb_discovery_interval(
+        self,
+        mock_write_env,
+        admin_client,
+    ):
+        original_value = settings.usb_discovery_interval
+        try:
+            resp = admin_client.put(
+                "/configuration",
+                json={"usb_discovery_interval": 0},
+            )
+            assert resp.status_code == 200, resp.json()
+
+            payload = resp.json()
+            assert "usb_discovery_interval" in payload["changed_settings"]
+            assert payload["restart_required"] is False
+
+            written = mock_write_env.call_args.args[0]
+            assert written.get("USB_DISCOVERY_INTERVAL") == "0"
+        finally:
+            settings.usb_discovery_interval = original_value
 
     @patch("app.services.configuration_service.database_service._write_env_settings")
     def test_update_configuration_persists_callback_default_url(

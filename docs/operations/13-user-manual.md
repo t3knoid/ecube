@@ -1083,24 +1083,26 @@ What this page is for:
 
 - Adjusting troubleshooting log verbosity with `Log Level`
 - Tuning drive formatting and mounting defaults used in day-to-day media handling
+- Controlling background USB discovery polling without host-level edits
 - Tuning network mount and share-discovery timeout behavior for slow file servers
 - Adjusting copy timeout and Job Detail file-page defaults used by operators
 
 Basic workflow:
 
 1. Open `Configuration` from the navigation area.
-2. Review the current values in `Troubleshooting`, `Drive Operations`, `Network Mount Operations`, and `Copy and Job Workflow`.
+2. Review the current values in `Troubleshooting`, `Drive Operations`, `Background Operations`, `Network Mount Operations`, and `Copy and Job Workflow`.
 3. Edit one or more fields.
 4. Click `Save`.
 
 Important operational notes:
 
-- The `Configuration` page contains only operational settings: `log_level`, `mkfs_exfat_cluster_size`, `drive_format_timeout_seconds`, `drive_mount_timeout_seconds`, `network_mount_timeout_seconds`, `mount_share_discovery_timeout_seconds`, `copy_job_timeout`, and `job_detail_files_page_size`.
+- The `Configuration` page contains only operational settings: `log_level`, `mkfs_exfat_cluster_size`, `drive_format_timeout_seconds`, `drive_mount_timeout_seconds`, `usb_discovery_interval`, `network_mount_timeout_seconds`, `mount_share_discovery_timeout_seconds`, `copy_job_timeout`, and `job_detail_files_page_size`.
 - The `Configuration` page also shows the current effective log file name as a read-only value so managers can verify the target log file without exposing host path details.
 - Managers cannot view or trigger password policy, webhook secret, logging infrastructure, database runtime, or service restart controls from this page.
 - `exFAT Cluster Size` controls the allocation unit ECUBE uses when formatting drives as exFAT. `4K` is recommended for most situations. Use larger values only for drives that will store very large files only and no small files.
 - `Drive Format Timeout (seconds)` controls how long ECUBE allows a drive format command to run before treating it as failed. Increase it for large removable media that legitimately need extended exFAT formatting time.
 - `Drive Mount Timeout (seconds)` controls how long ECUBE allows a drive mount command to run before treating it as failed. Increase it for large removable media or slower USB links that need extra time to mount.
+- `Auto USB Discovery Interval (seconds)` controls how often ECUBE polls for USB topology and drive-state changes in the background. Set it to `0` to pause automatic polling, or set a positive value to resume periodic discovery without restarting the service.
 - `Network Mount Timeout (seconds)` controls how long ECUBE allows SMB and NFS mount workflows to run before treating them as failed. The same setting also governs related unmount and mount-state verification checks, so increase it when slow servers, DNS resolution, or authentication handshakes make network shares slow to validate or reconnect.
 - `Mount Share Discovery Timeout (seconds)` controls how long ECUBE allows SMB share browsing and NFS export discovery to run before treating them as failed. Increase it when the Add Mount `Browse` dialog times out against slow servers or high-latency networks.
 - Drive formatting now keeps the browser request open without the prior UI-side 30-second timeout. If a format still fails, operators should review the server log for `Drive format timed out` or `Drive format command failed` and adjust the Configuration values rather than treating the failure as a browser connectivity problem.

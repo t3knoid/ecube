@@ -184,7 +184,8 @@ def run_discovery_sync(
     """
     operation_id = operation_id or str(uuid.uuid4())
 
-    logger.info("USB discovery sync started", extra=_operation_extra(operation_id, actor=actor or "system"))
+    logger.debug("USB discovery sync started", extra=_operation_extra(operation_id, actor=actor or "system"))
+
     topology = topology_source()
 
     hub_repo = HubRepository(db)
@@ -240,6 +241,7 @@ def run_discovery_sync(
     drives_inserted: List[str] = []
     drives_updated: List[str] = []
     drives_removed: List[str] = []
+    drive_state_changes: List[dict] = []
     observed_drive_metadata: List[dict] = []
     removed_drive_metadata: List[dict] = []
 
@@ -335,6 +337,11 @@ def run_discovery_sync(
             drives_inserted.append(discovered_drive.device_identifier)
             metadata = _build_discovered_drive_metadata(discovered_drive, discovered_port, drive_id=drive.id)
             observed_drive_metadata.append({"action": "inserted", **metadata})
+            drive_state_changes.append({
+                **metadata,
+                "previous_state": None,
+                "current_state": drive.current_state.value,
+            })
             logger.info("USB discovery inserted drive", extra=_operation_extra(operation_id, **metadata))
             try:
                 audit_repo.add(
@@ -353,6 +360,7 @@ def run_discovery_sync(
         else:
             # Existing drive — update mutable fields.
             changed = False
+            previous_state = existing.current_state
             if existing.device_identifier != discovered_drive.device_identifier:
                 existing.device_identifier = discovered_drive.device_identifier
                 changed = True
@@ -441,7 +449,21 @@ def run_discovery_sync(
                 drives_updated.append(discovered_drive.device_identifier)
                 metadata = _build_persisted_drive_metadata(existing)
                 observed_drive_metadata.append({"action": "updated", **metadata})
-                logger.info("USB discovery updated drive", extra=_operation_extra(operation_id, **metadata))
+                if previous_state != existing.current_state:
+                    drive_state_changes.append({
+                        **metadata,
+                        "previous_state": previous_state.value,
+                        "current_state": existing.current_state.value,
+                    })
+                    logger.info(
+                        "USB discovery updated drive state",
+                        extra=_operation_extra(
+                            operation_id,
+                            previous_state=previous_state.value,
+                            current_state=existing.current_state.value,
+                            **metadata,
+                        ),
+                    )
             else:
                 observed_drive_metadata.append({
                     "action": "observed",
@@ -481,7 +503,20 @@ def run_discovery_sync(
                     drives_removed.append(drive.device_identifier)
                     removed_metadata = _build_persisted_drive_metadata(drive)
                     removed_drive_metadata.append(removed_metadata)
-                    logger.info("USB discovery removed drive", extra=_operation_extra(operation_id, **removed_metadata))
+                    drive_state_changes.append({
+                        **removed_metadata,
+                        "previous_state": DriveState.AVAILABLE.value,
+                        "current_state": drive.current_state.value,
+                    })
+                    logger.info(
+                        "USB discovery removed drive",
+                        extra=_operation_extra(
+                            operation_id,
+                            previous_state=DriveState.AVAILABLE.value,
+                            current_state=drive.current_state.value,
+                            **removed_metadata,
+                        ),
+                    )
                     try:
                         audit_repo.add(
                             action="DRIVE_REMOVED",
@@ -505,6 +540,7 @@ def run_discovery_sync(
         "drives_inserted": len(drives_inserted),
         "drives_updated": len(drives_updated),
         "drives_removed": len(drives_removed),
+        "drive_state_changes": drive_state_changes,
         "observed_drives": observed_drive_metadata,
         "removed_drives": removed_drive_metadata,
     }
@@ -519,16 +555,25 @@ def run_discovery_sync(
     except Exception:
         logger.exception("Failed to write audit log for USB_DISCOVERY_SYNC")
 
-    logger.info(
-        "USB discovery sync completed",
-        extra=_operation_extra(operation_id, **{
-            "actor": actor or "system",
-            "hubs_upserted": summary["hubs_upserted"],
-            "ports_upserted": summary["ports_upserted"],
-            "drives_inserted": summary["drives_inserted"],
-            "drives_updated": summary["drives_updated"],
-            "drives_removed": summary["drives_removed"],
-        }),
-    )
+    completion_metadata = {
+        "actor": actor or "system",
+        "hubs_upserted": summary["hubs_upserted"],
+        "ports_upserted": summary["ports_upserted"],
+        "drives_inserted": summary["drives_inserted"],
+        "drives_updated": summary["drives_updated"],
+        "drives_removed": summary["drives_removed"],
+        "drive_state_change_count": len(drive_state_changes),
+    }
+
+    if drive_state_changes:
+        logger.info(
+            "USB discovery sync completed",
+            extra=_operation_extra(operation_id, **completion_metadata),
+        )
+    else:
+        logger.debug(
+            "USB discovery sync completed",
+            extra=_operation_extra(operation_id, **completion_metadata),
+        )
 
     return summary

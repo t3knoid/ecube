@@ -58,6 +58,7 @@ const managerFieldOrder = [
   'network_mount_timeout_seconds',
   'mount_share_discovery_timeout_seconds',
   'copy_job_timeout',
+  'usb_discovery_interval',
   'job_detail_files_page_size',
 ]
 
@@ -106,6 +107,7 @@ const form = ref({
   network_mount_timeout_seconds: 120,
   mount_share_discovery_timeout_seconds: 60,
   copy_job_timeout: 3600,
+  usb_discovery_interval: 30,
   job_detail_files_page_size: 40,
   callback_default_url: '',
   callback_proxy_url: '',
@@ -529,6 +531,19 @@ onMounted(loadConfiguration)
             min="1"
           />
           <p class="field-help">{{ t('configuration.fields.drive_mount_timeout_seconds.help') }}</p>
+        </article>
+
+        <article class="panel">
+          <h2>{{ t('configuration.sections.backgroundOperations') }}</h2>
+
+          <label for="cfg-usb-discovery-interval">{{ t('configuration.fields.usb_discovery_interval.label') }}</label>
+          <input
+            id="cfg-usb-discovery-interval"
+            v-model.number="form.usb_discovery_interval"
+            type="number"
+            min="0"
+          />
+          <p class="field-help">{{ t('configuration.fields.usb_discovery_interval.help') }}</p>
         </article>
 
         <article class="panel">
