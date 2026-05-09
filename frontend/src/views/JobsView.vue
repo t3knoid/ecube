@@ -6,7 +6,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { hasArchivedJobs, listJobs, createJob, startJob, pauseJob } from '@/api/jobs.js'
 import { getDrives } from '@/api/drives.js'
 import { getMounts } from '@/api/mounts.js'
-import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
+import JobEditorDialogContent from '@/components/jobs/JobEditorDialogContent.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
@@ -820,124 +820,63 @@ onBeforeUnmount(() => {
 
     <teleport to="body">
       <div v-if="showCreateDialog" class="dialog-overlay" @click.self="closeCreateDialog">
-        <div ref="createDialogRef" class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="job-create-title">
-          <div class="dialog-header job-create-summary">
-            <h2 id="job-create-title">{{ t('jobs.createDialog') }}</h2>
-            <p class="muted">{{ t('jobs.dialogDescription') }}</p>
-            <p v-if="createDialogError" class="error-banner dialog-error-banner" role="alert" aria-live="assertive">{{ createDialogError }}</p>
-            <p v-if="!availableProjects.length" class="muted">{{ t('jobs.noProjectsAvailable') }}</p>
-            <p v-else-if="projectSelected && !eligibleMounts.length" class="muted">{{ t('jobs.noEligibleMounts') }}</p>
-            <p v-else-if="projectSelected && !primaryEligibleDrives.length" class="muted">{{ t('jobs.noEligibleDrives') }}</p>
-          </div>
-
-          <div class="dialog-body job-create-scroll-region">
-            <div class="dialog-groups">
-              <fieldset class="dialog-group">
-                <legend>{{ t('jobs.jobDetailsGroup') }}</legend>
-
-                <label for="job-project">{{ t('dashboard.project') }}</label>
-                <select id="job-project" v-model="form.project_id">
-                  <option value="">{{ t('jobs.chooseProject') }}</option>
-                  <option v-for="project in availableProjects" :key="project" :value="project">{{ project }}</option>
-                </select>
-
-                <label for="job-evidence">{{ t('jobs.evidence') }}</label>
-                <input id="job-evidence" v-model="form.evidence_number" type="text" :disabled="!projectSelected" />
-
-                <label for="job-notes">{{ t('jobs.additionalNotes') }}</label>
-                <textarea id="job-notes" v-model="form.notes" rows="3" :disabled="!projectSelected" :placeholder="t('jobs.notesHint')"></textarea>
-
-                <label for="job-callback-url">{{ t('jobs.callbackUrl') }}</label>
-                <input
-                  id="job-callback-url"
-                  v-model="form.callback_url"
-                  type="url"
-                  :disabled="!projectSelected"
-                  :placeholder="t('jobs.callbackUrlHint')"
-                />
-                <p class="muted field-hint">{{ t('jobs.callbackUrlHelp') }}</p>
-
-                <label for="job-thread-count">{{ t('jobs.threadCount') }}</label>
-                <input id="job-thread-count" v-model.number="form.thread_count" type="number" min="1" max="8" :disabled="!projectSelected" />
-              </fieldset>
-
-              <fieldset class="dialog-group">
-                <legend>{{ t('jobs.sourceGroup') }}</legend>
-
-                <label for="job-mount">{{ t('jobs.selectMount') }}</label>
-                <select id="job-mount" v-model="form.mount_id" :disabled="!projectSelected">
-                  <option :value="null">{{ t('jobs.chooseMount') }}</option>
-                  <option v-for="mount in eligibleMounts" :key="mount.id" :value="mount.id">
-                    {{ formatMountLabel(mount) }}
-                  </option>
-                </select>
-
-                <label for="job-source-path">{{ t('jobs.sourcePath') }}</label>
-                <input id="job-source-path" v-model="form.source_path" type="text" :disabled="!projectSelected" :placeholder="t('jobs.sourcePathHint')" />
-                <div class="source-browser-actions">
-                  <button
-                    id="job-source-browse-toggle"
-                    type="button"
-                    class="btn"
-                    :disabled="!canBrowseSelectedMount"
-                    @click="toggleSourceBrowser"
-                  >
-                    {{ showSourceBrowser ? t('common.actions.close') : t('jobs.browseSourcePath') }}
-                  </button>
-                </div>
-
-                <div v-if="showSourceBrowser && selectedMountRecord" class="source-browser-content">
-                  <DirectoryBrowser
-                    v-model:current-directory="form.source_path"
-                    :mount-id="Number(selectedMountRecord.id)"
-                    root-label=""
-                    :directories-only="true"
-                    :show-breadcrumb="false"
-                    :show-parent-entry="true"
-                  />
-                </div>
-              </fieldset>
-
-              <fieldset class="dialog-group">
-                <legend>{{ t('jobs.destinationGroup') }}</legend>
-
-                <label for="job-drive">{{ t('jobs.selectDrive') }}</label>
-                <select id="job-drive" v-model="form.drive_id" :disabled="!projectSelected">
-                  <option :value="null">{{ t('jobs.chooseDrive') }}</option>
-                  <option v-for="drive in primaryEligibleDrives" :key="drive.id" :value="drive.id">
-                    {{ formatDriveLabel(drive) }}
-                  </option>
-                </select>
-
-                <div class="overflow-panel">
-                  <p class="overflow-panel-title">{{ t('jobs.overflowPanelTitle') }}</p>
-                  <p class="muted field-hint">{{ t('jobs.overflowPanelHelp') }}</p>
-                  <p v-if="projectSelected && !overflowEligibleDrives.length" class="muted">{{ t('jobs.noEligibleOverflowDrives') }}</p>
-                  <div v-else class="overflow-drive-list">
-                    <label v-for="drive in overflowEligibleDrives" :key="drive.id" class="checkbox-row overflow-drive-option">
-                      <input v-model="form.overflow_drive_ids" type="checkbox" :value="drive.id" :disabled="!projectSelected" />
-                      <span>{{ formatDriveLabel(drive) }}</span>
-                    </label>
-                  </div>
-                </div>
-              </fieldset>
-
-              <fieldset class="dialog-group">
-                <legend>{{ t('jobs.executionGroup') }}</legend>
-                <label class="checkbox-row" for="job-run-immediately">
-                  <input id="job-run-immediately" v-model="form.run_immediately" type="checkbox" :disabled="!projectSelected" />
-                  <span>{{ t('jobs.runImmediately') }}</span>
-                </label>
-              </fieldset>
-            </div>
-          </div>
-
-          <div class="dialog-actions dialog-footer">
-            <button class="btn" @click="closeCreateDialog">{{ t('common.actions.cancel') }}</button>
-            <button id="job-submit" class="btn btn-primary" :disabled="saving || !formReady()" @click="submitCreateJob">
-              {{ saving ? t('common.labels.loading') : t('jobs.create') }}
-            </button>
-          </div>
+        <div ref="createDialogRef" class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="job-editor-title">
+          <JobEditorDialogContent
+            :title="t('jobs.createDialog')"
+            :description="t('jobs.dialogDescription')"
+            :error-message="createDialogError"
+            :no-projects-message="!availableProjects.length ? t('jobs.noProjectsAvailable') : ''"
+            :no-eligible-mounts-message="projectSelected && !eligibleMounts.length ? t('jobs.noEligibleMounts') : ''"
+            :no-eligible-drives-message="projectSelected && !primaryEligibleDrives.length ? t('jobs.noEligibleDrives') : ''"
+            :project-selected="projectSelected"
+            :project-editable="true"
+            :show-notes-field="true"
+            :show-overflow-panel="true"
+            :show-execution-group="true"
+            :show-source-browser-toggle="true"
+            :show-source-browser="showSourceBrowser"
+            :can-browse-selected-mount="canBrowseSelectedMount"
+            :selected-mount-record="selectedMountRecord"
+            :available-projects="availableProjects"
+            :eligible-mounts="eligibleMounts"
+            :primary-eligible-drives="primaryEligibleDrives"
+            :overflow-eligible-drives="overflowEligibleDrives"
+            :form="form"
+            :saving="saving"
+            :can-submit="formReady()"
+            :submit-label="t('jobs.create')"
+            :loading-label="t('common.labels.loading')"
+            :cancel-label="t('common.actions.cancel')"
+            :close-label="t('common.actions.close')"
+            :browse-label="t('jobs.browseSourcePath')"
+            :project-label="t('dashboard.project')"
+            :choose-project-label="t('jobs.chooseProject')"
+            :evidence-label="t('jobs.evidence')"
+            :notes-label="t('jobs.additionalNotes')"
+            :notes-hint="t('jobs.notesHint')"
+            :callback-url-label="t('jobs.callbackUrl')"
+            :callback-url-hint="t('jobs.callbackUrlHint')"
+            :thread-count-label="t('jobs.threadCount')"
+            :job-details-group-label="t('jobs.jobDetailsGroup')"
+            :source-group-label="t('jobs.sourceGroup')"
+            :select-mount-label="t('jobs.selectMount')"
+            :choose-mount-label="t('jobs.chooseMount')"
+            :source-path-label="t('jobs.sourcePath')"
+            :source-path-hint="t('jobs.sourcePathHint')"
+            :destination-group-label="t('jobs.destinationGroup')"
+            :select-drive-label="t('jobs.selectDrive')"
+            :choose-drive-label="t('jobs.chooseDrive')"
+            :overflow-panel-title="t('jobs.overflowPanelTitle')"
+            :overflow-panel-help="t('jobs.overflowPanelHelp')"
+            :no-eligible-overflow-drives-label="t('jobs.noEligibleOverflowDrives')"
+            :execution-group-label="t('jobs.executionGroup')"
+            :run-immediately-label="t('jobs.runImmediately')"
+            :format-mount-label="formatMountLabel"
+            :format-drive-label="formatDriveLabel"
+            @close="closeCreateDialog"
+            @submit="submitCreateJob"
+            @toggle-source-browser="toggleSourceBrowser"
+          />
         </div>
       </div>
     </teleport>

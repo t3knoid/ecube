@@ -9,6 +9,7 @@ import { getDrives } from '@/api/drives.js'
 import { getMounts } from '@/api/mounts.js'
 import { usePolling } from '@/composables/usePolling.js'
 import CocReport from '@/components/audit/CocReport.vue'
+import JobEditorDialogContent from '@/components/jobs/JobEditorDialogContent.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
@@ -25,6 +26,7 @@ const router = useRouter()
 const { t } = useI18n()
 const authStore = useAuthStore()
 const COC_PRINT_BODY_CLASS = 'printing-coc-report'
+const THREAD_COUNT_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8]
 
 const jobId = computed(() => {
   const parsed = Number(route.params.id)
@@ -55,6 +57,7 @@ const supportingDrives = ref([])
 const supportingMounts = ref([])
 const filesPanelExpanded = ref(false)
 const showEditDialog = ref(false)
+const showEditSourceBrowser = ref(false)
 const showDeleteDialog = ref(false)
 const showArchiveDialog = ref(false)
 const showStartupAnalysisCleanupDialog = ref(false)
@@ -82,6 +85,7 @@ const selectedErrorFile = ref(null)
 const editForm = ref({
   project_id: '',
   evidence_number: '',
+  notes: '',
   mount_id: null,
   source_path: '/',
   drive_id: null,
@@ -540,6 +544,12 @@ const editEligibleDrives = computed(() => {
       && (!boundProject || boundProject === projectId)
   })
 })
+
+const editSelectedMountRecord = computed(() => (
+  editEligibleMounts.value.find((mount) => Number(mount.id) === Number(editForm.value.mount_id)) || null
+))
+
+const canBrowseEditMount = computed(() => Number.isInteger(Number(editSelectedMountRecord.value?.id || NaN)))
 
 function calculateDurationSeconds(currentJob) {
   if (!currentJob) return null
@@ -1015,7 +1025,13 @@ function trapFocusWithin(event, container) {
 }
 
 function closeEditDialog() {
+  showEditSourceBrowser.value = false
   showEditDialog.value = false
+}
+
+function toggleEditSourceBrowser() {
+  if (!canBrowseEditMount.value) return
+  showEditSourceBrowser.value = !showEditSourceBrowser.value
 }
 
 function closeOverflowDialog() {
@@ -1167,12 +1183,14 @@ async function openEditDialog() {
   editForm.value = {
     project_id: normalizeProjectId(job.value.project_id) || '',
     evidence_number: String(job.value.evidence_number || ''),
+    notes: String(job.value.notes || ''),
     mount_id: inferredMount?.id ?? null,
     source_path: buildEditSourcePath(job.value, inferredMount),
     drive_id: job.value.drive?.id ?? null,
     thread_count: Number(job.value.thread_count || 4),
     callback_url: String(job.value.callback_url || ''),
   }
+  showEditSourceBrowser.value = false
   showEditDialog.value = true
 }
 
@@ -1223,6 +1241,7 @@ async function submitEditJob() {
     const updated = await updateJob(job.value.id, {
       project_id: normalizeProjectId(editForm.value.project_id),
       evidence_number: String(editForm.value.evidence_number || '').trim(),
+      notes: String(editForm.value.notes || '').trim() || null,
       mount_id: Number(editForm.value.mount_id),
       source_path: String(editForm.value.source_path || '').trim(),
       drive_id: Number(editForm.value.drive_id),
@@ -2004,7 +2023,9 @@ onUnmounted(() => {
               </select>
 
               <label for="job-overflow-thread-count">{{ t('jobs.threadCount') }}</label>
-              <input id="job-overflow-thread-count" v-model.number="overflowForm.thread_count" type="number" min="1" max="8" />
+              <select id="job-overflow-thread-count" v-model.number="overflowForm.thread_count">
+                <option v-for="count in THREAD_COUNT_OPTIONS" :key="count" :value="count">{{ count }}</option>
+              </select>
             </fieldset>
           </div>
 
@@ -2020,67 +2041,59 @@ onUnmounted(() => {
 
     <teleport to="body">
       <div v-if="showEditDialog" class="dialog-overlay" @click.self="closeEditDialog">
-        <div ref="editDialogRef" class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="job-edit-title">
-          <h2 id="job-edit-title">{{ t('jobs.editDialog') }}</h2>
-          <p class="muted">{{ t('jobs.editDialogDescription') }}</p>
-
-          <div class="dialog-groups">
-            <fieldset class="dialog-group">
-              <legend>{{ t('jobs.jobDetailsGroup') }}</legend>
-
-              <label for="job-project">{{ t('dashboard.project') }}</label>
-              <input id="job-project" :value="editForm.project_id" type="text" disabled />
-
-              <label for="job-evidence">{{ t('jobs.evidence') }}</label>
-              <input id="job-evidence" v-model="editForm.evidence_number" type="text" />
-
-              <label for="job-thread-count">{{ t('jobs.threadCount') }}</label>
-              <input id="job-thread-count" v-model.number="editForm.thread_count" type="number" min="1" max="8" />
-
-              <label for="job-callback-url">{{ t('jobs.callbackUrl') }}</label>
-              <input
-                id="job-callback-url"
-                v-model="editForm.callback_url"
-                type="url"
-                :placeholder="t('jobs.callbackUrlHint')"
-              />
-              <p class="muted field-hint">{{ t('jobs.callbackUrlHelp') }}</p>
-            </fieldset>
-
-            <fieldset class="dialog-group">
-              <legend>{{ t('jobs.sourceGroup') }}</legend>
-
-              <label for="job-mount">{{ t('jobs.selectMount') }}</label>
-              <select id="job-mount" v-model="editForm.mount_id">
-                <option :value="null">{{ t('jobs.chooseMount') }}</option>
-                <option v-for="mount in editEligibleMounts" :key="mount.id" :value="mount.id">
-                  {{ formatMountLabel(mount) }}
-                </option>
-              </select>
-
-              <label for="job-source-path">{{ t('jobs.sourcePath') }}</label>
-              <input id="job-source-path" v-model="editForm.source_path" type="text" :placeholder="t('jobs.sourcePathHint')" />
-            </fieldset>
-
-            <fieldset class="dialog-group">
-              <legend>{{ t('jobs.destinationGroup') }}</legend>
-
-              <label for="job-drive">{{ t('jobs.selectDrive') }}</label>
-              <select id="job-drive" v-model="editForm.drive_id">
-                <option :value="null">{{ t('jobs.chooseDrive') }}</option>
-                <option v-for="drive in editEligibleDrives" :key="drive.id" :value="drive.id">
-                  {{ formatDriveLabel(drive) }}
-                </option>
-              </select>
-            </fieldset>
-          </div>
-
-          <div class="dialog-actions">
-            <button class="btn" :disabled="acting" @click="closeEditDialog">{{ t('common.actions.cancel') }}</button>
-            <button id="job-submit" class="btn btn-primary" :disabled="acting || !editFormReady()" @click="submitEditJob">
-              {{ acting ? t('common.labels.loading') : t('jobs.saveChanges') }}
-            </button>
-          </div>
+        <div ref="editDialogRef" class="dialog-panel job-editor-dialog-panel" role="dialog" aria-modal="true" aria-labelledby="job-editor-title">
+          <JobEditorDialogContent
+            :title="t('jobs.editDialog')"
+            :description="t('jobs.editDialogDescription')"
+            :project-selected="true"
+            :project-editable="false"
+            :show-notes-field="true"
+            :show-overflow-panel="false"
+            :show-execution-group="false"
+            :show-source-browser-toggle="true"
+            :show-source-browser="showEditSourceBrowser"
+            :can-browse-selected-mount="canBrowseEditMount"
+            :selected-mount-record="editSelectedMountRecord"
+            :available-projects="[]"
+            :eligible-mounts="editEligibleMounts"
+            :primary-eligible-drives="editEligibleDrives"
+            :overflow-eligible-drives="[]"
+            :form="editForm"
+            :saving="acting"
+            :can-submit="editFormReady()"
+            :submit-label="t('jobs.saveChanges')"
+            :loading-label="t('common.labels.loading')"
+            :cancel-label="t('common.actions.cancel')"
+            :close-label="t('common.actions.close')"
+            :browse-label="t('jobs.browseSourcePath')"
+            :project-label="t('dashboard.project')"
+            :choose-project-label="t('jobs.chooseProject')"
+            :evidence-label="t('jobs.evidence')"
+            :notes-label="t('jobs.additionalNotes')"
+            :notes-hint="t('jobs.notesHint')"
+            :callback-url-label="t('jobs.callbackUrl')"
+            :callback-url-hint="t('jobs.callbackUrlHint')"
+            :thread-count-label="t('jobs.threadCount')"
+            :job-details-group-label="t('jobs.jobDetailsGroup')"
+            :source-group-label="t('jobs.sourceGroup')"
+            :select-mount-label="t('jobs.selectMount')"
+            :choose-mount-label="t('jobs.chooseMount')"
+            :source-path-label="t('jobs.sourcePath')"
+            :source-path-hint="t('jobs.sourcePathHint')"
+            :destination-group-label="t('jobs.destinationGroup')"
+            :select-drive-label="t('jobs.selectDrive')"
+            :choose-drive-label="t('jobs.chooseDrive')"
+            :overflow-panel-title="t('jobs.overflowPanelTitle')"
+            :overflow-panel-help="t('jobs.overflowPanelHelp')"
+            :no-eligible-overflow-drives-label="t('jobs.noEligibleOverflowDrives')"
+            :execution-group-label="t('jobs.executionGroup')"
+            :run-immediately-label="t('jobs.runImmediately')"
+            :format-mount-label="formatMountLabel"
+            :format-drive-label="formatDriveLabel"
+            @close="closeEditDialog"
+            @submit="submitEditJob"
+            @toggle-source-browser="toggleEditSourceBrowser"
+          />
         </div>
       </div>
     </teleport>
@@ -2352,6 +2365,11 @@ onUnmounted(() => {
   padding: var(--space-lg);
   display: grid;
   gap: var(--space-md);
+}
+
+.job-editor-dialog-panel {
+  overflow: hidden;
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .dialog-groups {

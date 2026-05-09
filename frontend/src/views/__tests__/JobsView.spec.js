@@ -409,9 +409,13 @@ describe('JobsView grouped create dialog', () => {
 
     await wrapper.find('#job-project').setValue('PROJ-001')
     await flushPromises()
+    expect(wrapper.find('#job-source-path').attributes('readonly')).toBeDefined()
     await wrapper.find('#job-evidence').setValue('EVID-77')
     await wrapper.find('#job-mount').setValue('11')
-    await wrapper.find('#job-source-path').setValue('folder/subfolder')
+    await wrapper.find('#job-source-browse-toggle').trigger('click')
+    await flushPromises()
+    await wrapper.find('.directory-browser-path-btn').trigger('click')
+    await flushPromises()
     await wrapper.find('#job-drive').setValue('1')
     await wrapper.findAll('.overflow-drive-option input')[0].setValue(true)
     await wrapper.find('#job-thread-count').setValue('3')
@@ -426,7 +430,7 @@ describe('JobsView grouped create dialog', () => {
       project_id: 'PROJ-001',
       evidence_number: 'EVID-77',
       mount_id: 11,
-      source_path: 'folder/subfolder',
+      source_path: '/folder/subfolder',
       drive_id: 1,
       overflow_drive_ids: [2],
       thread_count: 3,
@@ -449,7 +453,10 @@ describe('JobsView grouped create dialog', () => {
     await flushPromises()
     await wrapper.find('#job-evidence').setValue('EVID-80')
     await wrapper.find('#job-mount').setValue('11')
-    await wrapper.find('#job-source-path').setValue('folder')
+    await wrapper.find('#job-source-browse-toggle').trigger('click')
+    await flushPromises()
+    await wrapper.findComponent('.directory-browser-stub').vm.$emit('update:currentDirectory', 'folder')
+    await flushPromises()
     await wrapper.find('#job-drive').setValue('1')
 
     await wrapper.find('#job-submit').trigger('click')
@@ -493,7 +500,10 @@ describe('JobsView grouped create dialog', () => {
     await flushPromises()
     await wrapper.find('#job-evidence').setValue('EVID-78')
     await wrapper.find('#job-mount').setValue('11')
-    await wrapper.find('#job-source-path').setValue('/folder/subfolder')
+    await wrapper.find('#job-source-browse-toggle').trigger('click')
+    await flushPromises()
+    await wrapper.findComponent('.directory-browser-stub').vm.$emit('update:currentDirectory', '/folder/subfolder')
+    await flushPromises()
     await wrapper.find('#job-drive').setValue('1')
 
     await wrapper.find('#job-submit').trigger('click')
@@ -551,7 +561,10 @@ describe('JobsView grouped create dialog', () => {
     await flushPromises()
     await wrapper.find('#job-evidence').setValue('EVID-79')
     await wrapper.find('#job-mount').setValue('11')
-    await wrapper.find('#job-source-path').setValue('/')
+    await wrapper.find('#job-source-browse-toggle').trigger('click')
+    await flushPromises()
+    await wrapper.findComponent('.directory-browser-stub').vm.$emit('update:currentDirectory', '/')
+    await flushPromises()
     await wrapper.find('#job-drive').setValue('1')
 
     await wrapper.find('#job-submit').trigger('click')
@@ -588,7 +601,10 @@ describe('JobsView grouped create dialog', () => {
     await flushPromises()
     await wrapper.find('#job-evidence').setValue('EVID-77')
     await wrapper.find('#job-mount').setValue('11')
-    await wrapper.find('#job-source-path').setValue('folder')
+    await wrapper.find('#job-source-browse-toggle').trigger('click')
+    await flushPromises()
+    await wrapper.findComponent('.directory-browser-stub').vm.$emit('update:currentDirectory', 'folder')
+    await flushPromises()
     await wrapper.find('#job-drive').setValue('1')
 
     await wrapper.find('#job-submit').trigger('click')
@@ -622,7 +638,10 @@ describe('JobsView grouped create dialog', () => {
     await flushPromises()
     await wrapper.find('#job-evidence').setValue('EVID-OVERLAP')
     await wrapper.find('#job-mount').setValue('11')
-    await wrapper.find('#job-source-path').setValue('Evidence1')
+    await wrapper.find('#job-source-browse-toggle').trigger('click')
+    await flushPromises()
+    await wrapper.findComponent('.directory-browser-stub').vm.$emit('update:currentDirectory', 'Evidence1')
+    await flushPromises()
     await wrapper.find('#job-drive').setValue('1')
 
     await wrapper.find('#job-submit').trigger('click')
@@ -664,7 +683,10 @@ describe('JobsView grouped create dialog', () => {
     await flushPromises()
     await wrapper.find('#job-evidence').setValue('EVID-OVERLAP')
     await wrapper.find('#job-mount').setValue('11')
-    await wrapper.find('#job-source-path').setValue('Evidence1')
+    await wrapper.find('#job-source-browse-toggle').trigger('click')
+    await flushPromises()
+    await wrapper.findComponent('.directory-browser-stub').vm.$emit('update:currentDirectory', 'Evidence1')
+    await flushPromises()
     await wrapper.find('#job-drive').setValue('1')
 
     await wrapper.find('#job-submit').trigger('click')

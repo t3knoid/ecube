@@ -116,6 +116,16 @@ function mountView() {
       plugins: [i18n],
       stubs: {
         teleport: true,
+        DirectoryBrowser: {
+          props: ['mountId', 'rootLabel', 'showRootCrumbAtRoot', 'directoriesOnly', 'currentDirectory', 'showBreadcrumb', 'showParentEntry'],
+          emits: ['update:currentDirectory'],
+          template: `
+            <div class="directory-browser-stub">
+              {{ mountId }}|{{ rootLabel }}|{{ currentDirectory }}|{{ directoriesOnly }}|{{ showBreadcrumb }}|{{ showParentEntry }}
+              <button class="directory-browser-path-btn" @click="$emit('update:currentDirectory', '/folder/subfolder')">path</button>
+            </div>
+          `,
+        },
         DataTable: {
           props: ['rows', 'columns', 'rowClass'],
           template: `
@@ -2513,6 +2523,7 @@ describe('JobDetailView start action', () => {
       status: 'PENDING',
       project_id: 'PROJ-001',
       evidence_number: 'EV-006',
+      notes: 'Original note',
       source_path: '/nfs/project-001/evidence',
       target_mount_path: '/mnt/ecube/1',
       thread_count: 4,
@@ -2532,7 +2543,11 @@ describe('JobDetailView start action', () => {
     await editButton.trigger('click')
     await flushPromises()
 
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.editDialog'))
+    expect(wrapper.find('#job-source-browse-toggle').exists()).toBe(true)
+    expect(wrapper.find('#job-source-path').attributes('readonly')).toBeDefined()
     expect(wrapper.find('#job-evidence').element.value).toBe('EV-006')
+    expect(wrapper.find('#job-notes').element.value).toBe('Original note')
     expect(wrapper.find('#job-callback-url').element.value).toBe('https://example.com/current-webhook')
     const driveOptions = wrapper.find('#job-drive').findAll('option').map((node) => node.text())
     expect(wrapper.text()).toContain(i18n.global.t('jobs.selectDrive'))
@@ -2540,14 +2555,19 @@ describe('JobDetailView start action', () => {
     expect(driveOptions.join(' ')).not.toContain('#1 -')
     expect(driveOptions.join(' ')).not.toContain('USB-001')
     await wrapper.find('#job-evidence').setValue('EV-UPDATED')
+    await wrapper.find('#job-notes').setValue('Updated note')
     await wrapper.find('#job-mount').setValue('4')
     await wrapper.find('#job-drive').setValue('1')
-    await wrapper.find('#job-source-path').setValue('/updated/folder')
+    await wrapper.find('#job-source-browse-toggle').trigger('click')
+    await flushPromises()
+    await wrapper.findComponent('.directory-browser-stub').vm.$emit('update:currentDirectory', '/updated/folder')
+    await flushPromises()
     await wrapper.find('#job-submit').trigger('click')
     await flushPromises()
 
     expect(mocks.updateJob).toHaveBeenCalledWith(6, expect.objectContaining({
       evidence_number: 'EV-UPDATED',
+      notes: 'Updated note',
       source_path: '/updated/folder',
       callback_url: 'https://example.com/current-webhook',
     }))

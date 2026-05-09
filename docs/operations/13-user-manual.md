@@ -593,16 +593,16 @@ The `Job ID` value on the Jobs page acts as the direct navigation entry point in
 
 ### 9.2 Creating a Job
 
-The current job-creation flow uses a grouped dialog instead of a four-step wizard.
+The current job-creation flow uses a grouped dialog instead of a four-step wizard. The same grouped dialog shell is also reused when you edit an eligible job from Job Detail, so the overall section layout and required-field treatment stay consistent.
 
 The dialog is organized into four sections:
 
-1. `Job details` — project, evidence number, optional notes, and thread count
+1. `Job details` — project, evidence number, optional notes, webhook callback URL, and thread count
 2. `Source` — the mounted project source, a trusted source path field, and a folder browser for the selected mount
 3. `Destination` — the eligible mounted USB device for the selected project
 4. `Execution` — the optional `Run job immediately` checkbox
 
-Only the `Project` field is active when the dialog opens. After you select a project, ECUBE unlocks the remaining fields and filters the available mounts and destination drives to project-matching, currently eligible resources.
+Only the `Project` field is active when the dialog opens. After you select a project, ECUBE unlocks the remaining fields and filters the available mounts and destination drives to project-matching, currently eligible resources. Required fields use the shared required-marker icon in their labels, and the footer repeats that marker with a `Required field` legend.
 
 The destination selector is labeled `Select device` and shows the same port-based `Device` value used elsewhere in the UI, rather than a serial number or `#id` prefix.
 
@@ -622,7 +622,7 @@ Before creating a job, confirm:
 
 For `thread count`, start with the default value unless your administrator has given you a different recommendation. If you need to change it, a good rule is to choose a value no higher than the number of CPUs visible to the operating system and reduce it again if the host becomes sluggish or copy speed does not improve.
 
-The source path is interpreted inside the selected mounted share. Entering only / uses the root of that share, and attempts to navigate outside the selected share are rejected before the job is created. If you prefer not to type the path manually, use `Browse folders` in the `Source` section after selecting a mount. As you move through the mounted share, ECUBE updates the existing `Source path` field live, and the browser shows a `..` row whenever you can move back up to the parent folder.
+The source path is interpreted inside the selected mounted share. Entering only / uses the root of that share, and attempts to navigate outside the selected share are rejected before the job is created. After a project is selected, the visible `Source path` field becomes read-only in the standard job dialog workflow, so use `Browse folders` in the `Source` section after selecting a mount. As you move through the mounted share, ECUBE updates the existing `Source path` field live, and the browser shows a `..` row whenever you can move back up to the parent folder.
 
 ### 9.3 Opening a Job
 
@@ -669,7 +669,9 @@ Action buttons are shown near the top of the job detail screen.
 Use them when appropriate:
 
 - `Analyze` to run startup analysis for an eligible job without starting copy
-- `Edit` to adjust evidence number, source path, drive, thread count, or the job-specific webhook callback URL for a `PENDING`, `PAUSED`, or `FAILED` job
+- `Edit` to reopen the same grouped job dialog used for creation and adjust evidence number, operator notes, source path, drive, thread count, or the job-specific webhook callback URL for a `PENDING`, `PAUSED`, or `FAILED` job
+
+When the edit dialog contains more content than fits on screen, ECUBE keeps the header and footer pinned and scrolls only the dialog body so the title, required-field legend, and save/cancel actions stay visible.
 - The lifecycle toggle to show `Start` when a job can begin or resume, or `Pause` when a running job can safely stop after its current copy work finishes
 - `Continue on Another Drive` to choose a different mounted destination drive and continue the remaining work for an eligible `PENDING`, `PAUSED`, `FAILED`, or partial-success `COMPLETED` job
 - `Retry Failed Files` to re-queue only `ERROR` and `TIMEOUT` file rows on a `COMPLETED` job that finished with partial-success results

@@ -187,6 +187,8 @@ Exception:
 - Destructive actions require confirmation.
 - Buttons must disable when hardware state is unsafe.
 - Frontend validation must mirror backend validation.
+- Required form fields must not use a bare `*` alone. Use an accessible required indicator pattern: an `aria-hidden` SVG marker paired with visually hidden `required` text, and keep native `required` or `aria-required` semantics on the control. When most fields are required, prefer marking optional fields instead of cluttering every label.
+- Shared dialogs with fixed headers or footers must keep scrolling inside an internal body region rather than on the outer dialog panel. Preserve pinned header/footer behavior when reusing or extending dialog shells.
 
 ## 8. Database Review Rules
 

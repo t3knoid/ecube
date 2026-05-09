@@ -683,9 +683,12 @@ Use a large enough source tree that ECUBE needs noticeable startup analysis time
 For the current Jobs page UI, verify the grouped `Create Job` dialog behaves as follows:
 
 - When the dialog opens, only the `Project` field is active.
+- Required fields use the shared inline required-marker icon, and the footer includes a `Required field` legend using the same marker.
 - After selecting a project, the `Source` and `Destination` sections unlock and show only mounted project-matching sources and eligible mounted USB drives.
 - If no matching project, mount, or drive exists, the dialog shows the corresponding helper message instead of an empty or generic failure state.
+- After selecting a project, the visible `Source path` field is read-only and can be changed only through the trusted `Browse folders` workflow.
 - After selecting a mounted source, `Browse folders` opens an inline folder browser for that mount only, shows directories without mixing in files, updates the existing `Source path` field as the operator traverses folders, and shows a `..` row whenever the operator can move to the parent folder.
+- When the dialog body overflows, the header and footer remain pinned while only the body content scrolls.
 - If `Run job immediately` is checked, the created job transitions directly into the start flow after successful creation.
 - If the selected drive or mount becomes unavailable, the operator sees a specific conflict or availability message instead of a generic validation error.
 - The visible `Job ID` value navigates to Job Detail, and desktop row actions expose one stateful lifecycle toggle that shows `Start` for startable or resumable jobs and `Pause` for pausable jobs.
@@ -1302,7 +1305,8 @@ These tests exercise real hardware paths that must be validated during manual QA
 
 | # | Test | Steps | Expected |
 |---|------|-------|----------|
-| 1 | Edit a non-active job | Open a `PENDING`, `PAUSED`, or `FAILED` job, click `Edit`, change evidence number and source path, then save | Updated values persist on the detail page and the job remains bound to the same project |
+| 1 | Edit a non-active job | Open a `PENDING`, `PAUSED`, or `FAILED` job, click `Edit`, change evidence number, notes, and source path through `Browse folders`, then save | Updated values persist on the detail page, the job remains bound to the same project, and the edit dialog keeps the source path field read-only outside the browse workflow |
+| 1a | Edit dialog reuses the grouped job shell | Open an editable job, click `Edit`, and compare the layout with `Create Job` | The edit dialog uses the same grouped sections, required-field marker, footer legend, and pinned header/footer scrolling behavior as `Create Job`, while omitting create-only sections such as overflow selection or run-immediately |
 | 2 | Complete action is status-aware | Open one `PENDING` or `PAUSED` job and one `RUNNING` job | `Complete` is available only for the non-active job; the running job does not allow manual completion |
 | 3 | Delete pending job requires confirmation | Open a `PENDING` job, click `Delete`, confirm the dialog | The job is removed, the UI returns to the Jobs list, and the drive assignment is released |
 | 4 | Verify and Manifest are gated by real completion | Open a job that is still copying and watch the action bar, then open the same job after it reaches `COMPLETED` with 100% progress and no failed or timed-out files | `Verify` and `Download Manifest` stay disabled until the job is truly complete, then become available |

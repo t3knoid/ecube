@@ -39,6 +39,25 @@ test('jobs create, start, compare, and manifest flow', async ({ page }) => {
     remote_path: '10.1.1.1:/share',
     local_mount_point: '/mnt/share',
   }])
+  await routeJson(page, '**/api/browse**', (request) => {
+    const url = new URL(request.url())
+    const subdir = url.searchParams.get('subdir') || ''
+
+    if (subdir === 'existing-folder') {
+      return {
+        entries: [],
+        has_more: false,
+      }
+    }
+
+    return {
+      entries: [
+        { name: 'folder', type: 'directory', size_bytes: null, modified_at: '2026-05-03T12:00:00Z' },
+        { name: 'updated-folder', type: 'directory', size_bytes: null, modified_at: '2026-05-03T12:05:00Z' },
+      ],
+      has_more: false,
+    }
+  })
 
   await page.route('**/api/jobs**', async (route) => {
     const method = route.request().method()
@@ -149,7 +168,10 @@ test('jobs create, start, compare, and manifest flow', async ({ page }) => {
   await page.locator('#job-project').selectOption('P-77')
   await page.locator('#job-evidence').fill('EV-77')
   await page.locator('#job-mount').selectOption('4')
-  await page.locator('#job-source-path').fill('folder')
+  await expect(page.locator('#job-source-path')).toHaveAttribute('readonly', '')
+  await page.locator('#job-source-browse-toggle').click()
+  await page.locator('.entry-nav-btn').filter({ hasText: /^folder$/ }).click()
+  await expect(page.locator('#job-source-path')).toHaveValue('/folder')
   await page.locator('#job-drive').selectOption('1')
   await expect(page.locator('#job-drive')).toContainText('2-1')
   await expect(page.locator('#job-drive')).not.toContainText('USB-001')
@@ -163,7 +185,11 @@ test('jobs create, start, compare, and manifest flow', async ({ page }) => {
   await page.locator('#job-evidence').fill('EV-77-UPDATED')
   await page.locator('#job-mount').selectOption('4')
   await page.locator('#job-drive').selectOption('1')
-  await page.locator('#job-source-path').fill('/updated-folder')
+  await expect(page.locator('#job-source-path')).toHaveAttribute('readonly', '')
+  await page.locator('#job-source-browse-toggle').click()
+  await page.locator('.entry-nav-btn--parent').click()
+  await page.locator('.entry-nav-btn').filter({ hasText: /^updated-folder$/ }).click()
+  await expect(page.locator('#job-source-path')).toHaveValue('/updated-folder')
   await page.locator('#job-submit').click()
   await expect(page.getByText('EV-77-UPDATED')).toBeVisible()
 
