@@ -1,8 +1,8 @@
 """OS-level user and group management service.
 
-Wraps ``subprocess.run(["sudo", ...])`` calls to manage Linux users and groups
-through the ECUBE API.  The ECUBE FastAPI service runs as a non-root ``ecube``
-service account; narrowly scoped sudoers rules
+Delegates privileged Linux user and group commands through ECUBE infrastructure
+helpers while exposing a stable service-layer API. The ECUBE FastAPI service
+runs as a non-root ``ecube`` service account; narrowly scoped sudoers rules
 (``deploy/ecube-sudoers``) grant access to the specific binaries used here.
 
 Security notes:
@@ -34,6 +34,7 @@ from app.constants import (
     USERNAME_RE,
 )
 from app.exceptions import AuthorizationError
+from app.infrastructure.subprocess_runner import run_subprocess
 
 # Re-export platform-neutral types so existing ``os_user_service.X`` access
 # (e.g. ``os_user_service.OSUserError``) keeps working.
@@ -158,8 +159,9 @@ def _run_sudo(
     # Never log stdin_data (may contain passwords).
     logger.debug("Running: %s", " ".join(full_cmd))
     try:
-        result = subprocess.run(
+        result = run_subprocess(
             full_cmd,
+            runner=subprocess.run,
             input=stdin_data,
             capture_output=True,
             text=True,

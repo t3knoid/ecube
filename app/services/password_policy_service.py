@@ -13,6 +13,7 @@ from app.infrastructure.password_policy_protocol import (
     PasswordExpirationInfo,
     PasswordPolicyError,
 )
+from app.infrastructure.subprocess_runner import run_subprocess
 from app.utils.password_policy import (
     WRITABLE_PASSWORD_POLICY_KEYS,
     parse_pwquality_policy_values,
@@ -27,8 +28,9 @@ _ENFORCE_FOR_ROOT_LINE = "enforce_for_root = 1"
 def _run_root_command(cmd: list[str], *, stdin_data: str | None = None) -> subprocess.CompletedProcess[str]:
     full_cmd = ["sudo", "-n", *cmd] if settings.use_sudo else cmd
     try:
-        result = subprocess.run(
+        result = run_subprocess(
             full_cmd,
+            runner=subprocess.run,
             input=stdin_data,
             capture_output=True,
             text=True,

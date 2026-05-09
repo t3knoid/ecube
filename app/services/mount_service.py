@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.models.jobs import ExportJob, JobStatus
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.infrastructure.mount_namespace import shares_host_mount_namespace
+from app.infrastructure.subprocess_runner import resolve_binary, run_subprocess
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.mount_repository import MountRepository
 from app.schemas.network import MountCreate, MountRelatedJobSchema, MountShareDiscoveryItem, MountShareDiscoveryRequest, MountShareDiscoveryResponse, MountUpdate, NetworkMountSchema
@@ -219,8 +220,9 @@ class LinuxMountProvider:
             if not showmount_bin:
                 raise FileNotFoundError("showmount not available")
 
-            result = subprocess.run(
+            result = run_subprocess(
                 [showmount_bin, "-e", server],
+                runner=subprocess.run,
                 capture_output=True,
                 text=True,
                 timeout=_mount_share_discovery_timeout_seconds(),
@@ -252,8 +254,9 @@ class LinuxMountProvider:
         else:
             cmd.append("-N")
 
-        result = subprocess.run(
+        result = run_subprocess(
             cmd,
+            runner=subprocess.run,
             capture_output=True,
             text=True,
             timeout=_mount_share_discovery_timeout_seconds(),
@@ -330,7 +333,13 @@ class LinuxMountProvider:
             )
         logger.info("Executing mount command: type=%s mount_label=%s", mount_type.value, mount_label)
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=_network_mount_timeout_seconds())
+            result = run_subprocess(
+                cmd,
+                runner=subprocess.run,
+                capture_output=True,
+                text=True,
+                timeout=_network_mount_timeout_seconds(),
+            )
         except subprocess.TimeoutExpired as exc:
             logger.warning(
                 "Mount command timed out: type=%s mount_label=%s reason=%s",
@@ -410,8 +419,9 @@ class LinuxMountProvider:
                             direct_command_path,
                         )
                         try:
-                            direct_result = subprocess.run(
+                            direct_result = run_subprocess(
                                 direct_cmd,
+                                runner=subprocess.run,
                                 capture_output=True,
                                 text=True,
                                 timeout=_network_mount_timeout_seconds(),
@@ -474,8 +484,9 @@ class LinuxMountProvider:
             cmd = _with_host_mount_namespace([settings.umount_binary_path, local_mount_point])
             mount_label = _redacted_mount_label(local_mount_point)
             logger.info("Executing unmount command for mount_label=%s", mount_label)
-            result = subprocess.run(
+            result = run_subprocess(
                 cmd,
+                runner=subprocess.run,
                 capture_output=True, text=True,
                 timeout=_network_mount_timeout_seconds(),
             )
@@ -516,7 +527,13 @@ class LinuxMountProvider:
             if not _in_host_mount_namespace():
                 local_path = os.path.normpath(local_mount_point)
                 cmd = _with_sudo([settings.mount_binary_path, "-N", "/proc/1/ns/mnt"])
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+                result = run_subprocess(
+                    cmd,
+                    runner=subprocess.run,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                )
                 if result.returncode != 0:
                     error = (result.stderr or result.stdout or "").strip() or "mount list check failed"
                     logger.warning("Host namespace mount list check failed: reason=%s", sanitize_error_message(error, "Mount list check failed"))
@@ -535,16 +552,12 @@ class LinuxMountProvider:
 
     def _check_mounted_with_mountpoint(self, local_mount_point: str, timeout: float) -> Optional[bool]:
         cmd = _with_sudo([settings.mountpoint_binary_path, "-q", local_mount_point])
-        result = subprocess.run(cmd, capture_output=True, timeout=timeout)
+        result = run_subprocess(cmd, runner=subprocess.run, capture_output=True, timeout=timeout)
         return result.returncode == 0
 
 
 def _resolve_mount_nfs_binary() -> Optional[str]:
-    for candidate in ("/sbin/mount.nfs", "/usr/sbin/mount.nfs", "mount.nfs"):
-        resolved = shutil.which(candidate)
-        if resolved:
-            return resolved
-    return None
+    return resolve_binary(("/sbin/mount.nfs", "/usr/sbin/mount.nfs", "mount.nfs"), which=shutil.which)
 
 
 def _resolve_nfs_client_version(requested_version: Optional[str]) -> str:
@@ -563,26 +576,20 @@ def _stored_nfs_client_version(mount_type: MountType, requested_version: Optiona
 
 
 def _resolve_showmount_binary() -> Optional[str]:
-    for candidate in ("/usr/sbin/showmount", "/sbin/showmount", "showmount"):
-        resolved = shutil.which(candidate)
-        if resolved:
-            return resolved
-    return None
+    return resolve_binary(("/usr/sbin/showmount", "/sbin/showmount", "showmount"), which=shutil.which)
 
 
 def _resolve_smbclient_binary() -> Optional[str]:
-    for candidate in ("/usr/bin/smbclient", "/bin/smbclient", "smbclient"):
-        resolved = shutil.which(candidate)
-        if resolved:
-            return resolved
-    return None
+    return resolve_binary(("/usr/bin/smbclient", "/bin/smbclient", "smbclient"), which=shutil.which)
+    return resolve_binary(("/usr/bin/smbclient", "/bin/smbclient", "smbclient"), which=shutil.which)
 
 
 def _cleanup_temporary_smb_credentials_file(credentials_path: str) -> None:
     try:
         if settings.use_sudo and os.geteuid() != 0:
-            subprocess.run(
+            run_subprocess(
                 _with_sudo(["rm", "-f", credentials_path]),
+                runner=subprocess.run,
                 check=True,
                 capture_output=True,
                 text=True,
@@ -632,8 +639,9 @@ def _prepare_temporary_smb_credentials_file(
         if os.geteuid() == 0:
             os.chown(credentials_path, 0, 0)
         elif settings.use_sudo:
-            subprocess.run(
+            run_subprocess(
                 _with_sudo(["chown", "root:root", credentials_path]),
+                runner=subprocess.run,
                 check=True,
                 capture_output=True,
                 text=True,
@@ -772,8 +780,9 @@ def _service_owner_spec() -> str:
 
 
 def _run_sudo_cmd(cmd: list[str]) -> Tuple[bool, str]:
-    result = subprocess.run(
+    result = run_subprocess(
         ["sudo", "-n", *cmd],
+        runner=subprocess.run,
         capture_output=True,
         text=True,
         timeout=settings.subprocess_timeout_seconds,

@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from app.models.jobs import ExportJob, JobStatus
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.config import settings
+from app.exceptions import ConflictError
 from app.schemas.network import MountUpdate
 from app.services.mount_check_utils import check_mounted_with_configured_timeout
 from app.services.mount_service import (
@@ -1715,7 +1716,7 @@ def test_validate_mount_with_candidate_payload_returns_sanitized_failure_and_pre
 
     with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None):
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(ConflictError) as exc_info:
             validate_mount(
                 mount.id,
                 db,

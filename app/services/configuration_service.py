@@ -16,6 +16,7 @@ from typing import Any, Callable, Dict, List
 
 from app.config import settings
 from app.exceptions import AuthorizationError
+from app.infrastructure.subprocess_runner import resolve_binary, run_subprocess
 from app.logging_config import configure_logging
 from app.services import database_service
 
@@ -393,15 +394,16 @@ def request_service_restart(*, confirm: bool) -> Dict[str, str]:
     if not confirm:
         raise ValueError("Restart confirmation is required")
 
-    if not shutil.which("systemctl"):
+    if not resolve_binary(("systemctl",), which=shutil.which):
         raise RuntimeError("systemctl is not available on this host")
 
     cmd = ["systemctl", "restart", _SERVICE_NAME, "--no-block"]
     if settings.use_sudo:
         cmd = ["sudo", "-n", *cmd]
 
-    proc = subprocess.run(
+    proc = run_subprocess(
         cmd,
+        runner=subprocess.run,
         capture_output=True,
         text=True,
         timeout=settings.subprocess_timeout_seconds,
