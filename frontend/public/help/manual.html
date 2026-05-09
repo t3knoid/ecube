@@ -740,7 +740,7 @@ Compare a file's source version against its copied destination version
 </li></ul>
 <p>When the edit dialog contains more content than fits on screen, ECUBE keeps the header and footer pinned and scrolls only the dialog body so the title, required-field legend, and save/cancel actions stay visible.</p>
 <ul><li>
-The lifecycle toggle to show <code>Start</code> when a job can begin or resume, or <code>Pause</code> when a running job can safely stop after its current copy work finishes
+The lifecycle toggle to show <code>Start</code> when a job can begin or resume, <code>Pause</code> when a running job can safely stop after its current copy work finishes, and a disabled <code>Pause</code> while the job is still draining in-flight work during <code>PAUSING</code>
 </li><li>
 <code>Continue on Another Drive</code> to choose a different mounted destination drive and continue the remaining work for an eligible <code>PENDING</code>, <code>PAUSED</code>, <code>FAILED</code>, or partial-success <code>COMPLETED</code> job
 </li><li>
@@ -758,7 +758,7 @@ The lifecycle toggle to show <code>Start</code> when a job can begin or resume, 
 </li><li>
 <code>Manifest</code> to generate the manifest output once the job is fully complete with no failed or timed-out files
 </li></ul>
-<p>When a pause is requested, the Jobs list and Job Detail page can show a <code>Pause in progress</code> dialog while ECUBE waits for active copy threads to drain. The lifecycle toggle remains unavailable during <code>PAUSING</code> and returns to <code>Start</code> once the job reaches <code>PAUSED</code>.</p>
+<p>When a pause is requested, the Jobs list and Job Detail page can show a <code>Pause in progress</code> dialog while ECUBE waits for active copy threads to drain. During <code>PAUSING</code>, the lifecycle toggle remains visible as a disabled <code>Pause</code> button and returns to <code>Start</code> once the job reaches <code>PAUSED</code>.</p>
 <p>While a job is actively copying, Job Detail shows a live summary with the current run <code>Started at</code> timestamp and a <code>Duration</code> field that reflects cumulative active runtime only. The displayed duration continues updating while the job is <code>RUNNING</code>, does not add paused time while the job is <code>PAUSED</code>, and resumes from the previously stored active runtime after a later restart instead of resetting to zero.</p>
 <p>Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner for the latest refreshed <code>manifest.json</code> file and immediately starts a browser download of that generated manifest without an extra confirmation step. For jobs that used overflow media, ECUBE refreshes a separate <code>manifest.json</code> on each drive that received successful copies, and each file lists only the files written to that specific drive.</p>
 <p>For a partial-success <code>COMPLETED</code> job, Job Detail can show <code>Retry Failed Files</code> instead of exposing Verify or Manifest too early. This action is available only to <code>admin</code>, <code>manager</code>, and <code>processor</code>, moves the job back into <code>RUNNING</code>, re-queues only failed or timed-out files, and preserves already successful copies.</p>

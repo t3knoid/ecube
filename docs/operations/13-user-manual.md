@@ -672,7 +672,7 @@ Use them when appropriate:
 - `Edit` to reopen the same grouped job dialog used for creation and adjust evidence number, operator notes, source path, drive, thread count, or the job-specific webhook callback URL for a `PENDING`, `PAUSED`, or `FAILED` job
 
 When the edit dialog contains more content than fits on screen, ECUBE keeps the header and footer pinned and scrolls only the dialog body so the title, required-field legend, and save/cancel actions stay visible.
-- The lifecycle toggle to show `Start` when a job can begin or resume, or `Pause` when a running job can safely stop after its current copy work finishes
+- The lifecycle toggle to show `Start` when a job can begin or resume, `Pause` when a running job can safely stop after its current copy work finishes, and a disabled `Pause` while the job is still draining in-flight work during `PAUSING`
 - `Continue on Another Drive` to choose a different mounted destination drive and continue the remaining work for an eligible `PENDING`, `PAUSED`, `FAILED`, or partial-success `COMPLETED` job
 - `Retry Failed Files` to re-queue only `ERROR` and `TIMEOUT` file rows on a `COMPLETED` job that finished with partial-success results
 - `Complete` to manually mark a pending, paused, or failed job as complete when the operational workflow requires it
@@ -682,7 +682,7 @@ When the edit dialog contains more content than fits on screen, ECUBE keeps the 
 - `Verify` to run verification checks once the job is fully complete with no failed or timed-out files
 - `Manifest` to generate the manifest output once the job is fully complete with no failed or timed-out files
 
-When a pause is requested, the Jobs list and Job Detail page can show a `Pause in progress` dialog while ECUBE waits for active copy threads to drain. The lifecycle toggle remains unavailable during `PAUSING` and returns to `Start` once the job reaches `PAUSED`.
+When a pause is requested, the Jobs list and Job Detail page can show a `Pause in progress` dialog while ECUBE waits for active copy threads to drain. During `PAUSING`, the lifecycle toggle remains visible as a disabled `Pause` button and returns to `Start` once the job reaches `PAUSED`.
 
 While a job is actively copying, Job Detail shows a live summary with the current run `Started at` timestamp and a `Duration` field that reflects cumulative active runtime only. The displayed duration continues updating while the job is `RUNNING`, does not add paused time while the job is `PAUSED`, and resumes from the previously stored active runtime after a later restart instead of resetting to zero.
 

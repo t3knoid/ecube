@@ -691,12 +691,12 @@ For the current Jobs page UI, verify the grouped `Create Job` dialog behaves as 
 - When the dialog body overflows, the header and footer remain pinned while only the body content scrolls.
 - If `Run job immediately` is checked, the created job transitions directly into the start flow after successful creation.
 - If the selected drive or mount becomes unavailable, the operator sees a specific conflict or availability message instead of a generic validation error.
-- The visible `Job ID` value navigates to Job Detail, and desktop row actions expose one stateful lifecycle toggle that shows `Start` for startable or resumable jobs and `Pause` for pausable jobs.
+- The visible `Job ID` value navigates to Job Detail, and desktop row actions expose one stateful lifecycle toggle that shows `Start` for startable or resumable jobs, `Pause` for pausable jobs, and a disabled `Pause` while a pause request is still draining in-flight work.
 - A newly started job can show `Preparing...` in the Jobs list before a numeric percentage is available.
 - Opening Job Detail during that startup phase shows `Preparing copy...` together with explanatory text that ECUBE is still scanning the source files and calculating totals.
 - If a manual analyze run finishes while the Jobs page stays open, verify the page shows a completion banner identifying the job and final startup-analysis state.
 - Pressing the lifecycle toggle while it shows `Pause` on a running job opens a `Pause in progress` dialog while the system waits for in-flight copy threads to finish.
-- The lifecycle toggle remains unavailable during `PAUSING` and returns to `Start` once the job reaches `PAUSED`.
+- During `PAUSING`, the lifecycle toggle remains visible as a disabled `Pause` button and returns to `Start` once the job reaches `PAUSED`.
 - After a pause and resume cycle, the final duration and copy-rate summary remain additive across the full run rather than resetting to only the most recent segment.
 - For a failed or paused job with cached startup analysis, `admin` and `manager` see `Clear startup analysis cache`, processor-only users do not, and the confirmation dialog explains that the next restart will rescan the source.
 - After confirming cleanup, the success message appears, the cleanup action disappears, and later restart behavior performs a fresh startup analysis.
@@ -1311,7 +1311,7 @@ These tests exercise real hardware paths that must be validated during manual QA
 | 3 | Delete pending job requires confirmation | Open a `PENDING` job, click `Delete`, confirm the dialog | The job is removed, the UI returns to the Jobs list, and the drive assignment is released |
 | 4 | Verify and Manifest are gated by real completion | Open a job that is still copying and watch the action bar, then open the same job after it reaches `COMPLETED` with 100% progress and no failed or timed-out files | `Verify` and `Download Manifest` stay disabled until the job is truly complete, then become available |
 | 4a | Verify and Manifest stay blocked for partial-success completion | Open a `COMPLETED` job that still has one or more failed or timed-out files | `Verify` and `Download Manifest` remain disabled, and direct API calls to `/jobs/{job_id}/verify` or `/jobs/{job_id}/manifest` return `409 Conflict` |
-| 5 | Pause-in-progress feedback appears on Job Detail | Use the lifecycle toggle while it shows `Pause` on a running job from the detail page | A `Pause in progress` dialog appears until the job transitions to `PAUSED`, and the lifecycle toggle stays unavailable during `PAUSING` before returning to `Start` |
+| 5 | Pause-in-progress feedback appears on Job Detail | Use the lifecycle toggle while it shows `Pause` on a running job from the detail page | A `Pause in progress` dialog appears until the job transitions to `PAUSED`, and the lifecycle toggle stays visible as a disabled `Pause` during `PAUSING` before returning to `Start` |
 | 6 | Source versus destination compare is clear | Click `View Hashes` for a file, then run the compare action from Job Detail | Results show `Source`, `Destination`, and match details for path, size, and checksum; missing sides produce a sanitized conflict message |
 | 7 | Manifest download uses the stable file path | Let a job finish cleanly, then click `Download Manifest` from Job Detail | The browser starts a `manifest.json` download and the UI shows the stable destination path on the assigned drive |
 | 8 | Persisted failure reason outranks file summary | Open a failed job that has both a persisted job-level failure reason and file error rows | Job Detail shows the persisted failure reason first and does not replace it with the derived `error_summary` |
