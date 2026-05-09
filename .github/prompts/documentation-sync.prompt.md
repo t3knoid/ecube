@@ -36,6 +36,9 @@ For each required update:
 3. Propose the minimal documentation change in 1 to 3 sentences.
 4. If the change introduces a new UI state or workflow, propose a QA test case.
 5. Implement the change in the relevant document.
+6. When updating UI-facing documentation, QA guides, or use-case text for frontend behavior, describe the current interface directly.
+7. Prefer present-tense expectations for dialogs, buttons, navigation, loading states, and accessibility behavior.
+8. Avoid framing UI docs as migrations from an older interface with wording such as `now`, `no longer`, `instead of`, or `rather than` unless the comparison is required for operator safety or release notes.
 
 Constraints:
 - Be evidence-based. Do not suggest speculative documentation work.
