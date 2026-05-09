@@ -9,6 +9,7 @@ test('dashboard loads with summary cards and counts', async ({ page }) => {
     { id: 2, current_state: 'AVAILABLE' },
     { id: 3, current_state: 'IN_USE' },
   ])
+  await routeJson(page, '**/api/mounts', [])
   await routeJson(page, '**/api/jobs**', [
     { id: 11, project_id: 'P-001', status: 'RUNNING', copied_bytes: 50, total_bytes: 100 },
     { id: 12, project_id: 'P-002', status: 'COMPLETED', copied_bytes: 100, total_bytes: 100 },
@@ -27,6 +28,7 @@ test('dashboard loads with summary cards and counts', async ({ page }) => {
 test('dashboard shows preparing label for startup-phase active jobs', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
   await routeJson(page, '**/api/drives', [])
+  await routeJson(page, '**/api/mounts', [])
   await routeJson(page, '**/api/jobs**', [
     {
       id: 21,

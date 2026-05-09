@@ -28,6 +28,13 @@ export function canPauseJob({ canOperate, jobStatus }) {
 export function getJobLifecycleToggleAction({ canOperate, jobStatus, startupAnalysisStatus }) {
   const status = normalizeJobStatus(jobStatus)
 
+  if (status === 'PAUSING') {
+    return {
+      key: 'start',
+      enabled: false,
+    }
+  }
+
   if (INACTIVE_JOB_STATUSES.includes(status)) {
     return {
       key: 'start',
