@@ -212,3 +212,10 @@ Exception:
 - Metrics must exist for job duration, copy speed, mount failures.
 - Trace IDs must propagate across backend and frontend.
 - Health checks must validate USB subsystem and SMB/NFS availability.
+
+## 11. Documentation Wording Rules
+
+- Documentation, QA guides, UI use cases, help content, and code comments must describe the current behavior directly rather than comparing it to an older UI or workflow.
+- Prefer present-tense expectations such as what the page, dialog, or control does now.
+- Avoid history-preserving phrasing such as `now`, `no longer`, `instead of`, `rather than`, or other old-vs-new comparisons unless the historical comparison is itself operationally necessary.
+- When updating existing docs, rewrite inherited historical wording to direct current-state expectations where practical.

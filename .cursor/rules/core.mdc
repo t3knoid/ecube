@@ -196,6 +196,8 @@ CI expectations:
 - Comments and documentation must match actual behavior.
 - When behavior changes, update comments and nearby documentation in the same change.
 - Do not leave stricter or looser comments behind.
+- Phrase documentation and comments as direct current-state expectations rather than old-vs-new comparisons.
+- Avoid history-preserving wording such as `now`, `no longer`, `instead of`, or `rather than` unless the comparison itself is required for safe operator or developer guidance.
 - Fix mismatches immediately.
 
 ---

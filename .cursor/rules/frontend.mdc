@@ -212,9 +212,15 @@ Tests must not:
 - assume internal OS details  
 - rely on timing hacks  
 
+## 11. Frontend Documentation & UI Wording
+
+- When updating UI-facing documentation, QA guides, or use-case text for frontend behavior, describe the current interface directly.
+- Prefer present-tense expectations for dialogs, buttons, navigation, loading states, and accessibility behavior.
+- Avoid framing UI docs as migrations from an older interface with wording such as `now`, `no longer`, `instead of`, or `rather than` unless the comparison is required for operator safety or release notes.
+
 ---
 
-## 11. Out of Scope (Handled Elsewhere)
+## 12. Out of Scope (Handled Elsewhere)
 
 Do **not** redefine:
 
