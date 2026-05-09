@@ -1,5 +1,6 @@
 import { API_BASE } from '@/constants/routes.js'
 import { STORAGE_TOKEN_KEY } from '@/constants/storage.js'
+import apiClient from '@/api/client.js'
 
 const UI_NAVIGATION_TELEMETRY_PATH = `${API_BASE}/telemetry/ui-navigation`
 
@@ -48,7 +49,7 @@ function buildPayload(event) {
 }
 
 export async function postUiNavigationTelemetry(event) {
-  if (typeof window === 'undefined' || typeof fetch !== 'function') {
+  if (typeof window === 'undefined') {
     return false
   }
 
@@ -67,18 +68,13 @@ export async function postUiNavigationTelemetry(event) {
   }
 
   try {
-    const response = await fetch(UI_NAVIGATION_TELEMETRY_PATH, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(payload),
+    const response = await apiClient.post(UI_NAVIGATION_TELEMETRY_PATH, payload, {
+      adapter: 'fetch',
       keepalive: true,
       credentials: 'same-origin',
     })
 
-    return response.ok
+    return response.status >= 200 && response.status < 300
   } catch {
     return false
   }
