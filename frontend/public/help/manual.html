@@ -653,9 +653,9 @@ Progress label or percentage
 </li><li>
 <code>FAILED</code>
 </li></ul>
-<p>The <code>Job ID</code> value on the Jobs page acts as the direct navigation entry point into Job Detail. On desktop, authorized rows keep one stateful lifecycle action instead of separate <code>Start</code> and <code>Pause</code> buttons. That action shows <code>Start</code> when the job can begin or resume, shows <code>Pause</code> when the job can safely stop after current work finishes, and stays disabled or hidden for ineligible states. <code>PAUSING</code> means ECUBE is waiting for in-flight copy threads to finish their current work before the job becomes fully <code>PAUSED</code>.</p>
+<p>The <code>Job ID</code> value on the Jobs page acts as the direct navigation entry point into Job Detail. On desktop, authorized rows show one stateful lifecycle action. That action shows <code>Start</code> when the job can begin or resume, shows <code>Pause</code> when the job can safely stop after current work finishes, and stays disabled or hidden for ineligible states. <code>PAUSING</code> means ECUBE is waiting for in-flight copy threads to finish their current work before the job becomes fully <code>PAUSED</code>.</p>
 <h2 id="6-2-creating-a-job">6.2 Creating a Job</h2>
-<p>The current job-creation flow uses a grouped dialog instead of a four-step wizard. The same grouped dialog shell is also reused when you edit an eligible job from Job Detail, so the overall section layout and required-field treatment stay consistent.</p>
+<p>Job creation uses a grouped dialog. The same grouped dialog shell is also reused when you edit an eligible job from Job Detail, so the overall section layout and required-field treatment stay consistent.</p>
 <p>The dialog is organized into four sections:</p>
 <ol><li>
 <code>Job details</code> — project, evidence number, optional notes, webhook callback URL, and thread count

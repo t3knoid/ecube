@@ -589,11 +589,11 @@ Common statuses include:
 - `COMPLETED`
 - `FAILED`
 
-The `Job ID` value on the Jobs page acts as the direct navigation entry point into Job Detail. On desktop, authorized rows keep one stateful lifecycle action instead of separate `Start` and `Pause` buttons. That action shows `Start` when the job can begin or resume, shows `Pause` when the job can safely stop after current work finishes, and stays disabled or hidden for ineligible states. `PAUSING` means ECUBE is waiting for in-flight copy threads to finish their current work before the job becomes fully `PAUSED`.
+The `Job ID` value on the Jobs page acts as the direct navigation entry point into Job Detail. On desktop, authorized rows show one stateful lifecycle action. That action shows `Start` when the job can begin or resume, shows `Pause` when the job can safely stop after current work finishes, and stays disabled or hidden for ineligible states. `PAUSING` means ECUBE is waiting for in-flight copy threads to finish their current work before the job becomes fully `PAUSED`.
 
 ### 9.2 Creating a Job
 
-The current job-creation flow uses a grouped dialog instead of a four-step wizard. The same grouped dialog shell is also reused when you edit an eligible job from Job Detail, so the overall section layout and required-field treatment stay consistent.
+Job creation uses a grouped dialog. The same grouped dialog shell is also reused when you edit an eligible job from Job Detail, so the overall section layout and required-field treatment stay consistent.
 
 The dialog is organized into four sections:
 
