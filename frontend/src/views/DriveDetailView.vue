@@ -621,6 +621,10 @@ onBeforeUnmount(() => {
       <div class="detail-grid">
         <div><strong>{{ t('common.labels.id') }}</strong><span>{{ drive.id }}</span></div>
         <div><strong>{{ t('drives.device') }}</strong><span>{{ formatDriveIdentity(drive) }}</span></div>
+        <div><strong>{{ t('system.serialNumber') }}</strong><span>{{ drive.serial_number || '-' }}</span></div>
+        <div><strong>{{ t('system.manufacturer') }}</strong><span>{{ drive.manufacturer || '-' }}</span></div>
+        <div><strong>{{ t('system.vendorId') }}</strong><span>{{ drive.vendor_id || '-' }}</span></div>
+        <div><strong>{{ t('system.productId') }}</strong><span>{{ drive.product_id || '-' }}</span></div>
         <!-- Mount Point field removed -->
         <div><strong>{{ t('drives.filesystem') }}</strong><span>{{ drive.filesystem_type || '-' }}</span></div>
         <div><strong>{{ t('common.labels.size') }}</strong><span>{{ formatBytes(drive.capacity_bytes) }}</span></div>

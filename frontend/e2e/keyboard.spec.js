@@ -144,6 +144,7 @@ test('keyboard navigation: sidebar navigation links are Tab-reachable', async ({
   await setupAuthenticatedPage(page, ['admin'])
   await routeJson(page, '**/api/drives', [])
   await routeJson(page, '**/api/jobs**', [])
+  await routeJson(page, '**/api/mounts**', [])
 
   await page.goto('/')
 

@@ -61,7 +61,10 @@ function buildDrive(overrides = {}) {
     id: 7,
     device_identifier: 'USB-DETAIL-007',
     display_device_label: 'General USB Flash Disk - Port 2',
+    serial_number: 'SN-0007-DETAIL',
     manufacturer: 'General USB',
+    vendor_id: 'abcd',
+    product_id: '1234',
     product_name: 'Flash Disk',
     port_number: 2,
     filesystem_path: '/dev/sdb1',
@@ -153,6 +156,20 @@ describe('DriveDetailView mount workflow', () => {
 
     expect(wrapper.text()).toContain('Available Space')
     expect(wrapper.text()).toContain('0.0 B')
+  })
+
+  it('shows the drive serial, manufacturer, vendor id, and product id', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Serial Number')
+    expect(wrapper.text()).toContain('SN-0007-DETAIL')
+    expect(wrapper.text()).toContain('Manufacturer')
+    expect(wrapper.text()).toContain('General USB')
+    expect(wrapper.text()).toContain('Vendor ID')
+    expect(wrapper.text()).toContain('abcd')
+    expect(wrapper.text()).toContain('Product ID')
+    expect(wrapper.text()).toContain('1234')
   })
 
   it('shows the Mount action for managers and updates the mount point after success', async () => {
