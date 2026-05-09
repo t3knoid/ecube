@@ -1610,6 +1610,24 @@ describe('JobDetailView start action', () => {
     expect(mocks.continueJobOverflow).toHaveBeenCalledWith(6, { drive_id: 2, thread_count: 6 })
   })
 
+  it('moves focus into the overflow dialog and closes it on Escape', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const overflowButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.continueOverflow'))
+    expect(overflowButton).toBeTruthy()
+    await overflowButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('#job-overflow-drive').exists()).toBe(true)
+    expect(document.activeElement?.id).toBe('job-overflow-drive')
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+
+    expect(wrapper.find('#job-overflow-drive').exists()).toBe(false)
+  })
+
   it('does not show a file error affordance when the current page has no file errors', async () => {
     mocks.getJobFiles.mockResolvedValue({
       files: [{ id: 1, relative_path: 'done/doc-001.txt', status: 'DONE', error_message: '' }],

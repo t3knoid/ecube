@@ -1114,6 +1114,18 @@ function handleDialogKeydown(event) {
     return
   }
 
+  if (showOverflowDialog.value) {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeOverflowDialog()
+      return
+    }
+    if (event.key === 'Tab') {
+      trapFocusWithin(event, overflowDialogRef.value)
+    }
+    return
+  }
+
   if (showCocHandoffDialog.value) {
     if (event.key === 'Escape') {
       event.preventDefault()
@@ -1408,18 +1420,6 @@ async function refreshAll() {
     error.value = t('common.errors.invalidRequest')
     job.value = null
     debug.value = { files: [], total_files: 0, returned_files: 0, page: 1, page_size: DEFAULT_JOB_FILES_PAGE_SIZE }
-    return
-  }
-
-  if (showOverflowDialog.value) {
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      closeOverflowDialog()
-      return
-    }
-    if (event.key === 'Tab') {
-      trapFocusWithin(event, overflowDialogRef.value)
-    }
     return
   }
 
