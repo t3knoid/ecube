@@ -122,13 +122,12 @@ def test_initial_sync_no_hardware(db):
     assert db.query(UsbDrive).count() == 0
 
 
-def test_initial_sync_emits_audit_log(db):
+def test_initial_sync_without_state_changes_skips_audit_log(db):
     summary = run_discovery_sync(db, actor="admin-user", topology_source=_empty_topology, filesystem_detector=_NULL_DETECTOR)
 
     logs = db.query(AuditLog).filter(AuditLog.action == "USB_DISCOVERY_SYNC").all()
-    assert len(logs) == 1
-    assert logs[0].user == "admin-user"
-    assert logs[0].details["drives_inserted"] == 0
+    assert summary["drive_state_changes"] == []
+    assert logs == []
 
 
 def test_initial_sync_audit_includes_safe_drive_metadata_shape(db):
@@ -298,7 +297,7 @@ def test_initial_sync_continues_when_drive_discovered_audit_write_fails(db, monk
 
 
 def test_initial_sync_emits_app_log_lines(db, caplog):
-    caplog.set_level("INFO")
+    caplog.set_level("DEBUG")
 
     run_discovery_sync(db, actor="admin-user", topology_source=_empty_topology, filesystem_detector=_NULL_DETECTOR)
 
@@ -312,10 +311,10 @@ def test_initial_sync_emits_app_log_lines(db, caplog):
     assert completed_record.actor == "admin-user"
     assert getattr(start_record, "operation_id", None)
     assert start_record.operation_id == completed_record.operation_id
+    assert completed_record.drive_state_change_count == 0
 
     audit = db.query(AuditLog).filter(AuditLog.action == "USB_DISCOVERY_SYNC").order_by(AuditLog.id.desc()).first()
-    assert audit is not None
-    assert audit.details["operation_id"] == start_record.operation_id
+    assert audit is None
 
 
 # ---------------------------------------------------------------------------
@@ -802,3 +801,58 @@ def test_in_use_drive_not_demoted_when_port_disabled(db):
     db.refresh(drive)
     assert drive.current_state == DriveState.IN_USE
     assert drive.current_project_id == "PROJ-001"
+
+
+def test_discovery_sync_does_not_emit_info_logs_without_drive_state_change(db, caplog):
+    topology = _simple_topology()
+
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    caplog.clear()
+
+    with caplog.at_level("INFO"):
+        summary = run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+
+    assert summary["drive_state_changes"] == []
+    assert not [record for record in caplog.records if record.levelname == "INFO"]
+
+
+def test_discovery_sync_logs_when_drive_state_changes(db, caplog):
+    topology = _simple_topology()
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+    _enable_all_ports(db)
+    caplog.clear()
+
+    with caplog.at_level("INFO"):
+        summary = run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+
+    assert len(summary["drive_state_changes"]) == 1
+    assert any(record.message == "USB discovery updated drive state" for record in caplog.records)
+    assert any(record.message == "USB discovery sync completed" for record in caplog.records)
+
+
+def test_discovery_sync_records_disabled_drive_disconnect_as_state_change(db):
+    topology = _simple_topology()
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+
+    drive = db.query(UsbDrive).one()
+    assert drive.current_state == DriveState.DISABLED
+
+    summary = run_discovery_sync(db, topology_source=_empty_topology, filesystem_detector=_NULL_DETECTOR)
+
+    db.refresh(drive)
+    assert drive.current_state == DriveState.DISCONNECTED
+    assert summary["drives_removed"] == 0
+    assert len(summary["drive_state_changes"]) == 1
+    state_change = summary["drive_state_changes"][0]
+    assert state_change["drive_id"] == drive.id
+    assert state_change["device_label"] == "SanDisk Ultra"
+    assert state_change["manufacturer"] == "SanDisk"
+    assert state_change["product_name"] == "Ultra"
+    assert state_change["port_number"] is None
+    assert state_change["previous_state"] == DriveState.DISABLED.value
+    assert state_change["current_state"] == DriveState.DISCONNECTED.value
+
+    audit = db.query(AuditLog).filter(AuditLog.action == "USB_DISCOVERY_SYNC").order_by(AuditLog.id.desc()).first()
+    assert audit is not None
+    assert audit.details["drive_state_changes"][0]["previous_state"] == DriveState.DISABLED.value
+    assert audit.details["drive_state_changes"][0]["current_state"] == DriveState.DISCONNECTED.value

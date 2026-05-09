@@ -259,6 +259,35 @@ def _startup_reconciliation_counts(payload: Any) -> dict[str, Any]:
     return counts
 
 
+async def _wait_for_next_usb_discovery_cycle() -> None:
+    """Wait until the next automatic USB discovery cycle should run.
+
+    The configured interval is re-read continuously so runtime configuration
+    changes can pause, resume, or retime background polling without requiring
+    a service restart.
+    """
+    remaining_seconds: float | None = None
+    active_interval: int | None = None
+
+    while True:
+        configured_interval = int(getattr(settings, "usb_discovery_interval", 0) or 0)
+        if configured_interval <= 0:
+            remaining_seconds = None
+            active_interval = None
+            await asyncio.sleep(1.0)
+            continue
+
+        if remaining_seconds is None or active_interval != configured_interval:
+            active_interval = configured_interval
+            remaining_seconds = float(configured_interval)
+
+        sleep_for = min(1.0, remaining_seconds)
+        await asyncio.sleep(sleep_for)
+        remaining_seconds -= sleep_for
+        if remaining_seconds <= 0:
+            return
+
+
 def _log_demo_runtime_configuration() -> None:
     if not settings.is_demo_mode_enabled():
         return
@@ -525,15 +554,14 @@ async def lifespan(application: FastAPI):
     # Background: periodic USB discovery
     # ------------------------------------------------------------------
     discovery_task = None
-    if db_runtime_ready and settings.usb_discovery_interval > 0:
+    if db_runtime_ready:
         async def _usb_discovery_loop() -> None:
             from app.database import SessionLocal
             from app.services.discovery_service import run_discovery_sync
             from app.infrastructure import get_filesystem_detector
 
-            interval = settings.usb_discovery_interval
             while True:
-                await asyncio.sleep(interval)
+                await _wait_for_next_usb_discovery_cycle()
                 try:
                     db = SessionLocal()
                     try:

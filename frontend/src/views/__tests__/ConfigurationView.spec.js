@@ -44,6 +44,7 @@ function buildManagerResponse(overrides = {}) {
     network_mount_timeout_seconds: 120,
     mount_share_discovery_timeout_seconds: 60,
     copy_job_timeout: 3600,
+    usb_discovery_interval: 30,
     job_detail_files_page_size: 40,
     ...overrides,
   }
@@ -91,6 +92,7 @@ describe('ConfigurationView', () => {
     expect(panelTitles).toEqual([
       i18n.global.t('configuration.sections.troubleshooting'),
       i18n.global.t('configuration.sections.driveOperations'),
+      i18n.global.t('configuration.sections.backgroundOperations'),
       i18n.global.t('configuration.sections.networkMountOperations'),
       i18n.global.t('configuration.sections.copyAndJobWorkflow'),
     ])
@@ -144,6 +146,27 @@ describe('ConfigurationView', () => {
     await flushPromises()
 
     expect(mocks.updateConfiguration).toHaveBeenCalledWith({ drive_mount_timeout_seconds: 480 })
+  })
+
+  it('loads and saves the auto USB discovery interval', async () => {
+    mocks.getConfiguration.mockResolvedValue(buildManagerResponse({ usb_discovery_interval: 0 }))
+    mocks.updateConfiguration.mockResolvedValue({
+      restart_required: false,
+      restart_required_settings: [],
+      applied_immediately: ['usb_discovery_interval'],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const intervalInput = wrapper.find('#cfg-usb-discovery-interval')
+    expect(intervalInput.element.value).toBe('0')
+
+    await intervalInput.setValue('45')
+    await wrapper.find('.action-row .btn.btn-primary').trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateConfiguration).toHaveBeenCalledWith({ usb_discovery_interval: 45 })
   })
 
   it('loads and saves log level without exposing admin-only controls', async () => {

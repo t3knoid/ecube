@@ -83,6 +83,7 @@ _EDITABLE_FIELDS: Dict[str, _FieldSpec] = {
     "network_mount_timeout_seconds": _FieldSpec("NETWORK_MOUNT_TIMEOUT_SECONDS", False, _serialize_plain),
     "mount_share_discovery_timeout_seconds": _FieldSpec("MOUNT_SHARE_DISCOVERY_TIMEOUT_SECONDS", False, _serialize_plain),
     "copy_job_timeout": _FieldSpec("COPY_JOB_TIMEOUT", False, _serialize_plain),
+    "usb_discovery_interval": _FieldSpec("USB_DISCOVERY_INTERVAL", False, _serialize_plain),
     "job_detail_files_page_size": _FieldSpec("JOB_DETAIL_FILES_PAGE_SIZE", False, _serialize_plain),
     "callback_default_url": _FieldSpec("CALLBACK_DEFAULT_URL", False, _serialize_callback_default_url),
     "callback_proxy_url": _FieldSpec("CALLBACK_PROXY_URL", False, _serialize_callback_proxy_url),
@@ -105,6 +106,7 @@ _MANAGER_CONFIGURATION_READ_FIELDS = (
     "network_mount_timeout_seconds",
     "mount_share_discovery_timeout_seconds",
     "copy_job_timeout",
+    "usb_discovery_interval",
     "job_detail_files_page_size",
 )
 
@@ -116,6 +118,7 @@ _MANAGER_CONFIGURATION_UPDATE_FIELDS = (
     "network_mount_timeout_seconds",
     "mount_share_discovery_timeout_seconds",
     "copy_job_timeout",
+    "usb_discovery_interval",
     "job_detail_files_page_size",
 )
 

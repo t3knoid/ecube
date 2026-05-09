@@ -303,6 +303,7 @@ Manager-accessible fields are limited to:
 - `mkfs_exfat_cluster_size`
 - `drive_format_timeout_seconds`
 - `drive_mount_timeout_seconds`
+- `usb_discovery_interval`
 - `network_mount_timeout_seconds`
 - `mount_share_discovery_timeout_seconds`
 - `copy_job_timeout`
@@ -313,6 +314,7 @@ Notes:
 - `processor` and `auditor` receive `403 Forbidden`.
 - Requests that try to send admin-only configuration fields through `/configuration` are rejected with `403 Forbidden`.
 - Managers can see the current effective `log_file` name on `GET /configuration`. The response returns a basename only, not a host path, and changing it remains admin-only through `/admin/configuration`.
+- `usb_discovery_interval` applies to future background discovery polls without a service restart. Setting it to `0` pauses automatic discovery until a positive interval is configured again.
 - This surface intentionally does not expose password policy, webhook secret, database runtime, logging infrastructure, or restart controls.
 
 ---

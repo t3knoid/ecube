@@ -1219,6 +1219,8 @@ Adjusting troubleshooting log verbosity with <code>Log Level</code>
 </li><li>
 Tuning drive formatting and mounting defaults used in day-to-day media handling
 </li><li>
+Controlling background USB discovery polling without host-level edits
+</li><li>
 Tuning network mount and share-discovery timeout behavior for slow file servers
 </li><li>
 Adjusting copy timeout and Job Detail file-page defaults used by operators
@@ -1227,7 +1229,7 @@ Adjusting copy timeout and Job Detail file-page defaults used by operators
 <ol><li>
 Open <code>Configuration</code> from the navigation area.
 </li><li>
-Review the current values in <code>Troubleshooting</code>, <code>Drive Operations</code>, <code>Network Mount Operations</code>, and <code>Copy and Job Workflow</code>.
+Review the current values in <code>Troubleshooting</code>, <code>Drive Operations</code>, <code>Background Operations</code>, <code>Network Mount Operations</code>, and <code>Copy and Job Workflow</code>.
 </li><li>
 Edit one or more fields.
 </li><li>
@@ -1235,7 +1237,7 @@ Click <code>Save</code>.
 </li></ol>
 <p>Important operational notes:</p>
 <ul><li>
-The <code>Configuration</code> page contains only operational settings: <code>log_level</code>, <code>mkfs_exfat_cluster_size</code>, <code>drive_format_timeout_seconds</code>, <code>drive_mount_timeout_seconds</code>, <code>network_mount_timeout_seconds</code>, <code>mount_share_discovery_timeout_seconds</code>, <code>copy_job_timeout</code>, and <code>job_detail_files_page_size</code>.
+The <code>Configuration</code> page contains only operational settings: <code>log_level</code>, <code>mkfs_exfat_cluster_size</code>, <code>drive_format_timeout_seconds</code>, <code>drive_mount_timeout_seconds</code>, <code>usb_discovery_interval</code>, <code>network_mount_timeout_seconds</code>, <code>mount_share_discovery_timeout_seconds</code>, <code>copy_job_timeout</code>, and <code>job_detail_files_page_size</code>.
 </li><li>
 The <code>Configuration</code> page also shows the current effective log file name as a read-only value so managers can verify the target log file without exposing host path details.
 </li><li>
@@ -1246,6 +1248,8 @@ Managers cannot view or trigger password policy, webhook secret, logging infrast
 <code>Drive Format Timeout (seconds)</code> controls how long ECUBE allows a drive format command to run before treating it as failed. Increase it for large removable media that legitimately need extended exFAT formatting time.
 </li><li>
 <code>Drive Mount Timeout (seconds)</code> controls how long ECUBE allows a drive mount command to run before treating it as failed. Increase it for large removable media or slower USB links that need extra time to mount.
+</li><li>
+<code>Auto USB Discovery Interval (seconds)</code> controls how often ECUBE polls for USB topology and drive-state changes in the background. Set it to <code>0</code> to pause automatic polling, or set a positive value to resume periodic discovery without restarting the service.
 </li><li>
 <code>Network Mount Timeout (seconds)</code> controls how long ECUBE allows SMB and NFS mount workflows to run before treating them as failed. The same setting also governs related unmount and mount-state verification checks, so increase it when slow servers, DNS resolution, or authentication handshakes make network shares slow to validate or reconnect.
 </li><li>

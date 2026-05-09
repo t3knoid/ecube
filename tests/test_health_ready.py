@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 import app.infrastructure as infra_module
@@ -259,6 +260,38 @@ def test_lifespan_logs_demo_mode_runtime_configuration(monkeypatch, caplog):
     assert debug_record.login_message_source == "override"
     assert debug_record.accounts_source == "override"
     assert debug_record.password_change_policy_source == "override"
+
+
+def test_wait_for_next_usb_discovery_cycle_resumes_after_runtime_enable(monkeypatch):
+    observed_sleeps = []
+
+    async def _fake_sleep(seconds):
+        observed_sleeps.append(seconds)
+        if len(observed_sleeps) == 1:
+            monkeypatch.setattr(main_module.settings, "usb_discovery_interval", 2)
+
+    monkeypatch.setattr(main_module.settings, "usb_discovery_interval", 0)
+    monkeypatch.setattr(main_module.asyncio, "sleep", _fake_sleep)
+
+    asyncio.run(main_module._wait_for_next_usb_discovery_cycle())
+
+    assert observed_sleeps == [1.0, 1.0, 1.0]
+
+
+def test_wait_for_next_usb_discovery_cycle_retimes_after_runtime_change(monkeypatch):
+    observed_sleeps = []
+
+    async def _fake_sleep(seconds):
+        observed_sleeps.append(seconds)
+        if len(observed_sleeps) == 1:
+            monkeypatch.setattr(main_module.settings, "usb_discovery_interval", 1)
+
+    monkeypatch.setattr(main_module.settings, "usb_discovery_interval", 3)
+    monkeypatch.setattr(main_module.asyncio, "sleep", _fake_sleep)
+
+    asyncio.run(main_module._wait_for_next_usb_discovery_cycle())
+
+    assert observed_sleeps == [1.0, 1.0]
 
 
 def test_health_ready_returns_200_when_no_mounts_configured(unauthenticated_client, db, monkeypatch):
