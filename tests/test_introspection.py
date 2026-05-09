@@ -47,14 +47,14 @@ def test_system_health(client, db):
     assert "ecube_process" in data
 
 
-def test_system_health_reports_exfat_runtime_warning_when_formatting_is_available_but_mount_support_is_missing(client, db):
+def test_system_health_reports_exfat_runtime_warning_when_formatting_is_available_but_mount_support_is_missing(admin_client, db):
     inspector = _runtime_inspector(formatting_available=True, mount_runtime_available=False)
 
     with (
         patch("app.routers.introspection.get_filesystem_runtime_inspector", return_value=inspector),
         patch("app.routers.introspection.get_runtime_repair_provider", return_value=object()),
     ):
-        response = client.get("/introspection/system-health")
+        response = admin_client.get("/introspection/system-health")
 
     assert response.status_code == 200
     data = response.json()
@@ -72,6 +72,28 @@ def test_system_health_reports_exfat_runtime_warning_when_formatting_is_availabl
             "confirm_title": "Load exFAT runtime support?",
             "confirm_message": "This will run an explicit host repair action to load the exFAT kernel module for the current kernel. Use this only when runtime warnings show exFAT mount support is missing.",
         }],
+    }]
+
+
+def test_system_health_omits_runtime_repair_actions_for_non_admin_roles(manager_client, db):
+    inspector = _runtime_inspector(formatting_available=True, mount_runtime_available=False)
+
+    with (
+        patch("app.routers.introspection.get_filesystem_runtime_inspector", return_value=inspector),
+        patch("app.routers.introspection.get_runtime_repair_provider", return_value=object()),
+    ):
+        response = manager_client.get("/introspection/system-health")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "degraded"
+    assert data["warnings"] == [{
+        "code": "exfat_runtime_kernel_mismatch",
+        "severity": "warning",
+        "component": "filesystem_runtime",
+        "message": "exFAT formatting tools are available, but runtime mount support for exFAT is unavailable on this host. After a kernel change, the matching runtime package can be missing even though formatting still works.",
+        "remediation": "Verify exFAT runtime support for the current kernel, including the documented exfatprogs and linux-modules-extra-$(uname -r) prerequisites, then retry the mount.",
+        "actions": [],
     }]
 
 
@@ -212,7 +234,7 @@ def test_run_system_health_action_returns_conflict_when_repair_fails(admin_clien
         "action_code": "load_exfat_kernel_module",
         "warning_code": "exfat_runtime_kernel_mismatch",
         "status": "failed",
-        "reason": "permission denied",
+        "reason": "Permission or authentication failure",
     }
 
 

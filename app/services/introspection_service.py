@@ -167,6 +167,7 @@ def get_system_health(
     psutil_module: Any | None,
     filesystem_runtime_inspector: Any | None = None,
     runtime_repair_provider: Any | None = None,
+    include_repair_actions: bool = False,
 ) -> dict[str, Any]:
     """Return host and ECUBE-owned runtime diagnostics for the System page."""
 
@@ -222,6 +223,7 @@ def get_system_health(
     warnings = _build_runtime_warnings(
         filesystem_runtime_inspector,
         runtime_repair_provider=runtime_repair_provider,
+        include_repair_actions=include_repair_actions,
     )
 
     return {
@@ -250,6 +252,7 @@ def _build_runtime_warnings(
     filesystem_runtime_inspector: Any | None,
     *,
     runtime_repair_provider: Any | None = None,
+    include_repair_actions: bool = False,
 ) -> list[dict[str, Any]]:
     if filesystem_runtime_inspector is None:
         return []
@@ -272,7 +275,7 @@ def _build_runtime_warnings(
             },
         )
 
-        if runtime_repair_provider is not None:
+        if runtime_repair_provider is not None and include_repair_actions:
             warning["actions"].append(
                 {
                     "code": action.code,

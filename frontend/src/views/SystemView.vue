@@ -42,6 +42,7 @@ const tabs = computed(() => {
 const activeTab = ref('health')
 const loading = ref(false)
 const error = ref('')
+const infoMessage = ref('')
 const successMessage = ref('')
 const reconcilingManagedMounts = ref(false)
 const runningSystemHealthAction = ref(false)
@@ -449,6 +450,7 @@ function openSystemHealthActionDialog(action) {
   }
 
   error.value = ''
+  infoMessage.value = ''
   successMessage.value = ''
   selectedSystemHealthAction.value = action
   showSystemHealthActionDialog.value = true
@@ -467,12 +469,18 @@ async function confirmSystemHealthAction() {
 
   runningSystemHealthAction.value = true
   error.value = ''
+  infoMessage.value = ''
   successMessage.value = ''
   try {
     const result = await runSystemHealthAction(action.code)
     closeSystemHealthActionDialog()
     await loadTabData()
-    successMessage.value = String(result?.message || '').trim() || action.label
+    const message = String(result?.message || '').trim() || action.label
+    if (result?.status === 'not_needed') {
+      infoMessage.value = message
+    } else {
+      successMessage.value = message
+    }
   } catch (err) {
     error.value = extractApiMessage(err) || t('common.errors.requestConflict')
   } finally {
@@ -723,6 +731,7 @@ onBeforeUnmount(() => {
 
     <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
     <p v-if="error" class="error-banner">{{ error }}</p>
+    <p v-if="infoMessage" class="info-banner" role="status" aria-live="polite">{{ infoMessage }}</p>
     <p v-if="successMessage" class="success-banner" role="status" aria-live="polite">{{ successMessage }}</p>
 
     <article v-if="activeTab === 'health'" class="panel">
@@ -1296,6 +1305,14 @@ input,
   color: var(--color-alert-success-text);
   background: var(--color-alert-success-bg);
   border: 1px solid var(--color-alert-success-border);
+  border-radius: var(--border-radius);
+  padding: var(--space-sm);
+}
+
+.info-banner {
+  color: var(--color-text-primary);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
   border-radius: var(--border-radius);
   padding: var(--space-sm);
 }

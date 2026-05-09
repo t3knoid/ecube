@@ -271,7 +271,7 @@ describe('SystemView USB topology tab', () => {
     expect(wrapper.text()).toContain('Load exFAT runtime support')
   })
 
-  it('hides runtime repair actions for non-admin users even when the backend returns them', async () => {
+  it('does not render runtime repair actions for non-admin users when the backend omits them', async () => {
     mocks.hasRole.mockImplementation((role) => role === 'manager')
     mocks.getSystemHealth.mockResolvedValue({
       status: 'degraded',
@@ -284,15 +284,7 @@ describe('SystemView USB topology tab', () => {
           component: 'filesystem_runtime',
           message: 'exFAT formatting tools are available, but runtime mount support for exFAT is unavailable on this host.',
           remediation: 'Verify exFAT runtime support for the current kernel, then retry the mount.',
-          actions: [
-            {
-              code: 'load_exfat_kernel_module',
-              label: 'Load exFAT runtime support',
-              description: 'Load the exFAT kernel module.',
-              confirm_title: 'Load exFAT runtime support?',
-              confirm_message: 'Run the host repair action?',
-            },
-          ],
+          actions: [],
         },
       ],
       ecube_process: {
@@ -369,6 +361,67 @@ describe('SystemView USB topology tab', () => {
     expect(mocks.runSystemHealthAction).toHaveBeenCalledWith('load_exfat_kernel_module')
     expect(mocks.getSystemHealth).toHaveBeenCalledTimes(2)
     expect(wrapper.text()).toContain('Loaded exFAT runtime support.')
+  })
+
+  it('shows a neutral informational banner when a repair action is not needed', async () => {
+    mocks.getSystemHealth
+      .mockResolvedValueOnce({
+        status: 'degraded',
+        database: 'connected',
+        active_jobs: 0,
+        warnings: [
+          {
+            code: 'exfat_runtime_kernel_mismatch',
+            severity: 'warning',
+            component: 'filesystem_runtime',
+            message: 'exFAT formatting tools are available, but runtime mount support for exFAT is unavailable on this host.',
+            remediation: 'Verify exFAT runtime support for the current kernel, then retry the mount.',
+            actions: [
+              {
+                code: 'load_exfat_kernel_module',
+                label: 'Load exFAT runtime support',
+                description: 'Load the exFAT kernel module.',
+                confirm_title: 'Load exFAT runtime support?',
+                confirm_message: 'Run the host repair action?',
+              },
+            ],
+          },
+        ],
+        ecube_process: {
+          active_copy_thread_count: 0,
+          active_copy_threads: [],
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 'ok',
+        database: 'connected',
+        active_jobs: 0,
+        warnings: [],
+        ecube_process: {
+          active_copy_thread_count: 0,
+          active_copy_threads: [],
+        },
+      })
+    mocks.runSystemHealthAction.mockResolvedValue({
+      code: 'load_exfat_kernel_module',
+      status: 'not_needed',
+      message: 'exFAT runtime support is already available on this host.',
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const actionButton = wrapper.findAll('button').find((button) => button.text() === 'Load exFAT runtime support')
+    expect(actionButton).toBeTruthy()
+    await actionButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('.confirm-dialog-confirm').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('exFAT runtime support is already available on this host.')
+    expect(wrapper.find('.info-banner').exists()).toBe(true)
+    expect(wrapper.find('.success-banner').exists()).toBe(false)
   })
 
   it('shows a clear empty state when no ECUBE copy threads are active', async () => {

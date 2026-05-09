@@ -228,7 +228,7 @@ def system_mounts(_: CurrentUser = Depends(_ALL_ROLES)):
 @router.get("/system-health", response_model=SystemHealthResponse, responses={**R_401, **R_403})
 def system_health(
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(_ALL_ROLES),
+    current_user: CurrentUser = Depends(_ALL_ROLES),
 ):
     """Check the health of critical system components: database and job engine.
 
@@ -242,6 +242,7 @@ def system_health(
         psutil_module=_psutil if _PSUTIL_AVAILABLE else None,
         filesystem_runtime_inspector=get_filesystem_runtime_inspector(),
         runtime_repair_provider=_get_runtime_repair_provider_or_none(),
+        include_repair_actions="admin" in current_user.roles,
     )
 
 
