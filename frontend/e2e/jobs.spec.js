@@ -294,7 +294,7 @@ test('jobs list supports safe pause and resume flow', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Pause' }).click()
   await expect(page.getByText('Pause in progress', { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Start' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Pause' })).toBeDisabled()
 
   await expect(page.getByText('Pause in progress', { exact: true })).toHaveCount(0, { timeout: 10000 })
   await expect(page.getByRole('button', { name: 'Start' })).toBeEnabled({ timeout: 10000 })

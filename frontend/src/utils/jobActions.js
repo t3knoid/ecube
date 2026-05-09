@@ -30,7 +30,7 @@ export function getJobLifecycleToggleAction({ canOperate, jobStatus, startupAnal
 
   if (status === 'PAUSING') {
     return {
-      key: 'start',
+      key: 'pause',
       enabled: false,
     }
   }
