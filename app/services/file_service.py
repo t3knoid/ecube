@@ -2,9 +2,9 @@ import hashlib
 from pathlib import Path
 from typing import Optional
 
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.exceptions import service_exception
 from app.models.jobs import ExportFile
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.job_repository import FileRepository, JobRepository
@@ -132,7 +132,7 @@ def get_file_hashes(
 
     ef = file_repo.get(file_id)
     if ef is None:
-        raise HTTPException(status_code=404, detail="File not found")
+        raise service_exception(status_code=404, detail="File not found")
 
     md5: Optional[str] = None
     sha256: Optional[str] = ef.checksum
@@ -180,21 +180,21 @@ def compare_files(
 
     ef_a = file_repo.get(body.file_id_a)
     if ef_a is None:
-        raise HTTPException(status_code=404, detail=f"File {body.file_id_a} not found")
+        raise service_exception(status_code=404, detail=f"File {body.file_id_a} not found")
 
     ef_b = file_repo.get(body.file_id_b)
     if ef_b is None:
-        raise HTTPException(status_code=404, detail=f"File {body.file_id_b} not found")
+        raise service_exception(status_code=404, detail=f"File {body.file_id_b} not found")
 
     compare_mode = "generic"
     if body.file_id_a == body.file_id_b:
         source_path = _resolve_source_file_path(ef_a, db)
         if source_path is None or not _path_accessible(source_path):
-            raise HTTPException(status_code=409, detail="Source file is unavailable for comparison")
+            raise service_exception(status_code=409, detail="Source file is unavailable for comparison")
 
         destination_path = _resolve_destination_file_path(ef_a, db)
         if destination_path is None or not _path_accessible(destination_path):
-            raise HTTPException(status_code=409, detail="Destination file is unavailable for comparison")
+            raise service_exception(status_code=409, detail="Destination file is unavailable for comparison")
 
         item_a = _file_to_item_from_path(ef_a, source_path)
         item_b = _file_to_item_from_path(ef_a, destination_path, checksum_fallback=ef_a.checksum)

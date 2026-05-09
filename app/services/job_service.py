@@ -4,12 +4,12 @@ import logging
 import os
 from typing import Any, Optional, Tuple, cast
 
-from fastapi import BackgroundTasks, HTTPException
+from fastapi import BackgroundTasks
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.exceptions import ConflictError, ECUBEException, EncodingError
+from app.exceptions import ConflictError, ECUBEException, EncodingError, service_exception
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, Manifest, StartupAnalysisEntry, StartupAnalysisStatus
@@ -222,19 +222,19 @@ def _generate_manifest_for_job(
     job = job_repo.get(job_id)
     if not job:
         if strict:
-            raise HTTPException(status_code=404, detail="Job not found")
+            raise service_exception(status_code=404, detail="Job not found")
         raise LookupError("Job not found")
 
     job_row = _row(job)
     if cast(JobStatus, job_row.status) != JobStatus.COMPLETED:
         if strict:
-            raise HTTPException(status_code=409, detail="Only completed jobs can generate a manifest")
+            raise service_exception(status_code=409, detail="Only completed jobs can generate a manifest")
         return job, False
 
     _done, failed, timed_out = file_repo.count_done_errors_and_timeouts(job_id)
     if failed or timed_out:
         if strict:
-            raise HTTPException(
+            raise service_exception(
                 status_code=409,
                 detail="Only clean completed jobs can generate a manifest",
             )
@@ -288,7 +288,7 @@ def _generate_manifest_for_job(
                     extra={"job_id": job_id, "project_id": job_project_id, "reason": "drive_not_mounted", "drive_id": drive_id},
                 )
                 audit_manifest_failure(manifest_error, drive_id)
-                raise HTTPException(status_code=409, detail=manifest_error)
+                raise service_exception(status_code=409, detail=manifest_error)
             logger.info(
                 "Skipping automatic manifest generation",
                 extra={"job_id": job_id, "project_id": job_project_id, "reason": "drive_not_mounted", "drive_id": drive_id},
@@ -331,7 +331,7 @@ def _generate_manifest_for_job(
             )
             audit_manifest_failure(manifest_error, drive_id, manifest_name)
             if strict:
-                raise HTTPException(status_code=500, detail=manifest_error) from exc
+                raise service_exception(status_code=500, detail=manifest_error) from exc
             return job, created_any
 
         try:
@@ -353,7 +353,7 @@ def _generate_manifest_for_job(
                 extra={"job_id": job_id, "project_id": job_project_id, "raw_error": str(exc), "drive_id": drive_id},
             )
             if strict:
-                raise HTTPException(
+                raise service_exception(
                     status_code=500,
                     detail="Database error while creating manifest",
                 ) from exc
@@ -455,11 +455,11 @@ def _resolve_job_source_path(body: JobCreate, db: Session) -> str:
                 usb_mount_base_path=settings.usb_mount_base_path,
             )
         except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+            raise service_exception(status_code=422, detail=str(exc)) from exc
 
     mount = MountRepository(db).get(body.mount_id)
     if not mount:
-        raise HTTPException(status_code=404, detail="Mount not found")
+        raise service_exception(status_code=404, detail="Mount not found")
 
     mount_row = _row(mount)
     mount_project_id = cast(Optional[str], mount_row.project_id)
@@ -467,9 +467,9 @@ def _resolve_job_source_path(body: JobCreate, db: Session) -> str:
     mount_root = cast(Optional[str], mount_row.local_mount_point)
 
     if mount_project_id != body.project_id:
-        raise HTTPException(status_code=409, detail="Selected mount is not available for this project")
+        raise service_exception(status_code=409, detail="Selected mount is not available for this project")
     if mount_status != MountStatus.MOUNTED or not mount_root:
-        raise HTTPException(status_code=409, detail="Selected mount is not mounted")
+        raise service_exception(status_code=409, detail="Selected mount is not mounted")
 
     try:
         return resolve_source_path(
@@ -478,7 +478,7 @@ def _resolve_job_source_path(body: JobCreate, db: Session) -> str:
             usb_mount_base_path=settings.usb_mount_base_path,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise service_exception(status_code=422, detail=str(exc)) from exc
 
 
 def _build_source_overlap_message(overlap_type: str, drive_id: int, existing_job_id: int) -> str:
@@ -651,19 +651,19 @@ def archive_job(
     client_ip: Optional[str] = None,
 ) -> ExportJob:
     if not confirm:
-        raise HTTPException(status_code=400, detail="Confirmation is required to archive this job")
+        raise service_exception(status_code=400, detail="Confirmation is required to archive this job")
 
     job_repo = JobRepository(db)
     audit_repo = AuditRepository(db)
 
     job = job_repo.get_for_update(job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise service_exception(status_code=404, detail="Job not found")
 
     job_row = _row(job)
     current_status = cast(JobStatus, job_row.status)
     if current_status not in _ARCHIVABLE_JOB_STATUSES:
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail="Only completed or failed jobs can be archived",
         )
@@ -674,7 +674,7 @@ def archive_job(
     if assigned_drive is not None:
         drive_state = cast(DriveState, assigned_drive.current_state)
         if drive_state != DriveState.AVAILABLE or assigned_drive.mount_path:
-            raise HTTPException(
+            raise service_exception(
                 status_code=409,
                 detail=(
                     "Prepare eject the related drive before archiving this job so the media can move into chain of custody"
@@ -701,7 +701,7 @@ def archive_job(
     except Exception:
         db.rollback()
         logger.exception("DB commit failed while archiving job", {"job_id": job_id})
-        raise HTTPException(
+        raise service_exception(
             status_code=500,
             detail="Database error while archiving job",
         )
@@ -732,7 +732,7 @@ def create_job(
     if seeded_job_id is not None:
         existing_job = db.query(ExportJob).filter(ExportJob.id == seeded_job_id).one_or_none()
         if existing_job is not None:
-            raise HTTPException(status_code=409, detail=f"Job id {seeded_job_id} already exists")
+            raise service_exception(status_code=409, detail=f"Job id {seeded_job_id} already exists")
 
     job = ExportJob(
         id=seeded_job_id,
@@ -761,7 +761,7 @@ def create_job(
 
         if body.drive_id is not None and int(body.drive_id) in {int(value) for value in body.overflow_drive_ids}:
             db.rollback()
-            raise HTTPException(status_code=422, detail="Overflow drive list must not include the primary destination drive")
+            raise service_exception(status_code=422, detail="Overflow drive list must not include the primary destination drive")
 
         def _reserve_selected_drive(
             drive_id: int,
@@ -772,11 +772,11 @@ def create_job(
             nonlocal explicit_bound
 
             if drive_id in selected_drive_ids:
-                raise HTTPException(status_code=422, detail="Drive selections must be unique")
+                raise service_exception(status_code=422, detail="Drive selections must be unique")
 
             drive = drive_repo.get_for_update(drive_id)
             if not drive:
-                raise HTTPException(status_code=404, detail="Drive not found")
+                raise service_exception(status_code=404, detail="Drive not found")
 
             drive_row = _row(drive)
             current_project_id = cast(Optional[str], drive_row.current_project_id)
@@ -793,13 +793,13 @@ def create_job(
                     drive_id=drive_id,
                     existing_project_id=current_project_id,
                 )
-                raise HTTPException(status_code=403, detail="Drive belongs to a different project")
+                raise service_exception(status_code=403, detail="Drive belongs to a different project")
             if current_state not in (DriveState.AVAILABLE, DriveState.IN_USE):
-                raise HTTPException(status_code=409, detail="Drive is not available")
+                raise service_exception(status_code=409, detail="Drive is not available")
             if not mount_path:
-                raise HTTPException(status_code=409, detail="Assigned drive is not mounted")
+                raise service_exception(status_code=409, detail="Assigned drive is not mounted")
             if not require_primary_overlap_check and _is_drive_assigned_to_another_job(db, drive_id=drive_id):
-                raise HTTPException(status_code=409, detail="Drive is already assigned to another job")
+                raise service_exception(status_code=409, detail="Drive is already assigned to another job")
 
             if current_project_id is None:
                 drive_row.current_project_id = body.project_id
@@ -812,7 +812,7 @@ def create_job(
                     target_mount_path=mount_path,
                 )
             except ValueError as exc:
-                raise HTTPException(status_code=422, detail=str(exc)) from exc
+                raise service_exception(status_code=422, detail=str(exc)) from exc
 
             if require_primary_overlap_check:
                 job_row.source_path = validated_source_path
@@ -859,7 +859,7 @@ def create_job(
             mount_path = cast(Optional[str], drive_row.mount_path)
             if not mount_path:
                 db.rollback()
-                raise HTTPException(
+                raise service_exception(
                     status_code=409,
                     detail="Assigned drive is not mounted",
                 )
@@ -872,7 +872,7 @@ def create_job(
                 )
             except ValueError as exc:
                 db.rollback()
-                raise HTTPException(status_code=422, detail=str(exc)) from exc
+                raise service_exception(status_code=422, detail=str(exc)) from exc
             _reject_source_path_overlap(
                 db=db,
                 audit_repo=audit_repo,
@@ -911,14 +911,14 @@ def create_job(
             )
 
         db.commit()
-    except (HTTPException, ECUBEException):
+    except ECUBEException:
         raise
     except Exception as exc:
         db.rollback()
         if is_encoding_error(exc):
             raise EncodingError("Job data contains invalid characters") from exc
         logger.exception("DB commit failed while creating job")
-        raise HTTPException(
+        raise service_exception(
             status_code=500,
             detail="Database error while creating job",
         )
@@ -1026,7 +1026,7 @@ def _auto_assign_drive(
         project_count = drive_repo.count_available_for_project(project_id)
         if project_count > 1:
             db.rollback()
-            raise HTTPException(
+            raise service_exception(
                 status_code=409,
                 detail=f"Multiple drives assigned to project {project_id}; specify drive_id",
             )
@@ -1036,7 +1036,7 @@ def _auto_assign_drive(
     project_count = drive_repo.count_available_for_project(project_id)
     if project_count >= 1:
         db.rollback()
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail=(
                 f"Multiple drives assigned to project {project_id}; specify drive_id"
@@ -1055,7 +1055,7 @@ def _auto_assign_drive(
     # Either no unbound AVAILABLE drives exist, or they are all
     # temporarily unavailable — we cannot distinguish reliably.
     db.rollback()
-    raise HTTPException(
+    raise service_exception(
         status_code=409,
         detail=f"No available drive for project {project_id}",
     )
@@ -1064,7 +1064,7 @@ def _auto_assign_drive(
 def get_job(job_id: int, db: Session) -> ExportJob:
     job = JobRepository(db).get(job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise service_exception(status_code=404, detail="Job not found")
     return job
 
 
@@ -1236,7 +1236,7 @@ def _has_persisted_startup_analysis_state(job_row: Any) -> bool:
 def _require_editable_job(job: ExportJob) -> None:
     job_row = _row(job)
     if cast(JobStatus, job_row.status) not in (JobStatus.PENDING, JobStatus.PAUSED, JobStatus.FAILED):
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail="Only pending, paused, or failed jobs can be edited from Job Detail",
         )
@@ -1245,7 +1245,7 @@ def _require_editable_job(job: ExportJob) -> None:
 def _reject_when_startup_analysis_running(job: ExportJob, *, action: str) -> None:
     job_row = _row(job)
     if cast(Optional[StartupAnalysisStatus], job_row.startup_analysis_status) == StartupAnalysisStatus.ANALYZING:
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail=f"Cannot {action} while startup analysis is in progress",
         )
@@ -1360,13 +1360,13 @@ def continue_job_overflow(
 
     job = job_repo.get_for_update(job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise service_exception(status_code=404, detail="Job not found")
 
     job_row = _row(job)
     _reject_when_startup_analysis_running(job, action="continue overflow for this job")
     current_status = cast(JobStatus, job_row.status)
     if current_status not in (JobStatus.PENDING, JobStatus.PAUSED, JobStatus.FAILED, JobStatus.COMPLETED):
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail="Only pending, paused, failed, or partially successful completed jobs can continue overflow",
         )
@@ -1375,15 +1375,15 @@ def continue_job_overflow(
     assignment_row = _row(active_assignment) if active_assignment is not None else None
     current_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
     if current_drive_id is None:
-        raise HTTPException(status_code=409, detail="Job has no assigned drive")
+        raise service_exception(status_code=409, detail="Job has no assigned drive")
     if int(body.drive_id) == int(current_drive_id):
-        raise HTTPException(status_code=409, detail="Overflow continuation requires a different destination drive")
+        raise service_exception(status_code=409, detail="Overflow continuation requires a different destination drive")
     if _is_drive_assigned_to_another_job(db, drive_id=int(body.drive_id), exclude_job_id=job_id):
-        raise HTTPException(status_code=409, detail="Drive is already assigned to another job")
+        raise service_exception(status_code=409, detail="Drive is already assigned to another job")
 
     drive = drive_repo.get_for_update(int(body.drive_id))
     if not drive:
-        raise HTTPException(status_code=404, detail="Drive not found")
+        raise service_exception(status_code=404, detail="Drive not found")
 
     drive_row = _row(drive)
     drive_project_id = cast(Optional[str], drive_row.current_project_id)
@@ -1399,11 +1399,11 @@ def continue_job_overflow(
             existing_project_id=drive_project_id,
             job_id=job_id,
         )
-        raise HTTPException(status_code=403, detail="Drive belongs to a different project")
+        raise service_exception(status_code=403, detail="Drive belongs to a different project")
     if drive_state not in (DriveState.AVAILABLE, DriveState.IN_USE):
-        raise HTTPException(status_code=409, detail="Drive is not available")
+        raise service_exception(status_code=409, detail="Drive is not available")
     if not drive_mount_path:
-        raise HTTPException(status_code=409, detail="Assigned drive is not mounted")
+        raise service_exception(status_code=409, detail="Assigned drive is not mounted")
 
     try:
         job_row.source_path = validate_source_path(
@@ -1412,7 +1412,7 @@ def continue_job_overflow(
             target_mount_path=drive_mount_path,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise service_exception(status_code=422, detail=str(exc)) from exc
 
     _reject_source_path_overlap(
         db=db,
@@ -1427,7 +1427,7 @@ def continue_job_overflow(
 
     retryable_count = sum(file_repo.count_done_errors_and_timeouts(job_id)[1:])
     if current_status == JobStatus.COMPLETED and retryable_count <= 0:
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail="Only completed jobs with failed or timed-out files can continue overflow",
         )
@@ -1475,7 +1475,7 @@ def continue_job_overflow(
             "DB commit failed while continuing overflow",
             extra={"job_id": job_id},
         )
-        raise HTTPException(
+        raise service_exception(
             status_code=500,
             detail="Database error while continuing overflow",
         )
@@ -1529,14 +1529,14 @@ def update_job(
 
     job = job_repo.get_for_update(job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise service_exception(status_code=404, detail="Job not found")
 
     job_row = _row(job)
     _require_editable_job(job)
     _reject_when_startup_analysis_running(job, action="edit this job")
 
     if body.project_id != cast(Optional[str], job_row.project_id):
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail="Project cannot be changed for an existing job",
         )
@@ -1547,11 +1547,11 @@ def update_job(
     current_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
     requested_drive_id = body.drive_id if body.drive_id is not None else current_drive_id
     if requested_drive_id is None:
-        raise HTTPException(status_code=409, detail="Job has no assigned drive")
+        raise service_exception(status_code=409, detail="Job has no assigned drive")
 
     drive = drive_repo.get_for_update(int(requested_drive_id))
     if not drive:
-        raise HTTPException(status_code=404, detail="Drive not found")
+        raise service_exception(status_code=404, detail="Drive not found")
 
     drive_row = _row(drive)
     drive_project_id = cast(Optional[str], drive_row.current_project_id)
@@ -1568,11 +1568,11 @@ def update_job(
             existing_project_id=drive_project_id,
             job_id=job_id,
         )
-        raise HTTPException(status_code=403, detail="Drive belongs to a different project")
+        raise service_exception(status_code=403, detail="Drive belongs to a different project")
     if drive_state not in (DriveState.AVAILABLE, DriveState.IN_USE):
-        raise HTTPException(status_code=409, detail="Drive is not available")
+        raise service_exception(status_code=409, detail="Drive is not available")
     if not drive_mount_path:
-        raise HTTPException(status_code=409, detail="Assigned drive is not mounted")
+        raise service_exception(status_code=409, detail="Assigned drive is not mounted")
 
     if drive_project_id is None:
         drive_row.current_project_id = cast(Optional[str], job_row.project_id)
@@ -1584,7 +1584,7 @@ def update_job(
             target_mount_path=drive_mount_path,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise service_exception(status_code=422, detail=str(exc)) from exc
 
     _reject_source_path_overlap(
         db=db,
@@ -1659,7 +1659,7 @@ def update_job(
         job_repo.save(job)
     except Exception:
         logger.exception("DB commit failed while updating job %s", job_id)
-        raise HTTPException(
+        raise service_exception(
             status_code=500,
             detail="Database error while updating job",
         )
@@ -1696,13 +1696,13 @@ def complete_job(
 
     job = job_repo.get_for_update(job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise service_exception(status_code=404, detail="Job not found")
 
     job_row = _row(job)
     _reject_when_startup_analysis_running(job, action="complete this job")
     current_status = cast(JobStatus, job_row.status)
     if current_status not in (JobStatus.PENDING, JobStatus.PAUSED, JobStatus.FAILED):
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail="Only pending, paused, or failed jobs can be manually completed",
         )
@@ -1720,7 +1720,7 @@ def complete_job(
         job_repo.save(job)
     except Exception:
         logger.exception("DB commit failed while completing job %s", job_id)
-        raise HTTPException(
+        raise service_exception(
             status_code=500,
             detail="Database error while completing job",
         )
@@ -1792,14 +1792,14 @@ def clear_job_startup_analysis_cache(
     client_ip: Optional[str] = None,
 ) -> ExportJob:
     if not confirm:
-        raise HTTPException(status_code=400, detail="Confirmation is required to clear cached startup analysis")
+        raise service_exception(status_code=400, detail="Confirmation is required to clear cached startup analysis")
 
     job_repo = JobRepository(db)
     audit_repo = AuditRepository(db)
 
     job = job_repo.get_for_update(job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise service_exception(status_code=404, detail="Job not found")
 
     job_row = _row(job)
     _reject_when_startup_analysis_running(job, action="clear cached startup analysis")
@@ -1818,7 +1818,7 @@ def clear_job_startup_analysis_cache(
                 reason="Database error while clearing cached startup analysis",
                 exc=exc,
             )
-            raise HTTPException(
+            raise service_exception(
                 status_code=500,
                 detail="Database error while clearing cached startup analysis",
             )
@@ -1864,13 +1864,13 @@ def analyze_job(
 
     job = job_repo.get_for_update(job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise service_exception(status_code=404, detail="Job not found")
 
     job_row = _row(job)
     _reject_when_startup_analysis_running(job, action="analyze this job")
     current_status = cast(JobStatus, job_row.status)
     if current_status not in (JobStatus.PENDING, JobStatus.FAILED, JobStatus.PAUSED):
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail="Only pending, paused, or failed jobs can be analyzed",
         )
@@ -1882,7 +1882,7 @@ def analyze_job(
             target_mount_path=cast(Optional[str], job_row.target_mount_path),
         )
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise service_exception(status_code=422, detail=str(exc)) from exc
 
     job_row.startup_analysis_status = StartupAnalysisStatus.ANALYZING
     job_row.startup_analysis_failure_reason = None
@@ -1895,7 +1895,7 @@ def analyze_job(
             reason=sanitize_error_message(exc, "Database error while scheduling startup analysis"),
             exc=exc,
         )
-        raise HTTPException(
+        raise service_exception(
             status_code=500,
             detail="Database error while scheduling startup analysis",
         )
@@ -1949,12 +1949,12 @@ def delete_job(
 
     job = job_repo.get_for_update(job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise service_exception(status_code=404, detail="Job not found")
 
     job_row = _row(job)
     _reject_when_startup_analysis_running(job, action="delete this job")
     if cast(JobStatus, job_row.status) != JobStatus.PENDING:
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail="Only pending jobs can be deleted",
         )
@@ -1980,7 +1980,7 @@ def delete_job(
     except Exception:
         db.rollback()
         logger.exception("DB commit failed while deleting job %s", job_id)
-        raise HTTPException(
+        raise service_exception(
             status_code=500,
             detail="Database error while deleting job",
         )
@@ -2018,13 +2018,13 @@ def start_job(
 
     job = job_repo.get_for_update(job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise service_exception(status_code=404, detail="Job not found")
 
     job_row = _row(job)
     _reject_when_startup_analysis_running(job, action="start this job")
     current_status = cast(JobStatus, job_row.status)
     if current_status not in (JobStatus.PENDING, JobStatus.FAILED, JobStatus.PAUSED):
-        raise HTTPException(
+        raise service_exception(
             status_code=409, detail=f"Job is already in status {current_status}"
         )
 
@@ -2035,7 +2035,7 @@ def start_job(
             target_mount_path=cast(Optional[str], job_row.target_mount_path),
         )
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise service_exception(status_code=422, detail=str(exc)) from exc
 
     assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
     _reject_start_when_drive_capacity_is_insufficient(
@@ -2060,7 +2060,7 @@ def start_job(
         job_repo.save(job)
     except Exception:
         logger.exception("DB commit failed while starting job %s", job_id)
-        raise HTTPException(
+        raise service_exception(
             status_code=500,
             detail="Database error while starting job",
         )
@@ -2133,13 +2133,13 @@ def retry_failed_files(
 
     job = job_repo.get_for_update(job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise service_exception(status_code=404, detail="Job not found")
 
     job_row = _row(job)
     _reject_when_startup_analysis_running(job, action="retry failed files for this job")
     current_status = cast(JobStatus, job_row.status)
     if current_status != JobStatus.COMPLETED:
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail="Only completed jobs with failed files can retry failed copies",
         )
@@ -2151,12 +2151,12 @@ def retry_failed_files(
             target_mount_path=cast(Optional[str], job_row.target_mount_path),
         )
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise service_exception(status_code=422, detail=str(exc)) from exc
 
     _done_count, error_count, timeout_count = file_repo.count_done_errors_and_timeouts(job_id)
     retryable_count = int(error_count) + int(timeout_count)
     if retryable_count <= 0:
-        raise HTTPException(status_code=409, detail="Job has no failed files to retry")
+        raise service_exception(status_code=409, detail="Job has no failed files to retry")
 
     file_repo.reset_failed_for_retry(job_id)
     job_row.status = JobStatus.RUNNING
@@ -2172,7 +2172,7 @@ def retry_failed_files(
             "DB commit failed while retrying failed files",
             extra={"job_id": job_id},
         )
-        raise HTTPException(
+        raise service_exception(
             status_code=500,
             detail="Database error while retrying failed files",
         )
@@ -2243,12 +2243,12 @@ def pause_job(
 
     job = job_repo.get_for_update(job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise service_exception(status_code=404, detail="Job not found")
 
     job_row = _row(job)
     current_status = cast(JobStatus, job_row.status)
     if current_status != JobStatus.RUNNING:
-        raise HTTPException(status_code=409, detail=f"Job is already in status {current_status}")
+        raise service_exception(status_code=409, detail=f"Job is already in status {current_status}")
 
     job_row.status = JobStatus.PAUSING
     job_row.completed_at = None
@@ -2256,7 +2256,7 @@ def pause_job(
         job_repo.save(job)
     except Exception:
         logger.exception("DB commit failed while pausing job %s", job_id)
-        raise HTTPException(
+        raise service_exception(
             status_code=500,
             detail="Database error while pausing job",
         )
@@ -2317,11 +2317,11 @@ def verify_job(
 
     job = job_repo.get_for_update(job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise service_exception(status_code=404, detail="Job not found")
 
     job_row = _row(job)
     if cast(JobStatus, job_row.status) != JobStatus.COMPLETED:
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail="Only completed jobs can be verified",
         )
@@ -2329,7 +2329,7 @@ def verify_job(
     file_repo = FileRepository(db)
     _done, failed, timed_out = file_repo.count_done_errors_and_timeouts(job_id)
     if failed or timed_out:
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail="Only clean completed jobs can be verified",
         )
@@ -2339,7 +2339,7 @@ def verify_job(
         job_repo.save(job)
     except Exception:
         logger.exception("DB commit failed while starting verification for job %s", job_id)
-        raise HTTPException(
+        raise service_exception(
             status_code=500,
             detail="Database error while starting job verification",
         )
@@ -2393,13 +2393,13 @@ def download_manifest(job_id: int, db: Session, actor: Optional[str] = None, cli
 
     job = job_repo.get(job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise service_exception(status_code=404, detail="Job not found")
 
     job_row = _row(job)
     manifest = manifest_repo.get_latest_for_job(job_id)
     manifest_path = cast(Optional[str], getattr(manifest, "manifest_path", None))
     if not manifest_path:
-        raise HTTPException(status_code=404, detail="Manifest not found")
+        raise service_exception(status_code=404, detail="Manifest not found")
 
     manifest_name = os.path.basename(manifest_path) or "manifest.json"
     assignment = assignment_repo.get_active_for_job(job_id)
@@ -2417,7 +2417,7 @@ def download_manifest(job_id: int, db: Session, actor: Optional[str] = None, cli
             "Manifest download rejected",
             extra={"job_id": job_id, "project_id": job_project_id, "reason": "drive_not_mounted"},
         )
-        raise HTTPException(status_code=409, detail="Assigned drive is not mounted")
+        raise service_exception(status_code=409, detail="Assigned drive is not mounted")
 
     candidate_path = os.path.join(drive_mount_path, manifest_name)
 
@@ -2433,7 +2433,7 @@ def download_manifest(job_id: int, db: Session, actor: Optional[str] = None, cli
             "Manifest download file missing",
             extra={"path": candidate_path, "raw_error": str(exc)},
         )
-        raise HTTPException(status_code=404, detail="Manifest file not found") from exc
+        raise service_exception(status_code=404, detail="Manifest file not found") from exc
     except OSError as exc:
         logger.info(
             "Manifest download failed",
@@ -2443,7 +2443,7 @@ def download_manifest(job_id: int, db: Session, actor: Optional[str] = None, cli
             "Manifest download file unavailable",
             extra={"path": candidate_path, "raw_error": str(exc)},
         )
-        raise HTTPException(status_code=500, detail="Manifest file is unavailable") from exc
+        raise service_exception(status_code=500, detail="Manifest file is unavailable") from exc
 
     try:
         audit_repo.add(

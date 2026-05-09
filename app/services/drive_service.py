@@ -2,12 +2,11 @@ import logging
 import os
 from typing import Dict, List, Optional
 
-from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.exceptions import ConflictError
+from app.exceptions import ConflictError, ECUBEException, service_exception
 from app.infrastructure.drive_eject import DriveEjectProvider
 from app.infrastructure.drive_format import DriveFormatter
 from app.infrastructure.drive_mount import DriveMountProvider
@@ -262,7 +261,7 @@ def get_all_drives(
             parsed = [DriveState(s) for s in states]
         except ValueError:
             valid = ", ".join(e.value for e in DriveState)
-            raise HTTPException(
+            raise service_exception(
                 status_code=422,
                 detail=f"Invalid state filter. Valid values: {valid}",
             )
@@ -287,7 +286,7 @@ def initialize_drive(
 ) -> UsbDrive:
     normalized_project_id = normalize_project_id(project_id)
     if not isinstance(normalized_project_id, str) or not normalized_project_id:
-        raise HTTPException(status_code=422, detail="project_id must not be empty")
+        raise service_exception(status_code=422, detail="project_id must not be empty")
 
     project_id = normalized_project_id
 
@@ -297,7 +296,7 @@ def initialize_drive(
 
     drive = drive_repo.get_for_update(drive_id)
     if not drive:
-        raise HTTPException(status_code=404, detail="Drive not found")
+        raise service_exception(status_code=404, detail="Drive not found")
 
     # DISCONNECTED drives are physically absent, and DISABLED drives are
     # present on a blocked port. Initialization requires AVAILABLE so the
@@ -319,7 +318,7 @@ def initialize_drive(
             )
         except Exception:
             logger.error("Failed to write audit log for INIT_REJECTED_NOT_AVAILABLE")
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail=(
                 "Drive is DISCONNECTED (not physically present) and cannot be initialized."
@@ -353,7 +352,7 @@ def initialize_drive(
                 )
             except Exception:
                 logger.error("Failed to write audit log for PROJECT_ISOLATION_VIOLATION")
-            raise HTTPException(
+            raise service_exception(
                 status_code=403,
                 detail=f"Drive is already assigned to project '{drive.current_project_id}'",
             )
@@ -376,7 +375,7 @@ def initialize_drive(
                 )
             except Exception:
                 logger.error("Failed to write audit log for INIT_REJECTED_PROJECT_MISMATCH")
-            raise HTTPException(
+            raise service_exception(
                 status_code=409,
                 detail=(
                     f"Drive previously used for project '{drive.current_project_id}'. "
@@ -404,7 +403,7 @@ def initialize_drive(
             )
         except Exception:
             logger.exception("Failed to write audit log for INIT_REJECTED_FILESYSTEM")
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail=(
                 "Drive must have a recognized filesystem before initialization. "
@@ -430,7 +429,7 @@ def initialize_drive(
             )
         except Exception:
             logger.exception("Failed to write audit log for INIT_REJECTED_NOT_MOUNTED")
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail="Drive must be mounted before it can be initialized for a project.",
         )
@@ -465,7 +464,7 @@ def initialize_drive(
                     "client_ip": client_ip,
                 },
             )
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise service_exception(status_code=409, detail=str(exc)) from exc
 
     if not project_source:
         try:
@@ -495,7 +494,7 @@ def initialize_drive(
                     "client_ip": client_ip,
                 },
             )
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail=(
                 f"No mounted share is assigned to project {project_id}. "
@@ -509,7 +508,7 @@ def initialize_drive(
         drive_repo.save(drive)
     except Exception:
         logger.exception("DB commit failed while initializing drive %s", drive_id)
-        raise HTTPException(
+        raise service_exception(
             status_code=500,
             detail="Database error while initializing drive",
         )
@@ -543,38 +542,38 @@ def mount_drive(
     # Read and validate without a row lock so the OS mount does not hold a DB lock.
     drive = drive_repo.get(drive_id)
     if not drive:
-        raise HTTPException(status_code=404, detail="Drive not found")
+        raise service_exception(status_code=404, detail="Drive not found")
 
     initial_state = drive.current_state
     initial_filesystem_path = drive.filesystem_path
     initial_project_id = drive.current_project_id
 
     if initial_state not in (DriveState.AVAILABLE, DriveState.IN_USE):
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail="Drive must be AVAILABLE or IN_USE before it can be mounted",
         )
 
     if drive.filesystem_type in {None, "unformatted", "unknown"}:
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail="Drive must have a recognized filesystem before it can be mounted",
         )
 
     if not initial_filesystem_path:
-        raise HTTPException(
+        raise service_exception(
             status_code=400,
             detail="Drive has no filesystem_path and cannot be mounted",
         )
 
     if not validate_device_path(initial_filesystem_path):
-        raise HTTPException(
+        raise service_exception(
             status_code=400,
             detail="Drive filesystem_path is invalid and cannot be mounted",
         )
 
     if drive.mount_path:
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail="Drive is already mounted",
         )
@@ -611,7 +610,7 @@ def mount_drive(
                     "filesystem_type": drive.filesystem_type,
                 },
             )
-            raise HTTPException(
+            raise service_exception(
                 status_code=409,
                 detail="Drive is already mounted; refresh drive status and retry",
             )
@@ -643,7 +642,7 @@ def mount_drive(
         except Exception:
             logger.exception("Failed to write audit log for DRIVE_MOUNT_FAILED")
         failure_status, failure_detail = _drive_mount_failure_response(error)
-        raise HTTPException(
+        raise service_exception(
             status_code=failure_status,
             detail=failure_detail,
         )
@@ -663,7 +662,7 @@ def mount_drive(
         detail = "Drive disappeared during mount; rollback attempted"
         if rollback_attempted and not rollback_ok:
             detail += "; manual intervention may be required"
-        raise HTTPException(status_code=404, detail=detail)
+        raise service_exception(status_code=404, detail=detail)
 
     if drive.current_state != initial_state:
         rollback_attempted, rollback_ok, rollback_error = _rollback_mount()
@@ -682,7 +681,7 @@ def mount_drive(
         )
         if rollback_attempted and not rollback_ok:
             detail += "; manual intervention may be required"
-        raise HTTPException(status_code=409, detail=detail)
+        raise service_exception(status_code=409, detail=detail)
 
     if drive.filesystem_path != initial_filesystem_path:
         rollback_attempted, rollback_ok, rollback_error = _rollback_mount()
@@ -696,7 +695,7 @@ def mount_drive(
         detail = "Device path changed during mount; operation aborted after rollback attempted"
         if rollback_attempted and not rollback_ok:
             detail += "; manual intervention may be required"
-        raise HTTPException(status_code=409, detail=detail)
+        raise service_exception(status_code=409, detail=detail)
 
     if drive.current_project_id != initial_project_id:
         rollback_attempted, rollback_ok, rollback_error = _rollback_mount()
@@ -710,7 +709,7 @@ def mount_drive(
         detail = "Drive project binding changed during mount; operation aborted after rollback attempted"
         if rollback_attempted and not rollback_ok:
             detail += "; manual intervention may be required"
-        raise HTTPException(status_code=409, detail=detail)
+        raise service_exception(status_code=409, detail=detail)
 
     if drive.mount_path:
         persisted_mount_path = os.path.normpath(str(drive.mount_path))
@@ -733,7 +732,7 @@ def mount_drive(
             detail = "Drive mount state changed during mount; operation aborted after rollback attempted"
             if rollback_attempted and not rollback_ok:
                 detail += "; manual intervention may be required"
-            raise HTTPException(status_code=409, detail=detail)
+            raise service_exception(status_code=409, detail=detail)
 
     drive.mount_path = mount_point
     try:
@@ -751,7 +750,7 @@ def mount_drive(
         detail = "Drive mount failed after database update error; rollback attempted"
         if rollback_attempted and not rollback_ok:
             detail += "; manual intervention may be required"
-        raise HTTPException(
+        raise service_exception(
             status_code=500,
             detail=detail,
         )
@@ -796,7 +795,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
     # Read the drive WITHOUT row lock so OS operations don't hold the lock.
     drive = drive_repo.get(drive_id)
     if not drive:
-        raise HTTPException(status_code=404, detail="Drive not found")
+        raise service_exception(status_code=404, detail="Drive not found")
 
     # Capture the precondition state for later validation.
     initial_state = drive.current_state
@@ -806,17 +805,17 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
     # Don't waste time on expensive OS operations for invalid preconditions.
     if initial_state == DriveState.AVAILABLE:
         if not drive.mount_path:
-            raise HTTPException(
+            raise service_exception(
                 status_code=409,
                 detail="Drive is not mounted; refresh drive status and retry prepare-eject",
             )
     elif initial_state != DriveState.IN_USE:
         if drive.mount_path:
-            raise HTTPException(
+            raise service_exception(
                 status_code=409,
                 detail="Drive mount state is stale or changed; refresh drive status and retry prepare-eject",
             )
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail=f"Drive is not in an ejectable state; cannot prepare eject (current state: {initial_state.value})",
         )
@@ -860,7 +859,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                 "failure_class": "job_not_completed",
             },
         )
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail=(
                 f"Drive cannot be prepared for eject while assigned job {blocking_job.id} "
@@ -905,7 +904,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                     )
                 except Exception:
                     logger.exception("Failed to write audit log for DRIVE_EJECT_CONFIRM_REQUIRED")
-                raise HTTPException(status_code=409, detail=confirm_message)
+                raise service_exception(status_code=409, detail=confirm_message)
 
             logger.warning(
                 "DRIVE_EJECT_WITH_INCOMPLETE_FILES",
@@ -930,7 +929,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                 )
             except Exception:
                 logger.exception("Failed to write audit log for DRIVE_EJECT_WITH_INCOMPLETE_FILES")
-    except HTTPException:
+    except ECUBEException:
         raise
     except Exception:
         logger.warning(
@@ -941,7 +940,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                 "failure_class": "incomplete_precheck_failed",
             },
         )
-        raise HTTPException(
+        raise service_exception(
             status_code=500,
             detail="Unable to verify incomplete-file state; retry prepare-eject",
         )
@@ -955,12 +954,12 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
     drive = drive_repo.get_for_update(drive_id)
     if not drive:
         # Drive was deleted between reads (unlikely but possible).
-        raise HTTPException(status_code=404, detail="Drive not found")
+        raise service_exception(status_code=404, detail="Drive not found")
 
     # Verify the drive state is still the same ejectable state we validated earlier.
     # If another request changed the state, reject with 409 Conflict.
     if drive.current_state != initial_state:
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail=f"Drive state changed during prepare-eject (was: {initial_state.value}, now: {drive.current_state.value}); operation aborted",
         )
@@ -968,7 +967,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
     # Verify the device path hasn't changed (e.g., via discovery refresh).
     # If it changed, the OS operations we performed are stale and the audit log would be inconsistent.
     if drive.filesystem_path != initial_device_path:
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail="Device path changed during prepare-eject; operation aborted",
         )
@@ -983,7 +982,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                 "DB commit failed after successful OS eject for drive %s",
                 drive_id,
             )
-            raise HTTPException(
+            raise service_exception(
                 status_code=500,
                 detail="Drive ejected at OS level but database update failed; manual intervention may be required",
             )
@@ -1069,12 +1068,12 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                 _redacted_device_name(initial_device_path),
                 sanitize_error_message(result.unmount_error, "Drive eject operation failed"),
             )
-            raise HTTPException(
+            raise service_exception(
                 status_code=409,
                 detail=recoverable_detail,
             )
 
-        raise HTTPException(
+        raise service_exception(
             status_code=500,
             detail="Drive eject preparation failed",
         )
@@ -1099,34 +1098,34 @@ def format_drive(
 
     drive = drive_repo.get_for_update(drive_id)
     if not drive:
-        raise HTTPException(status_code=404, detail="Drive not found")
+        raise service_exception(status_code=404, detail="Drive not found")
 
     if drive.current_state != DriveState.AVAILABLE:
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail=f"Drive must be in AVAILABLE state to format (current: {drive.current_state.value})",
         )
 
     if not drive.filesystem_path:
-        raise HTTPException(
+        raise service_exception(
             status_code=400,
             detail="Drive has no filesystem_path; cannot format",
         )
 
     if not validate_device_path(drive.filesystem_path):
-        raise HTTPException(
+        raise service_exception(
             status_code=400,
             detail=f"Invalid device path: {drive.filesystem_path!r}",
         )
 
     if drive.mount_path:
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail="Drive is currently mounted; unmount before formatting",
         )
 
     if formatter.is_mounted(drive.filesystem_path):
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail="Drive is currently mounted; unmount before formatting",
         )
@@ -1151,7 +1150,7 @@ def format_drive(
             )
         except Exception:
             logger.exception("Failed to write audit log for DRIVE_FORMAT_FAILED")
-        raise HTTPException(
+        raise service_exception(
             status_code=500,
             detail=f"Drive format failed: {exc}",
         )
@@ -1210,7 +1209,7 @@ def format_drive(
             )
         except Exception:
             logger.exception("Failed to write audit log for DRIVE_FORMAT_DB_UPDATE_FAILED")
-        raise HTTPException(
+        raise service_exception(
             status_code=500,
             detail="Drive formatted at OS level but database update failed",
         )

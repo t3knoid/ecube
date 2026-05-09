@@ -2,11 +2,11 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import HTTPException
 from sqlalchemy import or_
 from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.orm import Session
 
+from app.exceptions import service_exception
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
 from app.models.jobs import DriveAssignment, ExportJob, JobChainOfCustodySnapshot, JobStatus, Manifest
@@ -325,7 +325,7 @@ def confirm_chain_of_custody_handoff(
     # rows.  If the row is already locked, ConflictError (HTTP 409) is raised.
     drive = DriveRepository(db).get_for_update(payload.drive_id)
     if drive is None:
-        raise HTTPException(status_code=404, detail="Drive not found")
+        raise service_exception(status_code=404, detail="Drive not found")
 
     if payload.project_id and drive.current_project_id and payload.project_id != drive.current_project_id:
         try:
@@ -345,7 +345,7 @@ def confirm_chain_of_custody_handoff(
             )
         except Exception:
             logger.error("Failed to write audit log for PROJECT_ISOLATION_VIOLATION")
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail=(
                 f"Provided project_id '{payload.project_id}' does not match drive binding '{drive.current_project_id}'"
@@ -355,7 +355,7 @@ def confirm_chain_of_custody_handoff(
     effective_project_id = payload.project_id or drive.current_project_id
 
     if effective_project_id is None:
-        raise HTTPException(
+        raise service_exception(
             status_code=422,
             detail="Drive has no project binding and no project_id was provided; cannot record handoff",
         )
@@ -394,7 +394,7 @@ def confirm_chain_of_custody_handoff(
         lifecycle_start_event_id=lifecycle_start_event_id,
     )
     if prior_handoff is not None:
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail="A custody handoff has already been recorded for this drive lifecycle",
         )
@@ -438,25 +438,25 @@ def get_job_chain_of_custody_report(
 ) -> ChainOfCustodyReportSchema:
     job = JobRepository(db).get(job_id)
     if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise service_exception(status_code=404, detail="Job not found")
 
     snapshot_repo = JobChainOfCustodySnapshotRepository(db)
     snapshot = snapshot_repo.get_by_job_id(job.id)
     if snapshot is None:
         if job.status == JobStatus.ARCHIVED:
-            raise HTTPException(
+            raise service_exception(
                 status_code=404,
                 detail="No stored chain-of-custody snapshot is available for this archived job",
             )
         if not allow_persistence:
-            raise HTTPException(
+            raise service_exception(
                 status_code=404,
                 detail=(
                     "No stored chain-of-custody snapshot is available for this job; "
                     "ask an admin or manager to refresh the report to create one"
                 ),
             )
-        raise HTTPException(
+        raise service_exception(
             status_code=404,
             detail="No stored chain-of-custody snapshot is available for this job; refresh the report to create one",
         )
@@ -661,9 +661,9 @@ def refresh_job_chain_of_custody_report(
 ) -> ChainOfCustodyReportSchema:
     job = JobRepository(db).get(job_id)
     if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise service_exception(status_code=404, detail="Job not found")
     if job.status == JobStatus.ARCHIVED:
-        raise HTTPException(status_code=409, detail="Archived jobs can only return the last stored chain-of-custody snapshot")
+        raise service_exception(status_code=409, detail="Archived jobs can only return the last stored chain-of-custody snapshot")
 
     report = _build_job_chain_of_custody_report(db, job)
     snapshot = _store_job_chain_of_custody_snapshot(
@@ -686,9 +686,9 @@ def confirm_job_chain_of_custody_handoff(
 ) -> ChainOfCustodyHandoffResponse:
     job = JobRepository(db).get(job_id)
     if job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise service_exception(status_code=404, detail="Job not found")
     if payload.project_id is not None and payload.project_id != job.project_id:
-        raise HTTPException(status_code=409, detail="Provided project_id does not match the job project")
+        raise service_exception(status_code=409, detail="Provided project_id does not match the job project")
 
     assignment = (
         db.query(DriveAssignment)
@@ -696,7 +696,7 @@ def confirm_job_chain_of_custody_handoff(
         .one_or_none()
     )
     if assignment is None:
-        raise HTTPException(status_code=409, detail="Drive is not assigned to this job")
+        raise service_exception(status_code=409, detail="Drive is not assigned to this job")
 
     response = confirm_chain_of_custody_handoff(
         db,
@@ -709,7 +709,7 @@ def confirm_job_chain_of_custody_handoff(
 
     refreshed_job = JobRepository(db).get(job.id)
     if refreshed_job is None:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise service_exception(status_code=404, detail="Job not found")
 
     report = _build_job_chain_of_custody_report(db, refreshed_job)
     _store_job_chain_of_custody_snapshot(
@@ -745,21 +745,21 @@ def _resolve_coc_targets(
     project_id: Optional[str],
 ) -> Tuple[str, List[UsbDrive]]:
     if drive_id is None and drive_sn is None and project_id is None:
-        raise HTTPException(status_code=422, detail="At least one selector is required")
+        raise service_exception(status_code=422, detail="At least one selector is required")
 
     if drive_id is not None:
         drive = db.get(UsbDrive, drive_id)
         if drive is None:
-            raise HTTPException(status_code=404, detail="Drive not found")
+            raise service_exception(status_code=404, detail="Drive not found")
         if project_id and drive.current_project_id and drive.current_project_id != project_id:
-            raise HTTPException(
+            raise service_exception(
                 status_code=409,
                 detail=(
                     f"Provided project_id '{project_id}' does not match drive binding '{drive.current_project_id}'"
                 ),
             )
         if project_id is None and drive.current_project_id is None:
-            raise HTTPException(
+            raise service_exception(
                 status_code=422,
                 detail=(
                     "Drive has no project binding; provide project_id to scope "
@@ -772,7 +772,7 @@ def _resolve_coc_targets(
         try:
             drive = db.query(UsbDrive).filter(UsbDrive.device_identifier == drive_sn).one_or_none()
         except MultipleResultsFound:
-            raise HTTPException(
+            raise service_exception(
                 status_code=409,
                 detail="drive_sn resolves to multiple drives; provide drive_id to select unambiguously",
             )
@@ -793,22 +793,22 @@ def _resolve_coc_targets(
                 if project_scoped_matches:
                     serial_matches = project_scoped_matches
             if len(serial_matches) > 1:
-                raise HTTPException(
+                raise service_exception(
                     status_code=409,
                     detail="drive_sn resolves to multiple drives; provide drive_id to select unambiguously",
                 )
             drive = serial_matches[0] if serial_matches else None
         if drive is None:
-            raise HTTPException(status_code=404, detail="No drive found for provided drive_sn")
+            raise service_exception(status_code=404, detail="No drive found for provided drive_sn")
         if project_id and drive.current_project_id and drive.current_project_id != project_id:
-            raise HTTPException(
+            raise service_exception(
                 status_code=409,
                 detail=(
                     f"Provided project_id '{project_id}' does not match drive binding '{drive.current_project_id}'"
                 ),
             )
         if project_id is None and drive.current_project_id is None:
-            raise HTTPException(
+            raise service_exception(
                 status_code=422,
                 detail=(
                     "Drive has no project binding; provide project_id to scope "
@@ -1033,7 +1033,7 @@ def _build_job_chain_of_custody_report(
         .all()
     )
     if not assignments:
-        raise HTTPException(status_code=409, detail="Job has no drive assignments for chain-of-custody reporting")
+        raise service_exception(status_code=409, detail="Job has no drive assignments for chain-of-custody reporting")
 
     drives_by_id: Dict[int, UsbDrive] = {}
     assignment_by_drive_and_job: Dict[tuple[int, int], DriveAssignment] = {}
@@ -1045,7 +1045,7 @@ def _build_job_chain_of_custody_report(
 
     drives = [drives_by_id[drive_id] for drive_id in sorted(drives_by_id)]
     if not drives:
-        raise HTTPException(status_code=409, detail="Job has no drive assignments for chain-of-custody reporting")
+        raise service_exception(status_code=409, detail="Job has no drive assignments for chain-of-custody reporting")
 
     drive_ids = [drive.id for drive in drives]
     drive_events = (

@@ -23,10 +23,10 @@ import stat
 from datetime import datetime, timezone
 from typing import Optional, Tuple
 
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.exceptions import ECUBEException, service_exception
 from app.infrastructure.mount_info import is_active_mount_point
 from app.models.hardware import DriveState, UsbDrive
 from app.models.network import MountStatus, NetworkMount
@@ -152,16 +152,16 @@ def _resolve_and_validate(
     verification.
 
     Raises:
-        HTTPException(400): path-traversal detected.
-        HTTPException(400): symlink encountered on the path from root to target.
-        HTTPException(403): resolved path not under an allowed prefix.
+        service_exception(400): path-traversal detected.
+        service_exception(400): symlink encountered on the path from root to target.
+        service_exception(403): resolved path not under an allowed prefix.
     """
     real_root = os.path.realpath(db_mount_root)
 
     # Reject null bytes — they cause ValueError in os.path.realpath and
     # can be used for truncation attacks.
     if subdir and "\x00" in subdir:
-        raise HTTPException(
+        raise service_exception(
             status_code=400,
             detail="Invalid subdir: contains null byte.",
         )
@@ -169,7 +169,7 @@ def _resolve_and_validate(
     # Reject absolute subdir paths — the caller should only supply relative
     # directory names within the mount root.
     if subdir and subdir.startswith("/"):
-        raise HTTPException(
+        raise service_exception(
             status_code=400,
             detail="Invalid subdir: absolute paths are not allowed.",
         )
@@ -186,7 +186,7 @@ def _resolve_and_validate(
     # Containment check — real_target must be real_root or a descendant
     safe_root_prefix = real_root.rstrip("/") + "/"
     if real_target != real_root and not real_target.startswith(safe_root_prefix):
-        raise HTTPException(
+        raise service_exception(
             status_code=400,
             detail="Path traversal detected: subdir resolves outside mount root.",
         )
@@ -203,7 +203,7 @@ def _resolve_and_validate(
                 continue
             current = os.path.join(current, component)
             if os.path.islink(current):
-                raise HTTPException(
+                raise service_exception(
                     status_code=400,
                     detail="Symlink traversal denied: a path component is a symbolic link.",
                 )
@@ -216,7 +216,7 @@ def _resolve_and_validate(
         normalised_prefixes = [os.path.realpath(p).rstrip("/") + "/" for p in allowed]
         root_with_sep = real_root.rstrip("/") + "/"
         if not any(root_with_sep.startswith(np) or real_root == np.rstrip("/") for np in normalised_prefixes):
-            raise HTTPException(
+            raise service_exception(
                 status_code=403,
                 detail="Mount root is not in the configured allowed-prefix list.",
             )
@@ -301,12 +301,12 @@ def list_directory(
 
     Raises
     ------
-    HTTPException(403):
+    service_exception(403):
         When *path* does not match any active mount root, or falls outside the
         configured allowed-prefix list.
-    HTTPException(400):
+    service_exception(400):
         When *subdir* causes a path-traversal outside the mount root.
-    HTTPException(500):
+    service_exception(500):
         When the target directory cannot be listed due to a filesystem error.
     """
     # 1. Validate mount root against DB — returns the DB-stored (trusted) value
@@ -324,7 +324,7 @@ def list_directory(
     real_target: Optional[str] = None
     try:
         if db_mount_root is None:
-            raise HTTPException(
+            raise service_exception(
                 status_code=403,
                 detail=(
                     "The requested mount is not a registered active mount root."
@@ -334,7 +334,7 @@ def list_directory(
             )
 
         if root_source == "usb_drive" and not is_active_mount_point(db_mount_root):
-            raise HTTPException(
+            raise service_exception(
                 status_code=403,
                 detail="The requested USB drive is no longer actively mounted.",
             )
@@ -356,7 +356,7 @@ def list_directory(
                 for entry in it:
                     seen_entries += 1
                     if max_entries and seen_entries > max_entries:
-                        raise HTTPException(
+                        raise service_exception(
                             status_code=400,
                             detail=(
                                 f"Directory contains more than {max_entries} "
@@ -389,7 +389,7 @@ def list_directory(
                 exc=exc,
                 default_message="Target device or path was not found",
             )
-            raise HTTPException(
+            raise service_exception(
                 status_code=404,
                 detail="The directory no longer exists — the drive or share may have been unmounted.",
             )
@@ -406,7 +406,7 @@ def list_directory(
                 exc=exc,
                 default_message="Permission denied listing the requested directory",
             )
-            raise HTTPException(
+            raise service_exception(
                 status_code=403,
                 detail="Permission denied listing the requested directory.",
             )
@@ -423,7 +423,7 @@ def list_directory(
                 exc=exc,
                 default_message="The resolved path is not a directory",
             )
-            raise HTTPException(
+            raise service_exception(
                 status_code=400,
                 detail="The resolved path is not a directory.",
             )
@@ -440,7 +440,7 @@ def list_directory(
                 exc=exc,
                 default_message="Failed to list the directory due to a filesystem error",
             )
-            raise HTTPException(
+            raise service_exception(
                 status_code=500,
                 detail="Failed to list the directory due to a filesystem error.",
             )
@@ -479,7 +479,7 @@ def list_directory(
             page_size=page_size,
             has_more=has_more,
         )
-    except HTTPException as exc:
+    except ECUBEException as exc:
         if exc.status_code == 403:
             reason = str(exc.detail) if exc.detail else "browse_forbidden"
 

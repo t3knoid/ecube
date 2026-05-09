@@ -10,7 +10,6 @@ import grp
 from datetime import datetime, timezone
 from typing import Optional, Tuple
 
-from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -21,7 +20,7 @@ from app.repositories.audit_repository import AuditRepository
 from app.repositories.mount_repository import MountRepository
 from app.schemas.network import MountCreate, MountRelatedJobSchema, MountShareDiscoveryItem, MountShareDiscoveryRequest, MountShareDiscoveryResponse, MountUpdate, NetworkMountSchema
 from app.config import settings
-from app.exceptions import ConflictError, EncodingError
+from app.exceptions import ConflictError, ECUBEException, EncodingError, service_exception
 from app.services.mount_credentials_service import decrypt_mount_secret, encrypt_mount_secret
 from app.services.mount_check_utils import check_mounted_with_configured_timeout
 from app.services.audit_service import get_job_custody_summaries
@@ -935,7 +934,7 @@ def _extract_share_discovery_target(mount_type: MountType, remote_path: str) -> 
     protocol, host, _path = _normalize_remote_reference(mount_type, remote_path)
     if protocol and host:
         return host
-    raise HTTPException(status_code=422, detail="Enter a server address before browsing shares")
+    raise service_exception(status_code=422, detail="Enter a server address before browsing shares")
 
 
 def _discovered_share_display_name(mount_type: MountType, remote_path: str) -> str:
@@ -993,7 +992,7 @@ def _validate_remote_path_conflicts(
         existing_remote_path = str(existing.remote_path)
         existing_type, existing_host, existing_path = _normalize_remote_reference(existing_mount_type, existing_remote_path)
         if (candidate_type, candidate_host, candidate_path) == (existing_type, existing_host, existing_path):
-            raise HTTPException(
+            raise service_exception(
                 status_code=409,
                 detail="A mount for this remote source is already configured.",
             )
@@ -1004,7 +1003,7 @@ def _validate_remote_path_conflicts(
         if _remote_paths_overlap(candidate_path, existing_path):
             existing_project_id = normalize_project_id(existing.project_id) or "UNASSIGNED"
             if existing_project_id != project_id:
-                raise HTTPException(
+                raise service_exception(
                     status_code=409,
                     detail="Remote source paths overlap with another project's configured mount.",
                 )
@@ -1057,7 +1056,7 @@ def _load_stored_mount_credentials(mount: NetworkMount) -> dict[str, str | None]
                 }
             },
         )
-        raise HTTPException(
+        raise service_exception(
             status_code=500,
             detail="Stored mount credentials could not be decrypted",
         ) from exc
@@ -1149,7 +1148,7 @@ def _prepare_mount_for_update(
             }
         },
     )
-    raise HTTPException(
+    raise service_exception(
         status_code=409,
         detail=(
             f"Failed to unmount {_redacted_mount_label(local_mount_point)}: "
@@ -1211,7 +1210,7 @@ def validate_mount_candidate(mount_data: MountCreate, db: Session, actor: Option
                              client_ip: Optional[str] = None) -> NetworkMount:
     normalized_project_id = normalize_project_id(mount_data.project_id)
     if not isinstance(normalized_project_id, str) or not normalized_project_id:
-        raise HTTPException(status_code=422, detail="project_id must not be empty")
+        raise service_exception(status_code=422, detail="project_id must not be empty")
 
     mount_repo = MountRepository(db)
     audit_repo = AuditRepository(db)
@@ -1314,7 +1313,7 @@ def validate_mount_candidate(mount_data: MountCreate, db: Session, actor: Option
                 }
             },
         )
-        raise HTTPException(
+        raise service_exception(
             status_code=500,
             detail="Mount validation could not restore original mount state",
         )
@@ -1368,7 +1367,7 @@ def validate_mount_candidate(mount_data: MountCreate, db: Session, actor: Option
         )
 
     if candidate_status != MountStatus.MOUNTED:
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail=sanitize_error_message(validation_error, "Mount validation failed"),
         )
@@ -1429,7 +1428,7 @@ def discover_mount_shares(
             )
         except Exception:
             logger.exception("Failed to write audit log for MOUNT_SHARE_DISCOVERY_FAILED")
-        raise HTTPException(
+        raise service_exception(
             status_code=500,
             detail=_share_discovery_unavailable_detail(discovery_data.type),
         ) from exc
@@ -1454,7 +1453,7 @@ def discover_mount_shares(
             )
         except Exception:
             logger.exception("Failed to write audit log for MOUNT_SHARE_DISCOVERY_FAILED")
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail="Share discovery failed. Review the server address or credentials and try again.",
         ) from exc
@@ -1489,7 +1488,7 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
               client_ip: Optional[str] = None) -> NetworkMount:
     normalized_project_id = normalize_project_id(mount_data.project_id)
     if not isinstance(normalized_project_id, str) or not normalized_project_id:
-        raise HTTPException(status_code=422, detail="project_id must not be empty")
+        raise service_exception(status_code=422, detail="project_id must not be empty")
 
     mount_repo = MountRepository(db)
     audit_repo = AuditRepository(db)
@@ -1504,8 +1503,8 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
             normalized_project_id,
             existing_mounts,
         )
-    except (HTTPException, ConflictError) as exc:
-        rejection_message = str(exc.detail) if isinstance(exc, HTTPException) else exc.message
+    except ECUBEException as exc:
+        rejection_message = exc.message
         try:
             audit_repo.add(
                 action="MOUNT_ADD_REJECTED_CONFLICT",
@@ -1540,7 +1539,7 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
     try:
         mount_repo.add(mount)
     except IntegrityError as exc:
-        raise HTTPException(
+        raise service_exception(
             status_code=409,
             detail="A mount with this local_mount_point already exists",
         ) from exc
@@ -1548,7 +1547,7 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
         if is_encoding_error(exc):
             raise EncodingError("Mount data contains invalid characters") from exc
         logger.error("DB commit failed while creating mount record")
-        raise HTTPException(
+        raise service_exception(
             status_code=500,
             detail="Database error while creating mount record",
         )
@@ -1643,13 +1642,13 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
             # At this point the OS mount may have succeeded but the database did not
             # reflect the new status. Surface this as a server error rather than
             # returning an inconsistent mount object to the caller.
-            raise HTTPException(
+            raise service_exception(
                 status_code=500,
                 detail="Database error while updating mount status after OS mount; mount may be active at OS level.",
             )
     except Exception as exc:
-        if isinstance(exc, HTTPException):
-            # Re-raise HTTPExceptions so that intended HTTP error responses are not swallowed
+        if isinstance(exc, ECUBEException):
+            # Re-raise domain exceptions so intended API responses are not swallowed.
             raise
         mount.status = MountStatus.ERROR
         try:
@@ -1694,7 +1693,7 @@ def update_mount(mount_id: int, mount_data: MountUpdate, db: Session, actor: Opt
                  client_ip: Optional[str] = None) -> NetworkMount:
     normalized_project_id = normalize_project_id(mount_data.project_id)
     if not isinstance(normalized_project_id, str) or not normalized_project_id:
-        raise HTTPException(status_code=422, detail="project_id must not be empty")
+        raise service_exception(status_code=422, detail="project_id must not be empty")
 
     mount_repo = MountRepository(db)
     audit_repo = AuditRepository(db)
@@ -1702,7 +1701,7 @@ def update_mount(mount_id: int, mount_data: MountUpdate, db: Session, actor: Opt
 
     mount = mount_repo.get(mount_id)
     if not mount:
-        raise HTTPException(status_code=404, detail="Mount not found")
+        raise service_exception(status_code=404, detail="Mount not found")
 
     mount_label = _redacted_mount_label(str(mount.local_mount_point))
     changed_fields = _changed_mount_fields(
@@ -1721,7 +1720,7 @@ def update_mount(mount_id: int, mount_data: MountUpdate, db: Session, actor: Opt
             mount_repo.list_all(),
             ignore_mount_id=mount_id,
         )
-    except (HTTPException, ConflictError):
+    except ECUBEException:
         raise
 
     mount.type = mount_data.type
@@ -1834,12 +1833,12 @@ def update_mount(mount_id: int, mount_data: MountUpdate, db: Session, actor: Opt
                     }
                 },
             )
-            raise HTTPException(
+            raise service_exception(
                 status_code=500,
                 detail="Database error while updating mount record after mount attempt; mount may be active at OS level.",
             )
     except Exception as exc:
-        if isinstance(exc, HTTPException):
+        if isinstance(exc, ECUBEException):
             raise
         mount.status = MountStatus.ERROR
         try:
@@ -1899,7 +1898,7 @@ def remove_mount(mount_id: int, db: Session, actor: Optional[str] = None,
 
     mount = mount_repo.get(mount_id)
     if not mount:
-        raise HTTPException(status_code=404, detail="Mount not found")
+        raise service_exception(status_code=404, detail="Mount not found")
 
     provider = provider or _default_provider()
     local_mount_point = str(mount.local_mount_point)
@@ -1936,7 +1935,7 @@ def remove_mount(mount_id: int, db: Session, actor: Optional[str] = None,
                     _redacted_mount_label(local_mount_point),
                     sanitize_error_message(error_text, "Unmount failed"),
                 )
-                raise HTTPException(
+                raise service_exception(
                     status_code=409,
                     detail=(
                         f"Failed to unmount {_redacted_mount_label(local_mount_point)}: "
@@ -1959,7 +1958,7 @@ def remove_mount(mount_id: int, db: Session, actor: Optional[str] = None,
         mount_repo.delete(mount)
     except Exception:
         logger.exception("DB commit failed while deleting mount record %s", mount_id)
-        raise HTTPException(
+        raise service_exception(
             status_code=500,
             detail="Database error while removing mount record",
         )
@@ -2002,14 +2001,14 @@ def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None,
 
     mount = mount_repo.get(mount_id)
     if not mount:
-        raise HTTPException(status_code=404, detail="Mount not found")
+        raise service_exception(status_code=404, detail="Mount not found")
 
     provider = provider or _default_provider()
 
     if mount_data is not None:
         normalized_project_id = normalize_project_id(mount_data.project_id)
         if not isinstance(normalized_project_id, str) or not normalized_project_id:
-            raise HTTPException(status_code=422, detail="project_id must not be empty")
+            raise service_exception(status_code=422, detail="project_id must not be empty")
 
         mount_repo.acquire_create_lock()
         _validate_remote_path_conflicts(
@@ -2087,7 +2086,7 @@ def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None,
                     }
                 },
             )
-            raise HTTPException(
+            raise service_exception(
                 status_code=500,
                 detail="Mount validation could not restore original mount state",
             )
@@ -2100,7 +2099,7 @@ def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None,
                 "DB commit failed while saving mount validation timestamp",
                 extra={"context": {"mount_id": mount_id}},
             )
-            raise HTTPException(
+            raise service_exception(
                 status_code=500,
                 detail="Database error while saving mount validation",
             )
@@ -2123,7 +2122,7 @@ def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None,
             )
 
         if candidate_status != MountStatus.MOUNTED:
-            raise HTTPException(
+            raise service_exception(
                 status_code=409,
                 detail=sanitize_error_message(validation_error, "Mount validation failed"),
             )
@@ -2190,7 +2189,7 @@ def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None,
         mount = mount_repo.save(mount)
     except Exception:
         logger.exception("DB commit failed while saving mount validation for mount %s", mount_id)
-        raise HTTPException(
+        raise service_exception(
             status_code=500,
             detail="Database error while saving mount validation",
         )

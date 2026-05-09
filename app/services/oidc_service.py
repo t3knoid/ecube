@@ -11,11 +11,12 @@ lifetime (or until :func:`clear_jwks_cache` is called, e.g. in tests).
 Typical usage::
 
     from app.services import oidc_service
+    from app.exceptions import AuthenticationError
 
     try:
         payload = oidc_service.validate_token(raw_token)
     except oidc_service.OidcTokenError as exc:
-        raise HTTPException(status_code=401, detail=str(exc))
+        raise AuthenticationError(str(exc))
 
     groups = payload.get(settings.oidc_group_claim_name, [])
 """
