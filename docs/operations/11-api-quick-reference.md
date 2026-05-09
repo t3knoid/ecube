@@ -4,7 +4,7 @@
 |---|---|
 | Title | API Quick Reference |
 | Purpose | Provides a quick-reference guide to ECUBE API endpoints, authentication, and common request examples for operators and developers. |
-| Updated on | 05/04/26 |
+| Updated on | 05/08/26 |
 | Audience | Developers, operators, IT staff. |
 
 ## Table of Contents
@@ -189,7 +189,7 @@ Compatibility note: To support project-to-source-path policy, use project source
 
 **Chain-of-Custody Snapshot Semantics:** `GET /jobs/{job_id}/chain-of-custody` returns only the stored snapshot for that job. If no snapshot has been stored yet, the endpoint returns **404 Not Found** with guidance to refresh the report first. `POST /jobs/{job_id}/chain-of-custody/refresh` is the only API path that regenerates and persists the snapshot, returns snapshot metadata including the last on-disk update timestamp, and records the write in both the audit trail and the application log. Archived jobs remain readable through `GET /jobs/{job_id}/chain-of-custody` but cannot be refreshed.
 
-**System Health Runtime Warnings:** `GET /introspection/system-health` can include operator-safe `warnings` entries for degraded host runtime conditions. For example, ECUBE can report that exFAT formatting tools are present while exFAT runtime mount support is unavailable for the current kernel, which commonly appears after a kernel change leaves the matching runtime package missing. Warning entries can also include explicit `actions` metadata so the UI can render backend-approved repair actions without hardcoding warning-specific controls.
+**System Health Runtime Warnings:** `GET /introspection/system-health` can include operator-safe `warnings` entries for degraded host runtime conditions. For example, ECUBE can report that exFAT formatting tools are present while exFAT runtime mount support is unavailable for the current kernel, which commonly appears after a kernel change leaves the matching runtime package missing. Warning entries expose explicit `actions` metadata only to `admin` callers. `manager`, `processor`, and `auditor` callers still receive the warning itself, but the `actions` array is omitted or empty so non-admin roles do not receive repair-action metadata from this read-only endpoint.
 
 **Read-Only CoC Access:** `processor` shares the same read access as `admin`, `manager`, and `auditor` for `GET /jobs/{job_id}/chain-of-custody`. Snapshot refresh and custody handoff remain limited to `admin` and `manager`.
 

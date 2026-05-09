@@ -4,7 +4,7 @@
 |---|---|
 | Title | QA Testing Guide |
 | Purpose | Guides QA personnel through manual hands-on ECUBE UI and functional testing in a Linux-based test environment. |
-| Updated on | 05/04/26 |
+| Updated on | 05/08/26 |
 | Audience | QA personnel. |
 
 ## Table of Contents
@@ -734,6 +734,7 @@ At a narrow viewport (for example `<= 768px` wide), verify the responsive operat
 - On the System page, the USB Topology and Mounts tabs reduce visible columns on mobile and expose the remaining details through per-row overflow menus for `admin`, `manager`, and `processor`. Verify `auditor` sees only the `Health` tab and never sees the topology or mounts tabs on mobile or desktop.
 - On the System page, the tab set no longer includes `Job Debug`; verify authenticated roles only see the remaining supported tabs, with the `Logs` tab visible to `admin` and `manager` users only.
 - On the System page `Health` tab, verify `admin` users see any backend-provided runtime repair action buttons inside the `Runtime Warnings` panel, while `manager`, `processor`, and `auditor` do not see those action buttons even if the warning itself is visible.
+- Verify the API contract matches the UI gating: `GET /introspection/system-health` returns warning `actions` metadata for `admin` callers only, and the same warning is returned with an empty or omitted `actions` array for `manager`, `processor`, and `auditor` callers.
 - For a warning that exposes a runtime repair action, verify clicking the action opens a confirmation dialog, confirming the dialog calls the repair endpoint, and the page refreshes the health payload afterward instead of mutating state through the main `Refresh` button.
 - For a host where the warning is active but the backend cannot provide a runtime-repair adapter, verify the `Runtime Warnings` panel still loads, the warning remains visible, and no repair-action button is rendered for that warning.
 - For a warning whose repair action returns successfully but does not clear the degraded condition, verify the warning remains visible after refresh and the UI shows the explicit conflict message instead of a false success state.
