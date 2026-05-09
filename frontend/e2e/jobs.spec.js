@@ -225,6 +225,54 @@ test('jobs create, start, compare, and manifest flow', async ({ page }) => {
   await expectNoCriticalA11yViolations(page)
 })
 
+test('jobs create dialog traps keyboard focus and restores the trigger', async ({ page }) => {
+  await setupAuthenticatedPage(page, ['admin'])
+
+  await routeJson(page, '**/api/drives', [
+    {
+      id: 1,
+      device_identifier: 'USB-001',
+      port_system_path: '2-1',
+      serial_number: 'SER-001',
+      current_state: 'AVAILABLE',
+      current_project_id: 'P-77',
+      mount_path: '/mnt/ecube/1',
+    },
+  ])
+  await routeJson(page, '**/api/mounts', [
+    {
+      id: 4,
+      project_id: 'P-77',
+      status: 'MOUNTED',
+      remote_path: '10.1.1.1:/share',
+      local_mount_point: '/mnt/share',
+    },
+  ])
+  await routeJson(page, '**/api/jobs', [])
+
+  await page.goto('/jobs')
+
+  const createButton = page.getByRole('button', { name: 'Create Job' })
+  await createButton.click()
+
+  const dialog = page.getByRole('dialog', { name: 'Create Job' })
+  const projectField = dialog.locator('#job-project')
+  const cancelButton = dialog.getByRole('button', { name: 'Cancel' })
+
+  await expect(dialog).toBeVisible()
+  await expect(projectField).toBeFocused()
+
+  await page.keyboard.press('Shift+Tab')
+  await expect(cancelButton).toBeFocused()
+
+  await page.keyboard.press('Tab')
+  await expect(projectField).toBeFocused()
+
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await expect(createButton).toBeFocused()
+})
+
 test('jobs list supports safe pause and resume flow', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
 
