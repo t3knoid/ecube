@@ -102,6 +102,7 @@ frontend/
 │   │   ├── users.js               # GET/PUT/DELETE /users/*
 │   │   ├── admin.js               # POST/GET/DELETE /admin/os-users, /admin/os-groups
 │   │   ├── setup.js               # GET/POST/PUT /setup/*
+│   │   ├── telemetry.js           # POST /telemetry/ui-navigation via shared client
 │   │   └── introspection.js       # GET /introspection/*
 │   ├── assets/
 │   │   ├── base.css               # Reset, typography, layout utilities
@@ -284,7 +285,7 @@ All errors are mapped from the backend's `ErrorResponse { code, message, trace_i
 
 ### 6.2 API Modules
 
-Each module exports thin wrapper functions around Axios calls. Modules map 1:1 to backend router groups.
+Each module exports thin wrapper functions around the shared API client. Most modules use the default Axios adapter directly; `telemetry.js` is the current exception and still goes through `api/client.js` while selecting Axios's request-local fetch adapter so browser navigation telemetry can keep `keepalive` semantics without bypassing auth and response interceptors. Modules otherwise map 1:1 to backend router groups.
 
 | Module | Endpoints Covered | Used By |
 |--------|------------------|---------|
@@ -298,6 +299,7 @@ Each module exports thin wrapper functions around Axios calls. Modules map 1:1 t
 | `files.js` | `GET /files/{file_id}/hashes`, `POST /files/compare` | JobDetailView (hash viewer, file compare) |
 | `users.js` | `GET /users`, `GET /users/{username}/roles`, `PUT /users/{username}/roles`, `DELETE /users/{username}/roles` | UsersView |
 | `admin.js` | `POST /admin/os-users`, `GET /admin/os-users`, `DELETE /admin/os-users/{username}`, `PUT /admin/os-users/{username}/password`, `PUT /admin/os-users/{username}/groups`, `POST /admin/os-users/{username}/groups`, `GET /admin/os-groups` | UsersView (single users/roles editor) |
+| `telemetry.js` | `POST /telemetry/ui-navigation` | Router navigation guards, navigation tracing utilities |
 | `introspection.js` | `GET /introspection/usb/topology`, `GET /introspection/block-devices`, `GET /introspection/mounts`, `GET /introspection/system-health` | SystemView, DashboardView, AppFooter |
 
 ### 6.3 Job Progress Polling
