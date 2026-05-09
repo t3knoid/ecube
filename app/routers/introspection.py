@@ -249,7 +249,7 @@ def system_health(
 @router.post(
     "/system-health/actions/{action_code}",
     response_model=SystemHealthRepairActionResponse,
-    responses={**R_401, **R_403, **R_404, **R_409, **R_500},
+    responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500},
 )
 def run_system_health_action(
     action_code: str,

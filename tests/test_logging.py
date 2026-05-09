@@ -331,7 +331,10 @@ class TestAdminLogsEndpoints:
             assert resp.status_code == 404
 
     def test_list_logs_returns_503_when_log_directory_is_unavailable(self, admin_client):
-        with patch("app.routers.admin.settings") as mock_settings:
+        with (
+            patch("app.routers.admin.settings") as mock_settings,
+            patch("app.routers.admin.os.path.isdir", return_value=False),
+        ):
             mock_settings.log_file = "/var/log/ecube/app.log"
             resp = admin_client.get("/admin/logs")
             assert resp.status_code == 503
