@@ -25,11 +25,43 @@ from app.schemas.audit import (
     ManifestSummarySchema,
 )
 from app.services.callback_service import deliver_callback
-from app.utils.drive_identity import device_identifier_matches
+from app.utils.drive_identity import device_identifier_matches, parse_persistent_device_identifier
 
 logger = logging.getLogger(__name__)
 
 _IP_VISIBLE_ROLES = {"admin", "auditor"}
+
+
+def _drive_serial_for_coc(drive: UsbDrive) -> str:
+    return str(parse_persistent_device_identifier(drive.device_identifier).get("serial") or "")
+
+
+def _normalize_report_drive_serials(
+    db: Session,
+    report: ChainOfCustodyReportSchema,
+) -> ChainOfCustodyReportSchema:
+    drive_ids = [entry.drive_id for entry in report.reports]
+    if not drive_ids:
+        return report
+
+    drives = {
+        drive.id: drive
+        for drive in db.query(UsbDrive).filter(UsbDrive.id.in_(drive_ids)).all()
+    }
+    changed = False
+    reports = []
+
+    for entry in report.reports:
+        drive = drives.get(entry.drive_id)
+        drive_sn = _drive_serial_for_coc(drive) if drive is not None else entry.drive_sn
+        if drive_sn != entry.drive_sn:
+            changed = True
+        reports.append(entry.model_copy(update={"drive_sn": drive_sn}))
+
+    if not changed:
+        return report
+
+    return report.model_copy(update={"reports": reports})
 
 
 def _redact_ip(entry: AuditLog, roles: List[str]) -> AuditLogSchema:
@@ -407,7 +439,7 @@ def confirm_chain_of_custody_handoff(
         job_id=job_id,
         details={
             "drive_id": drive.id,
-            "drive_sn": drive.device_identifier,
+            "drive_sn": _drive_serial_for_coc(drive),
             "job_id": job_id,
             "project_id": effective_project_id,
             "creator": actor,
@@ -475,10 +507,11 @@ def get_job_chain_of_custody_report(
             },
             client_ip=client_ip,
         )
-    return _report_with_snapshot_metadata(
+    report = _normalize_report_drive_serials(
+        db,
         ChainOfCustodyReportSchema.model_validate(snapshot.payload),
-        snapshot,
     )
+    return _report_with_snapshot_metadata(report, snapshot)
 
 
 def get_job_drive_custody_summary(
@@ -992,7 +1025,7 @@ def _build_all_drive_reports(
         reports.append(
             ChainOfCustodyDriveReportSchema(
                 drive_id=drive.id,
-                drive_sn=drive.device_identifier,
+                drive_sn=_drive_serial_for_coc(drive),
                 drive_manufacturer=drive.manufacturer,
                 drive_model=drive.product_name,
                 project_id=effective_project_ids[drive_id_key],
@@ -1116,7 +1149,7 @@ def _build_job_chain_of_custody_report(
         reports.append(
             ChainOfCustodyDriveReportSchema(
                 drive_id=drive.id,
-                drive_sn=drive.device_identifier,
+                drive_sn=_drive_serial_for_coc(drive),
                 drive_manufacturer=drive.manufacturer,
                 drive_model=drive.product_name,
                 project_id=job.project_id,

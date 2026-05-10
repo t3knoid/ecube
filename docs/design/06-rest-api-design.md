@@ -1088,6 +1088,7 @@ Return the last stored job-scoped chain-of-custody snapshot for legal review, pr
 **Response notes:**
 
 - Each drive report includes `drive_id`, `drive_sn`, `drive_manufacturer`, `drive_model`, `project_id`, `custody_complete`, `delivery_time`, `manifest_summary`, and `chain_of_custody_events`.
+- `drive_sn` carries the parsed hardware serial number when the drive identity includes one and remains an empty string when the trusted identity data has no serial component.
 - Active and archived jobs can both return a stored snapshot when one exists.
 
 **Error responses:**

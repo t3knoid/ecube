@@ -174,22 +174,25 @@ Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 
 | UC-7.5a | Search audit logs by free-text substring across visible fields | Admin, Manager, Auditor | admin, manager, auditor |
 | UC-7.6 | View audit entry details (structured JSON metadata) | Admin, Manager, Auditor | admin, manager, auditor |
 | UC-7.7 | Export/download audit logs | Admin, Manager, Auditor | admin, manager, auditor |
-| UC-7.8 | Retrieve chain-of-custody report by drive ID | Admin, Manager, Auditor | admin, manager, auditor |
-| UC-7.9 | Retrieve chain-of-custody report by drive serial number | Admin, Manager, Auditor | admin, manager, auditor |
-| UC-7.10 | Retrieve chain-of-custody report by project ID | Admin, Manager, Auditor | admin, manager, auditor |
-| UC-7.11 | View chain-of-custody events (lifecycle timeline) | Admin, Manager, Auditor | admin, manager, auditor |
-| UC-7.12 | View manifest summary in chain-of-custody report | Admin, Manager, Auditor | admin, manager, auditor |
+| UC-7.8 | Retrieve chain-of-custody report by drive ID | Admin, Manager, Processor, Auditor | admin, manager, processor, auditor |
+| UC-7.9 | Retrieve chain-of-custody report by drive serial number | Admin, Manager, Processor, Auditor | admin, manager, processor, auditor |
+| UC-7.10 | Retrieve chain-of-custody report by project ID | Admin, Manager, Processor, Auditor | admin, manager, processor, auditor |
+| UC-7.11 | View chain-of-custody events (lifecycle timeline) | Admin, Manager, Processor, Auditor | admin, manager, processor, auditor |
+| UC-7.11a | View a chain-of-custody report when no drive serial is available | Admin, Manager, Processor, Auditor | admin, manager, processor, auditor |
+| UC-7.12 | View manifest summary in chain-of-custody report | Admin, Manager, Processor, Auditor | admin, manager, processor, auditor |
 | UC-7.13 | Confirm custody handoff with possessor and delivery details | Admin, Manager | admin, manager |
 | UC-7.14 | Acknowledge permanent archive warning before handoff | Admin, Manager | admin, manager |
 | UC-7.15 | Print or export the formatted chain-of-custody report for compliance records | Admin, Manager, Auditor | admin, manager, auditor |
 
 **UI Implication:** Audit and chain-of-custody now live on separate surfaces:
 
+The chain-of-custody report surfaces the hardware drive serial when trusted identity data includes one and leaves the serial field blank when the drive identity has no serial component.
+
 1. **Audit Logs** (UC-7.1–7.7): Traditional log viewer with server-backed pagination and filter controls populated from backend distinct values. The page supports user, action, job, date-range, and free-text search filters, shows the newest matching rows first, and expands individual rows to reveal the JSON `details` payload. Pagination uses numbered shortcut windows instead of simple previous/next-only controls: wider screens expose the current 10-page window while smaller screens reduce the shortcut window to 5 pages. A results summary above the table reports the current page count versus the total matching rows, an unfiltered empty audit store renders the default `No audit log entries are currently available.` message, and filtered no-match searches render a distinct empty state so operators can tell the difference between an empty audit store and an over-constrained query. `Export Audit CSV` exports the full filtered result set rather than only the currently visible page.
 
 	Startup reconciliation may add `MOUNT_RECONCILED` and `DRIVE_MOUNT_RECONCILED` entries when ECUBE restores expected managed mounts or removes orphan managed mount points during service startup.
 
-2. **Chain of Custody** (UC-7.8–7.15): Job Detail exposes a dedicated `Chain of Custody` action that becomes available only after the current job reaches `COMPLETED` and remains available on archived job detail pages for stored-report review. The action opens a compliance-focused CoC dialog for the current job. The dialog loads the last stored snapshot, shows a `Generated At` timestamp sourced from that stored snapshot metadata, lets `admin` and `manager` users explicitly refresh and persist a new snapshot, and exposes `Print CoC`, `Export CoC CSV`, and `Export JSON` against the stored snapshot currently loaded in the dialog. The same dialog contains the handoff confirmation form, prefill controls, and warning modal for `admin` and `manager` users only. After handoff, the custody transfer is recorded while the drive remains governed by the normal operational lifecycle, and archived jobs continue to expose their last stored CoC snapshot for read-only review.
+2. **Chain of Custody** (UC-7.8–7.15): Job Detail exposes a dedicated `Chain of Custody` action that becomes available only after the current job reaches `COMPLETED` and remains available on archived job detail pages for stored-report review. The action opens a compliance-focused CoC dialog for the current job. The dialog loads the last stored snapshot, shows a `Generated At` timestamp sourced from that stored snapshot metadata, lets `admin` and `manager` users explicitly refresh and persist a new snapshot, and exposes `Print CoC`, `Export CoC CSV`, and `Export JSON` against the stored snapshot currently loaded in the dialog for all read-enabled roles (`admin`, `manager`, `processor`, `auditor`). The same dialog contains the handoff confirmation form, prefill controls, and warning modal for `admin` and `manager` users only. After handoff, the custody transfer is recorded while the drive remains governed by the normal operational lifecycle, and archived jobs continue to expose their last stored CoC snapshot for read-only review.
 
 ---
 

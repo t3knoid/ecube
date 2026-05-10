@@ -1652,9 +1652,9 @@ Chain-of-Custody (CoC) handoff ensures legal custody transfer of evidence is pro
 | 1 | Retrieve stored CoC snapshot — archived job | `GET /jobs/{job_id}/chain-of-custody` for an archived job that already has a stored snapshot | 200, response contains the stored snapshot and snapshot metadata |
 | 2 | Retrieve stored CoC snapshot — active job | `GET /jobs/{job_id}/chain-of-custody` for a non-archived job that already has a stored snapshot | 200, response contains the stored snapshot and does not regenerate it |
 | 3 | CoC read — missing stored snapshot | `GET /jobs/{job_id}/chain-of-custody` for a non-archived job with no stored snapshot yet | 404, message explains that the report must be refreshed first |
-| 4 | CoC read — processor denied | `GET /jobs/{job_id}/chain-of-custody` with processor token | 403, `FORBIDDEN` |
+| 4 | CoC read — processor allowed | `GET /jobs/{job_id}/chain-of-custody` with processor token | 200 when a stored snapshot exists; otherwise 404 with refresh guidance |
 | 5 | CoC read — unauthenticated denied | `GET /jobs/{job_id}/chain-of-custody` without token | 401, `UNAUTHORIZED` |
-| 6 | CoC snapshot fields | Inspect any stored-snapshot response | `snapshot_stored_at`, `snapshot_updated_at`, `snapshot_stored_by`, `reports[]`, and manifest/custody fields are present |
+| 6 | CoC snapshot fields | Inspect any stored-snapshot response | `snapshot_stored_at`, `snapshot_updated_at`, `snapshot_stored_by`, `reports[]`, and manifest/custody fields are present; `drive_sn` shows the parsed hardware serial when available and is blank when unavailable |
 | 7 | CoC events include lifecycle | Inspect `chain_of_custody_events` in a stored report for a completed job | Events include `DRIVE_INITIALIZED`, `JOB_CREATED`, `JOB_STARTED`, `JOB_COMPLETED`, `DRIVE_EJECT_PREPARED`, and `COC_HANDOFF_CONFIRMED` when applicable |
 | 8 | CoC manifest summary | Inspect `manifest_summary` in the stored report | Array of objects with `job_id`, `evidence_number`, `processor_notes`, `total_files`, `total_bytes`, and `manifest_count` |
 | 9 | CoC — delivery_time absence (no handoff) | Complete a job and store a snapshot before handoff | `chain_of_custody_events` do not contain `COC_HANDOFF_CONFIRMED`; `custody_complete` is `false` |
@@ -1678,6 +1678,7 @@ Chain-of-Custody (CoC) handoff ensures legal custody transfer of evidence is pro
 | 10 | Confirm handoff — auditor denied | `POST /jobs/{job_id}/chain-of-custody/handoff` with auditor token | 403, `FORBIDDEN` |
 | 11 | Audit trail — COC_HANDOFF_CONFIRMED | Query `GET /audit?action=COC_HANDOFF_CONFIRMED` after handoff | Entry includes drive_id, project_id, possessor, delivery_time (ISO), received_by, receipt_ref, actor |
 | 12 | UI — delivery time local-to-UTC conversion | In the Confirm Custody Handoff panel, enter a delivery time (browser local timezone); submit the handoff | Submitted `delivery_time` in the API request body is in UTC ISO 8601; stored audit event reflects the UTC equivalent of the local time entered |
+| 13 | Handoff refresh leaves `drive_sn` blank when serial is unavailable | Confirm handoff for a drive whose trusted identity has no serial component, then inspect the refreshed job CoC snapshot and the `COC_HANDOFF_CONFIRMED` audit details | Both the stored snapshot and the audit event show `drive_sn: ""` |
 
 #### 12.12.3 Drive Availability and Stored Snapshot Behavior After Handoff
 
@@ -1703,7 +1704,7 @@ Chain-of-Custody (CoC) handoff ensures legal custody transfer of evidence is pro
 | 4 | Refresh stores a new snapshot while custody is pending | Open CoC as admin or manager for a non-archived job whose loaded report still has `custody_complete = false`, then click `Refresh` | Dialog reloads with the refreshed snapshot and a success message |
 | 5 | Completed custody hides refresh | Open CoC as admin or manager for a non-archived job whose loaded report shows `custody_complete = true` for all reports | The `Refresh` control is not shown |
 | 6 | CoC export actions use stored snapshot | Open CoC and inspect the toolbar | `Print CoC`, `Export CoC CSV`, and `Export JSON` operate on the loaded stored snapshot |
-| 7 | CoC CSV export contains custody-event rows | Load a stored snapshot and click `Export CoC CSV` | Download filename matches `chain-of-custody-job-*.csv`; rows include drive serial, manufacturer, model, timestamp, actor, action, event type, and JSON details |
+| 7 | CoC CSV export contains custody-event rows | Load a stored snapshot and click `Export CoC CSV` | Download filename matches `chain-of-custody-job-*.csv`; rows include drive serial, manufacturer, model, timestamp, actor, action, event type, and JSON details, and drives without a parsed serial export an empty serial field |
 | 8 | CoC print layout isolates the report | Load a stored snapshot, trigger print preview, and inspect the rendered page | Print view shows only the formatted CoC report cards from the dialog |
 | 9 | CoC prefill handoff form | Click `Prefill Handoff` on a CoC report as admin or manager | Handoff form populates with drive_id, project_id, and evidence value from the report/job |
 | 10 | Handoff confirmation warning modal appears | After filling handoff form and clicking `Confirm Handoff` | Modal appears with text explaining the handoff will be recorded in ECUBE and the stored CoC snapshot will be refreshed |

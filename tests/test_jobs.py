@@ -12,6 +12,7 @@ from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, 
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.services import audit_service
 from app.services.reconciliation_service import reconcile_jobs
+from app.utils.drive_identity import build_persistent_device_identifier
 
 
 def _create_assigned_job(db, *, drive, project_id, evidence_number, source_path, status):
@@ -941,7 +942,7 @@ def test_get_job_chain_of_custody_active_job_requires_stored_snapshot(manager_cl
 
 def test_refresh_job_chain_of_custody_persists_snapshot_for_active_job(manager_client, db, caplog):
     drive = UsbDrive(
-        device_identifier="USB-COC-JOB-REFRESH-001",
+        device_identifier=build_persistent_device_identifier("090c", "1000", "SER-COC-REFRESH-001", "2-1"),
         manufacturer="SanDisk",
         product_name="Ultra",
         current_state=DriveState.AVAILABLE,
@@ -989,6 +990,7 @@ def test_refresh_job_chain_of_custody_persists_snapshot_for_active_job(manager_c
     assert payload["selector_mode"] == "JOB"
     assert payload["project_id"] == "PROJ-COC-REFRESH"
     assert payload["reports"][0]["drive_id"] == drive.id
+    assert payload["reports"][0]["drive_sn"] == "SER-COC-REFRESH-001"
     assert payload["reports"][0]["manifest_summary"][0]["evidence_number"] == "EV-COC-REFRESH"
     assert payload["reports"][0]["manifest_summary"][0]["processor_notes"] == "Bag sealed at intake"
     assert payload["reports"][0]["manifest_summary"][0]["total_files"] == 4
@@ -998,6 +1000,7 @@ def test_refresh_job_chain_of_custody_persists_snapshot_for_active_job(manager_c
     snapshot = db.query(JobChainOfCustodySnapshot).filter(JobChainOfCustodySnapshot.job_id == job.id).one_or_none()
     assert snapshot is not None
     assert snapshot.payload["selector_mode"] == "JOB"
+    assert snapshot.payload["reports"][0]["drive_sn"] == "SER-COC-REFRESH-001"
 
     audit = db.query(AuditLog).filter(AuditLog.action == "COC_SNAPSHOT_STORED", AuditLog.job_id == job.id).one_or_none()
     assert audit is not None
@@ -1085,6 +1088,15 @@ def test_get_job_chain_of_custody_archived_job_requires_stored_snapshot(auditor_
 
 
 def test_get_job_chain_of_custody_archived_job_uses_stored_snapshot(auditor_client, db):
+    drive = UsbDrive(
+        id=7,
+        device_identifier=build_persistent_device_identifier("090c", "1000", "SER-COC-STORED-001", "2-7"),
+        current_state=DriveState.DISCONNECTED,
+        current_project_id="PROJ-COC-STORED",
+    )
+    db.add(drive)
+    db.flush()
+
     job = ExportJob(
         project_id="PROJ-COC-STORED",
         evidence_number="EV-COC-STORED",
@@ -1136,6 +1148,7 @@ def test_get_job_chain_of_custody_archived_job_uses_stored_snapshot(auditor_clie
     payload = response.json()
     assert payload["selector_mode"] == "JOB"
     assert payload["reports"][0]["drive_id"] == 7
+    assert payload["reports"][0]["drive_sn"] == "SER-COC-STORED-001"
     assert payload["snapshot_stored_by"] == "manager-user"
 
     audit = db.query(AuditLog).filter(AuditLog.action == "COC_SNAPSHOT_RECALLED", AuditLog.job_id == job.id).one_or_none()
@@ -1469,7 +1482,7 @@ def test_confirm_job_chain_of_custody_handoff_requires_drive_assignment(manager_
 
 def test_confirm_job_chain_of_custody_handoff_stores_snapshot(manager_client, db):
     drive = UsbDrive(
-        device_identifier="USB-COC-HANDOFF-002",
+        device_identifier=build_persistent_device_identifier("090c", "1000", "SER-COC-HANDOFF-002", "2-2"),
         current_state=DriveState.AVAILABLE,
         current_project_id="PROJ-COC-HANDOFF-2",
         mount_path="/mnt/ecube/coc-handoff-002",
@@ -1514,7 +1527,61 @@ def test_confirm_job_chain_of_custody_handoff_stores_snapshot(manager_client, db
     snapshot = db.query(JobChainOfCustodySnapshot).filter(JobChainOfCustodySnapshot.job_id == job.id).one_or_none()
     assert snapshot is not None
     assert snapshot.payload["selector_mode"] == "JOB"
+    assert snapshot.payload["reports"][0]["drive_sn"] == "SER-COC-HANDOFF-002"
     assert snapshot.payload["reports"][0]["custody_complete"] is True
+
+    handoff_audit = db.query(AuditLog).filter(AuditLog.action == "COC_HANDOFF_CONFIRMED", AuditLog.job_id == job.id).one()
+    assert handoff_audit.details["drive_sn"] == "SER-COC-HANDOFF-002"
+
+
+def test_confirm_job_chain_of_custody_handoff_leaves_drive_sn_blank_without_serial(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB-COC-HANDOFF-NO-SERIAL-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-COC-HANDOFF-3",
+        mount_path="/mnt/ecube/coc-handoff-no-serial-001",
+    )
+    db.add(drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-COC-HANDOFF-3",
+        evidence_number="EV-COC-HANDOFF-3",
+        source_path="/data/coc-handoff-3",
+        status=JobStatus.COMPLETED,
+        file_count=1,
+        copied_bytes=256,
+    )
+    db.add(job)
+    db.flush()
+
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id, file_count=1, copied_bytes=256))
+    db.add_all([
+        AuditLog(action="DRIVE_INITIALIZED", drive_id=drive.id, project_id="PROJ-COC-HANDOFF-3", details={"drive_id": drive.id}),
+        AuditLog(action="JOB_CREATED", drive_id=drive.id, job_id=job.id, project_id="PROJ-COC-HANDOFF-3", details={"project_id": "PROJ-COC-HANDOFF-3"}),
+    ])
+    db.commit()
+
+    response = manager_client.post(
+        f"/jobs/{job.id}/chain-of-custody/handoff",
+        json={
+            "drive_id": drive.id,
+            "project_id": "PROJ-COC-HANDOFF-3",
+            "possessor": "Evidence Locker",
+            "delivery_time": "2026-04-28T18:05:00Z",
+            "received_by": "Custodian B",
+            "receipt_ref": "RCPT-002",
+        },
+    )
+
+    assert response.status_code == 200
+
+    snapshot = db.query(JobChainOfCustodySnapshot).filter(JobChainOfCustodySnapshot.job_id == job.id).one_or_none()
+    assert snapshot is not None
+    assert snapshot.payload["reports"][0]["drive_sn"] == ""
+
+    handoff_audit = db.query(AuditLog).filter(AuditLog.action == "COC_HANDOFF_CONFIRMED", AuditLog.job_id == job.id).one()
+    assert handoff_audit.details["drive_sn"] == ""
 
 
 def test_job_chain_of_custody_handoff_reuses_legacy_event_without_job_id(manager_client, db):

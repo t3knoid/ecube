@@ -865,7 +865,7 @@ Typical workflow:
 
 1. Open the relevant job in `Job Detail`.
 2. Click `Chain of Custody` in the action area.
-3. Review the report card shown in the dialog for the drive tied to that copy job. The report is titled with the project binding and evidence number and includes generated-at UTC metadata, the requesting username, drive identity, processor notes, custody status, custody-event timeline, manifest summary rows, and an attestation block for print sign-off.
+3. Review the report card shown in the dialog for the drive tied to that copy job. The report is titled with the project binding and evidence number and includes generated-at UTC metadata, the requesting username, drive identity, processor notes, custody status, custody-event timeline, manifest summary rows, and an attestation block for print sign-off. The drive serial field shows the hardware serial number when ECUBE has one in trusted drive identity data and stays blank when that serial is unavailable.
 4. If no stored snapshot exists yet, or if the loaded report still shows incomplete custody and needs to be rebuilt from current trusted state, an `admin` or `manager` can click `Refresh` to store a new snapshot.
 5. Use `Print CoC`, `Export CoC CSV`, or `Export JSON` when you need a printable or downloadable copy of the report currently loaded in the dialog.
 6. If you are an `admin` or `manager` and the loaded report still shows incomplete custody, click `Custody Handoff` in the dialog toolbar.

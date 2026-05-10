@@ -65,7 +65,7 @@ class ManifestSummarySchema(BaseModel):
 
 class ChainOfCustodyDriveReportSchema(BaseModel):
     drive_id: int = Field(..., description="Target drive ID")
-    drive_sn: str = Field(..., description="Drive serial/device identifier")
+    drive_sn: str = Field(..., description="Drive serial number when available; blank when unavailable")
     drive_manufacturer: Optional[str] = Field(default=None, description="Drive manufacturer when available")
     drive_model: Optional[str] = Field(default=None, description="Drive model/product name when available")
     project_id: Optional[str] = Field(default=None, description="Bound project ID for the drive")

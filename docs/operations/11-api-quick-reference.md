@@ -250,6 +250,7 @@ Compatibility note: To support project-to-source-path policy, use project source
 - `search` is intended for operator-safe substring matching across audit content; `client_ip` participates only for roles that are already allowed to view it
 - `GET /audit/options` returns `actions`, `users`, and `job_ids` arrays for distinct filter values
 - `GET /audit/chain-of-custody` accepts `drive_id`, `drive_sn`, or `project_id`; when `drive_id` is present it remains authoritative over the other selectors
+- Each CoC report row returns `drive_sn` as the parsed hardware serial number when trusted drive identity data includes one; the field is an empty string when no serial component is available
 
 **Example:**
 

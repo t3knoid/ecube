@@ -979,6 +979,8 @@ curl -k -H "Authorization: Bearer $JWT_TOKEN" \
   "https://localhost:8443/jobs/42/chain-of-custody"
 ```
 
+The returned CoC snapshot reports `drive_sn` as the parsed hardware serial number when the drive identity includes one. When the trusted drive identity has no serial component, `drive_sn` is an empty string.
+
 > **Note:** Archived jobs continue returning their last stored snapshot through `GET /jobs/{job_id}/chain-of-custody`, but `POST /jobs/{job_id}/chain-of-custody/refresh` returns `409 Conflict` once the job is archived.
 > Full audit history for the drive remains visible via `GET /audit`.
 
