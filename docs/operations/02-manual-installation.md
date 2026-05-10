@@ -147,7 +147,7 @@ sha256sum -c "ecube-package-${LATEST_TAG}.sha256"
 
 ### 4.1 Install OS packages
 
-The ECUBE service depends on several non-standard OS packages for USB formatting, USB discovery, and NFS/SMB evidence mounts. These packages are provisioned by the Ansible deployment path and mirrored by the container image runtime dependencies, but operators preparing a bare-metal or minimal VM host should ensure they are installed before running the native installer or starting the service manually.
+The ECUBE service depends on several non-standard OS packages for USB formatting, USB discovery, and NFS/SMB evidence mounts. Operators preparing a bare-metal or minimal VM host should ensure these packages are installed before running the native installer or starting the service manually.
 
 | Package | Purpose |
 |---|---|

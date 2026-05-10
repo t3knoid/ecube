@@ -120,7 +120,7 @@ ECUBE must enforce password complexity and lifecycle policy for locally managed 
 
 - These requirements apply exclusively to local OS accounts managed through the `/admin/os-users` API.
 - LDAP and OIDC-backed accounts inherit the password and expiration policies of their upstream identity provider. ECUBE does not attempt to enforce or override those policies.
-- The configuration of `pam_pwhistory` and base `pam_pwquality` parameters in `/etc/pam.d/common-password` is a host-level prerequisite and is handled by the ECUBE installer and Ansible roles, not by the application at runtime.
+- The configuration of `pam_pwhistory` and base `pam_pwquality` parameters in `/etc/pam.d/common-password` is a host-level prerequisite and is handled by the ECUBE installer, not by the application at runtime.
 
 ## References
 
