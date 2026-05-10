@@ -821,7 +821,7 @@ Create a new job.
 
 ### `PUT /jobs/{job_id}`
 
-Update a non-active job from the Job Detail workflow. Editing is limited to `PENDING`, `PAUSED`, and `FAILED` jobs so project isolation and drive assignments remain consistent. The existing project binding cannot be changed.
+Update a pending job from the Job Detail workflow. Editing remains available after startup analysis completes only while the job is still `PENDING`, so project isolation and drive assignments cannot be redefined after copy work starts. The existing project binding cannot be changed.
 
 **Roles:** `admin`, `manager`, `processor`
 

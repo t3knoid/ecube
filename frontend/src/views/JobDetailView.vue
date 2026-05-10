@@ -17,7 +17,7 @@ import ProgressBar from '@/components/common/ProgressBar.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import { formatDriveIdentity } from '@/utils/driveIdentity.js'
 import { buildJobErrorMessage } from '@/utils/jobErrors.js'
-import { canOperateOnInactiveJob, canReadJobCoc, getJobDetailPrimaryActionKeys, getJobLifecycleToggleAction } from '@/utils/jobActions.js'
+import { canEditJob, canOperateOnInactiveJob, canReadJobCoc, getJobDetailPrimaryActionKeys, getJobLifecycleToggleAction } from '@/utils/jobActions.js'
 import { calculateJobProgress, isJobProgressActive } from '@/utils/jobProgress.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
@@ -214,7 +214,7 @@ function fileErrorPreview(row) {
 }
 
 const canEdit = computed(() => {
-  return canOperateOnInactiveJob({
+  return canEditJob({
     canOperate: canOperate.value,
     jobStatus: currentStatus.value,
     startupAnalysisStatus: currentStartupAnalysisStatus.value,
@@ -416,7 +416,7 @@ const actionItems = computed(() => {
       label: t('common.actions.edit'),
       disabled: !canEdit.value || acting.value,
       run: () => openEditDialog(),
-      visible: true,
+      visible: currentStatus.value === 'PENDING',
     },
     {
       key: 'analyze',

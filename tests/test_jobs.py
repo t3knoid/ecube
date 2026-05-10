@@ -3916,7 +3916,7 @@ def test_update_job_conflict_while_startup_analysis_running(client, db):
         evidence_number="EV-UPDATE-ANALYZING-001",
         source_path="/nfs/project-analyzing-001/evidence-old",
         target_mount_path=drive.mount_path,
-        status=JobStatus.FAILED,
+        status=JobStatus.PENDING,
         thread_count=4,
         startup_analysis_status=StartupAnalysisStatus.ANALYZING,
     )
@@ -3942,6 +3942,63 @@ def test_update_job_conflict_while_startup_analysis_running(client, db):
 
     assert response.status_code == 409
     assert "startup analysis is in progress" in response.json()["message"].lower()
+
+
+def test_update_job_rejects_started_job_states(client, db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="server:/exports/project-001",
+        project_id="PROJ-EDIT-STATE-001",
+        local_mount_point="/nfs/project-edit-state-001",
+        status=MountStatus.MOUNTED,
+    )
+    drive = UsbDrive(
+        device_identifier="USB-EDIT-STATE-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-EDIT-STATE-001",
+        mount_path="/mnt/ecube/edit-state-001",
+    )
+    db.add_all([mount, drive])
+    db.flush()
+
+    for status in (JobStatus.PAUSED, JobStatus.FAILED, JobStatus.RUNNING):
+        job = ExportJob(
+            project_id="PROJ-EDIT-STATE-001",
+            evidence_number=f"EV-EDIT-{status.value}",
+            source_path="/nfs/project-edit-state-001/evidence",
+            target_mount_path=drive.mount_path,
+            status=status,
+            thread_count=4,
+        )
+        db.add(job)
+        db.flush()
+        db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+        db.commit()
+
+        response = client.put(
+            f"/jobs/{job.id}",
+            json={
+                "project_id": "PROJ-EDIT-STATE-001",
+                "evidence_number": f"EV-EDIT-{status.value}",
+                "source_path": "/evidence-updated",
+                "mount_id": mount.id,
+                "drive_id": drive.id,
+                "thread_count": 4,
+                "max_file_retries": 3,
+                "retry_delay_seconds": 1,
+                "callback_url": None,
+            },
+        )
+
+        assert response.status_code == 409
+        payload = response.json()
+        assert payload.get("detail") == "Only pending jobs can be edited from Job Detail" \
+            or payload.get("message") == "Only pending jobs can be edited from Job Detail"
+
+        assignment = db.query(DriveAssignment).filter(DriveAssignment.job_id == job.id).one()
+        db.delete(assignment)
+        db.delete(job)
+        db.commit()
 
 
 def test_clear_job_startup_analysis_cache_manager_allowed_and_audited(manager_client, db):

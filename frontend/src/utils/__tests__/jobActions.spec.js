@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { canOperateOnInactiveJob, canPauseJob, canReadJobCoc, canStartJob, getJobDetailPrimaryActionKeys, getJobLifecycleToggleAction, getJobListLifecycleActions, shouldPollJobListEntry } from '../jobActions.js'
+import { canEditJob, canOperateOnInactiveJob, canPauseJob, canReadJobCoc, canStartJob, getJobDetailPrimaryActionKeys, getJobLifecycleToggleAction, getJobListLifecycleActions, shouldPollJobListEntry } from '../jobActions.js'
 import { buildJobErrorMessage } from '../jobErrors.js'
 
 describe('job action helpers', () => {
@@ -17,6 +17,13 @@ describe('job action helpers', () => {
   it('shares the inactive-job eligibility rule across edit, analyze, complete, and start states', () => {
     expect(canOperateOnInactiveJob({ canOperate: true, jobStatus: 'FAILED', startupAnalysisStatus: 'READY' })).toBe(true)
     expect(canOperateOnInactiveJob({ canOperate: true, jobStatus: 'RUNNING', startupAnalysisStatus: 'READY' })).toBe(false)
+  })
+
+  it('allows edit only while the job is still pending', () => {
+    expect(canEditJob({ canOperate: true, jobStatus: 'PENDING', startupAnalysisStatus: 'READY' })).toBe(true)
+    expect(canEditJob({ canOperate: true, jobStatus: 'PENDING', startupAnalysisStatus: 'ANALYZING' })).toBe(false)
+    expect(canEditJob({ canOperate: true, jobStatus: 'PAUSED', startupAnalysisStatus: 'READY' })).toBe(false)
+    expect(canEditJob({ canOperate: true, jobStatus: 'FAILED', startupAnalysisStatus: 'READY' })).toBe(false)
   })
 
   it('allows pause only for running jobs', () => {
@@ -72,6 +79,8 @@ describe('job action helpers', () => {
 
   it('derives primary Job Detail actions from one shared status helper', () => {
     expect(getJobDetailPrimaryActionKeys({ jobStatus: 'PENDING', canRetryFailed: false, canReadCoc: false })).toEqual(['edit', 'analyze', 'lifecycle-toggle'])
+    expect(getJobDetailPrimaryActionKeys({ jobStatus: 'PAUSED', canRetryFailed: false, canReadCoc: false })).toEqual(['analyze', 'lifecycle-toggle'])
+    expect(getJobDetailPrimaryActionKeys({ jobStatus: 'FAILED', canRetryFailed: false, canReadCoc: false })).toEqual(['analyze', 'lifecycle-toggle'])
     expect(getJobDetailPrimaryActionKeys({ jobStatus: 'RUNNING', canRetryFailed: false, canReadCoc: false })).toEqual(['lifecycle-toggle'])
     expect(getJobDetailPrimaryActionKeys({ jobStatus: 'COMPLETED', canRetryFailed: false, canReadCoc: true })).toEqual(['verify', 'manifest', 'coc'])
     expect(getJobDetailPrimaryActionKeys({ jobStatus: 'COMPLETED', canRetryFailed: true, canReadCoc: true })).toEqual(['retry-failed', 'coc'])

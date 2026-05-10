@@ -876,10 +876,9 @@ describe('JobDetailView start action', () => {
     const analyzeButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.analyze'))
     const startButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.start'))
 
-    expect(editButton).toBeTruthy()
+    expect(editButton).toBeUndefined()
     expect(analyzeButton).toBeTruthy()
     expect(startButton).toBeUndefined()
-    expect(editButton.attributes('disabled')).toBeDefined()
     expect(analyzeButton.attributes('disabled')).toBeDefined()
     expect(wrapper.findAll('button').some((node) => node.text() === i18n.global.t('jobs.archiveWithoutHandoff'))).toBe(false)
   })
@@ -2701,12 +2700,60 @@ describe('JobDetailView start action', () => {
     expect(primaryButtons.map((button) => button.text())).toEqual([
       i18n.global.t('jobs.pause'),
     ])
-    expect(wrapper.find('.detail-action-menu-edit').exists()).toBe(true)
+    expect(wrapper.find('.detail-action-menu-edit').exists()).toBe(false)
 
     await primaryButtons[0].trigger('click')
     await flushPromises()
 
     expect(mocks.pauseJob).toHaveBeenCalledWith(6)
+  })
+
+  it('keeps edit available after startup analysis completes while the job is still pending', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'PENDING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 0,
+      total_bytes: 0,
+      startup_analysis_status: 'READY',
+      startup_analysis_ready: true,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const editButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit'))
+    expect(editButton).toBeTruthy()
+    expect(editButton.attributes('disabled')).toBeUndefined()
+  })
+
+  it('hides edit once the job has started even if it later pauses or fails', async () => {
+    for (const status of ['PAUSED', 'FAILED']) {
+      mocks.getJob.mockResolvedValue({
+        id: 6,
+        status,
+        project_id: 'PROJ-001',
+        evidence_number: 'EV-006',
+        source_path: '/nfs/project-001/evidence',
+        target_mount_path: '/mnt/ecube/1',
+        thread_count: 4,
+        copied_bytes: 10,
+        total_bytes: 20,
+        startup_analysis_status: 'READY',
+        startup_analysis_ready: true,
+      })
+
+      const wrapper = mountView()
+      await flushPromises()
+
+      const editButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit'))
+      expect(editButton).toBeUndefined()
+      wrapper.unmount()
+    }
   })
 
   it('keeps desktop job detail actions expanded and files pagination wide', async () => {

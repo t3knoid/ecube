@@ -356,10 +356,10 @@ def update_job(
     current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
     request: Request,
 ):
-    """Update a non-active job from the Job Detail workflow.
+    """Update a pending job from the Job Detail workflow.
 
-    Editing is limited to safe non-active states so that project isolation and
-    drive assignments remain consistent.
+    Editing remains available after startup analysis completes only while the
+    job is still pending so that started work cannot be redefined mid-lifecycle.
 
     **Roles:** ``admin``, ``manager``, ``processor``
     """

@@ -649,7 +649,7 @@ Near the top of the page, Job Detail also shows the selected destination, the tr
 Typical functions include:
 
 - Run manual startup analysis before copy starts so the operator can review discovered files and estimated bytes
-- Edit a pending, paused, or failed job before resuming work
+- Edit a pending job before copy work has started, including after startup analysis completes while the job remains pending
 - Use the lifecycle toggle to start a pending job, resume a paused one, or pause a running one
 - Continue remaining work on another mounted destination drive when the original destination fills or a partial-success run must move to new media
 - Retry only the failed or timed-out files from a partial-success completed job

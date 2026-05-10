@@ -1235,10 +1235,10 @@ def _has_persisted_startup_analysis_state(job_row: Any) -> bool:
 
 def _require_editable_job(job: ExportJob) -> None:
     job_row = _row(job)
-    if cast(JobStatus, job_row.status) not in (JobStatus.PENDING, JobStatus.PAUSED, JobStatus.FAILED):
+    if cast(JobStatus, job_row.status) is not JobStatus.PENDING:
         raise service_exception(
             status_code=409,
-            detail="Only pending, paused, or failed jobs can be edited from Job Detail",
+            detail="Only pending jobs can be edited from Job Detail",
         )
 
 

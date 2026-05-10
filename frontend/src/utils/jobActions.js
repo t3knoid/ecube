@@ -21,6 +21,12 @@ export function canStartJob({ canOperate, jobStatus, startupAnalysisStatus }) {
   return canOperateOnInactiveJob({ canOperate, jobStatus, startupAnalysisStatus })
 }
 
+export function canEditJob({ canOperate, jobStatus, startupAnalysisStatus }) {
+  return Boolean(canOperate)
+    && normalizeJobStatus(jobStatus) === 'PENDING'
+    && normalizeStartupAnalysisStatus(startupAnalysisStatus) !== 'ANALYZING'
+}
+
 export function canPauseJob({ canOperate, jobStatus }) {
   return Boolean(canOperate) && normalizeJobStatus(jobStatus) === 'RUNNING'
 }
@@ -69,8 +75,11 @@ export function canReadJobCoc({ hasAccess, jobStatus }) {
 export function getJobDetailPrimaryActionKeys({ jobStatus, canRetryFailed, canReadCoc }) {
   const status = normalizeJobStatus(jobStatus)
 
-  if (INACTIVE_JOB_STATUSES.includes(status) || status === 'ARCHIVED') {
+  if (status === 'PENDING') {
     return ['edit', 'analyze', 'lifecycle-toggle']
+  }
+  if (status === 'FAILED' || status === 'PAUSED' || status === 'ARCHIVED') {
+    return ['analyze', 'lifecycle-toggle']
   }
   if (status === 'RUNNING' || status === 'PAUSING') {
     return ['lifecycle-toggle']
