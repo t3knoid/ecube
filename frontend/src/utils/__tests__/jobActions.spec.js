@@ -35,7 +35,7 @@ describe('job action helpers', () => {
       enabled: true,
     })
     expect(getJobLifecycleToggleAction({ canOperate: true, jobStatus: 'PAUSING', startupAnalysisStatus: 'READY' })).toEqual({
-      key: 'start',
+      key: 'pause',
       enabled: false,
     })
     expect(getJobLifecycleToggleAction({ canOperate: true, jobStatus: 'COMPLETED', startupAnalysisStatus: 'READY' })).toBeNull()
@@ -55,7 +55,7 @@ describe('job action helpers', () => {
       { key: 'pause', enabled: true },
     ])
     expect(getJobListLifecycleActions({ canOperate: true, jobStatus: 'PAUSING', startupAnalysisStatus: 'READY' })).toEqual([
-      { key: 'start', enabled: false },
+      { key: 'pause', enabled: false },
     ])
     expect(getJobListLifecycleActions({ canOperate: true, jobStatus: 'PAUSED', startupAnalysisStatus: 'ANALYZING' })).toEqual([
       { key: 'start', enabled: false },
