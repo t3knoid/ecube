@@ -83,6 +83,66 @@ def test_ensure_runtime_host_packages_adds_kernel_extras_when_available(tmp_path
     assert "install -y" in apt_commands
     assert "exfatprogs" in apt_commands
     assert "linux-modules-extra-6.8.0-test" in apt_commands
+    assert "Checking Ubuntu kernel runtime package availability: linux-modules-extra-6.8.0-test" in result.stdout
+    assert "Ubuntu kernel runtime package detected in apt and queued for installation: linux-modules-extra-6.8.0-test" in result.stdout
+
+
+def test_ensure_runtime_host_packages_warns_when_kernel_extras_unavailable(tmp_path):
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    apt_log = tmp_path / "apt.log"
+
+    (fake_bin / "dpkg").write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "exit 1\n",
+        encoding="utf-8",
+    )
+    (fake_bin / "dpkg").chmod(0o755)
+    (fake_bin / "apt-cache").write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "exit 1\n",
+        encoding="utf-8",
+    )
+    (fake_bin / "apt-cache").chmod(0o755)
+    (fake_bin / "apt-get").write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "printf '%s\\n' \"$*\" >> \"${APT_LOG:?}\"\n",
+        encoding="utf-8",
+    )
+    (fake_bin / "apt-get").chmod(0o755)
+    (fake_bin / "uname").write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "if [[ \"${1:-}\" == -r ]]; then\n"
+        "  printf '6.8.0-missing\\n'\n"
+        "else\n"
+        "  /usr/bin/uname \"$@\"\n"
+        "fi\n",
+        encoding="utf-8",
+    )
+    (fake_bin / "uname").chmod(0o755)
+
+    env = {
+        **os.environ,
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "APT_LOG": str(apt_log),
+        "LOG_FILE": str(tmp_path / "install.log"),
+    }
+    result = _run_install_function(
+        tmp_path,
+        "ID=ubuntu\nID_LIKE=debian\nDRY_RUN=false\n_ensure_runtime_host_packages\n",
+        env,
+    )
+
+    assert result.returncode == 0, f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+    apt_commands = apt_log.read_text(encoding="utf-8")
+    assert "install -y" in apt_commands
+    assert "linux-modules-extra-6.8.0-missing" not in apt_commands
+    assert "Checking Ubuntu kernel runtime package availability: linux-modules-extra-6.8.0-missing" in result.stdout
+    assert "Runtime package 'linux-modules-extra-6.8.0-missing' is not available in apt." in result.stdout
 
 
 def test_prepare_managed_mount_roots_honors_usb_mount_base_path_from_env(tmp_path):

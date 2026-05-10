@@ -1270,13 +1270,17 @@ _ensure_runtime_host_packages() {
 
   if [[ "${ID}" == "ubuntu" ]]; then
     kernel_extra_package="linux-modules-extra-$(uname -r)"
+    info "Checking Ubuntu kernel runtime package availability: ${kernel_extra_package}"
     if ! dpkg -s "${kernel_extra_package}" >/dev/null 2>&1; then
       _update_runtime_package_index
       if apt-cache show "${kernel_extra_package}" >/dev/null 2>&1; then
+        info "Ubuntu kernel runtime package detected in apt and queued for installation: ${kernel_extra_package}"
         packages+=("${kernel_extra_package}")
       else
         warn "Runtime package '${kernel_extra_package}' is not available in apt. exFAT USB mounts may fail until it is installed manually if your host kernel requires it."
       fi
+    else
+      info "Ubuntu kernel runtime package already installed: ${kernel_extra_package}"
     fi
   fi
 
