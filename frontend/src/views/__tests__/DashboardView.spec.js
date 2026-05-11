@@ -72,6 +72,7 @@ function mountView() {
                 </slot>
                 <slot name="cell-project_id" :row="row" />
                 <slot name="cell-status" :row="row" />
+                <slot name="cell-next_step" :row="row" />
                 <slot name="cell-attention" :row="row" />
                 <slot name="cell-progress" :row="row" />
               </div>
@@ -194,6 +195,9 @@ describe('DashboardView active jobs', () => {
     expect(wrapper.text()).toContain(i18n.global.t('dashboard.attentionBlocked'))
     expect(wrapper.text()).toContain(i18n.global.t('dashboard.attentionWaitingToStart'))
     expect(wrapper.text()).toContain(i18n.global.t('dashboard.attentionWaitingForCustody'))
+    expect(wrapper.text()).toContain(i18n.global.t('dashboard.nextStepReviewFailedFiles'))
+    expect(wrapper.text()).toContain(i18n.global.t('dashboard.nextStepReviewAndStart'))
+    expect(wrapper.text()).toContain(i18n.global.t('dashboard.nextStepReviewVerificationAndHandoff'))
 
     const jobLinks = wrapper.findAll('.cell-link').map((node) => node.text())
     expect(jobLinks).toContain('40')
@@ -224,6 +228,28 @@ describe('DashboardView active jobs', () => {
     expect(wrapper.text()).toContain(i18n.global.t('dashboard.needsAttention'))
     expect(wrapper.text()).not.toContain(i18n.global.t('dashboard.attentionWaitingToStart'))
     expect(wrapper.text()).toContain(i18n.global.t('dashboard.noNeedsAttention'))
+    expect(wrapper.text()).toContain(i18n.global.t('dashboard.nextStepAwaitAnalysis'))
+  })
+
+  it('shows monitor guidance for active jobs', async () => {
+    mocks.listJobs.mockResolvedValue([
+      {
+        id: 61,
+        project_id: 'PROJ-061',
+        status: 'RUNNING',
+        copied_bytes: 100,
+        total_bytes: 1000,
+        file_count: 10,
+        files_succeeded: 1,
+        files_failed: 0,
+      },
+    ])
+    mocks.getMounts.mockResolvedValue([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('dashboard.nextStepMonitorProgress'))
   })
 
   it('shows an empty needs-attention state when no follow-up items are present', async () => {

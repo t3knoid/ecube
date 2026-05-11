@@ -72,6 +72,51 @@ export function canReadJobCoc({ hasAccess, jobStatus }) {
   return Boolean(hasAccess) && COC_READABLE_JOB_STATUSES.includes(normalizeJobStatus(jobStatus))
 }
 
+function hasRetryableFiles({ failedFiles, timedOutFiles }) {
+  return Number(failedFiles || 0) + Number(timedOutFiles || 0) > 0
+}
+
+export function getDashboardNextStepKey({ jobStatus, startupAnalysisStatus, custodyStatus, failedFiles, timedOutFiles }) {
+  const status = normalizeJobStatus(jobStatus)
+  const normalizedStartupAnalysisStatus = normalizeStartupAnalysisStatus(startupAnalysisStatus)
+  const normalizedCustodyStatus = String(custodyStatus || '').toUpperCase()
+  const retryableFiles = hasRetryableFiles({ failedFiles, timedOutFiles })
+
+  if (status === 'PENDING') {
+    if (normalizedStartupAnalysisStatus === 'ANALYZING') return 'dashboard.nextStepAwaitAnalysis'
+    if (canStartJob({ canOperate: true, jobStatus: status, startupAnalysisStatus })) {
+      return 'dashboard.nextStepReviewAndStart'
+    }
+    return 'dashboard.nextStepOpenDetail'
+  }
+
+  if (['RUNNING', 'PAUSING', 'VERIFYING'].includes(status)) {
+    return 'dashboard.nextStepMonitorProgress'
+  }
+
+  if (status === 'FAILED' || status === 'PAUSED') {
+    return retryableFiles ? 'dashboard.nextStepReviewFailedFiles' : 'dashboard.nextStepReviewAndResume'
+  }
+
+  if (['COMPLETED', 'ARCHIVED'].includes(status)) {
+    if (normalizedCustodyStatus === 'PENDING_HANDOFF') {
+      return retryableFiles ? 'dashboard.nextStepReviewFailedFiles' : 'dashboard.nextStepReviewVerificationAndHandoff'
+    }
+
+    const primaryActionKeys = getJobDetailPrimaryActionKeys({
+      jobStatus: status,
+      canRetryFailed: retryableFiles,
+      canReadCoc: canReadJobCoc({ hasAccess: true, jobStatus: status }),
+    })
+
+    if (primaryActionKeys.includes('retry-failed')) return 'dashboard.nextStepReviewFailedFiles'
+    if (primaryActionKeys.includes('verify')) return 'dashboard.nextStepReviewVerification'
+    if (primaryActionKeys.includes('coc')) return 'dashboard.nextStepReviewHandoff'
+  }
+
+  return 'dashboard.nextStepOpenDetail'
+}
+
 export function getJobDetailPrimaryActionKeys({ jobStatus, canRetryFailed, canReadCoc }) {
   const status = normalizeJobStatus(jobStatus)
 

@@ -13,7 +13,7 @@ import ProgressBar from '@/components/common/ProgressBar.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { calculateJobProgress, isJobProgressActive } from '@/utils/jobProgress.js'
 import { MOUNT_WORKFLOW_BUCKETS, buildMountWorkflowCounts } from '@/utils/mountWorkflow.js'
-import { canStartJob, normalizeJobStatus } from '@/utils/jobActions.js'
+import { canStartJob, getDashboardNextStepKey, normalizeJobStatus } from '@/utils/jobActions.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
 const { t } = useI18n()
@@ -61,6 +61,7 @@ const needsAttentionColumns = computed(() => [
   { key: 'id', label: t('dashboard.jobId') },
   { key: 'project_id', label: t('dashboard.project') },
   { key: 'status', label: t('common.labels.status') },
+  { key: 'next_step', label: t('dashboard.nextStep') },
   { key: 'attention', label: t('dashboard.attentionType') },
 ])
 
@@ -68,6 +69,7 @@ const healthColumns = computed(() => [
   { key: 'id', label: t('dashboard.jobId') },
   { key: 'project_id', label: t('dashboard.project') },
   { key: 'status', label: t('common.labels.status') },
+  { key: 'next_step', label: t('dashboard.nextStep') },
   { key: 'progress', label: t('dashboard.progress') },
 ])
 
@@ -89,6 +91,11 @@ const mountSummaryEntries = computed(() => [
 const needsAttentionItems = computed(() => {
   const items = []
   const seenJobIds = new Set()
+  const jobsById = new Map(
+    jobs.value
+      .map((job) => [Number(job.id), job])
+      .filter(([jobId]) => Number.isInteger(jobId) && jobId > 0),
+  )
 
   for (const job of jobs.value) {
     const jobId = Number(job.id)
@@ -119,14 +126,17 @@ const needsAttentionItems = computed(() => {
     const relatedJobId = Number(mount?.related_job?.job_id)
     const relatedJobStatus = normalizeJobStatus(mount?.related_job?.status)
     const custodyStatus = String(mount?.related_job?.custody_status || '').toUpperCase()
+    const matchedJob = jobsById.get(relatedJobId)
 
     if (!Number.isInteger(relatedJobId) || relatedJobId < 1 || seenJobIds.has(relatedJobId)) continue
     if (!['COMPLETED', 'ARCHIVED'].includes(relatedJobStatus) || custodyStatus !== 'PENDING_HANDOFF') continue
 
     items.push({
+      ...(matchedJob || {}),
       id: relatedJobId,
-      project_id: mount.project_id,
+      project_id: matchedJob?.project_id || mount.project_id,
       status: relatedJobStatus,
+      custody_status: custodyStatus,
       attention: t('dashboard.attentionWaitingForCustody'),
       attentionPriority: 2,
     })
@@ -173,6 +183,16 @@ function progressLabel(job) {
 
 function progressActive(job) {
   return isJobProgressActive(job)
+}
+
+function nextStepLabel(job) {
+  return t(getDashboardNextStepKey({
+    jobStatus: job?.status,
+    startupAnalysisStatus: job?.startup_analysis_status,
+    custodyStatus: job?.custody_status,
+    failedFiles: job?.files_failed,
+    timedOutFiles: job?.files_timed_out,
+  }))
 }
 
 async function refreshDashboard() {
@@ -321,6 +341,9 @@ onUnmounted(() => {
         <template #cell-status="{ row }">
           <StatusBadge :status="row.status" />
         </template>
+        <template #cell-next_step="{ row }">
+          <span class="next-step-label">{{ nextStepLabel(row) }}</span>
+        </template>
         <template #cell-attention="{ row }">
           <span class="attention-label">{{ row.attention }}</span>
         </template>
@@ -344,6 +367,9 @@ onUnmounted(() => {
         <template #cell-project_id="{ row }">{{ formatProjectId(row.project_id) }}</template>
         <template #cell-status="{ row }">
           <StatusBadge :status="row.status" />
+        </template>
+        <template #cell-next_step="{ row }">
+          <span class="next-step-label">{{ nextStepLabel(row) }}</span>
         </template>
         <template #cell-progress="{ row }">
           <div class="dashboard-progress-cell">
@@ -451,6 +477,11 @@ onUnmounted(() => {
 }
 
 .attention-label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.next-step-label {
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
 }

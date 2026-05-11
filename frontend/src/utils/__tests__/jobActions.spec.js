@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { canEditJob, canOperateOnInactiveJob, canPauseJob, canReadJobCoc, canStartJob, getJobDetailPrimaryActionKeys, getJobLifecycleToggleAction, getJobListLifecycleActions, shouldPollJobListEntry } from '../jobActions.js'
+import { canEditJob, canOperateOnInactiveJob, canPauseJob, canReadJobCoc, canStartJob, getDashboardNextStepKey, getJobDetailPrimaryActionKeys, getJobLifecycleToggleAction, getJobListLifecycleActions, shouldPollJobListEntry } from '../jobActions.js'
 import { buildJobErrorMessage } from '../jobErrors.js'
 
 describe('job action helpers', () => {
@@ -85,6 +85,20 @@ describe('job action helpers', () => {
     expect(getJobDetailPrimaryActionKeys({ jobStatus: 'COMPLETED', canRetryFailed: false, canReadCoc: true })).toEqual(['verify', 'manifest', 'coc'])
     expect(getJobDetailPrimaryActionKeys({ jobStatus: 'COMPLETED', canRetryFailed: true, canReadCoc: true })).toEqual(['retry-failed', 'coc'])
     expect(getJobDetailPrimaryActionKeys({ jobStatus: 'COMPLETED', canRetryFailed: false, canReadCoc: false })).toEqual(['verify', 'manifest'])
+  })
+
+  it('derives dashboard next-step guidance from trusted job and custody state', () => {
+    expect(getDashboardNextStepKey({ jobStatus: 'PENDING', startupAnalysisStatus: 'READY' })).toBe('dashboard.nextStepReviewAndStart')
+    expect(getDashboardNextStepKey({ jobStatus: 'PENDING', startupAnalysisStatus: 'ANALYZING' })).toBe('dashboard.nextStepAwaitAnalysis')
+    expect(getDashboardNextStepKey({ jobStatus: 'RUNNING', startupAnalysisStatus: 'READY' })).toBe('dashboard.nextStepMonitorProgress')
+    expect(getDashboardNextStepKey({ jobStatus: 'FAILED', failedFiles: 1, timedOutFiles: 0 })).toBe('dashboard.nextStepReviewFailedFiles')
+    expect(getDashboardNextStepKey({ jobStatus: 'PAUSED', failedFiles: 0, timedOutFiles: 0 })).toBe('dashboard.nextStepReviewAndResume')
+    expect(getDashboardNextStepKey({ jobStatus: 'COMPLETED', custodyStatus: 'PENDING_HANDOFF', failedFiles: 0, timedOutFiles: 0 })).toBe('dashboard.nextStepReviewVerificationAndHandoff')
+  })
+
+  it('falls back to opening Job Detail when trusted next-step inputs are unavailable', () => {
+    expect(getDashboardNextStepKey({ jobStatus: 'STATUS_UNAVAILABLE' })).toBe('dashboard.nextStepOpenDetail')
+    expect(getDashboardNextStepKey({ jobStatus: null })).toBe('dashboard.nextStepOpenDetail')
   })
 
   it('builds consistent job error messages across views', () => {

@@ -308,9 +308,9 @@ Typical information shown:
 - `Needs Attention` table for blocked work, waiting-to-start assignments, and completed jobs that still require chain-of-custody closeout
 - Drive state summary (`DISCONNECTED`, `DISABLED`, `AVAILABLE`, `IN_USE`)
 - Mount workflow summary (`Unassigned`, `Assigned`, `In Progress`, `Completed`, `Unavailable`), where `Assigned` means a job exists but has not started, `In Progress` includes started, paused, failed, or handoff-pending work, and `Unavailable` marks mounts whose trusted related-job or custody state could not be derived
-- Table of active jobs
+- Table of active jobs with derived `Next Step` guidance
 
-The `Needs Attention` section highlights trusted workflow items that require follow-up from processors or managers. `Blocked` covers failed or paused jobs, `Waiting to Start` highlights pending assignments, and `Waiting on Custody Closeout` highlights completed or archived jobs whose trusted custody state is still `Pending handoff`. Each row uses the `Job ID` value as the direct navigation path into Job Detail.
+The `Needs Attention` section highlights trusted workflow items that require follow-up from processors or managers. `Blocked` covers failed or paused jobs, `Waiting to Start` highlights pending assignments, and `Waiting on Custody Closeout` highlights completed or archived jobs whose trusted custody state is still `Pending handoff`. The `Needs Attention` and active-jobs tables both include a read-only `Next Step` column derived from trusted lifecycle, startup-analysis, failed-file, and custody state so operators can triage work before opening Job Detail. Each row uses the `Job ID` value as the direct navigation path into Job Detail.
 
 Auditor users see the dashboard with only the system-health summary card; drive summary, mounts summary, needs-attention items, and active-job counts/tables are hidden.
 
