@@ -336,6 +336,35 @@ function liveTransferEntries(job) {
   return entries
 }
 
+function dashboardStatusTone(status) {
+  const value = normalizeJobStatus(status)
+
+  if (['COMPLETED', 'DONE', 'MOUNTED', 'CONNECTED', 'AVAILABLE', 'OK', 'TRUE'].includes(value)) {
+    return 'success'
+  }
+  if (['FAILED', 'ERROR', 'DISCONNECTED', 'UNMOUNTED', 'FALSE'].includes(value)) {
+    return 'danger'
+  }
+  if (['RUNNING', 'VERIFYING', 'COPYING', 'IN_USE', 'DEGRADED', 'PAUSING'].includes(value)) {
+    return 'warning'
+  }
+  if (['PENDING', 'PAUSED', 'UNKNOWN'].includes(value)) {
+    return 'muted'
+  }
+
+  return 'info'
+}
+
+function dashboardStatusIcon(status) {
+  const tone = dashboardStatusTone(status)
+
+  if (tone === 'success') return '✓'
+  if (tone === 'warning') return '!'
+  if (tone === 'danger') return '×'
+  if (tone === 'muted') return '•'
+  return '?'
+}
+
 function nextStepLabel(job) {
   return t(getDashboardNextStepKey({
     jobStatus: job?.status,
@@ -479,16 +508,22 @@ onUnmounted(() => {
       <p v-if="!needsAttentionItems.length" class="muted">{{ t('dashboard.noNeedsAttention') }}</p>
       <DataTable
         v-else
+        class="needs-attention-table"
         :columns="needsAttentionColumns"
         :rows="needsAttentionItems"
         row-key="id"
       >
         <template #cell-id="{ row }">
-          <div class="dashboard-cell-stack">
+          <div class="dashboard-cell-stack dashboard-job-id-cell">
             <button class="cell-link" type="button" @click="openJobDetail(row.id)">
               {{ row.id }}
             </button>
-            <div class="dashboard-cell-meta dashboard-cell-meta-block">
+          </div>
+        </template>
+        <template #cell-project_id="{ row }">
+          <div class="dashboard-cell-stack">
+            <span>{{ formatProjectId(row.project_id) }}</span>
+            <div class="dashboard-cell-meta dashboard-cell-meta-block dashboard-source-context">
               <div class="dashboard-meta-line">
                 <span class="dashboard-meta-label">{{ t('dashboard.sourceMount') }}</span>
                 <span class="dashboard-meta-value wrap-anywhere">{{ sourceMountLabel(row) }}</span>
@@ -497,13 +532,6 @@ onUnmounted(() => {
                 <span class="dashboard-meta-label">{{ t('jobs.sourcePath') }}</span>
                 <span class="dashboard-meta-value wrap-anywhere">{{ sourcePathLabel(row) }}</span>
               </div>
-            </div>
-          </div>
-        </template>
-        <template #cell-project_id="{ row }">
-          <div class="dashboard-cell-stack">
-            <span>{{ formatProjectId(row.project_id) }}</span>
-            <div class="dashboard-cell-meta dashboard-cell-meta-block">
               <div class="dashboard-meta-line">
                 <span class="dashboard-meta-label">{{ t('jobs.destinationDrive') }}</span>
                 <span class="dashboard-meta-value wrap-anywhere">{{ destinationDriveLabel(row) }}</span>
@@ -516,7 +544,16 @@ onUnmounted(() => {
           </div>
         </template>
         <template #cell-status="{ row }">
-          <StatusBadge :status="row.status" />
+          <span
+            class="dashboard-status-icon"
+            :class="`dashboard-status-icon--${dashboardStatusTone(row.status)}`"
+            :aria-label="String(row.status || 'unknown')"
+            :title="String(row.status || 'unknown')"
+            role="img"
+          >
+            <span aria-hidden="true">{{ dashboardStatusIcon(row.status) }}</span>
+          </span>
+          <StatusBadge class="dashboard-status-badge" :status="row.status" />
         </template>
         <template #cell-next_step="{ row }">
           <div class="dashboard-cell-stack">
@@ -537,9 +574,9 @@ onUnmounted(() => {
 
     <article v-if="canViewOperationalSummary" class="panel">
       <h2>{{ t('jobs.activeJobs') }}</h2>
-      <DataTable :columns="healthColumns" :rows="activeJobs" row-key="id" :empty-text="t('dashboard.noActiveJobs')">
+      <DataTable class="active-jobs-table" :columns="healthColumns" :rows="activeJobs" row-key="id" :empty-text="t('dashboard.noActiveJobs')">
         <template #cell-id="{ row }">
-          <div class="dashboard-cell-stack">
+          <div class="dashboard-cell-stack active-jobs-job-id-cell">
             <button
               v-if="Number.isInteger(Number(row.id)) && Number(row.id) > 0"
               class="cell-link"
@@ -549,7 +586,12 @@ onUnmounted(() => {
               {{ row.id }}
             </button>
             <span v-else class="job-id-text">{{ row.id ?? '-' }}</span>
-            <div class="dashboard-cell-meta dashboard-cell-meta-block">
+          </div>
+        </template>
+        <template #cell-project_id="{ row }">
+          <div class="dashboard-cell-stack">
+            <span>{{ formatProjectId(row.project_id) }}</span>
+            <div class="dashboard-cell-meta dashboard-cell-meta-block active-jobs-project-meta">
               <div class="dashboard-meta-line">
                 <span class="dashboard-meta-label">{{ t('dashboard.sourceMount') }}</span>
                 <span class="dashboard-meta-value wrap-anywhere">{{ sourceMountLabel(row) }}</span>
@@ -558,13 +600,6 @@ onUnmounted(() => {
                 <span class="dashboard-meta-label">{{ t('jobs.sourcePath') }}</span>
                 <span class="dashboard-meta-value wrap-anywhere">{{ sourcePathLabel(row) }}</span>
               </div>
-            </div>
-          </div>
-        </template>
-        <template #cell-project_id="{ row }">
-          <div class="dashboard-cell-stack">
-            <span>{{ formatProjectId(row.project_id) }}</span>
-            <div class="dashboard-cell-meta dashboard-cell-meta-block">
               <div class="dashboard-meta-line">
                 <span class="dashboard-meta-label">{{ t('jobs.destinationDrive') }}</span>
                 <span class="dashboard-meta-value wrap-anywhere">{{ destinationDriveLabel(row) }}</span>
@@ -577,7 +612,16 @@ onUnmounted(() => {
           </div>
         </template>
         <template #cell-status="{ row }">
-          <StatusBadge :status="row.status" />
+          <span
+            class="dashboard-status-icon"
+            :class="`dashboard-status-icon--${dashboardStatusTone(row.status)}`"
+            :aria-label="String(row.status || 'unknown')"
+            :title="String(row.status || 'unknown')"
+            role="img"
+          >
+            <span aria-hidden="true">{{ dashboardStatusIcon(row.status) }}</span>
+          </span>
+          <StatusBadge class="dashboard-status-badge" :status="row.status" />
         </template>
         <template #cell-next_step="{ row }">
           <div class="dashboard-cell-stack">
@@ -759,6 +803,49 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
+.dashboard-status-icon {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  font-size: 0.9rem;
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+}
+
+.dashboard-status-icon--success {
+  background: color-mix(in srgb, var(--color-success) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-success) 45%, var(--color-border));
+  color: var(--color-status-ok-text, #14532d);
+}
+
+.dashboard-status-icon--warning {
+  background: color-mix(in srgb, var(--color-warning) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-warning) 45%, var(--color-border));
+  color: var(--color-status-warn-text, #7c3f00);
+}
+
+.dashboard-status-icon--danger {
+  background: color-mix(in srgb, var(--color-danger) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-danger) 45%, var(--color-border));
+  color: var(--color-status-danger-text, #991b1b);
+}
+
+.dashboard-status-icon--info {
+  background: color-mix(in srgb, var(--color-info) 16%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-info) 45%, var(--color-border));
+  color: var(--color-status-info-text, #1e40af);
+}
+
+.dashboard-status-icon--muted {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border);
+  color: var(--color-status-muted-text, #475569);
+}
+
 .error-banner {
   color: var(--color-alert-danger-text);
   background: var(--color-alert-danger-bg);
@@ -781,12 +868,21 @@ onUnmounted(() => {
   }
 
   .card-grid {
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .summary-card,
   .panel {
     padding: var(--space-sm);
+  }
+
+  .summary-row,
+  .summary-link {
+    display: grid;
+    grid-template-columns: minmax(0, 11rem) auto;
+    justify-content: start;
+    align-items: center;
+    column-gap: var(--space-sm);
   }
 
   .dashboard-progress-bar {
@@ -795,6 +891,32 @@ onUnmounted(() => {
 
   .dashboard-progress-mobile-label {
     display: inline;
+  }
+
+  .dashboard-status-icon {
+    display: inline-flex;
+  }
+
+  :deep(.dashboard-status-badge) {
+    display: none;
+  }
+
+  :deep(.active-jobs-table th:nth-child(2)),
+  :deep(.active-jobs-table td:nth-child(2)) {
+    display: none;
+  }
+
+  :deep(.active-jobs-table .active-jobs-project-meta) {
+    display: none;
+  }
+
+  :deep(.active-jobs-table .dashboard-cell-meta) {
+    display: none;
+  }
+
+  :deep(.needs-attention-table th:nth-child(2)),
+  :deep(.needs-attention-table td:nth-child(2)) {
+    display: none;
   }
 }
 </style>

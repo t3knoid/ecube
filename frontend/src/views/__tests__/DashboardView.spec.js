@@ -204,6 +204,11 @@ describe('DashboardView active jobs', () => {
     expect(jobLinks).toContain('41')
     expect(jobLinks).toContain('42')
     expect(jobLinks).toContain('43')
+
+    const needsAttentionRows = wrapper.findAll('.row-stub').slice(0, 4)
+    expect(needsAttentionRows[0].find('.dashboard-job-id-cell').text()).toBe('40')
+    expect(needsAttentionRows[0].find('.dashboard-source-context').text()).toContain(i18n.global.t('dashboard.sourceMount'))
+    expect(needsAttentionRows[0].find('.dashboard-source-context').text()).toContain(i18n.global.t('jobs.sourcePath'))
   })
 
   it('falls back to Job Detail guidance for archived or incomplete custody-closeout state', async () => {
@@ -334,6 +339,14 @@ describe('DashboardView active jobs', () => {
     expect(wrapper.text()).toContain(`${i18n.global.t('dashboard.sourceMount')}${notAvailable}`)
     expect(wrapper.text()).toContain(`${i18n.global.t('jobs.sourcePath')}${notAvailable}`)
     expect(wrapper.text()).toContain(`${i18n.global.t('jobs.destinationDrive')}${notAvailable}`)
+
+    const rows = wrapper.findAll('.row-stub')
+    const activeRow = rows.find((node) => node.text().includes('62'))
+    expect(activeRow.find('.active-jobs-job-id-cell').text()).toBe('62')
+    expect(activeRow.find('.active-jobs-project-meta').text()).toContain(i18n.global.t('dashboard.sourceMount'))
+    expect(activeRow.find('.active-jobs-project-meta').text()).toContain(i18n.global.t('jobs.sourcePath'))
+    expect(activeRow.find('.active-jobs-project-meta').text()).toContain(i18n.global.t('jobs.destinationDrive'))
+    expect(activeRow.find('.dashboard-status-icon').attributes('aria-label')).toBe('RUNNING')
   })
 
   it('shows raw source mount paths only to admin and manager roles', async () => {
