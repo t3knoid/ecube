@@ -35,7 +35,6 @@ logger = logging.getLogger(__name__)
 STARTUP_ANALYSIS_SAMPLE_LIMIT = 16
 COPY_PENDING_BATCH_MULTIPLIER = 4
 THROUGHPUT_BENCHMARK_SAMPLE_BUCKETS: tuple[tuple[int, Optional[int]], ...] = (
-    (0, 16 * 1024),
     (16 * 1024, 32 * 1024),
     (32 * 1024, 64 * 1024),
     (64 * 1024, 128 * 1024),
@@ -714,6 +713,8 @@ def _calculate_per_file_overhead_seconds(
 
 
 def _classify_throughput_benchmark_sample_bucket(size_bytes: int) -> int:
+    if size_bytes < THROUGHPUT_BENCHMARK_SAMPLE_BUCKETS[0][0]:
+        return 0
     for index, (lower_bound, upper_bound) in enumerate(THROUGHPUT_BENCHMARK_SAMPLE_BUCKETS):
         if size_bytes < lower_bound:
             continue

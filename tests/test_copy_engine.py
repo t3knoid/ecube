@@ -1760,7 +1760,6 @@ def test_build_startup_analysis_sample_plan_spans_file_sizes(tmp_path):
 
     sampled_names = [path.name for path, _sample_size in sample_plan]
     assert sampled_names == [
-        "under-16k.bin",
         "16k-32k.bin",
         "32k-64k.bin",
         "64k-128k.bin",
@@ -1768,6 +1767,7 @@ def test_build_startup_analysis_sample_plan_spans_file_sizes(tmp_path):
         "256k-512k.bin",
         "512k-1m.bin",
         "1m-10m.bin",
+        "under-16k.bin",
     ]
     assert sum(sample_size for _path, sample_size in sample_plan) == sum(
         path.stat().st_size
@@ -1858,6 +1858,62 @@ def test_build_startup_analysis_sample_plan_matches_shared_throughput_sampler(tm
     shared_plan = copy_engine._build_throughput_benchmark_sample_plan(files, budget)
 
     assert startup_plan == shared_plan
+
+
+@pytest.mark.parametrize(
+    ("size_bytes", "expected_bucket_index"),
+    [
+        (8 * 1024, 0),
+        (16 * 1024, 0),
+        (32 * 1024, 1),
+        (64 * 1024, 2),
+        (128 * 1024, 3),
+        (256 * 1024, 4),
+        (512 * 1024, 5),
+        (1024 * 1024, 6),
+        (10 * 1024 * 1024, 7),
+    ],
+)
+def test_classify_throughput_benchmark_sample_bucket_respects_boundaries(size_bytes, expected_bucket_index):
+    assert copy_engine._classify_throughput_benchmark_sample_bucket(size_bytes) == expected_bucket_index
+
+
+def test_build_throughput_benchmark_sample_plan_respects_boundary_files(tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+
+    boundary_files = []
+    for name, size_bytes in (
+        ("under-16k.bin", 8 * 1024),
+        ("16k.bin", 16 * 1024),
+        ("32k.bin", 32 * 1024),
+        ("64k.bin", 64 * 1024),
+        ("128k.bin", 128 * 1024),
+        ("256k.bin", 256 * 1024),
+        ("512k.bin", 512 * 1024),
+        ("1m.bin", 1024 * 1024),
+        ("10m.bin", 10 * 1024 * 1024),
+    ):
+        file_path = source_dir / name
+        file_path.write_bytes(b"x" * size_bytes)
+        boundary_files.append(file_path)
+
+    sample_plan = copy_engine._build_throughput_benchmark_sample_plan(
+        boundary_files,
+        sum(path.stat().st_size for path in boundary_files),
+    )
+
+    assert [path.name for path, _sample_size in sample_plan] == [
+        "16k.bin",
+        "32k.bin",
+        "64k.bin",
+        "128k.bin",
+        "256k.bin",
+        "512k.bin",
+        "1m.bin",
+        "10m.bin",
+        "under-16k.bin",
+    ]
 
 
 def test_estimate_startup_analysis_duration_accounts_for_per_file_overhead():
