@@ -122,7 +122,7 @@
       ansible.builtin.set_fact:
         ecube_frontend_path: >-
           {{ ((ecube_env_file.content | default('') | b64decode)
-          | regex_search('(?m)^SERVE_FRONTEND_PATH=(.+)$', '\\1')
+          | regex_findall('(?m)^SERVE_FRONTEND_PATH=(.+)$')
           | first | default('') | trim) or (ecube_install_dir ~ '/www') }}
       when: ecube_frontend_path_override | length == 0
 
@@ -170,10 +170,20 @@
         path: "{{ ecube_install_dir }}/venv/bin/pip"
       register: ecube_venv_pip
 
+    - name: Ensure task-scoped Ansible remote tmp base exists
+      ansible.builtin.file:
+        path: "/tmp/ecube-ansible-tmp"
+        state: directory
+        owner: root
+        group: root
+        mode: "01777"
+
     - name: Refresh editable install inside existing virtualenv
       ansible.builtin.command:
         cmd: "{{ ecube_install_dir }}/venv/bin/pip install --quiet -e {{ ecube_install_dir }}"
       become_user: "{{ ecube_service_user }}"
+      vars:
+        ansible_remote_tmp: "/tmp/ecube-ansible-tmp"
       when:
         - ecube_refresh_editable_install
         - ecube_venv_pip.stat.exists

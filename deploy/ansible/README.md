@@ -95,20 +95,19 @@ Run the update against a single host by passing that host directly on the Ansibl
 
 ```bash
 /opt/python_3.12/bin/ansible-playbook \
-  -i test-host.example.com, \
+  -k -i test-host.example.com, \
   deploy/ansible/push-existing-install.yml \
   --user ubuntu \
   --become \
   -e ansible_python_interpreter=/usr/bin/python3
 ```
 
-You can also target a host from an inventory file with Ansible's normal limit flag.
+If the current user authenticates to the target host, the user option can be omitted.
 
 ```bash
 /opt/python_3.12/bin/ansible-playbook \
-  -i inventory.ini \
+  -k -i test-host.example.com, \
   deploy/ansible/push-existing-install.yml \
-  -l test-host \
   --become \
   -e ansible_python_interpreter=/usr/bin/python3
 ```
@@ -119,7 +118,7 @@ Before pushing files, confirm Ansible can reach the host and use the selected Py
 
 ```bash
 /opt/python_3.12/bin/ansible all \
-  -i test-host.example.com, \
+  -k -i test-host.example.com, \
   -u ubuntu \
   --become \
   -e ansible_python_interpreter=/usr/bin/python3 \
@@ -132,7 +131,7 @@ If this fails, fix the SSH access, privilege escalation, or interpreter path bef
 
 ```bash
 /opt/python_3.12/bin/ansible-playbook \
-  -i test-host.example.com, \
+  -k -i test-host.example.com, \
   deploy/ansible/push-existing-install.yml \
   --user ubuntu \
   --become \
@@ -155,7 +154,7 @@ Example without service restart:
 
 ```bash
 /opt/python_3.12/bin/ansible-playbook \
-  -i test-host.example.com, \
+  -k -i test-host.example.com, \
   deploy/ansible/push-existing-install.yml \
   --user ubuntu \
   --become \
