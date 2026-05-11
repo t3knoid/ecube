@@ -558,7 +558,7 @@ onUnmounted(() => {
         <template #cell-next_step="{ row }">
           <div class="dashboard-cell-stack">
             <span class="next-step-label">{{ nextStepLabel(row) }}</span>
-            <div v-if="failureEntries(row).length" class="dashboard-cell-meta dashboard-cell-meta-block">
+            <div v-if="failureEntries(row).length" class="dashboard-cell-meta dashboard-cell-meta-block active-jobs-next-step-meta">
               <div v-for="entry in failureEntries(row)" :key="`${row.id}-${entry.label}`" class="dashboard-meta-line">
                 <span class="dashboard-meta-label">{{ entry.label }}</span>
                 <span class="dashboard-meta-value">{{ entry.value }}</span>
@@ -626,7 +626,7 @@ onUnmounted(() => {
         <template #cell-next_step="{ row }">
           <div class="dashboard-cell-stack">
             <span class="next-step-label">{{ nextStepLabel(row) }}</span>
-            <div v-if="failureEntries(row).length" class="dashboard-cell-meta dashboard-cell-meta-block">
+            <div v-if="failureEntries(row).length" class="dashboard-cell-meta dashboard-cell-meta-block active-jobs-next-step-meta">
               <div v-for="entry in failureEntries(row)" :key="`${row.id}-${entry.label}`" class="dashboard-meta-line">
                 <span class="dashboard-meta-label">{{ entry.label }}</span>
                 <span class="dashboard-meta-value">{{ entry.value }}</span>
@@ -646,7 +646,7 @@ onUnmounted(() => {
               />
               <span class="dashboard-progress-mobile-label">{{ progressLabel(row) }}</span>
             </div>
-            <div class="dashboard-cell-meta dashboard-cell-meta-block">
+            <div class="dashboard-cell-meta dashboard-cell-meta-block active-jobs-progress-meta">
               <div v-for="entry in liveTransferEntries(row)" :key="`${row.id}-${entry.label}`" class="dashboard-meta-line">
                 <span class="dashboard-meta-label">{{ entry.label }}</span>
                 <span class="dashboard-meta-value">{{ entry.value }}</span>
@@ -910,7 +910,7 @@ onUnmounted(() => {
     display: none;
   }
 
-  :deep(.active-jobs-table .dashboard-cell-meta) {
+  :deep(.active-jobs-table .active-jobs-progress-meta) {
     display: none;
   }
 

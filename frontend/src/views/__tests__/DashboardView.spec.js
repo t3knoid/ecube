@@ -349,6 +349,38 @@ describe('DashboardView active jobs', () => {
     expect(activeRow.find('.dashboard-status-icon').attributes('aria-label')).toBe('RUNNING')
   })
 
+  it('keeps active job next-step and progress metadata separately addressable for mobile compaction', async () => {
+    mocks.listJobs.mockResolvedValue([
+      {
+        id: 65,
+        project_id: 'PROJ-065',
+        status: 'RUNNING',
+        source_path: '/evidence',
+        copied_bytes: 10 * 1024 * 1024,
+        total_bytes: 20 * 1024 * 1024,
+        file_count: 10,
+        files_succeeded: 5,
+        files_failed: 2,
+        files_timed_out: 1,
+        active_duration_seconds: 10,
+      },
+    ])
+    mocks.getMounts.mockResolvedValue([
+      { id: 18, status: 'MOUNTED', remote_path: '//server/case-065', project_id: 'PROJ-065', related_job: { job_id: 65, status: 'RUNNING', custody_status: 'PENDING_HANDOFF' } },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const row = wrapper.findAll('.row-stub').find((node) => node.text().includes('65'))
+
+    expect(row.find('.active-jobs-next-step-meta').text()).toContain(i18n.global.t('jobs.filesFailed'))
+    expect(row.find('.active-jobs-next-step-meta').text()).toContain(i18n.global.t('jobs.filesTimedOut'))
+    expect(row.find('.active-jobs-progress-meta').text()).toContain(i18n.global.t('jobs.copyRate'))
+    expect(row.find('.active-jobs-progress-meta').text()).toContain(i18n.global.t('jobs.timeRemaining'))
+    expect(row.find('.dashboard-progress-mobile-label').text()).toBe('50%')
+  })
+
   it('shows raw source mount paths only to admin and manager roles', async () => {
     mocks.authStore.hasRole.mockImplementation((role) => role === 'manager')
     mocks.listJobs.mockResolvedValue([
