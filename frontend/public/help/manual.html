@@ -355,7 +355,7 @@ Platform administrators can still influence the deployment default by controllin
 <blockquote><p><strong>Page visibility:</strong> <code>admin</code>, <code>manager</code>, <code>processor</code>, <code>auditor</code></p></blockquote>
 <blockquote><p><strong>Restricted actions:</strong> Auditor users see a reduced dashboard summary focused on system health and database status.</p></blockquote>
 <p>The dashboard provides a quick operational summary.</p>
-<p>The page refreshes system health, drive state, mount workflow counts, and the active-jobs table automatically about every 10 seconds. The <code>Refresh</code> button requests the same full dashboard snapshot on demand.</p>
+<p>The page refreshes system health, drive state, mount workflow counts, the <code>Needs Attention</code> section, and the active-jobs table automatically about every 10 seconds. The <code>Refresh</code> button requests the same full dashboard snapshot on demand.</p>
 <p>The <code>Drive Summary</code> and <code>Mounts Summary</code> entries act as drill-down controls. Selecting a summary entry opens the matching destination page with the corresponding drive state or mount workflow bucket preselected so the follow-up page stays aligned with the dashboard context.</p>
 <p>Typical information shown:</p>
 <ul><li>
@@ -365,19 +365,24 @@ Database status
 </li><li>
 Number of active jobs
 </li><li>
+<code>Needs Attention</code> table for blocked work, waiting-to-start assignments, and completed jobs that still require chain-of-custody closeout
+</li><li>
 Drive state summary (<code>DISCONNECTED</code>, <code>DISABLED</code>, <code>AVAILABLE</code>, <code>IN_USE</code>)
 </li><li>
 Mount workflow summary (<code>Unassigned</code>, <code>Assigned</code>, <code>In Progress</code>, <code>Completed</code>, <code>Unavailable</code>), where <code>Assigned</code> means a job exists but has not started, <code>In Progress</code> includes started, paused, failed, or handoff-pending work, and <code>Unavailable</code> marks mounts whose trusted related-job or custody state could not be derived
 </li><li>
 Table of active jobs
 </li></ul>
-<p>Auditor users see the dashboard with only the system-health summary card; drive summary, mounts summary, and active-job counts/tables are hidden.</p>
+<p>The <code>Needs Attention</code> section highlights trusted workflow items that require follow-up from processors or managers. <code>Blocked</code> covers failed or paused jobs, <code>Waiting to Start</code> highlights pending assignments, and <code>Waiting on Custody Closeout</code> highlights completed or archived jobs whose trusted custody state is still <code>Pending handoff</code>. Each row uses the <code>Job ID</code> value as the direct navigation path into Job Detail.</p>
+<p>Auditor users see the dashboard with only the system-health summary card; drive summary, mounts summary, needs-attention items, and active-job counts/tables are hidden.</p>
 <p>If your password is nearing expiration, the dashboard shows a dismissible warning banner with the remaining days. Dismissing the banner hides it only for the current browser session.</p>
 <p>Use the dashboard when you need a quick answer to questions such as:</p>
 <ul><li>
 Is the system healthy?
 </li><li>
 Are any jobs currently running or verifying?
+</li><li>
+Which jobs are blocked, waiting to start, or still waiting on custody closeout?
 </li><li>
 How many drives are ready for use?
 </li><li>

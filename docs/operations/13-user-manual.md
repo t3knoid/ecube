@@ -296,7 +296,7 @@ Example dark-theme appearance:
 
 The dashboard provides a quick operational summary.
 
-The page refreshes system health, drive state, mount workflow counts, and the active-jobs table automatically about every 10 seconds. The `Refresh` button requests the same full dashboard snapshot on demand.
+The page refreshes system health, drive state, mount workflow counts, the `Needs Attention` section, and the active-jobs table automatically about every 10 seconds. The `Refresh` button requests the same full dashboard snapshot on demand.
 
 The `Drive Summary` and `Mounts Summary` entries act as drill-down controls. Selecting a summary entry opens the matching destination page with the corresponding drive state or mount workflow bucket preselected so the follow-up page stays aligned with the dashboard context.
 
@@ -305,11 +305,14 @@ Typical information shown:
 - Overall system health
 - Database status
 - Number of active jobs
+- `Needs Attention` table for blocked work, waiting-to-start assignments, and completed jobs that still require chain-of-custody closeout
 - Drive state summary (`DISCONNECTED`, `DISABLED`, `AVAILABLE`, `IN_USE`)
 - Mount workflow summary (`Unassigned`, `Assigned`, `In Progress`, `Completed`, `Unavailable`), where `Assigned` means a job exists but has not started, `In Progress` includes started, paused, failed, or handoff-pending work, and `Unavailable` marks mounts whose trusted related-job or custody state could not be derived
 - Table of active jobs
 
-Auditor users see the dashboard with only the system-health summary card; drive summary, mounts summary, and active-job counts/tables are hidden.
+The `Needs Attention` section highlights trusted workflow items that require follow-up from processors or managers. `Blocked` covers failed or paused jobs, `Waiting to Start` highlights pending assignments, and `Waiting on Custody Closeout` highlights completed or archived jobs whose trusted custody state is still `Pending handoff`. Each row uses the `Job ID` value as the direct navigation path into Job Detail.
+
+Auditor users see the dashboard with only the system-health summary card; drive summary, mounts summary, needs-attention items, and active-job counts/tables are hidden.
 
 If your password is nearing expiration, the dashboard shows a dismissible warning banner with the remaining days. Dismissing the banner hides it only for the current browser session.
 
@@ -317,6 +320,7 @@ Use the dashboard when you need a quick answer to questions such as:
 
 - Is the system healthy?
 - Are any jobs currently running or verifying?
+- Which jobs are blocked, waiting to start, or still waiting on custody closeout?
 - How many drives are ready for use?
 - How many source mounts are unassigned, assigned but not started, already underway, fully complete including custody handoff, or currently unavailable for trusted workflow classification?
 

@@ -13,6 +13,7 @@ import ProgressBar from '@/components/common/ProgressBar.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { calculateJobProgress, isJobProgressActive } from '@/utils/jobProgress.js'
 import { MOUNT_WORKFLOW_BUCKETS, buildMountWorkflowCounts } from '@/utils/mountWorkflow.js'
+import { normalizeJobStatus } from '@/utils/jobActions.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
 const { t } = useI18n()
@@ -56,6 +57,13 @@ const activeJobs = computed(() =>
   jobs.value.filter((job) => ['PENDING', 'RUNNING', 'VERIFYING'].includes(String(job.status || '').toUpperCase())),
 )
 
+const needsAttentionColumns = computed(() => [
+  { key: 'id', label: t('dashboard.jobId') },
+  { key: 'project_id', label: t('dashboard.project') },
+  { key: 'status', label: t('common.labels.status') },
+  { key: 'attention', label: t('dashboard.attentionType') },
+])
+
 const healthColumns = computed(() => [
   { key: 'id', label: t('dashboard.jobId') },
   { key: 'project_id', label: t('dashboard.project') },
@@ -77,6 +85,61 @@ const mountSummaryEntries = computed(() => [
   { key: MOUNT_WORKFLOW_BUCKETS.COMPLETED, label: t('dashboard.mountCompleted'), count: mountCounts.value.COMPLETED },
   { key: MOUNT_WORKFLOW_BUCKETS.UNAVAILABLE, label: t('dashboard.mountUnavailable'), count: mountCounts.value.UNAVAILABLE },
 ])
+
+const needsAttentionItems = computed(() => {
+  const items = []
+  const seenJobIds = new Set()
+
+  for (const job of jobs.value) {
+    const jobId = Number(job.id)
+    const status = normalizeJobStatus(job.status)
+    if (!Number.isInteger(jobId) || jobId < 1) continue
+
+    if (status === 'FAILED' || status === 'PAUSED') {
+      items.push({
+        ...job,
+        attention: t('dashboard.attentionBlocked'),
+        attentionPriority: 0,
+      })
+      seenJobIds.add(jobId)
+      continue
+    }
+
+    if (status === 'PENDING') {
+      items.push({
+        ...job,
+        attention: t('dashboard.attentionWaitingToStart'),
+        attentionPriority: 1,
+      })
+      seenJobIds.add(jobId)
+    }
+  }
+
+  for (const mount of mounts.value) {
+    const relatedJobId = Number(mount?.related_job?.job_id)
+    const relatedJobStatus = normalizeJobStatus(mount?.related_job?.status)
+    const custodyStatus = String(mount?.related_job?.custody_status || '').toUpperCase()
+
+    if (!Number.isInteger(relatedJobId) || relatedJobId < 1 || seenJobIds.has(relatedJobId)) continue
+    if (!['COMPLETED', 'ARCHIVED'].includes(relatedJobStatus) || custodyStatus !== 'PENDING_HANDOFF') continue
+
+    items.push({
+      id: relatedJobId,
+      project_id: mount.project_id,
+      status: relatedJobStatus,
+      attention: t('dashboard.attentionWaitingForCustody'),
+      attentionPriority: 2,
+    })
+    seenJobIds.add(relatedJobId)
+  }
+
+  return items.sort((left, right) => {
+    if (left.attentionPriority !== right.attentionPriority) {
+      return left.attentionPriority - right.attentionPriority
+    }
+    return Number(left.id) - Number(right.id)
+  })
+})
 
 function formatProjectId(value) {
   return normalizeProjectId(value) || '-'
@@ -241,6 +304,30 @@ onUnmounted(() => {
     </div>
 
     <article v-if="canViewOperationalSummary" class="panel">
+      <h2>{{ t('dashboard.needsAttention') }}</h2>
+      <p v-if="!needsAttentionItems.length" class="muted">{{ t('dashboard.noNeedsAttention') }}</p>
+      <DataTable
+        v-else
+        :columns="needsAttentionColumns"
+        :rows="needsAttentionItems"
+        row-key="id"
+      >
+        <template #cell-id="{ row }">
+          <button class="cell-link" type="button" @click="openJobDetail(row.id)">
+            {{ row.id }}
+          </button>
+        </template>
+        <template #cell-project_id="{ row }">{{ formatProjectId(row.project_id) }}</template>
+        <template #cell-status="{ row }">
+          <StatusBadge :status="row.status" />
+        </template>
+        <template #cell-attention="{ row }">
+          <span class="attention-label">{{ row.attention }}</span>
+        </template>
+      </DataTable>
+    </article>
+
+    <article v-if="canViewOperationalSummary" class="panel">
       <h2>{{ t('jobs.activeJobs') }}</h2>
       <DataTable :columns="healthColumns" :rows="activeJobs" row-key="id" :empty-text="t('dashboard.noActiveJobs')">
         <template #cell-id="{ row }">
@@ -361,6 +448,11 @@ onUnmounted(() => {
 .cell-link:hover,
 .cell-link:focus-visible {
   text-decoration-thickness: 2px;
+}
+
+.attention-label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
 }
 
 .dashboard-progress-cell {

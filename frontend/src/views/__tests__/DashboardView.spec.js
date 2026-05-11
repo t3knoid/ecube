@@ -70,6 +70,9 @@ function mountView() {
                 <slot name="cell-id" :row="row">
                   <span class="row-id">{{ row.id }}</span>
                 </slot>
+                <slot name="cell-project_id" :row="row" />
+                <slot name="cell-status" :row="row" />
+                <slot name="cell-attention" :row="row" />
                 <slot name="cell-progress" :row="row" />
               </div>
             </div>
@@ -172,6 +175,41 @@ describe('DashboardView active jobs', () => {
     await flushPromises()
 
     expect(mocks.push).toHaveBeenCalledWith({ name: 'mounts', query: { workflow: 'UNASSIGNED' } })
+  })
+
+  it('shows blocked, waiting-to-start, and custody-closeout work in Needs Attention', async () => {
+    mocks.listJobs.mockResolvedValue([
+      { id: 40, project_id: 'PROJ-040', status: 'FAILED', copied_bytes: 0, total_bytes: 0, file_count: 1, files_succeeded: 0, files_failed: 1 },
+      { id: 41, project_id: 'PROJ-041', status: 'PAUSED', copied_bytes: 0, total_bytes: 0, file_count: 1, files_succeeded: 0, files_failed: 0 },
+      { id: 42, project_id: 'PROJ-042', status: 'PENDING', copied_bytes: 0, total_bytes: 0, file_count: 1, files_succeeded: 0, files_failed: 0 },
+    ])
+    mocks.getMounts.mockResolvedValue([
+      { id: 12, status: 'MOUNTED', project_id: 'PROJ-043', related_job: { job_id: 43, status: 'COMPLETED', custody_status: 'PENDING_HANDOFF' } },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('dashboard.needsAttention'))
+    expect(wrapper.text()).toContain(i18n.global.t('dashboard.attentionBlocked'))
+    expect(wrapper.text()).toContain(i18n.global.t('dashboard.attentionWaitingToStart'))
+    expect(wrapper.text()).toContain(i18n.global.t('dashboard.attentionWaitingForCustody'))
+
+    const jobLinks = wrapper.findAll('.cell-link').map((node) => node.text())
+    expect(jobLinks).toContain('40')
+    expect(jobLinks).toContain('41')
+    expect(jobLinks).toContain('42')
+    expect(jobLinks).toContain('43')
+  })
+
+  it('shows an empty needs-attention state when no follow-up items are present', async () => {
+    mocks.listJobs.mockResolvedValue([])
+    mocks.getMounts.mockResolvedValue([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('dashboard.noNeedsAttention'))
   })
 
   it('refreshes jobs, drives, and mounts on the same poll tick as system health', async () => {
@@ -417,6 +455,7 @@ describe('DashboardView active jobs', () => {
 
     expect(wrapper.text()).not.toContain(i18n.global.t('dashboard.driveSummary'))
     expect(wrapper.text()).not.toContain(i18n.global.t('dashboard.mountsSummary'))
+    expect(wrapper.text()).not.toContain(i18n.global.t('dashboard.needsAttention'))
     expect(wrapper.text()).not.toContain(i18n.global.t('jobs.activeJobs'))
     expect(wrapper.text()).toContain(i18n.global.t('dashboard.systemHealth'))
   })
