@@ -125,33 +125,40 @@ function progressActive(job) {
   return isJobProgressActive(job)
 }
 
-async function refreshSnapshot() {
+async function refreshDashboard() {
   const warnings = []
   const results = await Promise.allSettled([
+    getSystemHealth(),
     getDrives({ include_disconnected: true }),
     getMounts(),
     listJobs({ limit: 200 }),
   ])
 
   if (results[0].status === 'fulfilled') {
-    drives.value = Array.isArray(results[0].value)
-      ? results[0].value.map((item) => normalizeProjectRecord(item, ['current_project_id']))
+    health.value = results[0].value
+  } else {
+    warnings.push(t('common.errors.networkError'))
+  }
+
+  if (results[1].status === 'fulfilled') {
+    drives.value = Array.isArray(results[1].value)
+      ? results[1].value.map((item) => normalizeProjectRecord(item, ['current_project_id']))
       : []
   } else {
     warnings.push(t('dashboard.loadDrivesError'))
   }
 
-  if (results[1].status === 'fulfilled') {
-    mounts.value = Array.isArray(results[1].value)
-      ? results[1].value.map((item) => normalizeProjectRecord(item, ['project_id']))
+  if (results[2].status === 'fulfilled') {
+    mounts.value = Array.isArray(results[2].value)
+      ? results[2].value.map((item) => normalizeProjectRecord(item, ['project_id']))
       : []
   } else {
     warnings.push(t('dashboard.loadMountsError'))
   }
 
-  if (results[2].status === 'fulfilled') {
-    jobs.value = Array.isArray(results[2].value)
-      ? results[2].value.map((item) => normalizeProjectRecord(item, ['project_id']))
+  if (results[3].status === 'fulfilled') {
+    jobs.value = Array.isArray(results[3].value)
+      ? results[3].value.map((item) => normalizeProjectRecord(item, ['project_id']))
       : []
   } else {
     // Backward compatibility for servers that do not yet expose GET /jobs.
@@ -161,18 +168,14 @@ async function refreshSnapshot() {
   error.value = warnings.join(' ')
 }
 
-const healthPoller = usePolling(async () => {
-  const next = await getSystemHealth()
-  health.value = next
-  return next
-}, { intervalMs: 10000 })
+const dashboardPoller = usePolling(refreshDashboard, { intervalMs: 10000, immediate: false })
 
 onMounted(async () => {
   loading.value = true
   error.value = ''
   try {
-    await Promise.all([healthPoller.tick(), refreshSnapshot()])
-    healthPoller.start()
+    await dashboardPoller.tick()
+    dashboardPoller.start()
   } catch {
     error.value = t('common.errors.networkError')
   } finally {
@@ -181,7 +184,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  healthPoller.stop()
+  dashboardPoller.stop()
 })
 </script>
 
@@ -189,7 +192,7 @@ onUnmounted(() => {
   <section class="view-root">
     <header class="view-header">
       <h1>{{ t('nav.dashboard') }}</h1>
-      <button class="btn" @click="refreshSnapshot">{{ t('common.actions.refresh') }}</button>
+      <button class="btn" @click="refreshDashboard">{{ t('common.actions.refresh') }}</button>
     </header>
 
     <div v-if="showPasswordWarning" class="warning-banner">

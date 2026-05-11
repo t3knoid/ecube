@@ -10,6 +10,9 @@ const mocks = vi.hoisted(() => ({
   listJobs: vi.fn(),
   push: vi.fn(),
   authStore: { passwordWarningDays: null, hasRole: vi.fn() },
+  pollerStart: vi.fn(),
+  pollerStop: vi.fn(),
+  pollerTick: null,
 }))
 
 vi.mock('vue-router', () => ({
@@ -36,6 +39,17 @@ vi.mock('@/api/mounts.js', () => ({
 
 vi.mock('@/api/jobs.js', () => ({
   listJobs: (...args) => mocks.listJobs(...args),
+}))
+
+vi.mock('@/composables/usePolling.js', () => ({
+  usePolling: (tick) => {
+    mocks.pollerTick = tick
+    return {
+      tick,
+      start: (...args) => mocks.pollerStart(...args),
+      stop: (...args) => mocks.pollerStop(...args),
+    }
+  },
 }))
 
 async function flushPromises() {
@@ -81,6 +95,9 @@ describe('DashboardView active jobs', () => {
     mocks.getMounts.mockReset()
     mocks.listJobs.mockReset()
     mocks.push.mockReset()
+    mocks.pollerStart.mockReset()
+    mocks.pollerStop.mockReset()
+    mocks.pollerTick = null
     mocks.authStore.passwordWarningDays = null
     mocks.authStore.hasRole.mockReset()
     mocks.authStore.hasRole.mockReturnValue(false)
@@ -104,6 +121,55 @@ describe('DashboardView active jobs', () => {
     await flushPromises()
 
     expect(wrapper.find('.warning-banner').exists()).toBe(false)
+  })
+
+  it('refreshes jobs, drives, and mounts on the same poll tick as system health', async () => {
+    mocks.getSystemHealth.mockResolvedValueOnce({ status: 'ok', database: 'connected', active_jobs: 1 })
+    mocks.getDrives.mockResolvedValueOnce([{ id: 1, current_state: 'AVAILABLE' }])
+    mocks.getMounts.mockResolvedValueOnce([
+      { id: 10, status: 'UNMOUNTED', project_id: 'PROJ-000', related_job: { job_id: null, status: 'NO_RELATED_JOB', custody_status: 'NO_RELATED_JOB' } },
+    ])
+    mocks.listJobs.mockResolvedValueOnce([
+      {
+        id: 44,
+        project_id: 'PROJ-001',
+        status: 'RUNNING',
+        copied_bytes: 1000,
+        total_bytes: 1000,
+        file_count: 5,
+        files_succeeded: 2,
+        files_failed: 0,
+      },
+    ])
+
+    mocks.getSystemHealth.mockResolvedValueOnce({ status: 'degraded', database: 'connected', active_jobs: 0 })
+    mocks.getDrives.mockResolvedValueOnce([{ id: 2, current_state: 'DISABLED' }])
+    mocks.getMounts.mockResolvedValueOnce([
+      { id: 11, status: 'MOUNTED', project_id: 'PROJ-001', related_job: { job_id: 31, status: 'PENDING', custody_status: 'PENDING_HANDOFF' } },
+    ])
+    mocks.listJobs.mockResolvedValueOnce([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(typeof mocks.pollerTick).toBe('function')
+    expect(mocks.pollerStart).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('ok')
+    expect(wrapper.text()).toContain(`${i18n.global.t('drives.states.available')}1`)
+    expect(wrapper.text()).toContain(`${i18n.global.t('dashboard.mountUnassigned')}1`)
+    expect(wrapper.find('.cell-link').text()).toBe('44')
+
+    await mocks.pollerTick()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('degraded')
+    expect(wrapper.text()).toContain(`${i18n.global.t('drives.states.disabled')}1`)
+    expect(wrapper.text()).toContain(`${i18n.global.t('dashboard.mountAssigned')}1`)
+    expect(wrapper.find('.cell-link').exists()).toBe(false)
+    expect(mocks.getSystemHealth).toHaveBeenCalledTimes(2)
+    expect(mocks.getDrives).toHaveBeenCalledTimes(2)
+    expect(mocks.getMounts).toHaveBeenCalledTimes(2)
+    expect(mocks.listJobs).toHaveBeenCalledTimes(2)
   })
 
   it('keeps running progress aligned with finished file counts', async () => {

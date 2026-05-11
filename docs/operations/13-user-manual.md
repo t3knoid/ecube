@@ -296,6 +296,8 @@ Example dark-theme appearance:
 
 The dashboard provides a quick operational summary.
 
+The page refreshes system health, drive state, mount workflow counts, and the active-jobs table automatically about every 10 seconds. The `Refresh` button requests the same full dashboard snapshot on demand.
+
 Typical information shown:
 
 - Overall system health
