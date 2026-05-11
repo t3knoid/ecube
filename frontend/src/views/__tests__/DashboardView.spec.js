@@ -104,7 +104,7 @@ describe('DashboardView active jobs', () => {
     mocks.pollerTick = null
     mocks.authStore.passwordWarningDays = null
     mocks.authStore.hasRole.mockReset()
-    mocks.authStore.hasRole.mockReturnValue(false)
+    mocks.authStore.hasRole.mockImplementation(() => false)
     sessionStorage.clear()
 
     mocks.getSystemHealth.mockResolvedValue({ status: 'ok', database: 'connected', active_jobs: 1 })
@@ -319,7 +319,8 @@ describe('DashboardView active jobs', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain(i18n.global.t('dashboard.sourceMount'))
-    expect(wrapper.text()).toContain('//server/case-062')
+    expect(wrapper.text()).toContain(i18n.global.t('mounts.redactedValue'))
+    expect(wrapper.text()).not.toContain('//server/case-062')
     expect(wrapper.text()).toContain('/case/subfolder')
     expect(wrapper.text()).toContain(i18n.global.t('jobs.destinationDrive'))
     expect(wrapper.text()).toContain('Apricorn Aegis - Port 4')
@@ -333,6 +334,32 @@ describe('DashboardView active jobs', () => {
     expect(wrapper.text()).toContain(`${i18n.global.t('dashboard.sourceMount')}${notAvailable}`)
     expect(wrapper.text()).toContain(`${i18n.global.t('jobs.sourcePath')}${notAvailable}`)
     expect(wrapper.text()).toContain(`${i18n.global.t('jobs.destinationDrive')}${notAvailable}`)
+  })
+
+  it('shows raw source mount paths only to admin and manager roles', async () => {
+    mocks.authStore.hasRole.mockImplementation((role) => role === 'manager')
+    mocks.listJobs.mockResolvedValue([
+      {
+        id: 64,
+        project_id: 'PROJ-064',
+        status: 'RUNNING',
+        source_path: '/evidence',
+        copied_bytes: 0,
+        total_bytes: 100,
+        file_count: 1,
+        files_succeeded: 0,
+        files_failed: 0,
+      },
+    ])
+    mocks.getMounts.mockResolvedValue([
+      { id: 17, status: 'MOUNTED', remote_path: '//server/case-064', project_id: 'PROJ-064', related_job: { job_id: 64, status: 'RUNNING', custody_status: 'PENDING_HANDOFF' } },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('//server/case-064')
+    expect(wrapper.text()).not.toContain(i18n.global.t('mounts.redactedValue'))
   })
 
   it('shows an empty needs-attention state when no follow-up items are present', async () => {

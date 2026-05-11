@@ -31,6 +31,7 @@ const loading = ref(true)
 const error = ref('')
 const dismissedPasswordWarning = ref(sessionStorage.getItem(PASSWORD_WARNING_DISMISS_KEY) || '')
 const canViewOperationalSummary = computed(() => !authStore.hasRole('auditor'))
+const canViewRawMountPaths = computed(() => authStore.hasRole('admin') || authStore.hasRole('manager'))
 
 const showPasswordWarning = computed(() => {
   if (!Number.isInteger(authStore.passwordWarningDays)) return false
@@ -262,7 +263,9 @@ function resolveSourceMount(job) {
 }
 
 function sourceMountLabel(job) {
-  return resolveSourceMount(job)?.remote_path || t('common.labels.notAvailable')
+  const sourceMount = resolveSourceMount(job)
+  if (!sourceMount?.remote_path) return t('common.labels.notAvailable')
+  return canViewRawMountPaths.value ? sourceMount.remote_path : t('mounts.redactedValue')
 }
 
 function sourcePathLabel(job) {
