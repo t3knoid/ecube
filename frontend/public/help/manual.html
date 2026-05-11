@@ -543,7 +543,7 @@ Refresh the mount list
 </li><li>
 Open Mount Detail for an existing mount definition from the clickable mount ID
 </li><li>
-Filter the list by workflow bucket (<code>Unassigned</code>, <code>Assigned</code>, <code>In Progress</code>, <code>Completed</code>, or <code>Unavailable</code>) or search by mount details
+Filter the list by workflow bucket (<code>Unassigned</code>, <code>Assigned</code>, <code>Active</code>, <code>Blocked</code>, <code>Custody Pending</code>, <code>Completed</code>, or <code>Unavailable</code>) or search by mount details
 </li></ul>
 <p><code>admin</code> and <code>manager</code> users can also add a new mount definition and edit or remove a mount from Mount Detail. <code>processor</code> users can browse mounted shares from the clickable project value on the Mounts page and from Mount Detail. <code>auditor</code> users can open the Mounts page and Mount Detail, but they do not see browse, <code>Edit</code>, or <code>Remove</code> actions and sensitive path fields remain redacted.</p>
 <p>When you arrive from a Dashboard <code>Mounts Summary</code> entry, the matching workflow bucket is preselected so the destination list stays aligned with the dashboard context.</p>
@@ -575,7 +575,7 @@ Credentials file
 <ul><li>
 The dialog pre-fills the current type, remote path, and project ID.
 </li><li>
-Mount Detail shows Type, Project, NFS Client version, Last Checked, Job ID, Job Status, and mount Status before you open the dialog. <code>Job Status</code> is sourced from trusted backend job data when a related job exists, falls back to <code>No related job</code> when the project has no current related job, and falls back to <code>Status unavailable</code> instead of guessing when authoritative job status cannot be determined. The dashboard mount workflow summary separately considers trusted related-job custody status, so a <code>COMPLETED</code> or <code>ARCHIVED</code> job can still appear under <code>In Progress</code> there until custody handoff is recorded, and it uses <code>Unavailable</code> when trusted related-job or custody classification cannot be derived for that mount. <code>admin</code> and <code>manager</code> users also see the raw Remote Path and Local Mount Point values there; read-only roles see those path fields redacted.
+Mount Detail shows Type, Project, NFS Client version, Last Checked, Job ID, Job Status, and mount Status before you open the dialog. <code>Job Status</code> is sourced from trusted backend job data when a related job exists, falls back to <code>No related job</code> when the project has no current related job, and falls back to <code>Status unavailable</code> instead of guessing when authoritative job status cannot be determined. The dashboard mount workflow summary separately considers trusted related-job custody status, so running, pausing, or verifying jobs appear under <code>Active</code>, paused or failed jobs appear under <code>Blocked</code>, completed or archived jobs with pending handoff appear under <code>Custody Pending</code>, and <code>Unavailable</code> remains the fallback when trusted related-job or custody classification cannot be derived for that mount. <code>admin</code> and <code>manager</code> users also see the raw Remote Path and Local Mount Point values there; read-only roles see those path fields redacted.
 </li><li>
 The local mount point is shown as read-only informational context and is not directly editable.
 </li><li>
