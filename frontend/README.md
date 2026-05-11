@@ -62,3 +62,5 @@ npm run test:e2e -- tests/example.spec.ts
 # Runs the tests in debug mode
 npm run test:e2e -- --debug
 ```
+
+To refresh the checked-in Playwright screenshot baselines for this repository, run `../scripts/update-e2e-snapshots.sh` from the `frontend` directory or `scripts/update-e2e-snapshots.sh` from the repository root. The helper installs dependencies, installs the Chromium and WebKit browsers, builds the frontend, and runs Playwright with `--update-snapshots`. The script exits with Playwright's status code so failed snapshot refreshes still fail in local automation.
