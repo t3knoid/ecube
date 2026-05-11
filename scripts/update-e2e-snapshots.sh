@@ -44,5 +44,4 @@ set -e
 
 if [[ ${PLAYWRIGHT_EXIT} -ne 0 ]]; then
   echo "[WARN] Playwright returned non-zero (${PLAYWRIGHT_EXIT})."
-  echo "[WARN] Continuing to snapshot commit step to match workflow behavior."
 fi
