@@ -63,19 +63,28 @@ function mountView() {
       plugins: [i18n],
       stubs: {
         DataTable: {
-          props: ['rows'],
+          props: ['columns', 'rows', 'emptyText'],
           template: `
-            <div>
-              <div v-for="row in rows" :key="row.id" class="row-stub">
-                <slot name="cell-id" :row="row">
-                  <span class="row-id">{{ row.id }}</span>
-                </slot>
-                <slot name="cell-project_id" :row="row" />
-                <slot name="cell-status" :row="row" />
-                <slot name="cell-next_step" :row="row" />
-                <slot name="cell-attention" :row="row" />
-                <slot name="cell-progress" :row="row" />
-              </div>
+            <div class="table-wrap-stub">
+              <table class="data-table-stub">
+                <thead>
+                  <tr>
+                    <th v-for="column in columns" :key="column.key">{{ column.label }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-if="!rows.length">
+                    <td :colspan="columns.length || 1" class="empty-state-stub">{{ emptyText }}</td>
+                  </tr>
+                  <tr v-for="row in rows" :key="row.id" class="row-stub">
+                    <td v-for="column in columns" :key="column.key">
+                      <slot :name="'cell-' + column.key" :row="row">
+                        <span class="row-id">{{ row[column.key] }}</span>
+                      </slot>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           `,
         },
@@ -379,6 +388,49 @@ describe('DashboardView active jobs', () => {
     expect(row.find('.active-jobs-progress-meta').text()).toContain(i18n.global.t('jobs.copyRate'))
     expect(row.find('.active-jobs-progress-meta').text()).toContain(i18n.global.t('jobs.timeRemaining'))
     expect(row.find('.dashboard-progress-mobile-label').text()).toBe('50%')
+  })
+
+  it('renders dashboard tables with the real column order used by mobile selectors', async () => {
+    mocks.listJobs.mockResolvedValue([
+      {
+        id: 67,
+        project_id: 'PROJ-067',
+        status: 'FAILED',
+        copied_bytes: 0,
+        total_bytes: 100,
+        file_count: 1,
+        files_succeeded: 0,
+        files_failed: 1,
+      },
+      {
+        id: 66,
+        project_id: 'PROJ-066',
+        status: 'RUNNING',
+        copied_bytes: 100,
+        total_bytes: 200,
+        file_count: 2,
+        files_succeeded: 1,
+        files_failed: 0,
+      },
+    ])
+    mocks.getMounts.mockResolvedValue([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const tables = wrapper.findAll('table.data-table-stub')
+    const needsAttentionHeaders = tables[0].findAll('th').map((node) => node.text())
+    const activeJobsHeaders = tables[1].findAll('th').map((node) => node.text())
+
+    expect(needsAttentionHeaders.slice(0, 2)).toEqual([
+      i18n.global.t('dashboard.jobId'),
+      i18n.global.t('dashboard.project'),
+    ])
+    expect(activeJobsHeaders.slice(0, 3)).toEqual([
+      i18n.global.t('dashboard.jobId'),
+      i18n.global.t('dashboard.project'),
+      i18n.global.t('common.labels.status'),
+    ])
   })
 
   it('shows raw source mount paths only to admin and manager roles', async () => {
