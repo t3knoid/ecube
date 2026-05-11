@@ -366,7 +366,7 @@ DISCONNECTED → DISABLED → AVAILABLE → IN_USE → AVAILABLE
 
 A drive assigned to one project cannot be re-assigned to a different project without first being formatted. Formatting wipes the drive and clears the project binding.
 
-The Drives page shows `Disabled`, `AVAILABLE`, and `IN_USE` by default. Use `Show Disconnected drives` when you need to include historically known but currently absent hardware in the list.
+The drive-state filter includes `DISCONNECTED`, `DISABLED`, `AVAILABLE`, and `IN_USE`. Selecting `DISCONNECTED` keeps the list aligned with dashboard drill-down navigation and automatically includes historically known but currently absent hardware. Use `Show Disconnected drives` when you want disconnected rows included while viewing a broader state filter.
 
 After a service restart, ECUBE may automatically restore a previously mounted managed USB drive to its expected ECUBE mount slot. If a drive or mount appears to have changed state during startup, review the `Audit Logs` page for reconciliation events recorded by the system.
 
@@ -474,8 +474,11 @@ You can typically:
 
 - Refresh the mount list
 - Open Mount Detail for an existing mount definition from the clickable mount ID
+- Filter the list by workflow bucket (`Unassigned`, `Assigned`, `In Progress`, `Completed`, or `Unavailable`) or search by mount details
 
 `admin` and `manager` users can also add a new mount definition and edit or remove a mount from Mount Detail. `processor` users can browse mounted shares from the clickable project value on the Mounts page and from Mount Detail. `auditor` users can open the Mounts page and Mount Detail, but they do not see browse, `Edit`, or `Remove` actions and sensitive path fields remain redacted.
+
+When you arrive from a Dashboard `Mounts Summary` entry, the matching workflow bucket is preselected so the destination list stays aligned with the dashboard context.
 
 ### 8.1 Adding a Mount
 

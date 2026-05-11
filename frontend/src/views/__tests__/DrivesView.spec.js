@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 const routeState = vi.hoisted(() => ({
-  query: {},
+  current: null,
 }))
 
 const authState = vi.hoisted(() => ({
@@ -24,10 +24,16 @@ const viewportState = vi.hoisted(() => ({
 
 const matchMediaListeners = vi.hoisted(() => new Set())
 
-vi.mock('vue-router', () => ({
-  useRoute: () => routeState,
-  useRouter: () => ({ push: mocks.push }),
-}))
+vi.mock('vue-router', async () => {
+  const { reactive } = await vi.importActual('vue')
+
+  routeState.current = reactive({ query: {} })
+
+  return {
+    useRoute: () => routeState.current,
+    useRouter: () => ({ push: mocks.push }),
+  }
+})
 
 vi.mock('@/api/drives.js', () => ({
   getDrives: (...args) => mocks.getDrives(...args),
@@ -115,7 +121,7 @@ describe('DrivesView rescan and filter loading', () => {
   beforeEach(() => {
     authState.roles = ['admin', 'manager']
     viewportState.mobile = false
-    routeState.query = {}
+    routeState.current.query = {}
     matchMediaListeners.clear()
     installMatchMediaMock()
     mocks.push.mockReset()
@@ -150,7 +156,7 @@ describe('DrivesView rescan and filter loading', () => {
   })
 
   it('preselects the disconnected filter from the route query and loads disconnected rows', async () => {
-    routeState.query = { state: 'DISCONNECTED' }
+    routeState.current.query = { state: 'DISCONNECTED' }
     mocks.getDrives.mockResolvedValue([
       buildDrive({ id: 1, current_state: 'DISCONNECTED' }),
       buildDrive({ id: 2, current_state: 'AVAILABLE' }),
@@ -165,6 +171,32 @@ describe('DrivesView rescan and filter loading', () => {
     expect(mocks.getDrives).toHaveBeenCalledWith({ include_disconnected: true })
     expect(stateSelect.element.value).toBe('DISCONNECTED')
     expect(checkbox.element.checked).toBe(true)
+    expect(wrapper.find('.rows-count').text()).toBe('1')
+  })
+
+  it('clears the disconnected handoff when the route query changes to a different state', async () => {
+    routeState.current.query = { state: 'DISCONNECTED' }
+    mocks.getDrives
+      .mockResolvedValueOnce([
+        buildDrive({ id: 1, current_state: 'DISCONNECTED' }),
+        buildDrive({ id: 2, current_state: 'AVAILABLE' }),
+      ])
+      .mockResolvedValueOnce([
+        buildDrive({ id: 3, current_state: 'AVAILABLE' }),
+      ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    routeState.current.query = { state: 'AVAILABLE' }
+    await flushPromises()
+
+    const checkbox = wrapper.find('input[type="checkbox"]')
+    const stateSelect = wrapper.findAll('select')[0]
+
+    expect(stateSelect.element.value).toBe('AVAILABLE')
+    expect(checkbox.element.checked).toBe(false)
+    expect(mocks.getDrives).toHaveBeenLastCalledWith({})
     expect(wrapper.find('.rows-count').text()).toBe('1')
   })
 

@@ -440,7 +440,7 @@ Current state
    |                                  (re-insert same project)
      (re-detect on disabled port)</code></pre>
 <p>A drive assigned to one project cannot be re-assigned to a different project without first being formatted. Formatting wipes the drive and clears the project binding.</p>
-<p>The Drives page shows <code>Disabled</code>, <code>AVAILABLE</code>, and <code>IN_USE</code> by default. Use <code>Show Disconnected drives</code> when you need to include historically known but currently absent hardware in the list.</p>
+<p>The drive-state filter includes <code>DISCONNECTED</code>, <code>DISABLED</code>, <code>AVAILABLE</code>, and <code>IN_USE</code>. Selecting <code>DISCONNECTED</code> keeps the list aligned with dashboard drill-down navigation and automatically includes historically known but currently absent hardware. Use <code>Show Disconnected drives</code> when you want disconnected rows included while viewing a broader state filter.</p>
 <p>After a service restart, ECUBE may automatically restore a previously mounted managed USB drive to its expected ECUBE mount slot. If a drive or mount appears to have changed state during startup, review the <code>Audit Logs</code> page for reconciliation events recorded by the system.</p>
 <h2 id="4-2-viewing-drives">4.2 Viewing Drives</h2>
 <p>Use the page controls to:</p>
@@ -537,8 +537,11 @@ The drive can be physically removed once the operation completes.
 Refresh the mount list
 </li><li>
 Open Mount Detail for an existing mount definition from the clickable mount ID
+</li><li>
+Filter the list by workflow bucket (<code>Unassigned</code>, <code>Assigned</code>, <code>In Progress</code>, <code>Completed</code>, or <code>Unavailable</code>) or search by mount details
 </li></ul>
 <p><code>admin</code> and <code>manager</code> users can also add a new mount definition and edit or remove a mount from Mount Detail. <code>processor</code> users can browse mounted shares from the clickable project value on the Mounts page and from Mount Detail. <code>auditor</code> users can open the Mounts page and Mount Detail, but they do not see browse, <code>Edit</code>, or <code>Remove</code> actions and sensitive path fields remain redacted.</p>
+<p>When you arrive from a Dashboard <code>Mounts Summary</code> entry, the matching workflow bucket is preselected so the destination list stays aligned with the dashboard context.</p>
 <h2 id="5-1-adding-a-mount">5.1 Adding a Mount</h2>
 <p>The add-mount dialog supports common fields such as:</p>
 <ul><li>

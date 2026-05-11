@@ -211,9 +211,7 @@ function normalizeDriveStateFilter(value) {
 function applyDriveRouteFilter() {
   const nextStateFilter = normalizeDriveStateFilter(route.query?.state)
   stateFilter.value = nextStateFilter
-  if (nextStateFilter === 'DISCONNECTED') {
-    showDisconnected.value = true
-  }
+  showDisconnected.value = nextStateFilter === 'DISCONNECTED'
 }
 
 function setSort(key) {
