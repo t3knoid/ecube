@@ -369,7 +369,7 @@ Number of active jobs
 </li><li>
 Drive state summary (<code>DISCONNECTED</code>, <code>DISABLED</code>, <code>AVAILABLE</code>, <code>IN_USE</code>)
 </li><li>
-Mount workflow summary (<code>Unassigned</code>, <code>Assigned</code>, <code>In Progress</code>, <code>Completed</code>, <code>Unavailable</code>), where <code>Assigned</code> means a job exists but has not started, <code>In Progress</code> includes started, paused, failed, or handoff-pending work, and <code>Unavailable</code> marks mounts whose trusted related-job or custody state could not be derived
+Mount workflow summary (<code>Unassigned</code>, <code>Assigned</code>, <code>Active</code>, <code>Blocked</code>, <code>Custody Pending</code>, <code>Completed</code>, <code>Unavailable</code>), where <code>Assigned</code> means a job exists but has not started, <code>Active</code> includes running, pausing, and verifying work, <code>Blocked</code> captures paused or failed work, <code>Custody Pending</code> captures completed or archived jobs whose handoff is still pending, and <code>Unavailable</code> marks mounts whose trusted related-job or custody state could not be derived
 </li><li>
 Table of active jobs with derived <code>Next Step</code> guidance
 </li></ul>
@@ -386,7 +386,7 @@ Which jobs are blocked, waiting to start, or still waiting on custody closeout?
 </li><li>
 How many drives are ready for use?
 </li><li>
-How many source mounts are unassigned, assigned but not started, already underway, fully complete including custody handoff, or currently unavailable for trusted workflow classification?
+How many source mounts are unassigned, assigned but not started, actively processing, blocked, waiting on custody closeout, fully complete including custody handoff, or currently unavailable for trusted workflow classification?
 </li></ul>
 <p>The dashboard is intended for situational awareness, not full task execution. Use the dedicated pages for detailed operations.</p>
 <p class="help-back-to-top"><a href="#help-toc-title">Back to top</a></p>

@@ -307,7 +307,7 @@ Typical information shown:
 - Number of active jobs
 - `Needs Attention` table for blocked work, waiting-to-start assignments, and completed jobs that still require chain-of-custody closeout
 - Drive state summary (`DISCONNECTED`, `DISABLED`, `AVAILABLE`, `IN_USE`)
-- Mount workflow summary (`Unassigned`, `Assigned`, `In Progress`, `Completed`, `Unavailable`), where `Assigned` means a job exists but has not started, `In Progress` includes started, paused, failed, or handoff-pending work, and `Unavailable` marks mounts whose trusted related-job or custody state could not be derived
+- Mount workflow summary (`Unassigned`, `Assigned`, `Active`, `Blocked`, `Custody Pending`, `Completed`, `Unavailable`), where `Assigned` means a job exists but has not started, `Active` includes running, pausing, and verifying work, `Blocked` captures paused or failed work, `Custody Pending` captures completed or archived jobs whose handoff is still pending, and `Unavailable` marks mounts whose trusted related-job or custody state could not be derived
 - Table of active jobs with derived `Next Step` guidance
 
 The `Needs Attention` section highlights trusted workflow items that require follow-up from processors or managers. `Blocked` covers failed or paused jobs, `Waiting to Start` highlights pending assignments, and `Waiting on Custody Closeout` highlights completed or archived jobs whose trusted custody state is still `Pending handoff`. The `Needs Attention` and active-jobs tables both include a read-only `Next Step` column derived from trusted lifecycle, startup-analysis, failed-file, and custody state so operators can triage work before opening Job Detail. Each row uses the `Job ID` value as the direct navigation path into Job Detail.
@@ -322,7 +322,7 @@ Use the dashboard when you need a quick answer to questions such as:
 - Are any jobs currently running or verifying?
 - Which jobs are blocked, waiting to start, or still waiting on custody closeout?
 - How many drives are ready for use?
-- How many source mounts are unassigned, assigned but not started, already underway, fully complete including custody handoff, or currently unavailable for trusted workflow classification?
+- How many source mounts are unassigned, assigned but not started, actively processing, blocked, waiting on custody closeout, fully complete including custody handoff, or currently unavailable for trusted workflow classification?
 
 The dashboard is intended for situational awareness, not full task execution. Use the dedicated pages for detailed operations.
 

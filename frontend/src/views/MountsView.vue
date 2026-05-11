@@ -723,7 +723,9 @@ onBeforeUnmount(() => {
         <option value="ALL">{{ t('mounts.allWorkflowBuckets') }}</option>
         <option :value="MOUNT_WORKFLOW_BUCKETS.UNASSIGNED">{{ t('dashboard.mountUnassigned') }}</option>
         <option :value="MOUNT_WORKFLOW_BUCKETS.ASSIGNED">{{ t('dashboard.mountAssigned') }}</option>
-        <option :value="MOUNT_WORKFLOW_BUCKETS.IN_PROGRESS">{{ t('dashboard.mountInProgress') }}</option>
+        <option :value="MOUNT_WORKFLOW_BUCKETS.ACTIVE">{{ t('dashboard.mountActive') }}</option>
+        <option :value="MOUNT_WORKFLOW_BUCKETS.BLOCKED">{{ t('dashboard.mountBlocked') }}</option>
+        <option :value="MOUNT_WORKFLOW_BUCKETS.CUSTODY_PENDING">{{ t('dashboard.mountCustodyPending') }}</option>
         <option :value="MOUNT_WORKFLOW_BUCKETS.COMPLETED">{{ t('dashboard.mountCompleted') }}</option>
         <option :value="MOUNT_WORKFLOW_BUCKETS.UNAVAILABLE">{{ t('dashboard.mountUnavailable') }}</option>
       </select>

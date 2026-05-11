@@ -1,7 +1,9 @@
 export const MOUNT_WORKFLOW_BUCKETS = Object.freeze({
   UNASSIGNED: 'UNASSIGNED',
   ASSIGNED: 'ASSIGNED',
-  IN_PROGRESS: 'IN_PROGRESS',
+  ACTIVE: 'ACTIVE',
+  BLOCKED: 'BLOCKED',
+  CUSTODY_PENDING: 'CUSTODY_PENDING',
   COMPLETED: 'COMPLETED',
   UNAVAILABLE: 'UNAVAILABLE',
 })
@@ -22,8 +24,12 @@ export function classifyMountWorkflowBucket(mount) {
     return MOUNT_WORKFLOW_BUCKETS.ASSIGNED
   }
 
-  if (['RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING', 'FAILED'].includes(status)) {
-    return MOUNT_WORKFLOW_BUCKETS.IN_PROGRESS
+  if (['RUNNING', 'PAUSING', 'VERIFYING'].includes(status)) {
+    return MOUNT_WORKFLOW_BUCKETS.ACTIVE
+  }
+
+  if (['PAUSED', 'FAILED'].includes(status)) {
+    return MOUNT_WORKFLOW_BUCKETS.BLOCKED
   }
 
   if (['COMPLETED', 'ARCHIVED'].includes(status)) {
@@ -31,7 +37,7 @@ export function classifyMountWorkflowBucket(mount) {
       return MOUNT_WORKFLOW_BUCKETS.COMPLETED
     }
     if (custodyStatus === 'PENDING_HANDOFF') {
-      return MOUNT_WORKFLOW_BUCKETS.IN_PROGRESS
+      return MOUNT_WORKFLOW_BUCKETS.CUSTODY_PENDING
     }
     return MOUNT_WORKFLOW_BUCKETS.UNAVAILABLE
   }
@@ -43,7 +49,9 @@ export function buildMountWorkflowCounts(mounts) {
   const counts = {
     [MOUNT_WORKFLOW_BUCKETS.UNASSIGNED]: 0,
     [MOUNT_WORKFLOW_BUCKETS.ASSIGNED]: 0,
-    [MOUNT_WORKFLOW_BUCKETS.IN_PROGRESS]: 0,
+    [MOUNT_WORKFLOW_BUCKETS.ACTIVE]: 0,
+    [MOUNT_WORKFLOW_BUCKETS.BLOCKED]: 0,
+    [MOUNT_WORKFLOW_BUCKETS.CUSTODY_PENDING]: 0,
     [MOUNT_WORKFLOW_BUCKETS.COMPLETED]: 0,
     [MOUNT_WORKFLOW_BUCKETS.UNAVAILABLE]: 0,
   }

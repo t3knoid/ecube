@@ -83,7 +83,9 @@ const driveSummaryEntries = computed(() => [
 const mountSummaryEntries = computed(() => [
   { key: MOUNT_WORKFLOW_BUCKETS.UNASSIGNED, label: t('dashboard.mountUnassigned'), count: mountCounts.value.UNASSIGNED },
   { key: MOUNT_WORKFLOW_BUCKETS.ASSIGNED, label: t('dashboard.mountAssigned'), count: mountCounts.value.ASSIGNED },
-  { key: MOUNT_WORKFLOW_BUCKETS.IN_PROGRESS, label: t('dashboard.mountInProgress'), count: mountCounts.value.IN_PROGRESS },
+  { key: MOUNT_WORKFLOW_BUCKETS.ACTIVE, label: t('dashboard.mountActive'), count: mountCounts.value.ACTIVE },
+  { key: MOUNT_WORKFLOW_BUCKETS.BLOCKED, label: t('dashboard.mountBlocked'), count: mountCounts.value.BLOCKED },
+  { key: MOUNT_WORKFLOW_BUCKETS.CUSTODY_PENDING, label: t('dashboard.mountCustodyPending'), count: mountCounts.value.CUSTODY_PENDING },
   { key: MOUNT_WORKFLOW_BUCKETS.COMPLETED, label: t('dashboard.mountCompleted'), count: mountCounts.value.COMPLETED },
   { key: MOUNT_WORKFLOW_BUCKETS.UNAVAILABLE, label: t('dashboard.mountUnavailable'), count: mountCounts.value.UNAVAILABLE },
 ])

@@ -458,12 +458,39 @@ describe('DashboardView active jobs', () => {
     const summaryRows = wrapper
       .findAll('.summary-link')
       .map((row) => row.text())
-      .filter((text) => text.includes(i18n.global.t('dashboard.mountUnassigned')) || text.includes(i18n.global.t('dashboard.mountAssigned')) || text.includes(i18n.global.t('dashboard.mountInProgress')) || text.includes(i18n.global.t('dashboard.mountCompleted')) || text.includes(i18n.global.t('dashboard.mountUnavailable')))
+      .filter((text) => text.includes(i18n.global.t('dashboard.mountUnassigned'))
+        || text.includes(i18n.global.t('dashboard.mountAssigned'))
+        || text.includes(i18n.global.t('dashboard.mountActive'))
+        || text.includes(i18n.global.t('dashboard.mountBlocked'))
+        || text.includes(i18n.global.t('dashboard.mountCustodyPending'))
+        || text.includes(i18n.global.t('dashboard.mountCompleted'))
+        || text.includes(i18n.global.t('dashboard.mountUnavailable')))
     expect(summaryRows).toContain(`${i18n.global.t('dashboard.mountUnassigned')}1`)
     expect(summaryRows).toContain(`${i18n.global.t('dashboard.mountAssigned')}1`)
-    expect(summaryRows).toContain(`${i18n.global.t('dashboard.mountInProgress')}4`)
+    expect(summaryRows).toContain(`${i18n.global.t('dashboard.mountActive')}1`)
+    expect(summaryRows).toContain(`${i18n.global.t('dashboard.mountBlocked')}2`)
+    expect(summaryRows).toContain(`${i18n.global.t('dashboard.mountCustodyPending')}1`)
     expect(summaryRows).toContain(`${i18n.global.t('dashboard.mountCompleted')}2`)
     expect(summaryRows).toContain(`${i18n.global.t('dashboard.mountUnavailable')}1`)
+  })
+
+  it('keeps completed and archived pending-handoff mounts out of the completed bucket', async () => {
+    mocks.listJobs.mockResolvedValue([])
+    mocks.getMounts.mockResolvedValue([
+      { id: 24, status: 'MOUNTED', project_id: 'PROJ-024', related_job: { job_id: 44, status: 'COMPLETED', custody_status: 'PENDING_HANDOFF' } },
+      { id: 25, status: 'MOUNTED', project_id: 'PROJ-025', related_job: { job_id: 45, status: 'ARCHIVED', custody_status: 'PENDING_HANDOFF' } },
+      { id: 26, status: 'MOUNTED', project_id: 'PROJ-026', related_job: { job_id: 46, status: 'COMPLETED', custody_status: 'HANDOFF_RECORDED' } },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const summaryRows = wrapper
+      .findAll('.summary-link')
+      .map((row) => row.text())
+      .filter((text) => text.includes(i18n.global.t('dashboard.mountCustodyPending')) || text.includes(i18n.global.t('dashboard.mountCompleted')))
+    expect(summaryRows).toContain(`${i18n.global.t('dashboard.mountCustodyPending')}2`)
+    expect(summaryRows).toContain(`${i18n.global.t('dashboard.mountCompleted')}1`)
   })
 
   it('shows unavailable mounts explicitly instead of silently dropping them', async () => {

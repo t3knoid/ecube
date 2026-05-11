@@ -218,6 +218,24 @@ describe('MountsView removal flow', () => {
     expect(wrapper.find('.row-stub .row-id').text()).toBe('12')
   })
 
+  it('preselects the custody-pending workflow bucket from the route query and shows only matching mounts', async () => {
+    routeState.query = { workflow: 'CUSTODY_PENDING' }
+    mocks.getMounts.mockResolvedValueOnce([
+      buildMount({ id: 11, related_job: { job_id: 31, status: 'COMPLETED', custody_status: 'PENDING_HANDOFF' } }),
+      buildMount({ id: 12, related_job: { job_id: 32, status: 'ARCHIVED', custody_status: 'PENDING_HANDOFF' } }),
+      buildMount({ id: 13, related_job: { job_id: 33, status: 'COMPLETED', custody_status: 'HANDOFF_RECORDED' } }),
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const workflowSelect = wrapper.find('select')
+
+    expect(workflowSelect.element.value).toBe('CUSTODY_PENDING')
+    expect(wrapper.find('.rows-count').text()).toBe('2')
+    expect(wrapper.findAll('.row-stub')).toHaveLength(2)
+  })
+
   it('uses the project value as the browse entry point for a mounted share', async () => {
     mocks.getMounts.mockResolvedValueOnce([buildMount({ status: 'MOUNTED', local_mount_point: '/smb/demo-case-002' })])
 
