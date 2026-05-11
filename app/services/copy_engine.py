@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 STARTUP_ANALYSIS_SAMPLE_LIMIT = 16
 COPY_PENDING_BATCH_MULTIPLIER = 4
-STARTUP_ANALYSIS_SAMPLE_BUCKETS: tuple[tuple[int, Optional[int]], ...] = (
+THROUGHPUT_BENCHMARK_SAMPLE_BUCKETS: tuple[tuple[int, Optional[int]], ...] = (
     (0, 16 * 1024),
     (16 * 1024, 32 * 1024),
     (32 * 1024, 64 * 1024),
@@ -713,16 +713,16 @@ def _calculate_per_file_overhead_seconds(
     return overhead_seconds / sample_file_count
 
 
-def _classify_startup_analysis_sample_bucket(size_bytes: int) -> int:
-    for index, (lower_bound, upper_bound) in enumerate(STARTUP_ANALYSIS_SAMPLE_BUCKETS):
+def _classify_throughput_benchmark_sample_bucket(size_bytes: int) -> int:
+    for index, (lower_bound, upper_bound) in enumerate(THROUGHPUT_BENCHMARK_SAMPLE_BUCKETS):
         if size_bytes < lower_bound:
             continue
         if upper_bound is None or size_bytes < upper_bound:
             return index
-    return len(STARTUP_ANALYSIS_SAMPLE_BUCKETS) - 1
+    return len(THROUGHPUT_BENCHMARK_SAMPLE_BUCKETS) - 1
 
 
-def _build_startup_analysis_sample_plan(files: list[Path], sample_bytes: int) -> list[tuple[Path, int]]:
+def _build_throughput_benchmark_sample_plan(files: list[Path], sample_bytes: int) -> list[tuple[Path, int]]:
     if sample_bytes <= 0:
         return []
 
@@ -741,10 +741,10 @@ def _build_startup_analysis_sample_plan(files: list[Path], sample_bytes: int) ->
 
     sorted_infos = sorted(file_infos, key=lambda item: item[1])
     buckets: list[list[tuple[Path, int]]] = [
-        [] for _ in STARTUP_ANALYSIS_SAMPLE_BUCKETS
+        [] for _ in THROUGHPUT_BENCHMARK_SAMPLE_BUCKETS
     ]
     for file_info in sorted_infos:
-        buckets[_classify_startup_analysis_sample_bucket(file_info[1])].append(file_info)
+        buckets[_classify_throughput_benchmark_sample_bucket(file_info[1])].append(file_info)
 
     ordered_buckets: list[list[tuple[Path, int]]] = []
     for bucket in buckets:
@@ -788,6 +788,10 @@ def _build_startup_analysis_sample_plan(files: list[Path], sample_bytes: int) ->
             break
 
     return selected
+
+
+def _build_startup_analysis_sample_plan(files: list[Path], sample_bytes: int) -> list[tuple[Path, int]]:
+    return _build_throughput_benchmark_sample_plan(files, sample_bytes)
 
 
 def _measure_share_read_mbps(sample_plan: list[tuple[Path, int]]) -> tuple[Optional[float], int, float, float]:

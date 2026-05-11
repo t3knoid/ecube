@@ -1836,6 +1836,30 @@ def test_build_startup_analysis_sample_plan_uses_bucket_ordering_within_same_ran
     )
 
 
+def test_build_startup_analysis_sample_plan_matches_shared_throughput_sampler(tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+
+    files = []
+    for name, size_kb in (
+        ("small.bin", 24),
+        ("typical.bin", 56),
+        ("medium.bin", 112),
+        ("large.bin", 320),
+        ("tail.bin", 1536),
+    ):
+        file_path = source_dir / name
+        file_path.write_bytes(b"x" * (size_kb * 1024))
+        files.append(file_path)
+
+    budget = (24 + 56 + 112 + 96) * 1024
+
+    startup_plan = copy_engine._build_startup_analysis_sample_plan(files, budget)
+    shared_plan = copy_engine._build_throughput_benchmark_sample_plan(files, budget)
+
+    assert startup_plan == shared_plan
+
+
 def test_estimate_startup_analysis_duration_accounts_for_per_file_overhead():
     estimated_seconds = copy_engine._estimate_startup_analysis_duration_seconds(
         total_bytes=24 * 1024 * 1024,
