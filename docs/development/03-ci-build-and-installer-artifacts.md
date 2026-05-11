@@ -182,6 +182,14 @@ Included payload paths in the tarball:
 - `README.md`
 - `LICENSE`
 
+## Test Host Source Push Helper
+
+For test-host refreshes from a working source checkout, use the Ansible helper in [deploy/ansible/README.md](../../deploy/ansible/README.md).
+
+This helper is intended only for updating an existing native install on a designated test host without producing a tarball first. It pushes the same core payload paths used by the local package flow, refreshes the editable install in the existing virtual environment, updates the served frontend bundle, and restarts `ecube.service`.
+
+Pass the target host through the normal `ansible-playbook` inventory or `-l` options. Keep release-like or production-style deployments on the package artifact flow described in this document.
+
 ---
 
 ## Installer Contract: What `install.sh` Expects

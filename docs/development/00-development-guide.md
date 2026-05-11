@@ -656,6 +656,7 @@ Do not hide these repairs behind `Refresh` or any `GET` endpoint. They must rema
 | [Windows Development Guide](02-windows-development-guide.md) | Windows-specific setup, Docker, USB passthrough |
 | [Debugging Guide](01-debugging-guide.md) | Command-line and VS Code debugging reference |
 | [CI Build and Installer Artifact Contract](03-ci-build-and-installer-artifacts.md) | GitHub Actions package build flow and installer-required artifact contract |
+| [Ansible Test-Host Update Helper](../../deploy/ansible/README.md) | Push a locally built source checkout into an existing native test install |
 | [operations/](../operations/00-operational-guide.md) | Production deployment, configuration, user manual, security hardening |
 | [testing/](../testing/03-qa-testing-guide.md) | QA testing guide and test-case spreadsheet |
 | [design/](../design/00-overview.md) | Architecture, data model, API specification, security design |

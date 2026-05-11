@@ -281,7 +281,7 @@ ECUBE calls `chpasswd` (via `sudo`) to set and reset passwords for local OS acco
 
 **Scope:** These prerequisites apply **only to the backend host** where the ECUBE application (FastAPI service, database, and user management) is deployed. The frontend (React/Vue UI) and other satellites that consume only the ECUBE REST API do not require these OS-level configurations. In containerized deployments where user management is delegated to the backend, these steps are performed only once at the backend container image build time or on the backend host.
 
-The following host-level configuration must be applied by the ECUBE installer and Ansible roles before the application can rely on PAM policy enforcement. These steps apply to Ubuntu 20.04+ and Debian 11+. Debian 10 may still default to `pam_cracklib`; the installer must replace it with `pam_pwquality.so` in that case.
+The following host-level configuration must be applied on the backend host before the application can rely on PAM policy enforcement. These steps apply to Ubuntu 20.04+ and Debian 11+. Debian 10 may still default to `pam_cracklib`; the installer must replace it with `pam_pwquality.so` in that case.
 
 #### Install `libpam-pwquality`
 
@@ -503,11 +503,11 @@ The `deploy/ecube-sudoers` file must be extended with the `chage` and `pwquality
 ecube ALL=(root) NOPASSWD: /usr/sbin/useradd, /usr/sbin/usermod, /usr/sbin/userdel, /usr/sbin/groupadd, /usr/sbin/groupdel, /usr/sbin/chpasswd, /usr/bin/chage, /usr/bin/tee /etc/security/pwquality.conf
 ```
 
-### Installer and Ansible Responsibilities
+### Installer Responsibilities
 
 **Scope:** The following steps are performed on the **backend host** where the ECUBE application and OS user management service are deployed. These do not apply to frontend-only installations or satellite deployments.
 
-The ECUBE installer (`install.sh`) and the Ansible role for the ecube-host (backend only) must:
+The ECUBE installer (`install.sh`) must:
 
 1. Install `libpam-pwquality` if not present.
 2. Write the baseline `/etc/security/pwquality.conf` (preserving any existing admin customizations if upgrading).

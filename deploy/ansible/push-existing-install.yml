@@ -1,0 +1,196 @@
+---
+- name: Push ECUBE source update into an existing native install
+  hosts: all
+  gather_facts: false
+  become: true
+  vars:
+    ecube_repo_root: "{{ playbook_dir }}/../.."
+    ecube_install_dir: /opt/ecube
+    ecube_service_name: ecube.service
+    ecube_service_user: ecube
+    ecube_restart_service: true
+    ecube_refresh_editable_install: true
+    ecube_frontend_path_override: ""
+    ecube_required_paths:
+      - install.sh
+      - app
+      - alembic
+      - deploy
+      - pyproject.toml
+      - alembic.ini
+      - README.md
+      - LICENSE
+      - frontend/dist
+    ecube_protected_frontend_paths:
+      - /
+      - /bin
+      - /boot
+      - /dev
+      - /etc
+      - /home
+      - /lib
+      - /lib64
+      - /media
+      - /mnt
+      - /opt
+      - /proc
+      - /root
+      - /run
+      - /sbin
+      - /srv
+      - /sys
+      - /tmp
+      - /usr
+      - /var
+
+  pre_tasks:
+    - name: Check required local payload paths
+      ansible.builtin.stat:
+        path: "{{ ecube_repo_root }}/{{ item }}"
+      loop: "{{ ecube_required_paths }}"
+      register: ecube_local_payload_stats
+      delegate_to: localhost
+      become: false
+
+    - name: Fail when local payload is incomplete
+      ansible.builtin.assert:
+        that:
+          - (ecube_local_payload_stats.results | selectattr('stat.exists', 'equalto', false) | list | length) == 0
+        fail_msg: >-
+          Missing required local payload paths: {{ ecube_local_payload_stats.results
+          | selectattr('stat.exists', 'equalto', false)
+          | map(attribute='item')
+          | join(', ') }}
+        success_msg: Local ECUBE payload is complete.
+
+  tasks:
+    - name: Check install root exists on target
+      ansible.builtin.stat:
+        path: "{{ ecube_install_dir }}"
+      register: ecube_install_dir_stat
+
+    - name: Require an existing install root
+      ansible.builtin.assert:
+        that:
+          - ecube_install_dir_stat.stat.exists
+          - ecube_install_dir_stat.stat.isdir
+        fail_msg: "Existing install directory not found: {{ ecube_install_dir }}"
+        success_msg: "Existing install directory found: {{ ecube_install_dir }}"
+
+    - name: Stop ECUBE service before updating files
+      ansible.builtin.systemd:
+        name: "{{ ecube_service_name }}"
+        state: stopped
+      when: ecube_restart_service
+
+    - name: Copy backend payload into install root
+      ansible.builtin.copy:
+        src: "{{ ecube_repo_root }}/{{ item }}"
+        dest: "{{ ecube_install_dir }}/{{ item }}"
+        owner: "{{ ecube_service_user }}"
+        group: "{{ ecube_service_user }}"
+        mode: preserve
+      loop:
+        - install.sh
+        - app
+        - alembic
+        - deploy
+        - pyproject.toml
+        - alembic.ini
+        - README.md
+        - LICENSE
+
+    - name: Ensure install.sh remains executable
+      ansible.builtin.file:
+        path: "{{ ecube_install_dir }}/install.sh"
+        owner: "{{ ecube_service_user }}"
+        group: "{{ ecube_service_user }}"
+        mode: "0755"
+
+    - name: Read runtime environment file when present
+      ansible.builtin.slurp:
+        src: "{{ ecube_install_dir }}/.env"
+      register: ecube_env_file
+      failed_when: false
+
+    - name: Resolve frontend deployment path from explicit override
+      ansible.builtin.set_fact:
+        ecube_frontend_path: "{{ ecube_frontend_path_override }}"
+      when: ecube_frontend_path_override | length > 0
+
+    - name: Resolve frontend deployment path from runtime config
+      ansible.builtin.set_fact:
+        ecube_frontend_path: >-
+          {{ ((ecube_env_file.content | default('') | b64decode)
+          | regex_findall('(?m)^SERVE_FRONTEND_PATH=(.+)$')
+          | first | default('') | trim) or (ecube_install_dir ~ '/www') }}
+      when: ecube_frontend_path_override | length == 0
+
+    - name: Guard frontend deployment path
+      ansible.builtin.assert:
+        that:
+          - ecube_frontend_path.startswith('/')
+          - ecube_frontend_path not in ecube_protected_frontend_paths
+          - ecube_frontend_path != ecube_install_dir
+          - not ecube_install_dir.startswith(ecube_frontend_path ~ '/')
+        fail_msg: "Refusing to deploy frontend to unsafe path: {{ ecube_frontend_path }}"
+        success_msg: "Frontend path accepted: {{ ecube_frontend_path }}"
+
+    - name: Refresh staged frontend dist in install root
+      ansible.builtin.copy:
+        src: "{{ ecube_repo_root }}/frontend/dist/"
+        dest: "{{ ecube_install_dir }}/frontend/dist/"
+        owner: "{{ ecube_service_user }}"
+        group: "{{ ecube_service_user }}"
+        mode: preserve
+
+    - name: Clear deployed frontend directory
+      ansible.builtin.file:
+        path: "{{ ecube_frontend_path }}"
+        state: absent
+
+    - name: Recreate deployed frontend directory
+      ansible.builtin.file:
+        path: "{{ ecube_frontend_path }}"
+        state: directory
+        owner: "{{ ecube_service_user }}"
+        group: "{{ ecube_service_user }}"
+        mode: "0755"
+
+    - name: Copy frontend bundle into deployed frontend directory
+      ansible.builtin.copy:
+        src: "{{ ecube_repo_root }}/frontend/dist/"
+        dest: "{{ ecube_frontend_path }}/"
+        owner: "{{ ecube_service_user }}"
+        group: "{{ ecube_service_user }}"
+        mode: preserve
+
+    - name: Check editable install virtualenv exists
+      ansible.builtin.stat:
+        path: "{{ ecube_install_dir }}/venv/bin/pip"
+      register: ecube_venv_pip
+
+    - name: Ensure task-scoped Ansible remote tmp base exists
+      ansible.builtin.file:
+        path: "/tmp/ecube-ansible-tmp"
+        state: directory
+        owner: root
+        group: root
+        mode: "01777"
+
+    - name: Refresh editable install inside existing virtualenv
+      ansible.builtin.command:
+        cmd: "{{ ecube_install_dir }}/venv/bin/pip install --quiet -e {{ ecube_install_dir }}"
+      become_user: "{{ ecube_service_user }}"
+      vars:
+        ansible_remote_tmp: "/tmp/ecube-ansible-tmp"
+      when:
+        - ecube_refresh_editable_install
+        - ecube_venv_pip.stat.exists
+
+    - name: Restart ECUBE service after updating files
+      ansible.builtin.systemd:
+        name: "{{ ecube_service_name }}"
+        state: restarted
+        enabled: true
+      when: ecube_restart_service
