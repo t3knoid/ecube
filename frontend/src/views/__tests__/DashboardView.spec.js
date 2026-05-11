@@ -202,6 +202,30 @@ describe('DashboardView active jobs', () => {
     expect(jobLinks).toContain('43')
   })
 
+  it('does not classify pending jobs that are still analyzing as waiting to start', async () => {
+    mocks.listJobs.mockResolvedValue([
+      {
+        id: 60,
+        project_id: 'PROJ-060',
+        status: 'PENDING',
+        startup_analysis_status: 'ANALYZING',
+        copied_bytes: 0,
+        total_bytes: 0,
+        file_count: 1,
+        files_succeeded: 0,
+        files_failed: 0,
+      },
+    ])
+    mocks.getMounts.mockResolvedValue([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('dashboard.needsAttention'))
+    expect(wrapper.text()).not.toContain(i18n.global.t('dashboard.attentionWaitingToStart'))
+    expect(wrapper.text()).toContain(i18n.global.t('dashboard.noNeedsAttention'))
+  })
+
   it('shows an empty needs-attention state when no follow-up items are present', async () => {
     mocks.listJobs.mockResolvedValue([])
     mocks.getMounts.mockResolvedValue([])

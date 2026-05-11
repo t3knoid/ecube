@@ -13,7 +13,7 @@ import ProgressBar from '@/components/common/ProgressBar.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { calculateJobProgress, isJobProgressActive } from '@/utils/jobProgress.js'
 import { MOUNT_WORKFLOW_BUCKETS, buildMountWorkflowCounts } from '@/utils/mountWorkflow.js'
-import { normalizeJobStatus } from '@/utils/jobActions.js'
+import { canStartJob, normalizeJobStatus } from '@/utils/jobActions.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
 const { t } = useI18n()
@@ -105,7 +105,7 @@ const needsAttentionItems = computed(() => {
       continue
     }
 
-    if (status === 'PENDING') {
+    if (status === 'PENDING' && canStartJob({ canOperate: true, jobStatus: status, startupAnalysisStatus: job.startup_analysis_status })) {
       items.push({
         ...job,
         attention: t('dashboard.attentionWaitingToStart'),
