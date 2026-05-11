@@ -103,6 +103,7 @@ class UsbDeviceInfo(BaseModel):
     idProduct: Optional[str] = Field(default=None, description="USB product ID")
     product: Optional[str] = Field(default=None, description="Product description")
     manufacturer: Optional[str] = Field(default=None, description="Manufacturer name")
+    speed: Optional[str] = Field(default=None, description="Negotiated USB speed in Mbps when available")
 
 
 class UsbTopologyResponse(BaseModel):

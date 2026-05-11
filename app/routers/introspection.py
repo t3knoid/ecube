@@ -140,7 +140,7 @@ def usb_topology(_: CurrentUser = Depends(_ALL_ROLES)):
             for dev in os.listdir(usb_path):
                 dev_path = os.path.join(usb_path, dev)
                 info = {"device": dev}
-                for attr in ["serial", "idVendor", "idProduct", "product", "manufacturer"]:
+                for attr in ["serial", "idVendor", "idProduct", "product", "manufacturer", "speed"]:
                     attr_file = os.path.join(dev_path, attr)
                     if os.path.isfile(attr_file):
                         try:

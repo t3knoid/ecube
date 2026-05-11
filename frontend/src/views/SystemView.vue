@@ -17,6 +17,7 @@ import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { normalizeProjectId } from '@/utils/projectId.js'
+import { formatUsbSpeed } from '@/utils/usbSpeed.js'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -83,6 +84,7 @@ const tabColumns = computed(() => {
       { key: 'serial', label: t('system.serialNumber') },
       { key: 'manufacturer', label: t('system.manufacturer') },
       { key: 'product', label: t('system.product') },
+      { key: 'speed', label: t('system.speed') },
       { key: 'idVendor', label: t('system.vendorId') },
       { key: 'idProduct', label: t('system.productId') },
     ]
@@ -125,7 +127,7 @@ const tabColumns = computed(() => {
 // Hide only if Serial Number, Manufacturer, Product, Vendor ID, and Product ID are all empty
 function isUsbDeviceEmpty(device) {
   if (!device) return true
-  const fields = ['serial', 'manufacturer', 'product', 'idVendor', 'idProduct']
+  const fields = ['serial', 'manufacturer', 'product', 'speed', 'idVendor', 'idProduct']
   return fields.every((key) => {
     const v = device[key]
     return v === undefined || v === null || String(v).trim() === ''
@@ -878,6 +880,7 @@ onBeforeUnmount(() => {
           </span>
           <span v-else>{{ row.product || '-' }}</span>
         </template>
+        <template #cell-speed="{ row }">{{ formatUsbSpeed(row.speed) }}</template>
         <template #cell-mount_point="{ row }">
           <span
             v-if="activeTab === 'mounts' && isMobileViewport"
@@ -901,6 +904,7 @@ onBeforeUnmount(() => {
               <div v-if="activeTab === 'usb'" class="usb-topology-menu-grid">
                 <span>{{ t('system.manufacturer') }}</span><strong>{{ row.manufacturer || '-' }}</strong>
                 <span>{{ t('system.serialNumber') }}</span><strong>{{ row.serial || '-' }}</strong>
+                <span>{{ t('system.speed') }}</span><strong>{{ formatUsbSpeed(row.speed) }}</strong>
                 <span>{{ t('system.vendorId') }}</span><strong>{{ row.idVendor || '-' }}</strong>
                 <span>{{ t('system.productId') }}</span><strong>{{ row.idProduct || '-' }}</strong>
               </div>

@@ -441,7 +441,7 @@ describe('SystemView USB topology tab', () => {
     expect(wrapper.text()).toContain(i18n.global.t('system.noActiveCopyThreads'))
   })
 
-  it('hides devices only if Serial Number, Manufacturer, Product, Vendor ID, and Product ID are all empty, and sorts by device column', async () => {
+  it('hides devices only if Serial Number, Manufacturer, Product, Speed, Vendor ID, and Product ID are all empty, and sorts by device column', async () => {
     const usbDevices = [
       { device: '', manufacturer: '', product: '', idVendor: '', idProduct: '' },
       { device: 'usb3', manufacturer: 'B', product: 'Y', idVendor: '1234', idProduct: '5678' },
@@ -451,6 +451,7 @@ describe('SystemView USB topology tab', () => {
       { device: 'usb4', manufacturer: '', product: '', idVendor: '', idProduct: '1' },
       { device: 'usb5', manufacturer: '', product: 'Z', idVendor: '', idProduct: '' },
       { device: 'usb6', serial: 'SER-USB-006', manufacturer: '', product: '', idVendor: '', idProduct: '' },
+      { device: 'usb7', manufacturer: '', product: '', speed: '480', idVendor: '', idProduct: '' },
     ]
     mocks.getUsbTopology.mockResolvedValue({ devices: usbDevices })
 
@@ -468,25 +469,29 @@ describe('SystemView USB topology tab', () => {
     const idx4 = text.indexOf('usb4')
     const idx5 = text.indexOf('usb5')
     const idx6 = text.indexOf('usb6')
+    const idx7 = text.indexOf('usb7')
     expect(idx1).toBeGreaterThan(-1)
     expect(idx3).toBeGreaterThan(-1)
     expect(idx4).toBeGreaterThan(-1)
     expect(idx5).toBeGreaterThan(-1)
     expect(idx6).toBeGreaterThan(-1)
+    expect(idx7).toBeGreaterThan(-1)
     expect(idx1).toBeLessThan(idx3)
     expect(idx3).toBeLessThan(idx4)
     expect(idx4).toBeLessThan(idx5)
     expect(idx5).toBeLessThan(idx6)
+    expect(idx6).toBeLessThan(idx7)
     expect(text).not.toMatch(/^\s*$/m)
   })
 
-  it('shows a serial number column in USB topology', async () => {
+  it('shows serial number and speed columns in USB topology', async () => {
     mocks.getUsbTopology.mockResolvedValue({
       devices: [{
         device: '2-1',
         serial: 'SER-USB-001',
         manufacturer: 'ECUBE',
         product: 'Evidence Drive',
+        speed: '5000',
         idVendor: 'abcd',
         idProduct: '1234',
       }],
@@ -502,6 +507,8 @@ describe('SystemView USB topology tab', () => {
 
     expect(wrapper.text()).toContain(i18n.global.t('system.serialNumber'))
     expect(wrapper.text()).toContain('SER-USB-001')
+    expect(wrapper.text()).toContain(i18n.global.t('system.speed'))
+    expect(wrapper.text()).toContain('5000 Mbps')
   })
 
   it('uses a compact USB topology table with overflow details on mobile', async () => {
@@ -512,6 +519,7 @@ describe('SystemView USB topology tab', () => {
         serial: 'SER-USB-001',
         manufacturer: 'ECUBE',
         product: 'Evidence Drive',
+        speed: '480',
         idVendor: 'abcd',
         idProduct: '1234',
       }],
@@ -534,10 +542,13 @@ describe('SystemView USB topology tab', () => {
     expect(wrapper.find('.usb-product-cell').attributes('title')).toBe('Evidence Drive')
     expect(wrapper.text()).toContain('ECUBE')
     expect(wrapper.text()).toContain('SER-USB-001')
+    expect(wrapper.text()).toContain(i18n.global.t('system.speed'))
+    expect(wrapper.text()).toContain('480 Mbps')
     expect(wrapper.text()).toContain('abcd')
     expect(wrapper.text()).toContain('1234')
     expect(wrapper.find('.columns-stub').text()).not.toContain(i18n.global.t('system.manufacturer'))
     expect(wrapper.find('.columns-stub').text()).not.toContain(i18n.global.t('system.serialNumber'))
+    expect(wrapper.find('.columns-stub').text()).not.toContain(i18n.global.t('system.speed'))
     expect(wrapper.find('.columns-stub').text()).not.toContain(i18n.global.t('system.vendorId'))
     expect(wrapper.find('.columns-stub').text()).not.toContain(i18n.global.t('system.productId'))
   })

@@ -1266,7 +1266,7 @@ These tests exercise real hardware paths that must be validated during manual QA
 | # | Test | Steps | Expected |
 |---|------|-------|----------|
 | 1 | Hot-plug detection | Plug in a USB drive, wait 30 seconds | `GET /drives` shows the new drive in `DISABLED` state if its port is disabled, or `AVAILABLE` if its port is enabled |
-| 2 | USB topology | Sign in as `admin`, `manager`, or `processor`, call `GET /introspection/usb/topology`, and open the System `USB Topology` tab | Shows real device values, serial numbers when available, sorted `Device` order, and no rows with entirely empty USB metadata |
+| 2 | USB topology | Sign in as `admin`, `manager`, or `processor`, call `GET /introspection/usb/topology`, and open the System `USB Topology` tab | Shows real device values, serial numbers when available, negotiated USB speed when available, sorted `Device` order, and no rows with entirely empty USB metadata |
 | 3 | Physical eject | Initialize drive → prepare-eject → physically remove | After the next discovery cycle, `GET /drives?include_disconnected=true` lists the drive with `current_state=DISCONNECTED`; audit shows `DRIVE_EJECT_PREPARED` |
 | 4 | Re-plug same drive | Remove and re-insert the same drive | Drive reappears as `AVAILABLE` with the same `port_system_path`/Device value and the same stable `device_identifier` (after discovery cycle) |
 | 5 | Multiple drives | Plug in 2+ drives simultaneously | All drives appear in `/drives`; each can be initialized to different projects |
@@ -1277,7 +1277,7 @@ These tests exercise real hardware paths that must be validated during manual QA
 | 10 | Sync + unmount | Initialize drive, create/start a job, then prepare-eject | Filesystem flushed and unmounted before eject (verify via `mount` command — no partitions from that drive should be listed) |
 | 11 | Disabled port blocks AVAILABLE | Disable a port, plug in a drive to that port, run discovery | Drive appears in `DISABLED` state; enable port + refresh → drive transitions to `AVAILABLE` |
 | 12 | Device labels stay aligned across UI | Open Drives, Jobs, and Create/Edit Job for the same connected drive | Drives shows the same `Device` value used by the Jobs list and the destination selector, and Create/Edit Job keeps the destination control labeled `Select device` |
-| 13 | Mounted drive surfaces capacity, available space, and Browse entry | Open Drive Detail for a mounted managed USB drive | The Drives list does not show a Size column, Drive Detail shows total capacity plus the last known available space value or `-` when no reading is available yet, and the mounted drive exposes a `Browse` button without exposing a raw mount-path link |
+| 13 | Mounted drive surfaces capacity, available space, speed, and Browse entry | Open Drive Detail for a mounted managed USB drive | The Drives list does not show a Size column, Drive Detail shows total capacity, negotiated USB speed when available or `-` when it is unavailable, plus the last known available space value or `-` when no reading is available yet, and the mounted drive exposes a `Browse` button without exposing a raw mount-path link |
 
 ### 12.6 End-to-End Copy Workflow
 

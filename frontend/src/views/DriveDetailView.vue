@@ -15,6 +15,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 import { formatDriveIdentity } from '@/utils/driveIdentity.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
+import { formatUsbSpeed } from '@/utils/usbSpeed.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -625,6 +626,7 @@ onBeforeUnmount(() => {
         <div><strong>{{ t('system.manufacturer') }}</strong><span>{{ drive.manufacturer || '-' }}</span></div>
         <div><strong>{{ t('system.vendorId') }}</strong><span>{{ drive.vendor_id || '-' }}</span></div>
         <div><strong>{{ t('system.productId') }}</strong><span>{{ drive.product_id || '-' }}</span></div>
+        <div><strong>{{ t('system.speed') }}</strong><span>{{ formatUsbSpeed(drive.speed) }}</span></div>
         <!-- Mount Point field removed -->
         <div><strong>{{ t('drives.filesystem') }}</strong><span>{{ drive.filesystem_type || '-' }}</span></div>
         <div><strong>{{ t('common.labels.size') }}</strong><span>{{ formatBytes(drive.capacity_bytes) }}</span></div>

@@ -660,6 +660,7 @@ def test_usb_topology_includes_serial_when_available(client, db):
         "/sys/bus/usb/devices/2-1/idProduct": "1234",
         "/sys/bus/usb/devices/2-1/product": "Evidence Drive",
         "/sys/bus/usb/devices/2-1/manufacturer": "ECUBE",
+        "/sys/bus/usb/devices/2-1/speed": "5000",
     }
 
     def _open_side_effect(path, *args, **kwargs):
@@ -683,6 +684,7 @@ def test_usb_topology_includes_serial_when_available(client, db):
         "idProduct": "1234",
         "product": "Evidence Drive",
         "manufacturer": "ECUBE",
+        "speed": "5000",
     }]
 
 

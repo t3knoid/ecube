@@ -65,6 +65,7 @@ function buildDrive(overrides = {}) {
     manufacturer: 'General USB',
     vendor_id: 'abcd',
     product_id: '1234',
+    speed: '5000',
     product_name: 'Flash Disk',
     port_number: 2,
     filesystem_path: '/dev/sdb1',
@@ -158,7 +159,7 @@ describe('DriveDetailView mount workflow', () => {
     expect(wrapper.text()).toContain('0.0 B')
   })
 
-  it('shows the drive serial, manufacturer, vendor id, and product id', async () => {
+  it('shows the drive serial, manufacturer, speed, vendor id, and product id', async () => {
     const wrapper = mountView()
     await flushPromises()
 
@@ -166,10 +167,21 @@ describe('DriveDetailView mount workflow', () => {
     expect(wrapper.text()).toContain('SN-0007-DETAIL')
     expect(wrapper.text()).toContain('Manufacturer')
     expect(wrapper.text()).toContain('General USB')
+    expect(wrapper.text()).toContain('Speed')
+    expect(wrapper.text()).toContain('5000 Mbps')
     expect(wrapper.text()).toContain('Vendor ID')
     expect(wrapper.text()).toContain('abcd')
     expect(wrapper.text()).toContain('Product ID')
     expect(wrapper.text()).toContain('1234')
+  })
+
+  it('shows a safe fallback when drive speed is unavailable', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ speed: null })])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toMatch(/Speed\s*-/)
   })
 
   it('shows the Mount action for managers and updates the mount point after success', async () => {

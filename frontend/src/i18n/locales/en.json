@@ -497,6 +497,7 @@
     "serialNumber": "Serial Number",
     "manufacturer": "Manufacturer",
     "product": "Product",
+    "speed": "Speed",
     "vendorId": "Vendor ID",
     "productId": "Product ID",
     "major": "Major",

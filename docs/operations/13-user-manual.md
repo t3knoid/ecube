@@ -392,7 +392,7 @@ The `Drive ID` value on the Drives page also acts as the direct navigation entry
 
 Selecting a drive opens a detail view showing:
 
-- The drive ID, the port-based `Device` value, filesystem type, total capacity, last known available space, and current status
+- The drive ID, the port-based `Device` value, trusted USB identity details such as serial number, manufacturer, vendor ID, product ID, negotiated speed when available, filesystem type, total capacity, last known available space, and current status
 - Current project assignment together with the related evidence number, job ID, and `Custody Status` when a job is associated with the drive
 - Current status badge
 - Available actions such as format, initialize, and prepare eject
@@ -932,7 +932,7 @@ End users who only perform evidence exports may rarely need this page. Administr
 
 In the `System Health` tab, ECUBE separates host metrics from ECUBE-owned process diagnostics. When the backend reports degraded but non-fatal runtime conditions, the same tab now shows a `Runtime Warnings` panel with the sanitized warning summary, remediation guidance, stable warning code, and any explicit operator repair actions that are safe to expose for that warning. `GET /introspection/system-health` now includes repair-action metadata only for `admin` callers; `manager`, `processor`, and `auditor` users still see the warning details, but they do not receive warning-action metadata from the API and therefore do not see repair-action buttons. For example, when exFAT formatting tools are present but the running kernel has not loaded exFAT runtime support, `admin` users can trigger the explicit repair action from the warning itself instead of relying on `Refresh` to mutate host state. The ECUBE process section shows ECUBE CPU and memory usage, the total ECUBE thread count, the number of active copy workers, and a table that correlates each active copy thread to its parent job and project, including status, configured threads, elapsed time, and CPU time.
 
-For `admin`, `manager`, and `processor` users, the `USB Topology` tab shows a sorted device table and hides rows with no meaningful USB metadata so the list stays focused on useful hardware entries. On smaller screens, the table tightens to primary columns such as `Device` and `Product`, and the remaining hardware details move into a per-row overflow menu.
+For `admin`, `manager`, and `processor` users, the `USB Topology` tab shows a sorted device table and hides rows with no meaningful USB metadata so the list stays focused on useful hardware entries. The wider-screen table includes negotiated USB speed when the backend exposes it. On smaller screens, the table tightens to primary columns such as `Device` and `Product`, and the remaining hardware details, including negotiated speed, move into a per-row overflow menu.
 
 For `admin`, `manager`, and `processor` users, the `Mounts` tab continues to show device, mount point, filesystem type, and mount options on wider screens. On smaller screens, it keeps `Device` and `Mount Point` visible and moves the remaining fields into a per-row overflow menu.
 
