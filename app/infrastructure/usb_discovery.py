@@ -285,12 +285,11 @@ def discover_usb_topology() -> DiscoveredTopology:
                 )
 
                 # Check for a mass-storage drive at this port
-                interface_class = _read_sysfs_attr(dev_path, "bDeviceClass") or ""
                 serial = _read_sysfs_attr(dev_path, "serial")
                 manufacturer = _read_sysfs_attr(dev_path, "manufacturer")
                 product_name = _read_sysfs_attr(dev_path, "product")
                 block_node = _block_device_for_sysfs_path(dev_path)
-                if block_node or interface_class == "00":
+                if block_node:
                     capacity: Optional[int] = None
                     udev_props: dict[str, str] = {}
                     if block_node:

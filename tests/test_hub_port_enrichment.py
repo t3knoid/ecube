@@ -532,6 +532,39 @@ def test_read_sysfs_attr_nonempty_returns_stripped(tmp_path):
     assert result == "0781"
 
 
+def test_discover_usb_topology_ignores_non_block_usb_device(monkeypatch, tmp_path):
+    from app.infrastructure.usb_discovery import discover_usb_topology
+
+    dev_name = "3-5"
+    dev_path = tmp_path / dev_name
+    dev_path.mkdir()
+
+    monkeypatch.setattr("app.infrastructure.usb_discovery.settings.sysfs_usb_devices_path", str(tmp_path))
+    monkeypatch.setattr("app.infrastructure.usb_discovery.read_mount_points", lambda: {})
+
+    def fake_read_sysfs_attr(path: str, attr: str):
+        if path != str(dev_path):
+            return None
+        return {
+            "idVendor": "1c4f",
+            "idProduct": "0002",
+            "speed": "1.5",
+            "serial": "keyboard-serial",
+            "manufacturer": "SIGMACHIP",
+            "product": "USB Keyboard",
+            "bDeviceClass": "00",
+        }.get(attr)
+
+    monkeypatch.setattr("app.infrastructure.usb_discovery._read_sysfs_attr", fake_read_sysfs_attr)
+    monkeypatch.setattr("app.infrastructure.usb_discovery._block_device_for_sysfs_path", lambda path: None)
+
+    topology = discover_usb_topology()
+
+    assert len(topology.ports) == 1
+    assert topology.ports[0].system_path == dev_name
+    assert topology.drives == []
+
+
 # ---------------------------------------------------------------------------
 # Unique constraint on usb_ports.system_path
 # ---------------------------------------------------------------------------
