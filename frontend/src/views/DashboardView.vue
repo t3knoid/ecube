@@ -12,6 +12,7 @@ import StatusBadge from '@/components/common/StatusBadge.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { calculateJobProgress, isJobProgressActive } from '@/utils/jobProgress.js'
+import { MOUNT_WORKFLOW_BUCKETS, buildMountWorkflowCounts } from '@/utils/mountWorkflow.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
 const { t } = useI18n()
@@ -49,44 +50,7 @@ const driveCounts = computed(() => {
   return counts
 })
 
-const mountCounts = computed(() => {
-  const counts = { UNASSIGNED: 0, ASSIGNED: 0, IN_PROGRESS: 0, COMPLETED: 0, UNAVAILABLE: 0 }
-  for (const mount of mounts.value) {
-    const key = String(mount.related_job?.status || '').toUpperCase()
-    const custodyStatus = String(mount.related_job?.custody_status || 'STATUS_UNAVAILABLE').toUpperCase()
-    if (!key || key === 'STATUS_UNAVAILABLE') {
-      counts.UNAVAILABLE += 1
-      continue
-    }
-
-    if (key === 'NO_RELATED_JOB') {
-      counts.UNASSIGNED += 1
-      continue
-    }
-
-    if (key === 'PENDING') {
-      counts.ASSIGNED += 1
-      continue
-    }
-    if (['RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING', 'FAILED'].includes(key)) {
-      counts.IN_PROGRESS += 1
-      continue
-    }
-    if (['COMPLETED', 'ARCHIVED'].includes(key)) {
-      if (custodyStatus === 'HANDOFF_RECORDED') {
-        counts.COMPLETED += 1
-      } else if (custodyStatus === 'PENDING_HANDOFF') {
-        counts.IN_PROGRESS += 1
-      } else {
-        counts.UNAVAILABLE += 1
-      }
-      continue
-    }
-
-    counts.UNAVAILABLE += 1
-  }
-  return counts
-})
+const mountCounts = computed(() => buildMountWorkflowCounts(mounts.value))
 
 const activeJobs = computed(() =>
   jobs.value.filter((job) => ['PENDING', 'RUNNING', 'VERIFYING'].includes(String(job.status || '').toUpperCase())),
@@ -99,6 +63,21 @@ const healthColumns = computed(() => [
   { key: 'progress', label: t('dashboard.progress') },
 ])
 
+const driveSummaryEntries = computed(() => [
+  { key: 'DISCONNECTED', label: t('drives.states.disconnected'), count: driveCounts.value.DISCONNECTED },
+  { key: 'DISABLED', label: t('drives.states.disabled'), count: driveCounts.value.DISABLED },
+  { key: 'AVAILABLE', label: t('drives.states.available'), count: driveCounts.value.AVAILABLE },
+  { key: 'IN_USE', label: t('drives.states.inUse'), count: driveCounts.value.IN_USE },
+])
+
+const mountSummaryEntries = computed(() => [
+  { key: MOUNT_WORKFLOW_BUCKETS.UNASSIGNED, label: t('dashboard.mountUnassigned'), count: mountCounts.value.UNASSIGNED },
+  { key: MOUNT_WORKFLOW_BUCKETS.ASSIGNED, label: t('dashboard.mountAssigned'), count: mountCounts.value.ASSIGNED },
+  { key: MOUNT_WORKFLOW_BUCKETS.IN_PROGRESS, label: t('dashboard.mountInProgress'), count: mountCounts.value.IN_PROGRESS },
+  { key: MOUNT_WORKFLOW_BUCKETS.COMPLETED, label: t('dashboard.mountCompleted'), count: mountCounts.value.COMPLETED },
+  { key: MOUNT_WORKFLOW_BUCKETS.UNAVAILABLE, label: t('dashboard.mountUnavailable'), count: mountCounts.value.UNAVAILABLE },
+])
+
 function formatProjectId(value) {
   return normalizeProjectId(value) || '-'
 }
@@ -107,6 +86,14 @@ function openJobDetail(jobId) {
   const normalizedJobId = Number(jobId)
   if (!Number.isInteger(normalizedJobId) || normalizedJobId < 1) return
   router.push({ name: 'job-detail', params: { id: normalizedJobId } })
+}
+
+function openDriveSummary(state) {
+  router.push({ name: 'drives', query: { state } })
+}
+
+function openMountSummary(workflow) {
+  router.push({ name: 'mounts', query: { workflow } })
 }
 
 function progressPercent(job) {
@@ -226,19 +213,30 @@ onUnmounted(() => {
 
       <article v-if="canViewOperationalSummary" class="summary-card">
         <h2>{{ t('dashboard.driveSummary') }}</h2>
-        <div class="summary-row"><span>{{ t('drives.states.disconnected') }}</span><strong>{{ driveCounts.DISCONNECTED }}</strong></div>
-        <div class="summary-row"><span>{{ t('drives.states.disabled') }}</span><strong>{{ driveCounts.DISABLED }}</strong></div>
-        <div class="summary-row"><span>{{ t('drives.states.available') }}</span><strong>{{ driveCounts.AVAILABLE }}</strong></div>
-        <div class="summary-row"><span>{{ t('drives.states.inUse') }}</span><strong>{{ driveCounts.IN_USE }}</strong></div>
+        <button
+          v-for="entry in driveSummaryEntries"
+          :key="entry.key"
+          class="summary-link"
+          type="button"
+          @click="openDriveSummary(entry.key)"
+        >
+          <span>{{ entry.label }}</span>
+          <strong>{{ entry.count }}</strong>
+        </button>
       </article>
 
       <article v-if="canViewOperationalSummary" class="summary-card">
         <h2>{{ t('dashboard.mountsSummary') }}</h2>
-        <div class="summary-row"><span>{{ t('dashboard.mountUnassigned') }}</span><strong>{{ mountCounts.UNASSIGNED }}</strong></div>
-        <div class="summary-row"><span>{{ t('dashboard.mountAssigned') }}</span><strong>{{ mountCounts.ASSIGNED }}</strong></div>
-        <div class="summary-row"><span>{{ t('dashboard.mountInProgress') }}</span><strong>{{ mountCounts.IN_PROGRESS }}</strong></div>
-        <div class="summary-row"><span>{{ t('dashboard.mountCompleted') }}</span><strong>{{ mountCounts.COMPLETED }}</strong></div>
-        <div class="summary-row"><span>{{ t('dashboard.mountUnavailable') }}</span><strong>{{ mountCounts.UNAVAILABLE }}</strong></div>
+        <button
+          v-for="entry in mountSummaryEntries"
+          :key="entry.key"
+          class="summary-link"
+          type="button"
+          @click="openMountSummary(entry.key)"
+        >
+          <span>{{ entry.label }}</span>
+          <strong>{{ entry.count }}</strong>
+        </button>
       </article>
     </div>
 
@@ -328,6 +326,26 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: var(--space-xs) 0;
+}
+
+.summary-link {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-xs) 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.summary-link:hover,
+.summary-link:focus-visible {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
 }
 
 .cell-link {

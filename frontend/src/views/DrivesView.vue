@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getDrives, refreshDrives } from '@/api/drives.js'
 import { listAllJobs } from '@/api/jobs.js'
@@ -17,7 +17,10 @@ import { buildDriveJobMap, buildProjectEvidenceMap, getDriveJob, getProjectEvide
 const { t } = useI18n()
 const { driveStateLabel } = useStatusLabels()
 const authStore = useAuthStore()
+const route = useRoute()
 const router = useRouter()
+
+const DRIVE_STATE_FILTERS = new Set(['ALL', 'DISCONNECTED', 'DISABLED', 'AVAILABLE', 'IN_USE'])
 
 const drives = ref([])
 const loading = ref(false)
@@ -200,6 +203,19 @@ const paged = computed(() => {
   return sorted.value.slice(start, start + pageSize.value)
 })
 
+function normalizeDriveStateFilter(value) {
+  const normalized = String(value || 'ALL').toUpperCase()
+  return DRIVE_STATE_FILTERS.has(normalized) ? normalized : 'ALL'
+}
+
+function applyDriveRouteFilter() {
+  const nextStateFilter = normalizeDriveStateFilter(route.query?.state)
+  stateFilter.value = nextStateFilter
+  if (nextStateFilter === 'DISCONNECTED') {
+    showDisconnected.value = true
+  }
+}
+
 function setSort(key) {
   if (sortKey.value === key) {
     sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
@@ -241,13 +257,27 @@ async function rescan() {
 }
 
 watch(stateFilter, () => {
+  if (stateFilter.value === 'DISCONNECTED' && !showDisconnected.value) {
+    showDisconnected.value = true
+  }
   page.value = 1
 })
 
 watch(showDisconnected, () => {
+  if (!showDisconnected.value && stateFilter.value === 'DISCONNECTED') {
+    stateFilter.value = 'ALL'
+  }
   page.value = 1
   loadDrives()
 })
+
+watch(
+  () => route.query?.state,
+  () => {
+    applyDriveRouteFilter()
+  },
+  { immediate: true },
+)
 
 function openRelatedJob(jobId) {
   const normalizedJobId = Number(jobId)
@@ -308,6 +338,7 @@ onBeforeUnmount(() => {
       <input v-model="search" type="text" :placeholder="t('drives.searchPlaceholder')" :aria-label="t('drives.searchPlaceholder')" />
       <select v-model="stateFilter" :aria-label="t('drives.allStates')">
         <option value="ALL">{{ t('drives.allStates') }}</option>
+        <option value="DISCONNECTED">{{ t('drives.states.disconnected') }}</option>
         <option value="DISABLED">{{ t('drives.states.disabled') }}</option>
         <option value="AVAILABLE">{{ t('drives.states.available') }}</option>
         <option value="IN_USE">{{ t('drives.states.inUse') }}</option>

@@ -16,6 +16,10 @@ const mocks = vi.hoisted(() => ({
   getPublicAuthConfig: vi.fn(),
 }))
 
+const routeState = vi.hoisted(() => ({
+  query: {},
+}))
+
 const authState = vi.hoisted(() => ({
   roles: ['admin', 'manager'],
 }))
@@ -27,6 +31,7 @@ const viewportState = vi.hoisted(() => ({
 const matchMediaListeners = vi.hoisted(() => new Set())
 
 vi.mock('vue-router', () => ({
+  useRoute: () => routeState,
   useRouter: () => ({ push: mocks.push }),
 }))
 
@@ -87,6 +92,7 @@ function mountView() {
                 <slot name="cell-status" :row="row" />
                 <slot name="cell-last_checked_at" :row="row" />
               </div>
+              <div class="rows-count">{{ rows.length }}</div>
             </div>
           `,
         },
@@ -143,6 +149,7 @@ describe('MountsView removal flow', () => {
   beforeEach(() => {
     authState.roles = ['admin', 'manager']
     viewportState.mobile = false
+    routeState.query = {}
     matchMediaListeners.clear()
     installMatchMediaMock()
     mocks.push.mockReset()
@@ -191,6 +198,24 @@ describe('MountsView removal flow', () => {
     await flushPromises()
 
     expect(mocks.push).toHaveBeenCalledWith({ name: 'mount-detail', params: { id: 11 } })
+  })
+
+  it('preselects the workflow bucket from the route query and shows only matching mounts', async () => {
+    routeState.query = { workflow: 'ASSIGNED' }
+    mocks.getMounts.mockResolvedValueOnce([
+      buildMount({ id: 11, related_job: { job_id: null, status: 'NO_RELATED_JOB', custody_status: 'NO_RELATED_JOB' } }),
+      buildMount({ id: 12, related_job: { job_id: 21, status: 'PENDING', custody_status: 'PENDING_HANDOFF' } }),
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const workflowSelect = wrapper.find('select')
+
+    expect(workflowSelect.element.value).toBe('ASSIGNED')
+    expect(wrapper.find('.rows-count').text()).toBe('1')
+    expect(wrapper.findAll('.row-stub')).toHaveLength(1)
+    expect(wrapper.find('.row-stub .row-id').text()).toBe('12')
   })
 
   it('uses the project value as the browse entry point for a mounted share', async () => {

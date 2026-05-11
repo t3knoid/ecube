@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getMounts, createMount, updateMount, deleteMount, validateMount, validateMountCandidate, discoverMountShares } from '@/api/mounts.js'
 import { getPublicAuthConfig } from '@/api/auth.js'
@@ -11,11 +11,15 @@ import StatusBadge from '@/components/common/StatusBadge.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 import { useAuthStore } from '@/stores/auth.js'
+import { MOUNT_WORKFLOW_BUCKETS, classifyMountWorkflowBucket } from '@/utils/mountWorkflow.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
+const route = useRoute()
 const router = useRouter()
+
+const MOUNT_WORKFLOW_FILTERS = new Set(['ALL', ...Object.values(MOUNT_WORKFLOW_BUCKETS)])
 
 const mounts = ref([])
 const loading = ref(false)
@@ -37,6 +41,7 @@ const removeTarget = ref(null)
 const page = ref(1)
 const pageSize = ref(10)
 const search = ref('')
+const workflowFilter = ref('ALL')
 const isMobileViewport = ref(false)
 let mobileViewportQuery = null
 
@@ -142,11 +147,18 @@ const columns = computed(() => {
 const filtered = computed(() => {
   const query = search.value.trim().toLowerCase()
   return mounts.value.filter((mount) => {
+    const workflowMatch = workflowFilter.value === 'ALL' || classifyMountWorkflowBucket(mount) === workflowFilter.value
+    if (!workflowMatch) return false
     if (!query) return true
     const text = [mount.type, mount.project_id, mount.remote_path, mount.local_mount_point, mount.status].join(' ').toLowerCase()
     return text.includes(query)
   })
 })
+
+function normalizeMountWorkflowFilter(value) {
+  const normalized = String(value || 'ALL').toUpperCase()
+  return MOUNT_WORKFLOW_FILTERS.has(normalized) ? normalized : 'ALL'
+}
 
 const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
@@ -635,6 +647,18 @@ watch(
   },
 )
 
+watch(
+  () => route.query?.workflow,
+  (value) => {
+    workflowFilter.value = normalizeMountWorkflowFilter(value)
+  },
+  { immediate: true },
+)
+
+watch(workflowFilter, () => {
+  page.value = 1
+})
+
 watch(showAddDialog, async (open) => {
   if (open) {
     document.addEventListener('keydown', handleAddDialogKeydown)
@@ -693,7 +717,17 @@ onBeforeUnmount(() => {
     <p v-if="error" class="error-banner" role="alert" aria-live="assertive">{{ error }}</p>
     <p v-if="successMessage" class="success-banner" role="status" aria-live="polite">{{ successMessage }}</p>
 
-    <input v-model="search" type="text" :placeholder="t('mounts.searchPlaceholder')" :aria-label="t('mounts.searchPlaceholder')" />
+    <div class="filters">
+      <input v-model="search" type="text" :placeholder="t('mounts.searchPlaceholder')" :aria-label="t('mounts.searchPlaceholder')" />
+      <select v-model="workflowFilter" :aria-label="t('mounts.workflowBucket')">
+        <option value="ALL">{{ t('mounts.allWorkflowBuckets') }}</option>
+        <option :value="MOUNT_WORKFLOW_BUCKETS.UNASSIGNED">{{ t('dashboard.mountUnassigned') }}</option>
+        <option :value="MOUNT_WORKFLOW_BUCKETS.ASSIGNED">{{ t('dashboard.mountAssigned') }}</option>
+        <option :value="MOUNT_WORKFLOW_BUCKETS.IN_PROGRESS">{{ t('dashboard.mountInProgress') }}</option>
+        <option :value="MOUNT_WORKFLOW_BUCKETS.COMPLETED">{{ t('dashboard.mountCompleted') }}</option>
+        <option :value="MOUNT_WORKFLOW_BUCKETS.UNAVAILABLE">{{ t('dashboard.mountUnavailable') }}</option>
+      </select>
+    </div>
 
     <DataTable :columns="columns" :rows="paged" :empty-text="t('mounts.empty')">
       <template #cell-id="{ row }">
@@ -891,6 +925,12 @@ onBeforeUnmount(() => {
 .view-root {
   display: grid;
   gap: var(--space-md);
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
 }
 
 .cell-link {

@@ -313,6 +313,8 @@
     "testAll": "Test All",
     "add": "Add Mount",
     "searchPlaceholder": "Search mounts",
+    "workflowBucket": "Workflow bucket",
+    "allWorkflowBuckets": "All workflow buckets",
     "empty": "No mounts found",
     "test": "Test",
     "remove": "Remove",

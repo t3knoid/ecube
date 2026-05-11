@@ -298,6 +298,8 @@ The dashboard provides a quick operational summary.
 
 The page refreshes system health, drive state, mount workflow counts, and the active-jobs table automatically about every 10 seconds. The `Refresh` button requests the same full dashboard snapshot on demand.
 
+The `Drive Summary` and `Mounts Summary` entries act as drill-down controls. Selecting a summary entry opens the matching destination page with the corresponding drive state or mount workflow bucket preselected so the follow-up page stays aligned with the dashboard context.
+
 Typical information shown:
 
 - Overall system health

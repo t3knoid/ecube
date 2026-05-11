@@ -123,6 +123,57 @@ describe('DashboardView active jobs', () => {
     expect(wrapper.find('.warning-banner').exists()).toBe(false)
   })
 
+  it('renders drive and mount summary entries as keyboard-operable buttons', async () => {
+    mocks.listJobs.mockResolvedValue([])
+    mocks.getDrives.mockResolvedValue([{ id: 1, current_state: 'AVAILABLE' }])
+    mocks.getMounts.mockResolvedValue([
+      { id: 10, status: 'UNMOUNTED', project_id: 'PROJ-000', related_job: { job_id: null, status: 'NO_RELATED_JOB', custody_status: 'NO_RELATED_JOB' } },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const driveButton = wrapper.findAll('.summary-link').find((node) => node.text().includes(i18n.global.t('drives.states.available')))
+    const mountButton = wrapper.findAll('.summary-link').find((node) => node.text().includes(i18n.global.t('dashboard.mountUnassigned')))
+
+    expect(driveButton.element.tagName).toBe('BUTTON')
+    expect(driveButton.attributes('type')).toBe('button')
+    expect(mountButton.element.tagName).toBe('BUTTON')
+    expect(mountButton.attributes('type')).toBe('button')
+  })
+
+  it('routes drive summary entries to Drives with the matching state filter', async () => {
+    mocks.listJobs.mockResolvedValue([])
+    mocks.getDrives.mockResolvedValue([{ id: 1, current_state: 'AVAILABLE' }])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const driveButton = wrapper.findAll('.summary-link').find((node) => node.text().includes(i18n.global.t('drives.states.available')))
+
+    await driveButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.push).toHaveBeenCalledWith({ name: 'drives', query: { state: 'AVAILABLE' } })
+  })
+
+  it('routes mount summary entries to Mounts with the matching workflow filter', async () => {
+    mocks.listJobs.mockResolvedValue([])
+    mocks.getMounts.mockResolvedValue([
+      { id: 10, status: 'UNMOUNTED', project_id: 'PROJ-000', related_job: { job_id: null, status: 'NO_RELATED_JOB', custody_status: 'NO_RELATED_JOB' } },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const mountButton = wrapper.findAll('.summary-link').find((node) => node.text().includes(i18n.global.t('dashboard.mountUnassigned')))
+
+    await mountButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.push).toHaveBeenCalledWith({ name: 'mounts', query: { workflow: 'UNASSIGNED' } })
+  })
+
   it('refreshes jobs, drives, and mounts on the same poll tick as system health', async () => {
     mocks.getSystemHealth.mockResolvedValueOnce({ status: 'ok', database: 'connected', active_jobs: 1 })
     mocks.getDrives.mockResolvedValueOnce([{ id: 1, current_state: 'AVAILABLE' }])
@@ -265,7 +316,10 @@ describe('DashboardView active jobs', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const summaryRows = wrapper.findAll('.summary-row').map((row) => row.text())
+    const summaryRows = wrapper
+      .findAll('.summary-link')
+      .map((row) => row.text())
+      .filter((text) => text.includes(i18n.global.t('drives.states.disconnected')) || text.includes(i18n.global.t('drives.states.disabled')) || text.includes(i18n.global.t('drives.states.available')) || text.includes(i18n.global.t('drives.states.inUse')))
     expect(summaryRows).toContain(`${i18n.global.t('drives.states.disconnected')}1`)
     expect(summaryRows).toContain(`${i18n.global.t('drives.states.disabled')}1`)
     expect(summaryRows).toContain(`${i18n.global.t('drives.states.available')}1`)
@@ -291,7 +345,10 @@ describe('DashboardView active jobs', () => {
 
     expect(wrapper.text()).toContain(i18n.global.t('dashboard.mountsSummary'))
 
-    const summaryRows = wrapper.findAll('.summary-row').map((row) => row.text())
+    const summaryRows = wrapper
+      .findAll('.summary-link')
+      .map((row) => row.text())
+      .filter((text) => text.includes(i18n.global.t('dashboard.mountUnassigned')) || text.includes(i18n.global.t('dashboard.mountAssigned')) || text.includes(i18n.global.t('dashboard.mountInProgress')) || text.includes(i18n.global.t('dashboard.mountCompleted')) || text.includes(i18n.global.t('dashboard.mountUnavailable')))
     expect(summaryRows).toContain(`${i18n.global.t('dashboard.mountUnassigned')}1`)
     expect(summaryRows).toContain(`${i18n.global.t('dashboard.mountAssigned')}1`)
     expect(summaryRows).toContain(`${i18n.global.t('dashboard.mountInProgress')}4`)
@@ -309,7 +366,10 @@ describe('DashboardView active jobs', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const summaryRows = wrapper.findAll('.summary-row').map((row) => row.text())
+    const summaryRows = wrapper
+      .findAll('.summary-link')
+      .map((row) => row.text())
+      .filter((text) => text.includes(i18n.global.t('dashboard.mountUnavailable')) || text.includes(i18n.global.t('dashboard.mountCompleted')))
     expect(summaryRows).toContain(`${i18n.global.t('dashboard.mountUnavailable')}2`)
     expect(summaryRows).toContain(`${i18n.global.t('dashboard.mountCompleted')}0`)
   })

@@ -10,6 +10,10 @@ const mocks = vi.hoisted(() => ({
   refreshDrives: vi.fn(),
 }))
 
+const routeState = vi.hoisted(() => ({
+  query: {},
+}))
+
 const authState = vi.hoisted(() => ({
   roles: ['admin', 'manager'],
 }))
@@ -21,6 +25,7 @@ const viewportState = vi.hoisted(() => ({
 const matchMediaListeners = vi.hoisted(() => new Set())
 
 vi.mock('vue-router', () => ({
+  useRoute: () => routeState,
   useRouter: () => ({ push: mocks.push }),
 }))
 
@@ -110,6 +115,7 @@ describe('DrivesView rescan and filter loading', () => {
   beforeEach(() => {
     authState.roles = ['admin', 'manager']
     viewportState.mobile = false
+    routeState.query = {}
     matchMediaListeners.clear()
     installMatchMediaMock()
     mocks.push.mockReset()
@@ -141,6 +147,25 @@ describe('DrivesView rescan and filter loading', () => {
     await flushPromises()
 
     expect(mocks.getDrives).toHaveBeenLastCalledWith({ include_disconnected: true })
+  })
+
+  it('preselects the disconnected filter from the route query and loads disconnected rows', async () => {
+    routeState.query = { state: 'DISCONNECTED' }
+    mocks.getDrives.mockResolvedValue([
+      buildDrive({ id: 1, current_state: 'DISCONNECTED' }),
+      buildDrive({ id: 2, current_state: 'AVAILABLE' }),
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const checkbox = wrapper.find('input[type="checkbox"]')
+    const stateSelect = wrapper.findAll('select')[0]
+
+    expect(mocks.getDrives).toHaveBeenCalledWith({ include_disconnected: true })
+    expect(stateSelect.element.value).toBe('DISCONNECTED')
+    expect(checkbox.element.checked).toBe(true)
+    expect(wrapper.find('.rows-count').text()).toBe('1')
   })
 
   it('rescans and reloads using the All filter payload', async () => {
