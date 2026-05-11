@@ -1703,26 +1703,28 @@ _ensure_ecube_user() {
 # commands and mount/unmount commands non-interactively from API endpoints.
 # ==========================================================================
 _install_os_user_mgmt_sudoers() {
-  local sudoers_file="/etc/sudoers.d/ecube-user-mgmt"
+  local script_dir
+  script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+  local sudoers_src="${script_dir}/deploy/ecube-sudoers"
+  local sudoers_file="${ECUBE_SUDOERS_DEST:-/etc/sudoers.d/ecube-user-mgmt}"
+  local sudoers_dir
+  sudoers_dir="$(dirname "${sudoers_file}")"
   local sudoers_tmp="${sudoers_file}.tmp"
 
-  info "Installing sudoers policy for ECUBE OS user/group management, mount operations, and drive formatting/eject..."
+  info "Installing sudoers policy for ECUBE OS user/group management, mount operations, drive formatting/eject, and runtime repair..."
 
   if [[ "${DRY_RUN}" == true ]]; then
-    echo "[DRY-RUN] Would write ${sudoers_file} with NOPASSWD rules for user/group management, mount, sync, and mkfs binaries"
+    echo "[DRY-RUN] Would install ${sudoers_src} to ${sudoers_file}"
     return
   fi
 
-  mkdir -p /etc/sudoers.d
-  cat > "${sudoers_tmp}" <<'EOF_SUDOERS'
-# /etc/sudoers.d/ecube-user-mgmt
-# Narrowly scoped privilege escalation for the ECUBE service account.
-ecube ALL=(root) NOPASSWD: /usr/sbin/useradd, /usr/sbin/usermod, /usr/sbin/userdel, /usr/sbin/groupadd, /usr/sbin/groupdel, /usr/sbin/chpasswd
-ecube ALL=(root) NOPASSWD: /usr/bin/chage, /usr/local/bin/ecube-write-pwquality-conf
-ecube ALL=(root) NOPASSWD: /bin/mount, /bin/umount, /sbin/mount.nfs, /usr/sbin/mount.nfs, /usr/bin/nsenter, /bin/nsenter
-ecube ALL=(root) NOPASSWD: /bin/sync, /sbin/mkfs.ext4, /sbin/mkfs.exfat
-ecube ALL=(root) NOPASSWD: /bin/mkdir, /bin/chown, /usr/bin/chown
-EOF_SUDOERS
+  if [[ ! -f "${sudoers_src}" ]]; then
+    error "Sudoers policy source not found: ${sudoers_src}"
+    exit 1
+  fi
+
+  mkdir -p "${sudoers_dir}"
+  cp "${sudoers_src}" "${sudoers_tmp}"
   chmod 0440 "${sudoers_tmp}"
   chown root:root "${sudoers_tmp}"
 

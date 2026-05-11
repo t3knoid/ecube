@@ -217,6 +217,51 @@ def test_prepare_managed_mount_roots_honors_installer_environment_before_env_exi
     assert "chmod 755 /nfs /smb /srv/ecube-usb" in commands
 
 
+def test_install_os_user_mgmt_sudoers_uses_canonical_template_with_modprobe(tmp_path):
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    sudoers_dest = tmp_path / "sudoers.d" / "ecube-user-mgmt"
+
+    (fake_bin / "chown").write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    (fake_bin / "chown").chmod(0o755)
+    (fake_bin / "visudo").write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "[[ ${1:-} == -cf ]]\n"
+        "[[ -f ${2:?} ]]\n",
+        encoding="utf-8",
+    )
+    (fake_bin / "visudo").chmod(0o755)
+
+    env = {
+        **os.environ,
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "LOG_FILE": str(tmp_path / "install.log"),
+    }
+    result = _run_install_function(
+        tmp_path,
+        textwrap.dedent(
+            f"""
+            DRY_RUN=false
+            ECUBE_SUDOERS_DEST={sudoers_dest}
+            _install_os_user_mgmt_sudoers
+            """
+        ),
+        env,
+    )
+
+    assert result.returncode == 0, f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+    installed_text = sudoers_dest.read_text(encoding="utf-8")
+    expected_text = (Path(__file__).resolve().parent.parent / "deploy" / "ecube-sudoers").read_text(encoding="utf-8")
+    assert installed_text == expected_text
+    assert "/usr/sbin/modprobe" in installed_text
+
+
 def test_write_env_file_persists_configured_usb_mount_base_path(tmp_path):
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
