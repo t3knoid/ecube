@@ -11,6 +11,7 @@ import DataTable from '@/components/common/DataTable.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import ProgressBar from '@/components/common/ProgressBar.vue'
 import { useAuthStore } from '@/stores/auth.js'
+import { formatDriveIdentity } from '@/utils/driveIdentity.js'
 import { calculateJobProgress, isJobProgressActive } from '@/utils/jobProgress.js'
 import { MOUNT_WORKFLOW_BUCKETS, buildMountWorkflowCounts } from '@/utils/mountWorkflow.js'
 import { canStartJob, getDashboardNextStepKey, normalizeJobStatus } from '@/utils/jobActions.js'
@@ -52,6 +53,18 @@ const driveCounts = computed(() => {
 })
 
 const mountCounts = computed(() => buildMountWorkflowCounts(mounts.value))
+
+const mountsByJobId = computed(() => {
+  const mapping = new Map()
+
+  for (const mount of mounts.value) {
+    const jobId = Number(mount?.related_job?.job_id)
+    if (!Number.isInteger(jobId) || jobId < 1 || mapping.has(jobId)) continue
+    mapping.set(jobId, mount)
+  }
+
+  return mapping
+})
 
 const activeJobs = computed(() =>
   jobs.value.filter((job) => ['PENDING', 'RUNNING', 'VERIFYING'].includes(String(job.status || '').toUpperCase())),
@@ -185,6 +198,139 @@ function progressLabel(job) {
 
 function progressActive(job) {
   return isJobProgressActive(job)
+}
+
+function formatTimestamp(value) {
+  if (!value) return t('common.labels.notAvailable')
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return t('common.labels.notAvailable')
+  return parsed.toLocaleString()
+}
+
+function formatDuration(totalSeconds) {
+  if (typeof totalSeconds !== 'number' || totalSeconds < 0) return t('common.labels.notAvailable')
+  if (totalSeconds === 0) return '0s'
+
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`
+  if (minutes > 0) return `${minutes}m ${seconds}s`
+  return `${seconds}s`
+}
+
+function formatCopyRate(bytesValue, totalSeconds) {
+  if (typeof bytesValue !== 'number' || bytesValue < 0 || typeof totalSeconds !== 'number') {
+    return t('common.labels.notAvailable')
+  }
+  if (totalSeconds <= 0 || bytesValue === 0) return '0.0 MB/s'
+
+  const mbPerSecond = bytesValue / (1024 * 1024) / totalSeconds
+  return `${mbPerSecond.toFixed(1)} MB/s`
+}
+
+function calculateDurationSeconds(job) {
+  const storedSeconds = Number(job?.active_duration_seconds || 0)
+  const status = normalizeJobStatus(job?.status)
+
+  if (['RUNNING', 'VERIFYING', 'PAUSING'].includes(status) && job?.started_at) {
+    const started = new Date(job.started_at)
+    if (!Number.isNaN(started.getTime())) {
+      const liveSeconds = Math.max(0, Math.round((Date.now() - started.getTime()) / 1000))
+      return storedSeconds + liveSeconds
+    }
+  }
+
+  if (storedSeconds > 0) return storedSeconds
+
+  if (job?.started_at && job?.completed_at) {
+    const started = new Date(job.started_at)
+    const completed = new Date(job.completed_at)
+    if (!Number.isNaN(started.getTime()) && !Number.isNaN(completed.getTime())) {
+      return Math.max(0, Math.round((completed.getTime() - started.getTime()) / 1000))
+    }
+  }
+
+  return null
+}
+
+function resolveSourceMount(job) {
+  const jobId = Number(job?.id)
+  if (!Number.isInteger(jobId) || jobId < 1) return null
+  return mountsByJobId.value.get(jobId) || null
+}
+
+function sourceMountLabel(job) {
+  return resolveSourceMount(job)?.remote_path || t('common.labels.notAvailable')
+}
+
+function sourcePathLabel(job) {
+  const sourcePath = String(job?.source_path || '').trim()
+  return sourcePath || t('common.labels.notAvailable')
+}
+
+function destinationDriveLabel(job) {
+  if (job?.drive) return formatDriveIdentity(job.drive)
+  return t('common.labels.notAvailable')
+}
+
+function jobActivityEntry(job) {
+  const status = normalizeJobStatus(job?.status)
+
+  if (status === 'FAILED' && job?.completed_at) {
+    return { label: t('jobs.failedAt'), value: formatTimestamp(job.completed_at) }
+  }
+  if (['COMPLETED', 'ARCHIVED'].includes(status) && job?.completed_at) {
+    return { label: t('jobs.completedAt'), value: formatTimestamp(job.completed_at) }
+  }
+  if (['RUNNING', 'VERIFYING', 'PAUSING', 'PAUSED'].includes(status) && job?.started_at) {
+    return { label: t('jobs.startedAt'), value: formatTimestamp(job.started_at) }
+  }
+  return null
+}
+
+function failureEntries(job) {
+  const entries = []
+  const failedFiles = Number(job?.files_failed || 0)
+  const timedOutFiles = Number(job?.files_timed_out || 0)
+
+  if (failedFiles > 0) {
+    entries.push({ label: t('jobs.filesFailed'), value: String(failedFiles) })
+  }
+  if (timedOutFiles > 0) {
+    entries.push({ label: t('jobs.filesTimedOut'), value: String(timedOutFiles) })
+  }
+
+  return entries
+}
+
+function liveTransferEntries(job) {
+  const status = normalizeJobStatus(job?.status)
+  if (!['RUNNING', 'VERIFYING', 'PAUSING'].includes(status)) return []
+
+  const durationSeconds = calculateDurationSeconds(job)
+  const copiedBytes = Number(job?.copied_bytes || 0)
+  const totalBytes = Number(job?.total_bytes || 0)
+  const remainingBytes = Math.max(0, totalBytes - copiedBytes)
+  const rateBytesPerSecond = durationSeconds && durationSeconds > 0 ? copiedBytes / durationSeconds : 0
+  const remainingSeconds = rateBytesPerSecond > 0 && remainingBytes > 0
+    ? Math.ceil(remainingBytes / rateBytesPerSecond)
+    : null
+  const entries = []
+
+  if (durationSeconds != null) {
+    entries.push({ label: t('jobs.copyRate'), value: formatCopyRate(copiedBytes, durationSeconds) })
+  }
+  if (remainingSeconds != null) {
+    entries.push({ label: t('jobs.timeRemaining'), value: formatDuration(remainingSeconds) })
+    entries.push({
+      label: t('jobs.estimatedCompletion'),
+      value: formatTimestamp(new Date(Date.now() + (remainingSeconds * 1000)).toISOString()),
+    })
+  }
+
+  return entries
 }
 
 function nextStepLabel(job) {
@@ -335,16 +481,50 @@ onUnmounted(() => {
         row-key="id"
       >
         <template #cell-id="{ row }">
-          <button class="cell-link" type="button" @click="openJobDetail(row.id)">
-            {{ row.id }}
-          </button>
+          <div class="dashboard-cell-stack">
+            <button class="cell-link" type="button" @click="openJobDetail(row.id)">
+              {{ row.id }}
+            </button>
+            <div class="dashboard-cell-meta dashboard-cell-meta-block">
+              <div class="dashboard-meta-line">
+                <span class="dashboard-meta-label">{{ t('dashboard.sourceMount') }}</span>
+                <span class="dashboard-meta-value wrap-anywhere">{{ sourceMountLabel(row) }}</span>
+              </div>
+              <div class="dashboard-meta-line">
+                <span class="dashboard-meta-label">{{ t('jobs.sourcePath') }}</span>
+                <span class="dashboard-meta-value wrap-anywhere">{{ sourcePathLabel(row) }}</span>
+              </div>
+            </div>
+          </div>
         </template>
-        <template #cell-project_id="{ row }">{{ formatProjectId(row.project_id) }}</template>
+        <template #cell-project_id="{ row }">
+          <div class="dashboard-cell-stack">
+            <span>{{ formatProjectId(row.project_id) }}</span>
+            <div class="dashboard-cell-meta dashboard-cell-meta-block">
+              <div class="dashboard-meta-line">
+                <span class="dashboard-meta-label">{{ t('jobs.destinationDrive') }}</span>
+                <span class="dashboard-meta-value wrap-anywhere">{{ destinationDriveLabel(row) }}</span>
+              </div>
+              <div v-if="jobActivityEntry(row)" class="dashboard-meta-line">
+                <span class="dashboard-meta-label">{{ jobActivityEntry(row).label }}</span>
+                <span class="dashboard-meta-value">{{ jobActivityEntry(row).value }}</span>
+              </div>
+            </div>
+          </div>
+        </template>
         <template #cell-status="{ row }">
           <StatusBadge :status="row.status" />
         </template>
         <template #cell-next_step="{ row }">
-          <span class="next-step-label">{{ nextStepLabel(row) }}</span>
+          <div class="dashboard-cell-stack">
+            <span class="next-step-label">{{ nextStepLabel(row) }}</span>
+            <div v-if="failureEntries(row).length" class="dashboard-cell-meta dashboard-cell-meta-block">
+              <div v-for="entry in failureEntries(row)" :key="`${row.id}-${entry.label}`" class="dashboard-meta-line">
+                <span class="dashboard-meta-label">{{ entry.label }}</span>
+                <span class="dashboard-meta-value">{{ entry.value }}</span>
+              </div>
+            </div>
+          </div>
         </template>
         <template #cell-attention="{ row }">
           <span class="attention-label">{{ row.attention }}</span>
@@ -356,33 +536,75 @@ onUnmounted(() => {
       <h2>{{ t('jobs.activeJobs') }}</h2>
       <DataTable :columns="healthColumns" :rows="activeJobs" row-key="id" :empty-text="t('dashboard.noActiveJobs')">
         <template #cell-id="{ row }">
-          <button
-            v-if="Number.isInteger(Number(row.id)) && Number(row.id) > 0"
-            class="cell-link"
-            type="button"
-            @click="openJobDetail(row.id)"
-          >
-            {{ row.id }}
-          </button>
-          <span v-else class="job-id-text">{{ row.id ?? '-' }}</span>
+          <div class="dashboard-cell-stack">
+            <button
+              v-if="Number.isInteger(Number(row.id)) && Number(row.id) > 0"
+              class="cell-link"
+              type="button"
+              @click="openJobDetail(row.id)"
+            >
+              {{ row.id }}
+            </button>
+            <span v-else class="job-id-text">{{ row.id ?? '-' }}</span>
+            <div class="dashboard-cell-meta dashboard-cell-meta-block">
+              <div class="dashboard-meta-line">
+                <span class="dashboard-meta-label">{{ t('dashboard.sourceMount') }}</span>
+                <span class="dashboard-meta-value wrap-anywhere">{{ sourceMountLabel(row) }}</span>
+              </div>
+              <div class="dashboard-meta-line">
+                <span class="dashboard-meta-label">{{ t('jobs.sourcePath') }}</span>
+                <span class="dashboard-meta-value wrap-anywhere">{{ sourcePathLabel(row) }}</span>
+              </div>
+            </div>
+          </div>
         </template>
-        <template #cell-project_id="{ row }">{{ formatProjectId(row.project_id) }}</template>
+        <template #cell-project_id="{ row }">
+          <div class="dashboard-cell-stack">
+            <span>{{ formatProjectId(row.project_id) }}</span>
+            <div class="dashboard-cell-meta dashboard-cell-meta-block">
+              <div class="dashboard-meta-line">
+                <span class="dashboard-meta-label">{{ t('jobs.destinationDrive') }}</span>
+                <span class="dashboard-meta-value wrap-anywhere">{{ destinationDriveLabel(row) }}</span>
+              </div>
+              <div v-if="jobActivityEntry(row)" class="dashboard-meta-line">
+                <span class="dashboard-meta-label">{{ jobActivityEntry(row).label }}</span>
+                <span class="dashboard-meta-value">{{ jobActivityEntry(row).value }}</span>
+              </div>
+            </div>
+          </div>
+        </template>
         <template #cell-status="{ row }">
           <StatusBadge :status="row.status" />
         </template>
         <template #cell-next_step="{ row }">
-          <span class="next-step-label">{{ nextStepLabel(row) }}</span>
+          <div class="dashboard-cell-stack">
+            <span class="next-step-label">{{ nextStepLabel(row) }}</span>
+            <div v-if="failureEntries(row).length" class="dashboard-cell-meta dashboard-cell-meta-block">
+              <div v-for="entry in failureEntries(row)" :key="`${row.id}-${entry.label}`" class="dashboard-meta-line">
+                <span class="dashboard-meta-label">{{ entry.label }}</span>
+                <span class="dashboard-meta-value">{{ entry.value }}</span>
+              </div>
+            </div>
+          </div>
         </template>
         <template #cell-progress="{ row }">
-          <div class="dashboard-progress-cell">
-            <ProgressBar
-              class="dashboard-progress-bar"
-              :value="progressPercent(row)"
-              :total="100"
-              :label="progressLabel(row)"
-              :active="progressActive(row)"
-            />
-            <span class="dashboard-progress-mobile-label">{{ progressLabel(row) }}</span>
+          <div class="dashboard-cell-stack">
+            <div class="dashboard-progress-cell">
+              <ProgressBar
+                class="dashboard-progress-bar"
+                :value="progressPercent(row)"
+                :total="100"
+                :label="progressLabel(row)"
+                :active="progressActive(row)"
+              />
+              <span class="dashboard-progress-mobile-label">{{ progressLabel(row) }}</span>
+            </div>
+            <div class="dashboard-cell-meta dashboard-cell-meta-block">
+              <div v-for="entry in liveTransferEntries(row)" :key="`${row.id}-${entry.label}`" class="dashboard-meta-line">
+                <span class="dashboard-meta-label">{{ entry.label }}</span>
+                <span class="dashboard-meta-value">{{ entry.value }}</span>
+              </div>
+            </div>
           </div>
         </template>
       </DataTable>
@@ -483,9 +705,43 @@ onUnmounted(() => {
   font-size: var(--font-size-sm);
 }
 
+.dashboard-cell-stack {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.dashboard-cell-meta {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.dashboard-cell-meta-block {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.dashboard-meta-line {
+  display: flex;
+  gap: var(--space-xs);
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.dashboard-meta-label {
+  font-weight: 600;
+}
+
+.dashboard-meta-value {
+  min-width: 0;
+}
+
 .next-step-label {
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
+}
+
+.wrap-anywhere {
+  overflow-wrap: anywhere;
 }
 
 .dashboard-progress-cell {

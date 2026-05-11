@@ -585,6 +585,7 @@
     "mountCustodyPending": "Custody Pending",
     "mountCompleted": "Completed",
     "mountUnavailable": "Unavailable",
+    "sourceMount": "Source mount",
     "project": "Project",
     "progress": "Progress",
     "noActiveJobs": "No active jobs",

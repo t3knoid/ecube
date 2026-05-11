@@ -274,6 +274,67 @@ describe('DashboardView active jobs', () => {
     expect(wrapper.text()).toContain(i18n.global.t('dashboard.nextStepMonitorProgress'))
   })
 
+  it('renders trusted dashboard row context and safe fallbacks for triage', async () => {
+    mocks.listJobs.mockResolvedValue([
+      {
+        id: 62,
+        project_id: 'PROJ-062',
+        status: 'RUNNING',
+        source_path: '/case/subfolder',
+        created_at: '2026-05-10T10:00:00Z',
+        started_at: '2026-05-10T10:05:00Z',
+        copied_bytes: 10 * 1024 * 1024,
+        total_bytes: 20 * 1024 * 1024,
+        file_count: 10,
+        files_succeeded: 5,
+        files_failed: 0,
+        files_timed_out: 0,
+        active_duration_seconds: 10,
+        drive: {
+          id: 7,
+          manufacturer: 'Apricorn',
+          product_name: 'Aegis',
+          port_number: 4,
+        },
+      },
+      {
+        id: 63,
+        project_id: 'PROJ-063',
+        status: 'FAILED',
+        source_path: '',
+        completed_at: '2026-05-10T11:20:00Z',
+        copied_bytes: 0,
+        total_bytes: 100,
+        file_count: 4,
+        files_succeeded: 1,
+        files_failed: 2,
+        files_timed_out: 1,
+      },
+    ])
+    mocks.getMounts.mockResolvedValue([
+      { id: 16, status: 'MOUNTED', remote_path: '//server/case-062', project_id: 'PROJ-062', related_job: { job_id: 62, status: 'RUNNING', custody_status: 'PENDING_HANDOFF' } },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('dashboard.sourceMount'))
+    expect(wrapper.text()).toContain('//server/case-062')
+    expect(wrapper.text()).toContain('/case/subfolder')
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.destinationDrive'))
+    expect(wrapper.text()).toContain('Apricorn Aegis - Port 4')
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.copyRate'))
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.timeRemaining'))
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.estimatedCompletion'))
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.filesFailed'))
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.filesTimedOut'))
+
+    const notAvailable = i18n.global.t('common.labels.notAvailable')
+    expect(wrapper.text()).toContain(`${i18n.global.t('dashboard.sourceMount')}${notAvailable}`)
+    expect(wrapper.text()).toContain(`${i18n.global.t('jobs.sourcePath')}${notAvailable}`)
+    expect(wrapper.text()).toContain(`${i18n.global.t('jobs.destinationDrive')}${notAvailable}`)
+  })
+
   it('shows an empty needs-attention state when no follow-up items are present', async () => {
     mocks.listJobs.mockResolvedValue([])
     mocks.getMounts.mockResolvedValue([])
