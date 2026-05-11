@@ -170,11 +170,15 @@ async function refreshDashboard() {
 
 const dashboardPoller = usePolling(refreshDashboard, { intervalMs: 10000, immediate: false })
 
+function requestDashboardRefresh() {
+  return dashboardPoller.tick()
+}
+
 onMounted(async () => {
   loading.value = true
   error.value = ''
   try {
-    await dashboardPoller.tick()
+    await requestDashboardRefresh()
     dashboardPoller.start()
   } catch {
     error.value = t('common.errors.networkError')
@@ -192,7 +196,7 @@ onUnmounted(() => {
   <section class="view-root">
     <header class="view-header">
       <h1>{{ t('nav.dashboard') }}</h1>
-      <button class="btn" @click="refreshDashboard">{{ t('common.actions.refresh') }}</button>
+      <button class="btn" @click="requestDashboardRefresh">{{ t('common.actions.refresh') }}</button>
     </header>
 
     <div v-if="showPasswordWarning" class="warning-banner">
