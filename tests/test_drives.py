@@ -126,6 +126,44 @@ def test_list_drives_exposes_safe_usb_metadata_and_readable_label(client, db):
     assert match["serial_number"] == "SER-7777"
 
 
+def test_drive_throughput_test_persists_latest_measurement(manager_client, db, tmp_path):
+    drive = UsbDrive(
+        device_identifier="USB-THROUGHPUT-1",
+        current_state=DriveState.AVAILABLE,
+        mount_path=str(tmp_path),
+    )
+    db.add(drive)
+    db.commit()
+
+    provider = MagicMock()
+    provider.measure_drive_write_mbps.return_value = (145.6, 0.5, 0.4)
+
+    with patch("app.routers.drives.get_throughput_benchmark", return_value=provider):
+        response = manager_client.post(f"/drives/{drive.id}/throughput-test")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["throughput_write_mbps"] == 145.6
+    assert data["throughput_tested_at"] is not None
+    db.refresh(drive)
+    assert drive.throughput_write_mbps == 145.6
+    assert drive.throughput_tested_at is not None
+
+
+def test_drive_throughput_test_requires_mounted_drive(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB-THROUGHPUT-INVALID",
+        current_state=DriveState.DISCONNECTED,
+    )
+    db.add(drive)
+    db.commit()
+
+    response = manager_client.post(f"/drives/{drive.id}/throughput-test")
+
+    assert response.status_code == 409
+    assert "Drive throughput test requires a mounted managed drive" in str(response.json())
+
+
 def test_list_drives_filter_by_project(client, db):
     """GET /drives?project_id= returns only matching drives."""
     d1 = UsbDrive(device_identifier="USB-A", current_state=DriveState.IN_USE, current_project_id="PROJ-001")

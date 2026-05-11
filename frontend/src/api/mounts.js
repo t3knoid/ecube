@@ -41,3 +41,7 @@ export function updateMount(mountId, payload, { timeout } = {}) {
 export function deleteMount(mountId) {
   return toData(apiClient.delete(`${API_BASE}/mounts/${mountId}`))
 }
+
+export function testMountThroughput(mountId, { timeout = 0 } = {}) {
+  return toData(apiClient.post(`${API_BASE}/mounts/${mountId}/throughput-test`, null, withTimeout(timeout)))
+}

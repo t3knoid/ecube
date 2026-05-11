@@ -250,6 +250,48 @@ class TestDriveAuthorization:
         c = _client_for_role(db, ["auditor"])
         _assert_forbidden(c.post("/drives/1/prepare-eject"))
 
+    def test_drive_throughput_admin_allowed(self, db, tmp_path):
+        from app.models.hardware import DriveState, UsbDrive
+        from unittest.mock import MagicMock, patch
+
+        drive = UsbDrive(
+            device_identifier="AUTHZ-THROUGHPUT-ADMIN",
+            current_state=DriveState.AVAILABLE,
+            mount_path=str(tmp_path),
+        )
+        db.add(drive)
+        db.commit()
+        provider = MagicMock()
+        provider.measure_drive_write_mbps.return_value = (123.4, 0.5, 0.4)
+        c = _client_for_role(db, ["admin"])
+        with patch("app.routers.drives.get_throughput_benchmark", return_value=provider):
+            assert c.post(f"/drives/{drive.id}/throughput-test").status_code == 200
+
+    def test_drive_throughput_manager_allowed(self, db, tmp_path):
+        from app.models.hardware import DriveState, UsbDrive
+        from unittest.mock import MagicMock, patch
+
+        drive = UsbDrive(
+            device_identifier="AUTHZ-THROUGHPUT-MGR",
+            current_state=DriveState.AVAILABLE,
+            mount_path=str(tmp_path),
+        )
+        db.add(drive)
+        db.commit()
+        provider = MagicMock()
+        provider.measure_drive_write_mbps.return_value = (123.4, 0.5, 0.4)
+        c = _client_for_role(db, ["manager"])
+        with patch("app.routers.drives.get_throughput_benchmark", return_value=provider):
+            assert c.post(f"/drives/{drive.id}/throughput-test").status_code == 200
+
+    def test_drive_throughput_processor_denied(self, db):
+        c = _client_for_role(db, ["processor"])
+        _assert_forbidden(c.post("/drives/1/throughput-test"))
+
+    def test_drive_throughput_auditor_denied(self, db):
+        c = _client_for_role(db, ["auditor"])
+        _assert_forbidden(c.post("/drives/1/throughput-test"))
+
 
 # ---------------------------------------------------------------------------
 # Mount endpoints
@@ -318,6 +360,58 @@ class TestMountAuthorization:
     def test_list_mounts_no_role_denied(self, db):
         c = _client_for_role(db, [])
         _assert_forbidden(c.get("/mounts"))
+
+    def test_mount_throughput_admin_allowed(self, db, tmp_path):
+        from app.models.network import MountStatus, MountType, NetworkMount
+        from unittest.mock import MagicMock, patch
+
+        mount_root = tmp_path / "share"
+        mount_root.mkdir()
+        (mount_root / "sample.bin").write_bytes(b"a" * 4096)
+        mount = NetworkMount(
+            type=MountType.NFS,
+            remote_path="server:/authz-throughput-admin",
+            project_id="PROJ-AUTHZ-MOUNT-ADMIN",
+            local_mount_point=str(mount_root),
+            status=MountStatus.MOUNTED,
+        )
+        db.add(mount)
+        db.commit()
+        provider = MagicMock()
+        provider.measure_share_read_mbps.return_value = (88.2, 4096, 0.5, 0.4)
+        c = _client_for_role(db, ["admin"])
+        with patch("app.routers.mounts.get_throughput_benchmark", return_value=provider):
+            assert c.post(f"/mounts/{mount.id}/throughput-test").status_code == 200
+
+    def test_mount_throughput_manager_allowed(self, db, tmp_path):
+        from app.models.network import MountStatus, MountType, NetworkMount
+        from unittest.mock import MagicMock, patch
+
+        mount_root = tmp_path / "share"
+        mount_root.mkdir()
+        (mount_root / "sample.bin").write_bytes(b"a" * 4096)
+        mount = NetworkMount(
+            type=MountType.NFS,
+            remote_path="server:/authz-throughput-manager",
+            project_id="PROJ-AUTHZ-MOUNT-MANAGER",
+            local_mount_point=str(mount_root),
+            status=MountStatus.MOUNTED,
+        )
+        db.add(mount)
+        db.commit()
+        provider = MagicMock()
+        provider.measure_share_read_mbps.return_value = (88.2, 4096, 0.5, 0.4)
+        c = _client_for_role(db, ["manager"])
+        with patch("app.routers.mounts.get_throughput_benchmark", return_value=provider):
+            assert c.post(f"/mounts/{mount.id}/throughput-test").status_code == 200
+
+    def test_mount_throughput_processor_denied(self, db):
+        c = _client_for_role(db, ["processor"])
+        _assert_forbidden(c.post("/mounts/1/throughput-test"))
+
+    def test_mount_throughput_auditor_denied(self, db):
+        c = _client_for_role(db, ["auditor"])
+        _assert_forbidden(c.post("/mounts/1/throughput-test"))
 
 
 # ---------------------------------------------------------------------------

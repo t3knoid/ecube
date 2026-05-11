@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { getMounts, updateMount, deleteMount, validateMount } from '@/api/mounts.js'
+import { getMounts, updateMount, deleteMount, testMountThroughput, validateMount } from '@/api/mounts.js'
 import { getPublicAuthConfig } from '@/api/auth.js'
 import { normalizeErrorMessage } from '@/api/client.js'
 import StatusBadge from '@/components/common/StatusBadge.vue'
@@ -10,6 +10,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
+import { formatTransferRate } from '@/utils/transferRate.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -20,6 +21,7 @@ const mountRecord = ref(null)
 const loading = ref(false)
 const saving = ref(false)
 const dialogTesting = ref(false)
+const throughputTesting = ref(false)
 const error = ref('')
 const infoMessage = ref('')
 const dialogError = ref('')
@@ -62,6 +64,7 @@ const canBrowseContents = computed(() => authStore.hasAnyRole(['admin', 'manager
 const canBrowse = computed(() => (
   canBrowseContents.value && mountRecord.value?.status === 'MOUNTED' && Number.isInteger(mountRecord.value?.id)
 ))
+const canTestThroughput = computed(() => canManageMounts.value && mountRecord.value?.status === 'MOUNTED')
 const redactedMountValue = computed(() => t('mounts.redactedValue'))
 const visibleRemotePath = computed(() => {
   if (!mountRecord.value?.remote_path) return '-'
@@ -327,6 +330,36 @@ async function submitMountDialog() {
   }
 }
 
+async function runThroughputTest() {
+  if (!mountRecord.value || !canTestThroughput.value) return
+  throughputTesting.value = true
+  clearBanners()
+  try {
+    mountRecord.value = normalizeProjectRecord(await testMountThroughput(mountRecord.value.id, { timeout: 0 }), ['project_id'])
+    infoMessage.value = t('mounts.throughputTestSuccess')
+  } catch (requestError) {
+    const status = requestError?.response?.status
+    const detail = normalizeErrorMessage(requestError?.response?.data, null)
+    if (!status) {
+      error.value = t('common.errors.networkError')
+    } else if (status === 403) {
+      error.value = detail || t('common.errors.insufficientPermissions')
+    } else if (status === 404) {
+      error.value = detail || t('common.errors.notFound')
+    } else if (status === 409) {
+      error.value = detail || t('mounts.throughputTestFailed')
+    } else if (status === 422) {
+      error.value = detail || t('common.errors.validationFailed')
+    } else if (status >= 500) {
+      error.value = detail || t('mounts.throughputTestFailed')
+    } else {
+      error.value = t('common.errors.serverErrorGeneric')
+    }
+  } finally {
+    throughputTesting.value = false
+  }
+}
+
 function requestRemove() {
   if (!mountRecord.value || !canManageMounts.value) return
   if (mountRecord.value.status === 'MOUNTED' && mountRecord.value.local_mount_point) {
@@ -440,6 +473,8 @@ onBeforeUnmount(() => {
         <div><strong>{{ t('mounts.nfsClientVersion') }}</strong><span>{{ mountRecord.nfs_client_version || '-' }}</span></div>
         <div><strong>{{ t('mounts.localMountPointInfo') }}</strong><span>{{ visibleLocalMountPoint }}</span></div>
         <div><strong>{{ t('mounts.lastChecked') }}</strong><span>{{ toIso(mountRecord.last_checked_at) }}</span></div>
+        <div><strong>{{ t('mounts.latestReadSpeed') }}</strong><span>{{ formatTransferRate(mountRecord.throughput_read_mbps) }}</span></div>
+        <div><strong>{{ t('mounts.lastThroughputTest') }}</strong><span>{{ toIso(mountRecord.throughput_tested_at) }}</span></div>
         <div>
           <strong>{{ t('jobs.jobId') }}</strong>
           <span>
@@ -463,6 +498,7 @@ onBeforeUnmount(() => {
 
       <div class="action-row">
         <button v-if="canBrowseContents" class="btn" :disabled="!canBrowse" @click="browseExpanded = !browseExpanded">{{ t('mounts.browse') }}</button>
+        <button v-if="canManageMounts" class="btn" :disabled="saving || throughputTesting || !canTestThroughput" @click="runThroughputTest">{{ throughputTesting ? t('common.labels.loading') : t('mounts.testThroughput') }}</button>
         <button v-if="canManageMounts" class="btn" :disabled="saving" @click="openEditDialog($event)">{{ t('common.actions.edit') }}</button>
         <button v-if="canManageMounts" class="btn btn-danger" :disabled="saving" @click="requestRemove">{{ t('mounts.remove') }}</button>
       </div>

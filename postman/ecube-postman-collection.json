@@ -3068,6 +3068,26 @@
 					"response": []
 				},
 				{
+					"name": "POST /drives/{drive_id}/throughput-test",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/drives/{{drive_id}}/throughput-test",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"drives",
+								"{{drive_id}}",
+								"throughput-test"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Test Drive Throughput\n\noperationId: test_drive_throughput_drives__drive_id__throughput_test_post"
+					},
+					"response": []
+				},
+				{
 					"name": "POST /files/compare",
 					"request": {
 						"method": "POST",
@@ -3842,6 +3862,26 @@
 							]
 						},
 						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Update Mount\n\noperationId: update_mount_mounts__mount_id__patch"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /mounts/{mount_id}/throughput-test",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/mounts/{{mount_id}}/throughput-test",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mounts",
+								"{{mount_id}}",
+								"throughput-test"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Test Mount Throughput\n\noperationId: test_mount_throughput_mounts__mount_id__throughput_test_post"
 					},
 					"response": []
 				},

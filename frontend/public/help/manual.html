@@ -394,7 +394,7 @@ How many source mounts are unassigned, assigned but not started, actively proces
 <h1 id="4-drives">4. Drives</h1>
 <blockquote><p><strong>Access Summary</strong></p></blockquote>
 <blockquote><p><strong>Page visibility:</strong> <code>admin</code>, <code>manager</code>, <code>processor</code>, <code>auditor</code></p></blockquote>
-<blockquote><p><strong>Restricted actions:</strong> Drive detail actions such as format, initialize, and prepare eject are currently enabled only for <code>admin</code> and <code>manager</code>.</p></blockquote>
+<blockquote><p><strong>Restricted actions:</strong> Drive detail actions such as format, initialize, throughput testing, and prepare eject are currently enabled only for <code>admin</code> and <code>manager</code>.</p></blockquote>
 <p>The <code>Drives</code> page shows detected USB drives and their current state.</p>
 <p>Typical drive fields include:</p>
 <ul><li>
@@ -467,14 +467,17 @@ Sort results
 <ul><li>
 The drive ID, the port-based <code>Device</code> value, trusted USB identity details such as serial number, manufacturer, vendor ID, product ID, negotiated speed when available, filesystem type, total capacity, last known available space, and current status
 </li><li>
+The latest measured write speed and last throughput-test time when a prior throughput test has completed for that mounted drive
+</li><li>
 Current project assignment together with the related evidence number, job ID, and <code>Custody Status</code> when a job is associated with the drive
 </li><li>
 Current status badge
 </li><li>
-Available actions such as format, initialize, and prepare eject
+Available actions such as format, initialize, throughput testing, and prepare eject
 </li></ul>
 <p>If ECUBE does not yet have a current mounted-drive free-space reading for that drive, the available-space field shows <code>-</code> instead of blocking the page.</p>
 <p>If a related job exists, the <code>Job ID</code> value on Drive Detail uses the same direct Job Detail navigation pattern as the clickable job context on the Drives page. <code>Custody Status</code> is sourced from trusted backend chain-of-custody data for that drive's related job lifecycle and can show <code>Handoff recorded</code>, <code>Pending handoff</code>, <code>Status unavailable</code>, or <code>No related job</code>. When a recorded handoff timestamp is available, Drive Detail shows it as secondary read-only detail. This field is informational only; use <code>Chain of Custody</code> from Job Detail to review the full report or record handoff.</p>
+<p>When the drive is mounted and in a managed state, <code>admin</code> and <code>manager</code> users can run <code>Test Throughput</code> from Drive Detail. The action measures write throughput against the mounted destination, stores the latest result on the drive record, and refreshes the <code>Latest Write Speed</code> plus <code>Last Throughput Test</code> fields on the page. <code>processor</code> and <code>auditor</code> users can still review those stored values when present, but they do not see the action button.</p>
 <p>When you open browse from Drive Detail, the panel title also uses the visible device identifier and the breadcrumb stays root-relative instead of showing the host mount path.</p>
 <p>Reference screen:</p>
 <h2 id="4-4-formatting-a-drive">4.4 Formatting a Drive</h2>
@@ -545,7 +548,7 @@ Open Mount Detail for an existing mount definition from the clickable mount ID
 </li><li>
 Filter the list by workflow bucket (<code>Unassigned</code>, <code>Assigned</code>, <code>Active</code>, <code>Blocked</code>, <code>Custody Pending</code>, <code>Completed</code>, or <code>Unavailable</code>) or search by mount details
 </li></ul>
-<p><code>admin</code> and <code>manager</code> users can also add a new mount definition and edit or remove a mount from Mount Detail. <code>processor</code> users can browse mounted shares from the clickable project value on the Mounts page and from Mount Detail. <code>auditor</code> users can open the Mounts page and Mount Detail, but they do not see browse, <code>Edit</code>, or <code>Remove</code> actions and sensitive path fields remain redacted.</p>
+<p><code>admin</code> and <code>manager</code> users can also add a new mount definition and edit or remove a mount from Mount Detail. <code>processor</code> users can browse mounted shares from the clickable project value on the Mounts page and from Mount Detail. <code>auditor</code> users can open the Mounts page and Mount Detail, but they do not see browse, <code>Test Throughput</code>, <code>Edit</code>, or <code>Remove</code> actions and sensitive path fields remain redacted.</p>
 <p>When you arrive from a Dashboard <code>Mounts Summary</code> entry, the matching workflow bucket is preselected so the destination list stays aligned with the dashboard context.</p>
 <h2 id="5-1-adding-a-mount">5.1 Adding a Mount</h2>
 <p>The add-mount dialog supports common fields such as:</p>
@@ -575,7 +578,7 @@ Credentials file
 <ul><li>
 The dialog pre-fills the current type, remote path, and project ID.
 </li><li>
-Mount Detail shows Type, Project, NFS Client version, Last Checked, Job ID, Job Status, and mount Status before you open the dialog. <code>Job Status</code> is sourced from trusted backend job data when a related job exists, falls back to <code>No related job</code> when the project has no current related job, and falls back to <code>Status unavailable</code> instead of guessing when authoritative job status cannot be determined. The dashboard mount workflow summary separately considers trusted related-job custody status, so running, pausing, or verifying jobs appear under <code>Active</code>, paused or failed jobs appear under <code>Blocked</code>, completed or archived jobs with pending handoff appear under <code>Custody Pending</code>, and <code>Unavailable</code> remains the fallback when trusted related-job or custody classification cannot be derived for that mount. <code>admin</code> and <code>manager</code> users also see the raw Remote Path and Local Mount Point values there; read-only roles see those path fields redacted.
+Mount Detail shows Type, Project, NFS Client version, Last Checked, Latest Read Speed, Last Throughput Test, Job ID, Job Status, and mount Status before you open the dialog. <code>Job Status</code> is sourced from trusted backend job data when a related job exists, falls back to <code>No related job</code> when the project has no current related job, and falls back to <code>Status unavailable</code> instead of guessing when authoritative job status cannot be determined. The dashboard mount workflow summary separately considers trusted related-job custody status, so running, pausing, or verifying jobs appear under <code>Active</code>, paused or failed jobs appear under <code>Blocked</code>, completed or archived jobs with pending handoff appear under <code>Custody Pending</code>, and <code>Unavailable</code> remains the fallback when trusted related-job or custody classification cannot be derived for that mount. <code>admin</code> and <code>manager</code> users also see the raw Remote Path and Local Mount Point values there; read-only roles see those path fields redacted.
 </li><li>
 The local mount point is shown as read-only informational context and is not directly editable.
 </li><li>
@@ -584,6 +587,7 @@ Stored credentials are not returned to the UI. Leaving the credential fields bla
 Use <code>Clear saved credentials</code> if you need to remove previously stored SMB credentials without replacing them in the same edit.
 </li></ul>
 <p>When you save, ECUBE updates the existing mount record instead of creating a new one. If the share is currently mounted, ECUBE attempts to remount it immediately with the edited options, including any explicit NFS client-version override. If the backend rejects the change, or if the returned mount status is <code>ERROR</code>, the dialog stays open so you can review the returned error state before closing it.</p>
+<p>When the selected share is <code>MOUNTED</code>, <code>admin</code> and <code>manager</code> users can run <code>Test Throughput</code> from Mount Detail. The action measures read throughput from the mounted share, stores the latest result on the mount record, and refreshes the <code>Latest Read Speed</code> plus <code>Last Throughput Test</code> fields on the detail page. This action is separate from the <code>Test</code> button inside the Add/Edit dialogs, which continues to validate connectivity for the configuration being edited.</p>
 <h2 id="5-2-testing-mount-connectivity">5.2 Testing Mount Connectivity</h2>
 <p>Use <code>Test</code> inside the <code>Add Share</code> dialog before creating a new mount, or inside the <code>Edit Share</code> dialog before saving changes to an existing mount.</p>
 <p>The dialog must show a successful test result before <code>Create</code> or <code>Save</code> becomes available. This keeps mount validation tied to the exact configuration you are about to persist rather than to a separate list-level action.</p>

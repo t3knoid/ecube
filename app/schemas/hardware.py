@@ -91,6 +91,8 @@ class UsbDriveSchema(BaseModel):
     current_state: DriveState = Field(..., description="Current drive state (DISCONNECTED, DISABLED, AVAILABLE, IN_USE)")
     current_project_id: Optional[str] = Field(default=None, description="Bound project ID if IN_USE, enforces isolation")
     mount_path: Optional[str] = Field(default=None, description="Active mount path for this drive (e.g. /mnt/ecube/7); null when not mounted")
+    throughput_write_mbps: Optional[float] = Field(default=None, description="Most recent measured manual drive write speed in MB/s when available")
+    throughput_tested_at: Optional[datetime] = Field(default=None, description="Timestamp of the most recent manual throughput test for this drive")
     related_job: Optional[DriveRelatedJobSchema] = Field(
         default=None,
         description="Trusted related job context for this drive lifecycle when requested",

@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
 import { getPublicAuthConfig } from '@/api/auth.js'
-import { getDrives, formatDrive, initializeDrive, mountDrive, prepareEjectDrive, refreshDrives } from '@/api/drives.js'
+import { getDrives, formatDrive, initializeDrive, mountDrive, prepareEjectDrive, refreshDrives, testDriveThroughput } from '@/api/drives.js'
 import { getJobChainOfCustody, listJobs } from '@/api/jobs.js'
 import { getMounts } from '@/api/mounts.js'
 import { enablePort } from '@/api/admin.js'
@@ -15,6 +15,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 import { formatDriveIdentity } from '@/utils/driveIdentity.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
+import { formatTransferRate } from '@/utils/transferRate.js'
 import { formatUsbSpeed } from '@/utils/usbSpeed.js'
 
 const route = useRoute()
@@ -25,6 +26,7 @@ const authStore = useAuthStore()
 const drive = ref(null)
 const loading = ref(false)
 const saving = ref(false)
+const throughputTesting = ref(false)
 const error = ref('')
 const infoMessage = ref('')
 const warnMessage = ref('')
@@ -131,6 +133,11 @@ const canEject = computed(
     ),
 )
 const canBrowse = computed(() => !!drive.value?.mount_path && canBrowseContents.value)
+const canTestThroughput = computed(
+  () => canManage.value
+    && !!drive.value?.mount_path
+    && ['AVAILABLE', 'IN_USE'].includes(drive.value?.current_state),
+)
 const hasMountedProjectOptions = computed(() => mountedProjectOptions.value.length > 0)
 const relatedJob = computed(() => drive.value?.related_job || null)
 const currentProjectEvidenceNumber = computed(() => relatedJob.value?.evidence_number || '')
@@ -154,6 +161,13 @@ function formatBytes(value) {
     unit += 1
   }
   return `${next.toFixed(next >= 10 ? 0 : 1)} ${units[unit]}`
+}
+
+function formatTimestamp(value) {
+  if (!value) return '-'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return '-'
+  return parsed.toLocaleString()
 }
 
 function driveBrowseTitle(record) {
@@ -462,6 +476,36 @@ async function runMount() {
   }
 }
 
+async function runThroughputTest() {
+  if (!drive.value || !canTestThroughput.value) return
+  throughputTesting.value = true
+  clearBanners()
+  try {
+    drive.value = normalizeProjectRecord(await testDriveThroughput(drive.value.id, { timeout: 0 }), ['current_project_id'])
+    infoMessage.value = t('drives.throughputTestSuccess')
+  } catch (err) {
+    const status = err?.response?.status
+    const detail = normalizeErrorMessage(err?.response?.data, null)
+    if (!status) {
+      error.value = t('common.errors.networkError')
+    } else if (status === 403) {
+      error.value = detail || t('common.errors.insufficientPermissions')
+    } else if (status === 404) {
+      error.value = detail || t('common.errors.notFound')
+    } else if (status === 409) {
+      error.value = detail || t('drives.throughputTestFailed')
+    } else if (status === 422) {
+      error.value = detail || t('common.errors.validationFailed')
+    } else if (status >= 500) {
+      error.value = detail || t('drives.throughputTestFailed')
+    } else {
+      error.value = t('common.errors.serverErrorGeneric')
+    }
+  } finally {
+    throughputTesting.value = false
+  }
+}
+
 async function openPrepareEjectDialog() {
   if (!drive.value) return
   saving.value = true
@@ -627,6 +671,8 @@ onBeforeUnmount(() => {
         <div><strong>{{ t('system.vendorId') }}</strong><span>{{ drive.vendor_id || '-' }}</span></div>
         <div><strong>{{ t('system.productId') }}</strong><span>{{ drive.product_id || '-' }}</span></div>
         <div><strong>{{ t('system.speed') }}</strong><span>{{ formatUsbSpeed(drive.speed) }}</span></div>
+        <div><strong>{{ t('drives.latestWriteSpeed') }}</strong><span>{{ formatTransferRate(drive.throughput_write_mbps) }}</span></div>
+        <div><strong>{{ t('drives.lastThroughputTest') }}</strong><span>{{ formatTimestamp(drive.throughput_tested_at) }}</span></div>
         <!-- Mount Point field removed -->
         <div><strong>{{ t('drives.filesystem') }}</strong><span>{{ drive.filesystem_type || '-' }}</span></div>
         <div><strong>{{ t('common.labels.size') }}</strong><span>{{ formatBytes(drive.capacity_bytes) }}</span></div>
@@ -658,6 +704,7 @@ onBeforeUnmount(() => {
       <div class="action-row">
         <button v-if="canEnable" class="btn btn-primary" :disabled="saving" @click="runEnable">{{ t('drives.enable') }}</button>
         <button v-if="canMount" class="btn" :disabled="saving" @click="runMount">{{ t('drives.mount') }}</button>
+        <button v-if="canManage" class="btn" :disabled="saving || throughputTesting || !canTestThroughput" @click="runThroughputTest">{{ throughputTesting ? t('common.labels.loading') : t('drives.testThroughput') }}</button>
         <button v-if="canBrowse" class="btn" @click="browseExpanded = !browseExpanded">{{ t('drives.browse') }}</button>
         <button class="btn" :disabled="!canFormat || saving" @click="showFormatDialog = true">{{ t('drives.format') }}</button>
         <button class="btn" :disabled="!canInitialize || saving" @click="openInitializeDialog">{{ t('drives.initialize') }}</button>

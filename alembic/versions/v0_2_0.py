@@ -129,6 +129,16 @@ def _network_mounts_has_nfs_client_version(inspector: sa.Inspector) -> bool:
     return any(column.get("name") == "nfs_client_version" for column in inspector.get_columns("network_mounts"))
 
 
+def _network_mounts_has_throughput_columns(inspector: sa.Inspector) -> bool:
+    columns = {column.get("name") for column in inspector.get_columns("network_mounts")}
+    return {"throughput_read_mbps", "throughput_tested_at"}.issubset(columns)
+
+
+def _usb_drives_has_throughput_columns(inspector: sa.Inspector) -> bool:
+    columns = {column.get("name") for column in inspector.get_columns("usb_drives")}
+    return {"throughput_write_mbps", "throughput_tested_at"}.issubset(columns)
+
+
 def _drive_assignments_has_manifest_counters(inspector: sa.Inspector) -> bool:
     columns = {column.get("name") for column in inspector.get_columns("drive_assignments")}
     return {"file_count", "copied_bytes"}.issubset(columns)
@@ -477,6 +487,14 @@ def upgrade() -> None:
         if "network_mounts" in existing_tables and not _network_mounts_has_nfs_client_version(inspector):
             with op.batch_alter_table("network_mounts") as batch_op:
                 batch_op.add_column(sa.Column("nfs_client_version", sa.String(), nullable=True))
+        if "network_mounts" in existing_tables and not _network_mounts_has_throughput_columns(inspector):
+            with op.batch_alter_table("network_mounts") as batch_op:
+                batch_op.add_column(sa.Column("throughput_read_mbps", sa.Float(), nullable=True))
+                batch_op.add_column(sa.Column("throughput_tested_at", sa.DateTime(timezone=True), nullable=True))
+        if "usb_drives" in existing_tables and not _usb_drives_has_throughput_columns(inspector):
+            with op.batch_alter_table("usb_drives") as batch_op:
+                batch_op.add_column(sa.Column("throughput_write_mbps", sa.Float(), nullable=True))
+                batch_op.add_column(sa.Column("throughput_tested_at", sa.DateTime(timezone=True), nullable=True))
         if "drive_assignments" in existing_tables:
             _upgrade_drive_assignment_manifest_counters(inspector)
             _upgrade_drive_assignment_activation_schema(inspector)
@@ -540,6 +558,8 @@ def upgrade() -> None:
         ),
         sa.Column("current_project_id", sa.String, nullable=True),
         sa.Column("mount_path", sa.String(), nullable=True),
+        sa.Column("throughput_write_mbps", sa.Float(), nullable=True),
+        sa.Column("throughput_tested_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "last_seen_at",
             sa.DateTime(timezone=True),
@@ -576,6 +596,8 @@ def upgrade() -> None:
             sa.DateTime(timezone=True),
             server_default=sa.func.now(),
         ),
+        sa.Column("throughput_read_mbps", sa.Float(), nullable=True),
+        sa.Column("throughput_tested_at", sa.DateTime(timezone=True), nullable=True),
     )
 
     op.create_index("ix_network_mounts_status", "network_mounts", ["status"])

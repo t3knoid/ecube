@@ -172,6 +172,32 @@ class TestDriveAuditLogging:
         assert entry.details["unmount_ok"] is True
         assert "filesystem_path" not in entry.details
 
+    def test_drive_throughput_logs_actor_and_measurement(self, manager_client, db, tmp_path):
+        drive = UsbDrive(
+            device_identifier="AUDIT-THROUGHPUT-DRIVE",
+            current_state=DriveState.AVAILABLE,
+            mount_path=str(tmp_path),
+            current_project_id="PROJ-AUDIT",
+        )
+        db.add(drive)
+        db.commit()
+
+        provider = MagicMock()
+        provider.measure_drive_write_mbps.return_value = (123.4, 0.5, 0.4)
+
+        with patch("app.routers.drives.get_throughput_benchmark", return_value=provider):
+            response = manager_client.post(f"/drives/{drive.id}/throughput-test")
+        assert response.status_code == 200
+
+        entry = _audit_by_action(db, "DRIVE_THROUGHPUT_TESTED")
+        assert entry is not None
+        assert entry.user == "manager-user"
+        assert entry.drive_id == drive.id
+        assert entry.project_id == "PROJ-AUDIT"
+        assert entry.details["outcome"] == "success"
+        assert entry.details["write_mbps"] == 123.4
+        assert "mount_path" not in entry.details
+
 
 # ---------------------------------------------------------------------------
 # Mount operations
@@ -306,6 +332,37 @@ class TestMountAuditLogging:
         assert entry.details["mount_label"] == "[redacted]"
         assert "local_mount_point" not in entry.details
         assert entry.details["status"] == "ERROR"
+
+    def test_mount_throughput_logs_actor_and_redacted_target(self, manager_client, db, tmp_path):
+        mount_root = tmp_path / "audit-share"
+        mount_root.mkdir()
+        (mount_root / "sample.bin").write_bytes(b"a" * 4096)
+        mount = NetworkMount(
+            type=MountType.NFS,
+            remote_path="1.2.3.4:/throughput-audit",
+            project_id="PROJ-MOUNT-AUDIT",
+            local_mount_point=str(mount_root),
+            status=MountStatus.MOUNTED,
+        )
+        db.add(mount)
+        db.commit()
+
+        provider = MagicMock()
+        provider.measure_share_read_mbps.return_value = (88.8, 4096, 0.5, 0.4)
+
+        with patch("app.routers.mounts.get_throughput_benchmark", return_value=provider):
+            response = manager_client.post(f"/mounts/{mount.id}/throughput-test")
+        assert response.status_code == 200
+
+        entry = _audit_by_action(db, "MOUNT_THROUGHPUT_TESTED")
+        assert entry is not None
+        assert entry.user == "manager-user"
+        assert entry.project_id == "PROJ-MOUNT-AUDIT"
+        assert entry.details["mount_id"] == mount.id
+        assert entry.details["mount_label"] == "[redacted]"
+        assert entry.details["outcome"] == "success"
+        assert entry.details["read_mbps"] == 88.8
+        assert "local_mount_point" not in entry.details
 
 
 # ---------------------------------------------------------------------------

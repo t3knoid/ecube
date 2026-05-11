@@ -7,9 +7,9 @@ from sqlalchemy.orm import Session
 from app.auth import CurrentUser, require_roles
 from app.database import get_db
 from app.exceptions import EncodingError
+from app.infrastructure import get_drive_eject, get_drive_formatter, get_drive_mount, get_filesystem_detector, get_throughput_benchmark
 from app.schemas.hardware import DiscoverySyncResponse, DriveFormatRequest, DriveInitialize, UsbDriveSchema
-from app.services import drive_service, discovery_service
-from app.infrastructure import get_drive_eject, get_drive_formatter, get_drive_mount, get_filesystem_detector
+from app.services import drive_service, discovery_service, throughput_service
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500
 from app.utils.client_ip import get_client_ip
 from app.utils.sanitize import normalize_project_id
@@ -184,5 +184,26 @@ def format_drive(
     return drive_service.format_drive(
         drive_id, body.filesystem_type, db, formatter=formatter, actor=current_user.username,
         filesystem_detector=get_filesystem_detector(),
+        client_ip=get_client_ip(request),
+    )
+
+
+@router.post("/{drive_id}/throughput-test", response_model=UsbDriveSchema, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
+def test_drive_throughput(
+    drive_id: int,
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER),
+    request: Request,
+):
+    """Measure mounted drive write throughput and persist the latest result.
+
+    **Roles:** ``admin``, ``manager``
+    """
+    return throughput_service.test_drive_write_throughput(
+        drive_id,
+        db,
+        benchmark_provider=get_throughput_benchmark(),
+        actor=current_user.username,
         client_ip=get_client_ip(request),
     )

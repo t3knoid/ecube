@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   mountDrive: vi.fn(),
   prepareEjectDrive: vi.fn(),
   refreshDrives: vi.fn(),
+  testDriveThroughput: vi.fn(),
   enablePort: vi.fn(),
 }))
 
@@ -41,6 +42,7 @@ vi.mock('@/api/drives.js', () => ({
   mountDrive: (...args) => mocks.mountDrive(...args),
   prepareEjectDrive: (...args) => mocks.prepareEjectDrive(...args),
   refreshDrives: (...args) => mocks.refreshDrives(...args),
+  testDriveThroughput: (...args) => mocks.testDriveThroughput(...args),
 }))
 
 vi.mock('@/api/jobs.js', () => ({
@@ -76,6 +78,8 @@ function buildDrive(overrides = {}) {
     capacity_bytes: 1024,
     available_bytes: 512,
     port_id: 1,
+    throughput_write_mbps: null,
+    throughput_tested_at: null,
     related_job: {
       job_id: null,
       evidence_number: null,
@@ -131,6 +135,7 @@ describe('DriveDetailView mount workflow', () => {
     mocks.mountDrive.mockReset()
     mocks.prepareEjectDrive.mockReset()
     mocks.refreshDrives.mockReset()
+    mocks.testDriveThroughput.mockReset()
     mocks.enablePort.mockReset()
 
     mocks.hasAnyRole.mockReturnValue(true)
@@ -147,6 +152,7 @@ describe('DriveDetailView mount workflow', () => {
       { id: 4, status: 'UNMOUNTED', project_id: 'PROJ-HIDDEN' },
     ])
     mocks.mountDrive.mockResolvedValue(buildDrive({}))
+    mocks.testDriveThroughput.mockResolvedValue(buildDrive({ throughput_write_mbps: 143.2, throughput_tested_at: '2026-05-11T18:10:00Z' }))
   })
 
   it('shows the last known available space and handles zero bytes safely', async () => {
@@ -182,6 +188,26 @@ describe('DriveDetailView mount workflow', () => {
     await flushPromises()
 
     expect(wrapper.text()).toMatch(/Speed\s*-/)
+  })
+
+  it('shows the latest measured write speed and runs the throughput test for managers', async () => {
+    mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/7', throughput_write_mbps: 101.1, throughput_tested_at: '2026-05-11T17:00:00Z' })])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('drives.latestWriteSpeed'))
+    expect(wrapper.text()).toContain('101.1 MB/s')
+
+    const testButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.testThroughput'))
+    expect(testButton).toBeTruthy()
+
+    await testButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.testDriveThroughput).toHaveBeenCalledWith(7, { timeout: 0 })
+    expect(wrapper.text()).toContain(i18n.global.t('drives.throughputTestSuccess'))
+    expect(wrapper.text()).toContain('143.2 MB/s')
   })
 
   it('shows the Mount action for managers and updates the mount point after success', async () => {
@@ -257,6 +283,9 @@ describe('DriveDetailView mount workflow', () => {
 
     const wrapper = mountView()
     await flushPromises()
+
+    const buttonLabels = wrapper.findAll('button').map((node) => node.text())
+    expect(buttonLabels).not.toContain(i18n.global.t('drives.testThroughput'))
 
     const labels = wrapper.findAll('button').map((node) => node.text())
     expect(labels).not.toContain(i18n.global.t('drives.browse'))

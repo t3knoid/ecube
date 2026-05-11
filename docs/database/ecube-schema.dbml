@@ -68,6 +68,8 @@ Table network_mounts {
   encrypted_credentials_file varchar
   status mount_status [default: 'UNMOUNTED']
   last_checked_at timestamptz
+  throughput_read_mbps float
+  throughput_tested_at timestamptz
 
   indexes {
     project_id [name: 'ix_network_mounts_project_id']
@@ -213,6 +215,8 @@ Table usb_drives {
   current_state drive_state [default: 'AVAILABLE']
   current_project_id varchar
   mount_path varchar
+  throughput_write_mbps float
+  throughput_tested_at timestamptz
   last_seen_at timestamptz
 
   indexes {

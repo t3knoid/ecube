@@ -19,6 +19,7 @@ from app.infrastructure.filesystem_runtime import FilesystemRuntimeInspector
 from app.infrastructure.runtime_repair import RuntimeRepairProvider
 from app.infrastructure.drive_format import DriveFormatter
 from app.infrastructure.drive_space import DriveSpaceProbe
+from app.infrastructure.throughput_benchmark import ThroughputBenchmarkProvider
 from app.infrastructure.usb_discovery import DriveDiscoveryProvider
 from app.infrastructure.drive_eject import (
     DriveEjectProvider,
@@ -37,6 +38,7 @@ __all__ = [
     "RuntimeRepairProvider",
     "DriveFormatter",
     "DriveSpaceProbe",
+    "ThroughputBenchmarkProvider",
     "DriveDiscoveryProvider",
     "DriveEjectProvider",
     "EjectError",
@@ -51,6 +53,7 @@ __all__ = [
     "get_runtime_repair_provider",
     "get_drive_formatter",
     "get_drive_space_probe",
+    "get_throughput_benchmark",
     "get_drive_discovery",
     "get_drive_eject",
     "get_drive_mount",
@@ -88,6 +91,11 @@ def _linux_drive_formatter() -> type[DriveFormatter]:
 def _linux_drive_space_probe() -> type[DriveSpaceProbe]:
     from app.infrastructure.drive_space import LinuxDriveSpaceProbe
     return LinuxDriveSpaceProbe
+
+
+def _linux_throughput_benchmark() -> type[ThroughputBenchmarkProvider]:
+    from app.infrastructure.throughput_benchmark import LinuxThroughputBenchmarkProvider
+    return LinuxThroughputBenchmarkProvider
 
 def _linux_drive_discovery() -> type[DriveDiscoveryProvider]:
     from app.infrastructure.usb_discovery import LinuxDriveDiscovery
@@ -137,6 +145,10 @@ _DRIVE_FORMATTER_REGISTRY: dict[str, Callable[[], type[DriveFormatter]]] = {
 
 _DRIVE_SPACE_PROBE_REGISTRY: dict[str, Callable[[], type[DriveSpaceProbe]]] = {
     "linux": _linux_drive_space_probe,
+}
+
+_THROUGHPUT_BENCHMARK_REGISTRY: dict[str, Callable[[], type[ThroughputBenchmarkProvider]]] = {
+    "linux": _linux_throughput_benchmark,
 }
 
 _DRIVE_DISCOVERY_REGISTRY: dict[str, Callable[[], type[DriveDiscoveryProvider]]] = {
@@ -199,6 +211,11 @@ def get_drive_formatter() -> DriveFormatter:
 def get_drive_space_probe() -> DriveSpaceProbe:
     """Return the platform-appropriate :class:`DriveSpaceProbe`."""
     return _resolve(_DRIVE_SPACE_PROBE_REGISTRY, "DriveSpaceProbe")
+
+
+def get_throughput_benchmark() -> ThroughputBenchmarkProvider:
+    """Return the platform-appropriate :class:`ThroughputBenchmarkProvider`."""
+    return _resolve(_THROUGHPUT_BENCHMARK_REGISTRY, "ThroughputBenchmarkProvider")
 
 
 def get_drive_discovery() -> DriveDiscoveryProvider:

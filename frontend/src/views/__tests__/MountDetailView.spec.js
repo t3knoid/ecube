@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   getMounts: vi.fn(),
   updateMount: vi.fn(),
   deleteMount: vi.fn(),
+  testMountThroughput: vi.fn(),
   validateMount: vi.fn(),
   getPublicAuthConfig: vi.fn(),
 }))
@@ -29,6 +30,7 @@ vi.mock('@/api/mounts.js', () => ({
   getMounts: (...args) => mocks.getMounts(...args),
   updateMount: (...args) => mocks.updateMount(...args),
   deleteMount: (...args) => mocks.deleteMount(...args),
+  testMountThroughput: (...args) => mocks.testMountThroughput(...args),
   validateMount: (...args) => mocks.validateMount(...args),
 }))
 
@@ -52,7 +54,9 @@ function buildMount(overrides = {}) {
     local_mount_point: '/smb/project2',
     status: 'MOUNTED',
     last_checked_at: null,
-        related_job: { job_id: 27, status: 'RUNNING' },
+    throughput_read_mbps: null,
+    throughput_tested_at: null,
+    related_job: { job_id: 27, status: 'RUNNING' },
     ...overrides,
   }
 }
@@ -101,12 +105,14 @@ describe('MountDetailView', () => {
     mocks.getMounts.mockReset()
     mocks.updateMount.mockReset()
     mocks.deleteMount.mockReset()
+    mocks.testMountThroughput.mockReset()
     mocks.validateMount.mockReset()
     mocks.getPublicAuthConfig.mockReset()
 
     mocks.getMounts.mockResolvedValue([buildMount()])
     mocks.updateMount.mockResolvedValue(buildMount())
     mocks.deleteMount.mockResolvedValue({})
+    mocks.testMountThroughput.mockResolvedValue(buildMount({ throughput_read_mbps: 87.4, throughput_tested_at: '2026-05-11T18:20:00Z' }))
     mocks.validateMount.mockResolvedValue(buildMount({ status: 'MOUNTED' }))
     mocks.getPublicAuthConfig.mockResolvedValue({
       demo_mode_enabled: false,
@@ -161,6 +167,26 @@ describe('MountDetailView', () => {
 
     expect(wrapper.text()).toContain(i18n.global.t('mounts.jobStatusUnavailable'))
     expect(wrapper.find('.cell-link').text()).toBe('27')
+  })
+
+  it('shows the latest measured read speed and runs the throughput test for managers', async () => {
+    mocks.getMounts.mockResolvedValue([buildMount({ throughput_read_mbps: 64.2, throughput_tested_at: '2026-05-11T17:45:00Z' })])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('mounts.latestReadSpeed'))
+    expect(wrapper.text()).toContain('64.2 MB/s')
+
+    const testButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.testThroughput'))
+    expect(testButton).toBeTruthy()
+
+    await testButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.testMountThroughput).toHaveBeenCalledWith(11, { timeout: 0 })
+    expect(wrapper.text()).toContain(i18n.global.t('mounts.throughputTestSuccess'))
+    expect(wrapper.text()).toContain('87.4 MB/s')
   })
 
   it('opens the edit dialog prefilled and submits updates through validateMount and updateMount', async () => {
@@ -257,6 +283,7 @@ describe('MountDetailView', () => {
 
     const buttonTexts = wrapper.findAll('button').map((node) => node.text())
     expect(buttonTexts).not.toContain(i18n.global.t('mounts.browse'))
+    expect(buttonTexts).not.toContain(i18n.global.t('mounts.testThroughput'))
     expect(buttonTexts).not.toContain(i18n.global.t('common.actions.edit'))
     expect(buttonTexts).not.toContain(i18n.global.t('mounts.remove'))
     expect(wrapper.text()).not.toContain('//server/share')

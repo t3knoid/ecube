@@ -5,9 +5,10 @@ from typing import List
 
 from app.auth import CurrentUser, require_roles
 from app.database import get_db
+from app.infrastructure import get_throughput_benchmark
 from app.schemas.network import CandidateNetworkMountSchema, MountCreate, MountShareDiscoveryRequest, MountShareDiscoveryResponse, MountUpdate, NetworkMountSchema
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500
-from app.services import mount_service
+from app.services import mount_service, throughput_service
 from app.utils.client_ip import get_client_ip
 
 logger = logging.getLogger(__name__)
@@ -188,6 +189,27 @@ def validate_mount(
         mount_id,
         db,
         mount_data=body,
+        actor=current_user.username,
+        client_ip=get_client_ip(request),
+    )
+
+
+@router.post("/{mount_id}/throughput-test", response_model=NetworkMountSchema, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
+def test_mount_throughput(
+    mount_id: int,
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER),
+    request: Request,
+):
+    """Measure mounted share read throughput and persist the latest result.
+
+    **Roles:** ``admin``, ``manager``
+    """
+    return throughput_service.test_mount_read_throughput(
+        mount_id,
+        db,
+        benchmark_provider=get_throughput_benchmark(),
         actor=current_user.username,
         client_ip=get_client_ip(request),
     )

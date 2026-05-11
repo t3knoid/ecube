@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Integer, String, BigInteger, Enum, ForeignKey, DateTime, Index, UniqueConstraint
+from sqlalchemy import Boolean, Column, Integer, String, BigInteger, Enum, ForeignKey, DateTime, Float, Index, UniqueConstraint
 from sqlalchemy.orm import relationship, validates
 from sqlalchemy.sql import func
 from app.database import Base
@@ -62,6 +62,8 @@ class UsbDrive(Base):
     )
     current_project_id = Column(String, index=True)
     mount_path = Column(String, nullable=True, index=True)
+    throughput_write_mbps = Column(Float, nullable=True)
+    throughput_tested_at = Column(DateTime(timezone=True), nullable=True)
     last_seen_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

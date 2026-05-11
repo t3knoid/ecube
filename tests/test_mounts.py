@@ -149,6 +149,54 @@ def test_list_mounts_uses_status_unavailable_fallback_when_related_job_lookup_fa
     }
 
 
+def test_mount_throughput_test_persists_latest_measurement(manager_client, db, tmp_path):
+    mount_root = tmp_path / "share"
+    mount_root.mkdir()
+    (mount_root / "sample.bin").write_bytes(b"a" * 8192)
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="server:/throughput",
+        project_id="PROJ-THROUGHPUT",
+        local_mount_point=str(mount_root),
+        status=MountStatus.MOUNTED,
+    )
+    db.add(mount)
+    db.commit()
+
+    provider = MagicMock()
+    provider.measure_share_read_mbps.return_value = (98.7, 8192, 0.5, 0.4)
+
+    with patch("app.routers.mounts.get_throughput_benchmark", return_value=provider):
+        response = manager_client.post(f"/mounts/{mount.id}/throughput-test")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["throughput_read_mbps"] == 98.7
+    assert data["throughput_tested_at"] is not None
+    db.refresh(mount)
+    assert mount.throughput_read_mbps == 98.7
+    assert mount.throughput_tested_at is not None
+
+
+def test_mount_throughput_test_requires_readable_files(manager_client, db, tmp_path):
+    mount_root = tmp_path / "empty-share"
+    mount_root.mkdir()
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="server:/empty-throughput",
+        project_id="PROJ-EMPTY",
+        local_mount_point=str(mount_root),
+        status=MountStatus.MOUNTED,
+    )
+    db.add(mount)
+    db.commit()
+
+    response = manager_client.post(f"/mounts/{mount.id}/throughput-test")
+
+    assert response.status_code == 409
+    assert "Mounted share has no readable files available for throughput testing" in str(response.json())
+
+
 def test_add_mount(manager_client, db):
     with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \

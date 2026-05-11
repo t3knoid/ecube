@@ -334,7 +334,7 @@ The dashboard is intended for situational awareness, not full task execution. Us
 
 > **Access Summary**
 > **Page visibility:** `admin`, `manager`, `processor`, `auditor`
-> **Restricted actions:** Drive detail actions such as format, initialize, and prepare eject are currently enabled only for `admin` and `manager`.
+> **Restricted actions:** Drive detail actions such as format, initialize, throughput testing, and prepare eject are currently enabled only for `admin` and `manager`.
 
 The `Drives` page shows detected USB drives and their current state.
 
@@ -393,13 +393,16 @@ The `Drive ID` value on the Drives page also acts as the direct navigation entry
 Selecting a drive opens a detail view showing:
 
 - The drive ID, the port-based `Device` value, trusted USB identity details such as serial number, manufacturer, vendor ID, product ID, negotiated speed when available, filesystem type, total capacity, last known available space, and current status
+- The latest measured write speed and last throughput-test time when a prior throughput test has completed for that mounted drive
 - Current project assignment together with the related evidence number, job ID, and `Custody Status` when a job is associated with the drive
 - Current status badge
-- Available actions such as format, initialize, and prepare eject
+- Available actions such as format, initialize, throughput testing, and prepare eject
 
 If ECUBE does not yet have a current mounted-drive free-space reading for that drive, the available-space field shows `-` instead of blocking the page.
 
 If a related job exists, the `Job ID` value on Drive Detail uses the same direct Job Detail navigation pattern as the clickable job context on the Drives page. `Custody Status` is sourced from trusted backend chain-of-custody data for that drive's related job lifecycle and can show `Handoff recorded`, `Pending handoff`, `Status unavailable`, or `No related job`. When a recorded handoff timestamp is available, Drive Detail shows it as secondary read-only detail. This field is informational only; use `Chain of Custody` from Job Detail to review the full report or record handoff.
+
+When the drive is mounted and in a managed state, `admin` and `manager` users can run `Test Throughput` from Drive Detail. The action measures write throughput against the mounted destination, stores the latest result on the drive record, and refreshes the `Latest Write Speed` plus `Last Throughput Test` fields on the page. `processor` and `auditor` users can still review those stored values when present, but they do not see the action button.
 
 When you open browse from Drive Detail, the panel title also uses the visible device identifier and the breadcrumb stays root-relative instead of showing the host mount path.
 
@@ -480,7 +483,7 @@ You can typically:
 - Open Mount Detail for an existing mount definition from the clickable mount ID
 - Filter the list by workflow bucket (`Unassigned`, `Assigned`, `Active`, `Blocked`, `Custody Pending`, `Completed`, or `Unavailable`) or search by mount details
 
-`admin` and `manager` users can also add a new mount definition and edit or remove a mount from Mount Detail. `processor` users can browse mounted shares from the clickable project value on the Mounts page and from Mount Detail. `auditor` users can open the Mounts page and Mount Detail, but they do not see browse, `Edit`, or `Remove` actions and sensitive path fields remain redacted.
+`admin` and `manager` users can also add a new mount definition and edit or remove a mount from Mount Detail. `processor` users can browse mounted shares from the clickable project value on the Mounts page and from Mount Detail. `auditor` users can open the Mounts page and Mount Detail, but they do not see browse, `Test Throughput`, `Edit`, or `Remove` actions and sensitive path fields remain redacted.
 
 When you arrive from a Dashboard `Mounts Summary` entry, the matching workflow bucket is preselected so the destination list stays aligned with the dashboard context.
 
@@ -516,12 +519,14 @@ If share browsing is unavailable because the ECUBE host is missing a required di
 Use the clickable mount ID on an existing mount row to open Mount Detail, then use `Edit` from the detail action row to reopen the edit dialog in place.
 
 - The dialog pre-fills the current type, remote path, and project ID.
-- Mount Detail shows Type, Project, NFS Client version, Last Checked, Job ID, Job Status, and mount Status before you open the dialog. `Job Status` is sourced from trusted backend job data when a related job exists, falls back to `No related job` when the project has no current related job, and falls back to `Status unavailable` instead of guessing when authoritative job status cannot be determined. The dashboard mount workflow summary separately considers trusted related-job custody status, so running, pausing, or verifying jobs appear under `Active`, paused or failed jobs appear under `Blocked`, completed or archived jobs with pending handoff appear under `Custody Pending`, and `Unavailable` remains the fallback when trusted related-job or custody classification cannot be derived for that mount. `admin` and `manager` users also see the raw Remote Path and Local Mount Point values there; read-only roles see those path fields redacted.
+- Mount Detail shows Type, Project, NFS Client version, Last Checked, Latest Read Speed, Last Throughput Test, Job ID, Job Status, and mount Status before you open the dialog. `Job Status` is sourced from trusted backend job data when a related job exists, falls back to `No related job` when the project has no current related job, and falls back to `Status unavailable` instead of guessing when authoritative job status cannot be determined. The dashboard mount workflow summary separately considers trusted related-job custody status, so running, pausing, or verifying jobs appear under `Active`, paused or failed jobs appear under `Blocked`, completed or archived jobs with pending handoff appear under `Custody Pending`, and `Unavailable` remains the fallback when trusted related-job or custody classification cannot be derived for that mount. `admin` and `manager` users also see the raw Remote Path and Local Mount Point values there; read-only roles see those path fields redacted.
 - The local mount point is shown as read-only informational context and is not directly editable.
 - Stored credentials are not returned to the UI. Leaving the credential fields blank preserves the stored values.
 - Use `Clear saved credentials` if you need to remove previously stored SMB credentials without replacing them in the same edit.
 
 When you save, ECUBE updates the existing mount record instead of creating a new one. If the share is currently mounted, ECUBE attempts to remount it immediately with the edited options, including any explicit NFS client-version override. If the backend rejects the change, or if the returned mount status is `ERROR`, the dialog stays open so you can review the returned error state before closing it.
+
+When the selected share is `MOUNTED`, `admin` and `manager` users can run `Test Throughput` from Mount Detail. The action measures read throughput from the mounted share, stores the latest result on the mount record, and refreshes the `Latest Read Speed` plus `Last Throughput Test` fields on the detail page. This action is separate from the `Test` button inside the Add/Edit dialogs, which continues to validate connectivity for the configuration being edited.
 
 ### 8.2 Testing Mount Connectivity
 

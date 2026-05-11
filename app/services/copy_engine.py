@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal
-from app.infrastructure import DriveSpaceProbe, get_drive_space_probe
+from app.infrastructure import DriveSpaceProbe, ThroughputBenchmarkProvider, get_drive_space_probe, get_throughput_benchmark
 from app.models.hardware import DriveState, UsbDrive
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, StartupAnalysisEntry, StartupAnalysisStatus
 from app.repositories.audit_repository import AuditRepository
@@ -795,75 +795,28 @@ def _build_startup_analysis_sample_plan(files: list[Path], sample_bytes: int) ->
     return _build_throughput_benchmark_sample_plan(files, sample_bytes)
 
 
-def _measure_share_read_mbps(sample_plan: list[tuple[Path, int]]) -> tuple[Optional[float], int, float, float]:
-    if not sample_plan:
-        return None, 0, 0.0, 0.0
-
-    bytes_read = 0
-    checksum = hashlib.sha256()
-    total_started_at = time.perf_counter()
-    stream_elapsed_seconds = 0.0
-
-    for file_path, planned_bytes in sample_plan:
-        remaining = planned_bytes
-        with open(file_path, "rb") as handle:
-            while remaining > 0:
-                chunk_started_at = time.perf_counter()
-                chunk = handle.read(min(settings.copy_chunk_size_bytes, remaining))
-                if not chunk:
-                    stream_elapsed_seconds += time.perf_counter() - chunk_started_at
-                    break
-                chunk_len = len(chunk)
-                checksum.update(chunk)
-                bytes_read += chunk_len
-                remaining -= chunk_len
-                stream_elapsed_seconds += time.perf_counter() - chunk_started_at
-
-    elapsed_seconds = time.perf_counter() - total_started_at
-    checksum.digest()
-    return _calculate_transfer_rate_mbps(bytes_read, elapsed_seconds), bytes_read, elapsed_seconds, stream_elapsed_seconds
+def _measure_share_read_mbps(
+    sample_plan: list[tuple[Path, int]],
+    *,
+    benchmark_provider: Optional[ThroughputBenchmarkProvider] = None,
+) -> tuple[Optional[float], int, float, float]:
+    provider = benchmark_provider or get_throughput_benchmark()
+    return provider.measure_share_read_mbps(sample_plan)
 
 
-def _measure_drive_write_mbps(target_mount_path: Optional[str], sample_plan: list[tuple[Path, int]], *, job_id: int) -> tuple[Optional[float], float, float]:
-    if not sample_plan:
-        return None, 0.0, 0.0
-    target_root = Path(str(target_mount_path or "").strip())
-    if not str(target_mount_path or "").strip() or not target_root.exists() or not target_root.is_dir():
-        raise RuntimeError("Assigned target drive is unavailable for startup analysis benchmark")
-
-    bytes_written = 0
-    total_started_at = time.perf_counter()
-    stream_elapsed_seconds = 0.0
-
-    try:
-        for sample_index, (_source_file, planned_bytes) in enumerate(sample_plan):
-            chunk_size = max(1, min(settings.copy_chunk_size_bytes, planned_bytes))
-            chunk = b"\0" * chunk_size
-            benchmark_path = target_root / f".startup-analysis-benchmark-{job_id}-{sample_index}-{time.time_ns()}.tmp"
-
-            try:
-                with open(benchmark_path, "wb") as handle:
-                    remaining = planned_bytes
-                    while remaining > 0:
-                        chunk_started_at = time.perf_counter()
-                        write_size = min(chunk_size, remaining)
-                        handle.write(chunk[:write_size])
-                        bytes_written += write_size
-                        remaining -= write_size
-                        stream_elapsed_seconds += time.perf_counter() - chunk_started_at
-                    handle.flush()
-                    os.fsync(handle.fileno())
-            finally:
-                try:
-                    if benchmark_path.exists():
-                        benchmark_path.unlink()
-                except OSError:
-                    logger.debug("Could not remove startup analysis benchmark file", extra={"job_id": job_id})
-    finally:
-        pass
-
-    elapsed_seconds = time.perf_counter() - total_started_at
-    return _calculate_transfer_rate_mbps(bytes_written, elapsed_seconds), elapsed_seconds, stream_elapsed_seconds
+def _measure_drive_write_mbps(
+    target_mount_path: Optional[str],
+    sample_plan: list[tuple[Path, int]],
+    *,
+    job_id: int,
+    benchmark_provider: Optional[ThroughputBenchmarkProvider] = None,
+) -> tuple[Optional[float], float, float]:
+    provider = benchmark_provider or get_throughput_benchmark()
+    return provider.measure_drive_write_mbps(
+        str(target_mount_path or ""),
+        sample_plan,
+        benchmark_id=f"startup-analysis-{job_id}",
+    )
 
 
 def _measure_startup_analysis_transfer_rates(

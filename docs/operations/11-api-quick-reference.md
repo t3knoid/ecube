@@ -104,10 +104,13 @@ Authentication response behavior:
 | POST | `/drives/refresh` | admin/manager | Force rescan of attached drives |
 | POST | `/drives/{drive_id}/initialize` | admin/manager | Initialize drive for project (requires a recognized filesystem, a mounted destination drive, and a mounted share assigned to that project; returns `409` if the drive or source is not ready or is temporarily busy) |
 | POST | `/drives/{drive_id}/mount` | admin/manager | Mount a recognized `AVAILABLE` or `IN_USE` drive into the managed ECUBE mount root. Returns `409` when the device path is stale or the drive is already mounted. Returns `500` with a safe host-remediation message when the host lacks filesystem runtime support for the drive or when the managed mount root is not writable by the ECUBE service account. |
+| POST | `/drives/{drive_id}/throughput-test` | admin/manager | Measure mounted-drive write throughput from Drive Detail and persist the latest `throughput_write_mbps` and `throughput_tested_at` values on the drive record |
 | POST | `/drives/{drive_id}/format` | admin/manager | Format drive with `ext4` or `exfat`; drive must be AVAILABLE and unmounted |
 | POST | `/drives/{drive_id}/prepare-eject` | admin/manager | Flush filesystem + unmount all partitions for an ejectable drive; mounted `AVAILABLE` drives and `IN_USE` drives are both eligible. The drive transitions to `AVAILABLE` on success and otherwise retains its validated pre-eject state on failure. Returns `409` while an assigned job has started but is not yet completed. Separately, when active assignments contain timed-out or failed files, the first call returns `409` confirmation-required; retry with `?confirm_incomplete=true` to proceed. |
 
 Drive responses include both the stable `device_identifier` and the port-based `port_system_path` used as the UI `Device` value. The stable identifier is built from available USB metadata such as vendor ID, product ID, USB serial, optional disk serial, and bus path. When available, `serial_number` is exposed separately so operator views can show the physical port-based label and the extracted USB serial at the same time.
+
+`POST /drives/{drive_id}/throughput-test` requires the drive to be in a mounted managed state (`AVAILABLE` or `IN_USE` with a managed `mount_path`). On success it stores the latest measured write speed and test timestamp so Drive Detail can continue showing the last known result to all roles. Rejected or failed attempts are audit logged with operator-safe outcome metadata.
 
 ---
 
@@ -119,6 +122,7 @@ Drive responses include both the stable `device_identifier` and the port-based `
 | POST | `/mounts` | admin/manager | Add new mount with required project assignment |
 | PATCH | `/mounts/{mount_id}` | admin/manager | Update an existing mount in place while preserving the generated local mount point and reapplying the live mount when possible |
 | POST | `/mounts/discover` | admin/manager | Discover SMB shares or NFS exports from the Add Mount dialog using the submitted server seed and optional credentials |
+| POST | `/mounts/{mount_id}/throughput-test` | admin/manager | Measure mounted-share read throughput from Mount Detail and persist the latest `throughput_read_mbps` and `throughput_tested_at` values on the mount record |
 | POST | `/mounts/{mount_id}/validate` | admin/manager | Validate mount connectivity |
 | POST | `/mounts/validate` | admin/manager | Validate all mounts |
 | DELETE | `/mounts/{mount_id}` | admin/manager | Remove mount |
@@ -126,6 +130,8 @@ Drive responses include both the stable `device_identifier` and the port-based `
 Project identifiers are canonicalized by trimming surrounding whitespace and converting the value to uppercase before storage and comparison. The mount-create endpoint also rejects exact duplicate remote sources and cross-project parent or child overlaps with `409 Conflict`; same-project nested sources remain allowed. A temporary `409 Conflict` can also be returned when another mount update is already in progress and holds the serialization lock.
 
 `POST /mounts/discover` is a trusted helper for the Add Mount dialog. It accepts the selected mount type plus the entered server seed and optional credentials, returns sanitized remote paths suitable for populating the dialog even in demo mode, and can return actionable `500` guidance when the ECUBE host is missing required discovery tools such as `smbclient` or `showmount`.
+
+`POST /mounts/{mount_id}/throughput-test` requires the selected share to be currently `MOUNTED` with readable content. On success it stores the latest measured read speed and test timestamp so Mount Detail can keep showing the last known result to all roles. Connectivity testing inside the Add/Edit dialogs remains separate from this persisted throughput measurement workflow.
 
 `GET /mounts` now returns `related_job.status` together with `related_job.custody_status` when trusted related-job context is available. The custody field uses `HANDOFF_RECORDED`, `PENDING_HANDOFF`, `STATUS_UNAVAILABLE`, or `NO_RELATED_JOB` so operator-facing surfaces can distinguish copy completion from final custody handoff completion.
 

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Enum, DateTime, Index
+from sqlalchemy import Column, Integer, String, Enum, DateTime, Float, Index
 from sqlalchemy.orm import validates
 from sqlalchemy.sql import func
 from app.database import Base
@@ -34,6 +34,8 @@ class NetworkMount(Base):
     encrypted_credentials_file = Column(String, nullable=True)
     status = Column(Enum(MountStatus, native_enum=False), default=MountStatus.UNMOUNTED, index=True)
     last_checked_at = Column(DateTime(timezone=True), server_default=func.now())
+    throughput_read_mbps = Column(Float, nullable=True)
+    throughput_tested_at = Column(DateTime(timezone=True), nullable=True)
 
     @validates("project_id")
     def _normalize_project_id(self, _key, value):

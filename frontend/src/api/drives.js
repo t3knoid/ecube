@@ -36,3 +36,7 @@ export function prepareEjectDrive(driveId, options = {}) {
     params: { confirm_incomplete },
   }))
 }
+
+export function testDriveThroughput(driveId, { timeout = 0 } = {}) {
+  return toData(apiClient.post(`${API_BASE}/drives/${driveId}/throughput-test`, null, { timeout }))
+}
