@@ -34,6 +34,17 @@ logger = logging.getLogger(__name__)
 
 STARTUP_ANALYSIS_SAMPLE_LIMIT = 16
 COPY_PENDING_BATCH_MULTIPLIER = 4
+STARTUP_ANALYSIS_SAMPLE_BUCKETS: tuple[tuple[int, Optional[int]], ...] = (
+    (0, 16 * 1024),
+    (16 * 1024, 32 * 1024),
+    (32 * 1024, 64 * 1024),
+    (64 * 1024, 128 * 1024),
+    (128 * 1024, 256 * 1024),
+    (256 * 1024, 512 * 1024),
+    (512 * 1024, 1024 * 1024),
+    (1024 * 1024, 10 * 1024 * 1024),
+    (10 * 1024 * 1024, None),
+)
 
 
 # ---------------------------------------------------------------------------
@@ -702,6 +713,15 @@ def _calculate_per_file_overhead_seconds(
     return overhead_seconds / sample_file_count
 
 
+def _classify_startup_analysis_sample_bucket(size_bytes: int) -> int:
+    for index, (lower_bound, upper_bound) in enumerate(STARTUP_ANALYSIS_SAMPLE_BUCKETS):
+        if size_bytes < lower_bound:
+            continue
+        if upper_bound is None or size_bytes < upper_bound:
+            return index
+    return len(STARTUP_ANALYSIS_SAMPLE_BUCKETS) - 1
+
+
 def _build_startup_analysis_sample_plan(files: list[Path], sample_bytes: int) -> list[tuple[Path, int]]:
     if sample_bytes <= 0:
         return []
@@ -720,17 +740,16 @@ def _build_startup_analysis_sample_plan(files: list[Path], sample_bytes: int) ->
         return []
 
     sorted_infos = sorted(file_infos, key=lambda item: item[1])
-    bucket_count = min(3, len(sorted_infos))
-    buckets: list[list[tuple[Path, int]]] = []
-    for bucket_index in range(bucket_count):
-        start = (bucket_index * len(sorted_infos)) // bucket_count
-        end = ((bucket_index + 1) * len(sorted_infos)) // bucket_count
-        bucket = sorted_infos[start:end]
-        if bucket:
-            buckets.append(bucket)
+    buckets: list[list[tuple[Path, int]]] = [
+        [] for _ in STARTUP_ANALYSIS_SAMPLE_BUCKETS
+    ]
+    for file_info in sorted_infos:
+        buckets[_classify_startup_analysis_sample_bucket(file_info[1])].append(file_info)
 
     ordered_buckets: list[list[tuple[Path, int]]] = []
     for bucket in buckets:
+        if not bucket:
+            continue
         preferred_indexes = [len(bucket) // 2, 0, len(bucket) - 1]
         ordered_bucket: list[tuple[Path, int]] = []
         seen_indexes: set[int] = set()

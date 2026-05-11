@@ -1714,24 +1714,126 @@ def test_build_startup_analysis_sample_plan_spans_file_sizes(tmp_path):
     source_dir = tmp_path / "source"
     source_dir.mkdir()
 
-    small = source_dir / "small.bin"
-    medium = source_dir / "medium.bin"
-    large = source_dir / "large.bin"
-    extra_large = source_dir / "extra-large.bin"
-    small.write_bytes(b"a" * 128)
-    medium.write_bytes(b"b" * 512)
-    large.write_bytes(b"c" * 2048)
-    extra_large.write_bytes(b"d" * 4096)
+    under_16k = source_dir / "under-16k.bin"
+    between_16k_32k = source_dir / "16k-32k.bin"
+    between_32k_64k = source_dir / "32k-64k.bin"
+    between_64k_128k = source_dir / "64k-128k.bin"
+    between_128k_256k = source_dir / "128k-256k.bin"
+    between_256k_512k = source_dir / "256k-512k.bin"
+    between_512k_1m = source_dir / "512k-1m.bin"
+    between_1m_10m = source_dir / "1m-10m.bin"
+
+    under_16k.write_bytes(b"a" * (8 * 1024))
+    between_16k_32k.write_bytes(b"b" * (24 * 1024))
+    between_32k_64k.write_bytes(b"c" * (48 * 1024))
+    between_64k_128k.write_bytes(b"d" * (96 * 1024))
+    between_128k_256k.write_bytes(b"e" * (192 * 1024))
+    between_256k_512k.write_bytes(b"f" * (384 * 1024))
+    between_512k_1m.write_bytes(b"g" * (768 * 1024))
+    between_1m_10m.write_bytes(b"h" * (2 * 1024 * 1024))
 
     sample_plan = copy_engine._build_startup_analysis_sample_plan(
-        [small, medium, large, extra_large],
-        2304,
+        [
+            between_256k_512k,
+            between_32k_64k,
+            between_1m_10m,
+            under_16k,
+            between_64k_128k,
+            between_16k_32k,
+            between_512k_1m,
+            between_128k_256k,
+        ],
+        sum(
+            path.stat().st_size
+            for path in [
+                under_16k,
+                between_16k_32k,
+                between_32k_64k,
+                between_64k_128k,
+                between_128k_256k,
+                between_256k_512k,
+                between_512k_1m,
+                between_1m_10m,
+            ]
+        ),
     )
 
     sampled_names = [path.name for path, _sample_size in sample_plan]
-    assert "small.bin" in sampled_names
-    assert "large.bin" in sampled_names or "extra-large.bin" in sampled_names
-    assert sum(sample_size for _path, sample_size in sample_plan) == 2304
+    assert sampled_names == [
+        "under-16k.bin",
+        "16k-32k.bin",
+        "32k-64k.bin",
+        "64k-128k.bin",
+        "128k-256k.bin",
+        "256k-512k.bin",
+        "512k-1m.bin",
+        "1m-10m.bin",
+    ]
+    assert sum(sample_size for _path, sample_size in sample_plan) == sum(
+        path.stat().st_size
+        for path in [
+            under_16k,
+            between_16k_32k,
+            between_32k_64k,
+            between_64k_128k,
+            between_128k_256k,
+            between_256k_512k,
+            between_512k_1m,
+            between_1m_10m,
+        ]
+    )
+
+
+def test_build_startup_analysis_sample_plan_skips_empty_buckets(tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+
+    first_typical = source_dir / "first-typical.bin"
+    second_typical = source_dir / "second-typical.bin"
+    long_tail = source_dir / "long-tail.bin"
+    first_typical.write_bytes(b"a" * (40 * 1024))
+    second_typical.write_bytes(b"b" * (88 * 1024))
+    long_tail.write_bytes(b"c" * (2 * 1024 * 1024))
+
+    sample_plan = copy_engine._build_startup_analysis_sample_plan(
+        [second_typical, long_tail, first_typical],
+        first_typical.stat().st_size + second_typical.stat().st_size + (32 * 1024),
+    )
+
+    assert [path.name for path, _sample_size in sample_plan] == [
+        "first-typical.bin",
+        "second-typical.bin",
+        "long-tail.bin",
+    ]
+    assert sample_plan[-1][1] == 32 * 1024
+
+
+def test_build_startup_analysis_sample_plan_uses_bucket_ordering_within_same_range(tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+
+    small = source_dir / "small.bin"
+    medium = source_dir / "medium.bin"
+    large = source_dir / "large.bin"
+    next_bucket = source_dir / "next-bucket.bin"
+    small.write_bytes(b"a" * (36 * 1024))
+    medium.write_bytes(b"b" * (48 * 1024))
+    large.write_bytes(b"c" * (60 * 1024))
+    next_bucket.write_bytes(b"d" * (96 * 1024))
+
+    sample_plan = copy_engine._build_startup_analysis_sample_plan(
+        [large, next_bucket, small, medium],
+        medium.stat().st_size + next_bucket.stat().st_size + small.stat().st_size,
+    )
+
+    assert [path.name for path, _sample_size in sample_plan] == [
+        "medium.bin",
+        "next-bucket.bin",
+        "small.bin",
+    ]
+    assert sum(sample_size for _path, sample_size in sample_plan) == (
+        medium.stat().st_size + next_bucket.stat().st_size + small.stat().st_size
+    )
 
 
 def test_estimate_startup_analysis_duration_accounts_for_per_file_overhead():
