@@ -1048,13 +1048,13 @@ and management remain available through admin API endpoints only.
 │  Tab: [ Health ] [USB Topology] [ Block Devices ] [ Logs ]                   │
 │                                                                              │
 │  ┌─ USB Devices ───────────────────────────────────────────────────────────┐ │
-│  │ Device │ Serial Number │ Manufacturer   │ Product        │ VID  │ PID │ │
-│  │ ────── ┼───────────────┼────────────────┼────────────────┼──────┼───── │ │
-│  │ 1-1    │ HUB-001       │ Genesys Logic  │ USB Hub        │ 05e3 │ 0610│ │
-│  │ 1-1.1  │ SD-0001       │ SanDisk        │ Ultra          │ 0781 │ 5583│ │
-│  │ 1-1.2  │ KNG-0002      │ Kingston       │ DataTraveler   │ 0951 │ 1666│ │
-│  │ 1-1.4  │ SMS-0004      │ Samsung        │ Flash Drive    │ 04e8 │ 61f5│ │
-│  │ 1-2.2  │ SEG-0005      │ Seagate        │ Portable       │ 0bc2 │ 2322│ │
+│  │ Device │ Serial Number │ Manufacturer   │ Product        │ Speed │ VID  │ PID │ │
+│  │ ────── ┼───────────────┼────────────────┼────────────────┼───────┼──────┼───── │ │
+│  │ 1-1    │ HUB-001       │ Genesys Logic  │ USB Hub        │ 480   │ 05e3 │ 0610│ │
+│  │ 1-1.1  │ SD-0001       │ SanDisk        │ Ultra          │ 5000  │ 0781 │ 5583│ │
+│  │ 1-1.2  │ KNG-0002      │ Kingston       │ DataTraveler   │ 5000  │ 0951 │ 1666│ │
+│  │ 1-1.4  │ SMS-0004      │ Samsung        │ Flash Drive    │ 480   │ 04e8 │ 61f5│ │
+│  │ 1-2.2  │ SEG-0005      │ Seagate        │ Portable       │ 5000  │ 0bc2 │ 2322│ │
 │  └─────────────────────────────────────────────────────────────────────────┘ │
 
 Sorted by `Device`; rows with no meaningful USB metadata are hidden.

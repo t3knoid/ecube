@@ -265,18 +265,19 @@ def discover_usb_topology() -> DiscoveredTopology:
             )
             continue
 
-        # Downstream ports: pattern like "1-1", "2-3" (no colon, contains dash)
+        # Downstream ports: paths like "1-1", "2-3", or cascaded paths such as "1-1.1"
         if ":" not in dev and "-" in dev:
             parts = dev.split("-")
-            if len(parts) == 2 and parts[1].isdigit():
+            if len(parts) == 2 and re.fullmatch(r"\d+(?:\.\d+)*", parts[1]):
                 hub_id = f"usb{parts[0]}"
+                port_number = int(parts[1].split(".")[-1])
                 port_vendor_id = _read_sysfs_attr(dev_path, "idVendor")
                 port_product_id = _read_sysfs_attr(dev_path, "idProduct")
                 port_speed = _read_sysfs_attr(dev_path, "speed")
                 topology.ports.append(
                     DiscoveredPort(
                         hub_system_identifier=hub_id,
-                        port_number=int(parts[1]),
+                        port_number=port_number,
                         system_path=dev,
                         vendor_id=port_vendor_id,
                         product_id=port_product_id,

@@ -124,7 +124,7 @@ const tabColumns = computed(() => {
 })
 
 
-// Hide only if Serial Number, Manufacturer, Product, Vendor ID, and Product ID are all empty
+// Hide only if Serial Number, Manufacturer, Product, Speed, Vendor ID, and Product ID are all empty
 function isUsbDeviceEmpty(device) {
   if (!device) return true
   const fields = ['serial', 'manufacturer', 'product', 'speed', 'idVendor', 'idProduct']

@@ -15,9 +15,11 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.exceptions import ConflictError, NotFoundError
+from app.infrastructure import get_drive_discovery
 from app.models.jobs import ExportJob, JobStatus
 from app.repositories.audit_repository import AuditRepository
 from app.services.copy_worker_runtime import list_active_copy_workers
+from app.utils.drive_identity import extract_usb_serial_number
 from app.utils.sanitize import sanitize_error_message
 
 
@@ -36,6 +38,33 @@ _EXFAT_LOAD_MODULE_ACTION_CODE = "load_exfat_kernel_module"
 _PROCESS_CPU_SAMPLER: Any | None = None
 _PROCESS_CPU_SAMPLER_PID: int | None = None
 _PROCESS_CPU_SAMPLER_PRIMED = False
+
+
+def get_usb_topology() -> dict[str, Any]:
+    """Return sanitized USB topology details for the System page."""
+
+    topology = get_drive_discovery().discover_topology()
+    devices = []
+
+    for port in topology.ports:
+        matching_drive = next(
+            (drive for drive in topology.drives if drive.port_system_path == port.system_path),
+            None,
+        )
+        devices.append({
+            "device": port.system_path,
+            "serial": extract_usb_serial_number(
+                matching_drive.device_identifier,
+                port_system_path=port.system_path,
+            ) if matching_drive else None,
+            "idVendor": port.vendor_id,
+            "idProduct": port.product_id,
+            "product": matching_drive.product_name if matching_drive else None,
+            "manufacturer": matching_drive.manufacturer if matching_drive else None,
+            "speed": matching_drive.speed or port.speed if matching_drive else port.speed,
+        })
+
+    return {"devices": devices}
 
 
 @dataclass(frozen=True)

@@ -1,10 +1,13 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import MagicMock, patch
 
 from app.exceptions import ConflictError
+from app.infrastructure.usb_discovery import discover_usb_topology
+from app.infrastructure.usb_discovery import DiscoveredDrive, DiscoveredPort, DiscoveredTopology
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive, UsbHub, UsbPort
+from app.utils.drive_identity import build_persistent_device_identifier
 
 
 def _runtime_inspector(*, formatting_available=False, mount_runtime_available=True):
@@ -654,26 +657,38 @@ def test_usb_topology(client, db):
 
 
 def test_usb_topology_includes_serial_when_available(client, db):
-    file_values = {
-        "/sys/bus/usb/devices/2-1/serial": "SER-USB-001",
-        "/sys/bus/usb/devices/2-1/idVendor": "abcd",
-        "/sys/bus/usb/devices/2-1/idProduct": "1234",
-        "/sys/bus/usb/devices/2-1/product": "Evidence Drive",
-        "/sys/bus/usb/devices/2-1/manufacturer": "ECUBE",
-        "/sys/bus/usb/devices/2-1/speed": "5000",
-    }
+    device_identifier = build_persistent_device_identifier(
+        "abcd",
+        "1234",
+        "SER-USB-001",
+        "2-1",
+    )
+    topology = DiscoveredTopology(
+        ports=[
+            DiscoveredPort(
+                hub_system_identifier="usb2",
+                port_number=1,
+                system_path="2-1",
+                vendor_id="abcd",
+                product_id="1234",
+                speed="5000",
+            ),
+        ],
+        drives=[
+            DiscoveredDrive(
+                device_identifier=device_identifier,
+                port_system_path="2-1",
+                manufacturer="ECUBE",
+                product_name="Evidence Drive",
+                speed="5000",
+            ),
+        ],
+    )
 
-    def _open_side_effect(path, *args, **kwargs):
-        handle = mock_open(read_data=file_values[path]).return_value
-        handle.__iter__.return_value = file_values[path].splitlines(True)
-        return handle
+    fake_provider = MagicMock()
+    fake_provider.discover_topology.return_value = topology
 
-    with (
-        patch("app.routers.introspection.os.path.exists", return_value=True),
-        patch("app.routers.introspection.os.listdir", return_value=["2-1"]),
-        patch("app.routers.introspection.os.path.isfile", return_value=True),
-        patch("builtins.open", side_effect=_open_side_effect),
-    ):
+    with patch("app.services.introspection_service.get_drive_discovery", return_value=fake_provider):
         response = client.get("/introspection/usb/topology")
 
     assert response.status_code == 200
@@ -686,6 +701,33 @@ def test_usb_topology_includes_serial_when_available(client, db):
         "manufacturer": "ECUBE",
         "speed": "5000",
     }]
+
+
+def test_discover_usb_topology_includes_cascaded_usb_paths():
+    file_values = {
+        "/sys/bus/usb/devices/1-1.1/idVendor": "0781",
+        "/sys/bus/usb/devices/1-1.1/idProduct": "5583",
+        "/sys/bus/usb/devices/1-1.1/speed": "5000",
+        "/sys/bus/usb/devices/1-1.1/serial": "SER-CASCADE-001",
+        "/sys/bus/usb/devices/1-1.1/manufacturer": "SanDisk",
+        "/sys/bus/usb/devices/1-1.1/product": "Ultra",
+    }
+
+    def open_side_effect(path, *args, **kwargs):
+        return MagicMock(__enter__=lambda self: self, __exit__=lambda self, exc_type, exc, tb: False, read=lambda: file_values[path])
+
+    with (
+        patch("app.infrastructure.usb_discovery.read_mount_points", return_value={}),
+        patch("app.infrastructure.usb_discovery.os.listdir", return_value=["1-1.1"]),
+        patch("app.infrastructure.usb_discovery.os.path.isdir", return_value=True),
+        patch("app.infrastructure.usb_discovery._read_sysfs_attr", side_effect=lambda dev_path, attr: file_values.get(f"{dev_path}/{attr}")),
+        patch("app.infrastructure.usb_discovery._block_device_for_sysfs_path", return_value=None),
+    ):
+        topology = discover_usb_topology()
+
+    assert [port.system_path for port in topology.ports] == ["1-1.1"]
+    assert topology.ports[0].port_number == 1
+    assert topology.ports[0].speed == "5000"
 
 
 def test_introspection_drives_exposes_port_and_serial_identifiers(auditor_client, db):

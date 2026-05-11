@@ -1,5 +1,4 @@
 import logging
-import os
 import traceback
 
 try:
@@ -133,25 +132,7 @@ def usb_topology(_: CurrentUser = Depends(_ALL_ROLES)):
     **Roles:** ``admin``, ``manager``, ``processor``, ``auditor``
     **Restricted:** Outputs are scrubbed and do not expose sensitive paths.
     """
-    devices = []
-    usb_path = settings.sysfs_usb_devices_path
-    try:
-        if os.path.exists(usb_path):
-            for dev in os.listdir(usb_path):
-                dev_path = os.path.join(usb_path, dev)
-                info = {"device": dev}
-                for attr in ["serial", "idVendor", "idProduct", "product", "manufacturer", "speed"]:
-                    attr_file = os.path.join(dev_path, attr)
-                    if os.path.isfile(attr_file):
-                        try:
-                            with open(attr_file) as f:
-                                info[attr] = f.read().strip()
-                        except Exception:
-                            pass
-                devices.append(info)
-    except Exception as exc:
-        return {"error": str(exc), "devices": []}
-    return {"devices": devices}
+    return introspection_service.get_usb_topology()
 
 
 @router.get("/block-devices", response_model=BlockDevicesResponse, responses={**R_401, **R_403})
