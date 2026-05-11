@@ -76,11 +76,16 @@ function hasRetryableFiles({ failedFiles, timedOutFiles }) {
   return Number(failedFiles || 0) + Number(timedOutFiles || 0) > 0
 }
 
+function hasKnownFileOutcomeState({ failedFiles, timedOutFiles }) {
+  return Number.isFinite(Number(failedFiles)) && Number.isFinite(Number(timedOutFiles))
+}
+
 export function getDashboardNextStepKey({ jobStatus, startupAnalysisStatus, custodyStatus, failedFiles, timedOutFiles }) {
   const status = normalizeJobStatus(jobStatus)
   const normalizedStartupAnalysisStatus = normalizeStartupAnalysisStatus(startupAnalysisStatus)
   const normalizedCustodyStatus = String(custodyStatus || '').toUpperCase()
   const retryableFiles = hasRetryableFiles({ failedFiles, timedOutFiles })
+  const knownFileOutcomeState = hasKnownFileOutcomeState({ failedFiles, timedOutFiles })
 
   if (status === 'PENDING') {
     if (normalizedStartupAnalysisStatus === 'ANALYZING') return 'dashboard.nextStepAwaitAnalysis'
@@ -99,6 +104,10 @@ export function getDashboardNextStepKey({ jobStatus, startupAnalysisStatus, cust
   }
 
   if (['COMPLETED', 'ARCHIVED'].includes(status)) {
+    if (status === 'ARCHIVED' || !knownFileOutcomeState) {
+      return 'dashboard.nextStepOpenDetail'
+    }
+
     if (normalizedCustodyStatus === 'PENDING_HANDOFF') {
       return retryableFiles ? 'dashboard.nextStepReviewFailedFiles' : 'dashboard.nextStepReviewVerificationAndHandoff'
     }

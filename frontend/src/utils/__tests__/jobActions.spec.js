@@ -99,6 +99,8 @@ describe('job action helpers', () => {
   it('falls back to opening Job Detail when trusted next-step inputs are unavailable', () => {
     expect(getDashboardNextStepKey({ jobStatus: 'STATUS_UNAVAILABLE' })).toBe('dashboard.nextStepOpenDetail')
     expect(getDashboardNextStepKey({ jobStatus: null })).toBe('dashboard.nextStepOpenDetail')
+    expect(getDashboardNextStepKey({ jobStatus: 'COMPLETED', custodyStatus: 'PENDING_HANDOFF' })).toBe('dashboard.nextStepOpenDetail')
+    expect(getDashboardNextStepKey({ jobStatus: 'ARCHIVED', custodyStatus: 'PENDING_HANDOFF', failedFiles: 0, timedOutFiles: 0 })).toBe('dashboard.nextStepOpenDetail')
   })
 
   it('builds consistent job error messages across views', () => {

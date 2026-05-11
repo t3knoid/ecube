@@ -197,13 +197,35 @@ describe('DashboardView active jobs', () => {
     expect(wrapper.text()).toContain(i18n.global.t('dashboard.attentionWaitingForCustody'))
     expect(wrapper.text()).toContain(i18n.global.t('dashboard.nextStepReviewFailedFiles'))
     expect(wrapper.text()).toContain(i18n.global.t('dashboard.nextStepReviewAndStart'))
-    expect(wrapper.text()).toContain(i18n.global.t('dashboard.nextStepReviewVerificationAndHandoff'))
+    expect(wrapper.text()).toContain(i18n.global.t('dashboard.nextStepOpenDetail'))
 
     const jobLinks = wrapper.findAll('.cell-link').map((node) => node.text())
     expect(jobLinks).toContain('40')
     expect(jobLinks).toContain('41')
     expect(jobLinks).toContain('42')
     expect(jobLinks).toContain('43')
+  })
+
+  it('falls back to Job Detail guidance for archived or incomplete custody-closeout state', async () => {
+    mocks.listJobs.mockResolvedValue([
+      {
+        id: 70,
+        project_id: 'PROJ-070',
+        status: 'ARCHIVED',
+        files_failed: 0,
+        files_timed_out: 0,
+      },
+    ])
+    mocks.getMounts.mockResolvedValue([
+      { id: 13, status: 'MOUNTED', project_id: 'PROJ-070', related_job: { job_id: 70, status: 'ARCHIVED', custody_status: 'PENDING_HANDOFF' } },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('dashboard.attentionWaitingForCustody'))
+    expect(wrapper.text()).toContain(i18n.global.t('dashboard.nextStepOpenDetail'))
+    expect(wrapper.text()).not.toContain(i18n.global.t('dashboard.nextStepReviewVerificationAndHandoff'))
   })
 
   it('does not classify pending jobs that are still analyzing as waiting to start', async () => {
