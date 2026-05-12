@@ -461,6 +461,7 @@ class FileRepository:
                     ExportFile.status: FileStatus.PENDING,
                     ExportFile.retry_attempts: 0,
                     ExportFile.error_message: None,
+                    ExportFile.drive_assignment_id: None,
                 },
                 synchronize_session=False,
             )

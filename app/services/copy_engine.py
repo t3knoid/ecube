@@ -1820,7 +1820,8 @@ def _process_file(
         ef.checksum = checksum
         if success:
             ef.status = FileStatus.DONE
-            ef.drive_assignment_id = active_assignment_id
+            if ef.drive_assignment_id is None:
+                ef.drive_assignment_id = active_assignment_id
             _stage_remaining_progress()
             if active_assignment_id is not None:
                 db.execute(
@@ -1954,15 +1955,16 @@ def run_copy_job(job_id: int) -> None:
 
                 if not pause_requested:
                     max_workers = int(job.thread_count or settings.copy_default_thread_count)
-                    pending_after_id: int | None = None
                     batch_limit = max(1, max_workers * COPY_PENDING_BATCH_MULTIPLIER)
+                    stale_run_detected = False
 
                     def _handle_worker_completion(cancel_pending: list[Any] | None = None) -> bool:
-                        nonlocal pause_requested, stop_for_target_full
+                        nonlocal pause_requested, stop_for_target_full, stale_run_detected
 
                         latest_status, latest_started_at, should_attempt_target_full = _read_copy_job_runtime_state(db, job_id)
                         latest_started_at_key = _normalize_started_at(latest_started_at)
                         if latest_status is not None and latest_started_at_key and latest_started_at_key != run_started_at_key:
+                            stale_run_detected = True
                             if cancel_pending is not None:
                                 for pending in cancel_pending:
                                     if not pending.done():
@@ -1979,84 +1981,101 @@ def run_copy_job(job_id: int) -> None:
                                     if not pending.done():
                                         pending.cancel()
                             return True
-                        if should_attempt_target_full:
+                        if should_attempt_target_full and DriveAssignmentRepository(db).get_active_for_job(job_id) is not None:
                             stop_for_target_full = True
-                            if cancel_pending is not None:
-                                for pending in cancel_pending:
-                                    if not pending.done():
-                                        pending.cancel()
-                            return True
+                            return False
                         return False
 
-                    if max_workers == 1:
+                    executor = ThreadPoolExecutor(
+                        max_workers=max_workers,
+                        thread_name_prefix=f"copy-job-{job_id}",
+                    )
+                    try:
                         while True:
                             pending_files = file_repo.list_pending_by_job_after_id(
                                 job_id,
-                                after_id=pending_after_id,
+                                after_id=None,
                                 limit=batch_limit,
                             )
                             if not pending_files:
                                 break
-                            pending_after_id = pending_files[-1].id
-                            for ef in pending_files:
+                            active_assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
+                            batch_assignment_id = int(active_assignment.id) if active_assignment is not None else None
+                            if batch_assignment_id is not None:
+                                assignment_updated = False
+                                for ef in pending_files:
+                                    if ef.drive_assignment_id is None:
+                                        ef.drive_assignment_id = batch_assignment_id
+                                        assignment_updated = True
+                                if assignment_updated:
+                                    try:
+                                        db.commit()
+                                    except Exception:
+                                        db.rollback()
+                                        logger.error("DB commit failed assigning pending files for job %s", job_id)
+                                        return
+                            futures = {
+                                executor.submit(
+                                    _process_file,
+                                    ef.id,
+                                    _source_path_for_relative_path(source, ef.relative_path),
+                                    target,
+                                    max_retries,
+                                    retry_delay,
+                                ): ef.id
+                                for ef in pending_files
+                            }
+                            for future in as_completed(futures):
                                 try:
-                                    _process_file(
-                                        ef.id,
-                                        _source_path_for_relative_path(source, ef.relative_path),
-                                        target,
-                                        max_retries,
-                                        retry_delay,
-                                    )
+                                    future.result()
                                 except Exception:
                                     pass
-                                if _handle_worker_completion():
-                                    return
-                            if pause_requested or stop_for_target_full:
-                                break
-                    else:
-                        executor = ThreadPoolExecutor(
-                            max_workers=max_workers,
-                            thread_name_prefix=f"copy-job-{job_id}",
-                        )
-                        try:
-                            while True:
-                                pending_files = file_repo.list_pending_by_job_after_id(
-                                    job_id,
-                                    after_id=pending_after_id,
-                                    limit=batch_limit,
-                                )
-                                if not pending_files:
-                                    break
-                                pending_after_id = pending_files[-1].id
-                                futures = {
-                                    executor.submit(
-                                        _process_file,
-                                        ef.id,
-                                        _source_path_for_relative_path(source, ef.relative_path),
-                                        target,
-                                        max_retries,
-                                        retry_delay,
-                                    ): ef.id
-                                    for ef in pending_files
-                                }
-                                for future in as_completed(futures):
-                                    try:
-                                        future.result()
-                                    except Exception:
-                                        pass
 
-                                    if _handle_worker_completion(list(futures)):
+                                if _handle_worker_completion(list(futures)):
+                                    if stale_run_detected:
                                         return
-                                if pause_requested:
                                     break
-                                if stop_for_target_full:
-                                    break
+                            if stale_run_detected:
+                                return
+                            if pause_requested:
+                                break
+                            if stop_for_target_full:
+                                break
 
-                        finally:
-                            executor.shutdown(wait=True, cancel_futures=True)
+                    finally:
+                        executor.shutdown(wait=True, cancel_futures=True)
 
                 # Determine final job status.
                 db.expire_all()
+                lingering_copy_state_count = (
+                    db.query(ExportFile)
+                    .filter(
+                        ExportFile.job_id == job_id,
+                        ExportFile.status.in_((FileStatus.COPYING, FileStatus.RETRYING)),
+                    )
+                    .count()
+                )
+                if lingering_copy_state_count > 0 and not pause_requested:
+                    (
+                        db.query(ExportFile)
+                        .filter(
+                            ExportFile.job_id == job_id,
+                            ExportFile.status.in_((FileStatus.COPYING, FileStatus.RETRYING)),
+                        )
+                        .update(
+                            {
+                                ExportFile.status: FileStatus.PENDING,
+                            },
+                            synchronize_session=False,
+                        )
+                    )
+                    try:
+                        db.commit()
+                    except Exception:
+                        db.rollback()
+                        logger.error("DB commit failed resetting in-flight files for job %s", job_id)
+                        return
+                    continue
                 done_count, error_count = file_repo.count_done_and_errors(job_id)
                 timeout_count = db.query(ExportFile).filter(
                     ExportFile.job_id == job_id,
@@ -2069,6 +2088,15 @@ def run_copy_job(job_id: int) -> None:
                     if target_full_outcome == "continued":
                         db.expire_all()
                         continue
+
+                latest_status, latest_started_at, _ = _read_copy_job_runtime_state(db, job_id)
+                latest_started_at_key = _normalize_started_at(latest_started_at)
+                if latest_status is not None and latest_started_at_key != run_started_at_key:
+                    logger.info(
+                        "Skipping stale copy finalization after newer resume",
+                        extra={"job_id": job_id, "started_at": str(run_started_at)},
+                    )
+                    return
 
                 job = job_repo.get(job_id)
                 if job:
