@@ -2513,7 +2513,7 @@ def test_prepare_job_startup_analysis_refresh_failure_preserves_previous_cache(d
     assert [(row.entry_type, row.relative_path) for row in directory_rows] == [("directory", "")]
 
 
-def test_prepare_job_startup_analysis_reuses_ready_cache_without_full_validation(db, tmp_path):
+def test_prepare_job_startup_analysis_reuses_ready_cache_when_cached_entries_are_current(db, tmp_path):
     source_dir = tmp_path / "source"
     source_dir.mkdir()
     (source_dir / "file.txt").write_bytes(b"content")
@@ -2547,8 +2547,7 @@ def test_prepare_job_startup_analysis_reuses_ready_cache_without_full_validation
     db.commit()
 
     with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
-        with patch("app.services.copy_engine._cached_startup_analysis_is_current", side_effect=AssertionError("full validation should be skipped")):
-            result = copy_engine.prepare_job_startup_analysis(job.id)
+        result = copy_engine.prepare_job_startup_analysis(job.id)
 
     db.expire_all()
     db.refresh(job)
@@ -2557,6 +2556,56 @@ def test_prepare_job_startup_analysis_reuses_ready_cache_without_full_validation
     assert job.startup_analysis_status == StartupAnalysisStatus.READY
     assert job.file_count == 1
     assert job.total_bytes == len(b"content")
+
+
+def test_prepare_job_startup_analysis_invalidates_ready_cache_when_file_changes_in_place(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    source_file = source_dir / "file.txt"
+    source_file.write_bytes(b"content")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    job.startup_analysis_status = StartupAnalysisStatus.READY
+    job.startup_analysis_file_count = 1
+    job.startup_analysis_total_bytes = len(b"content")
+    job.startup_analysis_cache_present = True
+    job.startup_analysis_revision = 1
+    db.add(
+        ExportFile(
+            job_id=job.id,
+            relative_path="file.txt",
+            size_bytes=len(b"content"),
+            status=FileStatus.PENDING,
+            startup_analysis_revision=1,
+        )
+    )
+    db.add(
+        StartupAnalysisEntry(
+            job_id=job.id,
+            entry_type="directory",
+            relative_path="",
+            mtime_ns=source_dir.stat().st_mtime_ns,
+        )
+    )
+    db.commit()
+
+    source_file.write_bytes(b"content updated")
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        result = copy_engine.prepare_job_startup_analysis(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+    refreshed_file = db.query(ExportFile).filter(ExportFile.job_id == job.id, ExportFile.relative_path == "file.txt").one()
+
+    assert result["reused_cached_analysis"] is False
+    assert job.startup_analysis_status == StartupAnalysisStatus.READY
+    assert job.file_count == 1
+    assert job.total_bytes == len(b"content updated")
+    assert refreshed_file.size_bytes == len(b"content updated")
 
 
 def test_prepare_job_startup_analysis_recomputes_done_bytes_when_reusing_ready_cache(db, tmp_path):

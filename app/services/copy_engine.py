@@ -1355,38 +1355,8 @@ def prepare_job_startup_analysis(
         source = Path(job.source_path)
         reused_cached_analysis = False
         sample_files: list[Path] = []
-        root_directory_rows = startup_entry_repo.list_by_job(job_id, entry_type="directory", limit=1)
-        cached_root_directory = root_directory_rows[0] if root_directory_rows else None
-        root_directory_matches = True
-        if source.is_dir():
-            root_directory_matches = (
-                cached_root_directory is not None
-                and cached_root_directory.relative_path == ""
-                and int(cached_root_directory.mtime_ns or 0) == source.stat().st_mtime_ns
-            )
 
-        # For normal copy runs, trust a previously prepared READY cache when the
-        # persisted file rows already match the cached file count. Re-validating
-        # every cached path with stat() can make large restarts appear frozen
-        # before any copy workers are scheduled.
-        if (
-            not manual
-            and job.startup_analysis_status == StartupAnalysisStatus.READY
-            and bool(job.startup_analysis_cache_present)
-            and int(job.startup_analysis_file_count or 0) > 0
-            and root_directory_matches
-            and file_repo.count_by_job(job_id) == int(job.startup_analysis_file_count or 0)
-        ):
-            reused_cached_analysis = True
-            cached_file_count = int(job.startup_analysis_file_count or 0)
-            cached_total_bytes = int(job.startup_analysis_total_bytes or 0)
-            sample_rows = file_repo.list_by_job(job_id, limit=STARTUP_ANALYSIS_SAMPLE_LIMIT)
-            sample_files = [
-                _source_path_for_relative_path(source, file_row.relative_path)
-                for file_row in sample_rows
-            ]
-
-        elif bool(job.startup_analysis_cache_present) and _cached_startup_analysis_is_current(job, source, file_repo, startup_entry_repo):
+        if bool(job.startup_analysis_cache_present) and _cached_startup_analysis_is_current(job, source, file_repo, startup_entry_repo):
             reused_cached_analysis = True
             cached_file_count = int(job.startup_analysis_file_count or 0)
             cached_total_bytes = int(job.startup_analysis_total_bytes or 0)
@@ -1850,6 +1820,7 @@ def _process_file(
         ef.checksum = checksum
         if success:
             ef.status = FileStatus.DONE
+            ef.drive_assignment_id = active_assignment_id
             _stage_remaining_progress()
             if active_assignment_id is not None:
                 db.execute(
