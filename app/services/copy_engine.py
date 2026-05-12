@@ -1953,13 +1953,42 @@ def run_copy_job(job_id: int) -> None:
                 retry_delay = float(job.retry_delay_seconds) if job.retry_delay_seconds is not None else settings.copy_default_retry_delay_seconds
 
                 if not pause_requested:
-                    executor = ThreadPoolExecutor(
-                        max_workers=job.thread_count or settings.copy_default_thread_count,
-                        thread_name_prefix=f"copy-job-{job_id}",
-                    )
-                    try:
-                        pending_after_id: int | None = None
-                        batch_limit = max(1, (job.thread_count or settings.copy_default_thread_count) * COPY_PENDING_BATCH_MULTIPLIER)
+                    max_workers = int(job.thread_count or settings.copy_default_thread_count)
+                    pending_after_id: int | None = None
+                    batch_limit = max(1, max_workers * COPY_PENDING_BATCH_MULTIPLIER)
+
+                    def _handle_worker_completion(cancel_pending: list[Any] | None = None) -> bool:
+                        nonlocal pause_requested, stop_for_target_full
+
+                        latest_status, latest_started_at, should_attempt_target_full = _read_copy_job_runtime_state(db, job_id)
+                        latest_started_at_key = _normalize_started_at(latest_started_at)
+                        if latest_status is not None and latest_started_at_key and latest_started_at_key != run_started_at_key:
+                            if cancel_pending is not None:
+                                for pending in cancel_pending:
+                                    if not pending.done():
+                                        pending.cancel()
+                            logger.info(
+                                "Skipping stale copy worker after newer resume",
+                                extra={"job_id": job_id, "started_at": str(run_started_at)},
+                            )
+                            return True
+                        if latest_status in (JobStatus.PAUSING, JobStatus.PAUSED):
+                            pause_requested = True
+                            if cancel_pending is not None:
+                                for pending in cancel_pending:
+                                    if not pending.done():
+                                        pending.cancel()
+                            return True
+                        if should_attempt_target_full:
+                            stop_for_target_full = True
+                            if cancel_pending is not None:
+                                for pending in cancel_pending:
+                                    if not pending.done():
+                                        pending.cancel()
+                            return True
+                        return False
+
+                    if max_workers == 1:
                         while True:
                             pending_files = file_repo.list_pending_by_job_after_id(
                                 job_id,
@@ -1969,58 +1998,62 @@ def run_copy_job(job_id: int) -> None:
                             if not pending_files:
                                 break
                             pending_after_id = pending_files[-1].id
-                            futures = {
-                                executor.submit(
-                                    _process_file,
-                                    ef.id,
-                                    _source_path_for_relative_path(source, ef.relative_path),
-                                    target,
-                                    max_retries,
-                                    retry_delay,
-                                ): ef.id
-                                for ef in pending_files
-                            }
-                            for future in as_completed(futures):
+                            for ef in pending_files:
                                 try:
-                                    future.result()
-                                except Exception:
-                                    # Worker already recorded FileStatus.ERROR in its own session;
-                                    # unexpected exceptions are caught here to let other workers finish.
-                                    pass
-
-                                latest_status, latest_started_at, should_attempt_target_full = _read_copy_job_runtime_state(db, job_id)
-                                latest_started_at_key = _normalize_started_at(latest_started_at)
-                                if latest_status is not None and latest_started_at_key and latest_started_at_key != run_started_at_key:
-                                    for pending in futures:
-                                        if not pending.done():
-                                            pending.cancel()
-                                    logger.info(
-                                        "Skipping stale copy worker after newer resume",
-                                        extra={"job_id": job_id, "started_at": str(run_started_at)},
+                                    _process_file(
+                                        ef.id,
+                                        _source_path_for_relative_path(source, ef.relative_path),
+                                        target,
+                                        max_retries,
+                                        retry_delay,
                                     )
+                                except Exception:
+                                    pass
+                                if _handle_worker_completion():
                                     return
-                                if latest_status in (JobStatus.PAUSING, JobStatus.PAUSED):
-                                    pause_requested = True
-                                    for pending in futures:
-                                        if not pending.done():
-                                            pending.cancel()
-                                    break
-                                if should_attempt_target_full:
-                                    stop_for_target_full = True
-                                    for pending in futures:
-                                        if not pending.done():
-                                            pending.cancel()
-                                    break
-                            if pause_requested:
+                            if pause_requested or stop_for_target_full:
                                 break
-                            if stop_for_target_full:
-                                break
+                    else:
+                        executor = ThreadPoolExecutor(
+                            max_workers=max_workers,
+                            thread_name_prefix=f"copy-job-{job_id}",
+                        )
+                        try:
+                            while True:
+                                pending_files = file_repo.list_pending_by_job_after_id(
+                                    job_id,
+                                    after_id=pending_after_id,
+                                    limit=batch_limit,
+                                )
+                                if not pending_files:
+                                    break
+                                pending_after_id = pending_files[-1].id
+                                futures = {
+                                    executor.submit(
+                                        _process_file,
+                                        ef.id,
+                                        _source_path_for_relative_path(source, ef.relative_path),
+                                        target,
+                                        max_retries,
+                                        retry_delay,
+                                    ): ef.id
+                                    for ef in pending_files
+                                }
+                                for future in as_completed(futures):
+                                    try:
+                                        future.result()
+                                    except Exception:
+                                        pass
 
-                    finally:
-                        # Always wait for running workers to finish so the DB session is
-                        # idle before the main thread uses it.  cancel_futures=True
-                        # prevents queued (not-yet-started) tasks from running.
-                        executor.shutdown(wait=True, cancel_futures=True)
+                                    if _handle_worker_completion(list(futures)):
+                                        return
+                                if pause_requested:
+                                    break
+                                if stop_for_target_full:
+                                    break
+
+                        finally:
+                            executor.shutdown(wait=True, cancel_futures=True)
 
                 # Determine final job status.
                 db.expire_all()
