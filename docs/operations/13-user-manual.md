@@ -139,7 +139,7 @@ Supported browser targets for the current frontend:
 
 Use one of the latest two major browser versions maintained by your organization. Firefox is not currently a supported target for the frontend.
 
-If you do not kyour role, ask your ECUBE administrator. ECUBE uses role-based access control, so some pages and buttons are visible only to certain users.
+If you do not know your role, ask your ECUBE administrator. ECUBE uses role-based access control, so some pages and buttons are visible only to certain users.
 
 ---
 

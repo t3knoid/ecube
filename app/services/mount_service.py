@@ -42,6 +42,7 @@ logger = logging.getLogger(__name__)
 
 _SUPPORTED_NFS_CLIENT_VERSIONS = ("4.2", "4.1", "4.0", "3")
 _NFS_VALIDATION_SLOW_SECONDS = 5.0
+_NFS_VALIDATION_ADVISORY_CONFLICT_CODE = "MOUNT_VALIDATION_ADVISORY"
 
 _CREDENTIAL_FIELD_NAMES = ("username", "password", "credentials_file")
 _ENCRYPTED_CREDENTIAL_ATTRS = {
@@ -1528,9 +1529,9 @@ def validate_mount_candidate(mount_data: MountCreate, db: Session, actor: Option
 
     if candidate_status != MountStatus.MOUNTED:
         if validation_warning:
-            raise service_exception(
-                status_code=409,
-                detail=validation_warning,
+            raise ConflictError(
+                validation_warning,
+                code=_NFS_VALIDATION_ADVISORY_CONFLICT_CODE,
             )
         raise service_exception(
             status_code=409,

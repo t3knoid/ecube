@@ -1463,7 +1463,7 @@ curl -k -X POST https://localhost:8443/mounts/test \
   }'
 ```
 
-Response: returns the candidate mount object with `status` reflecting the validation result and can include `validation_warning` when the validation succeeds but the server exposes an operator-relevant advisory. For example, ECUBE can report that the effective `NFS 4.1` validation path validated slowly while a validation-only `NFS 3` probe against the same server completed much faster. The same warning behavior applies when the request relies on the default `4.1` setting instead of explicitly sending `"nfs_client_version": "4.1"`.
+Response: returns the candidate mount object with `status` reflecting the validation result and can include `validation_warning` when the validation succeeds but the server exposes an operator-relevant advisory. For example, ECUBE can report that the effective `NFS 4.1` validation path validated slowly while a validation-only `NFS 3` probe against the same server completed much faster. When validation cannot complete successfully but ECUBE still has that advisory to surface, the endpoint can instead return `409 Conflict` with `code="MOUNT_VALIDATION_ADVISORY"` plus the same operator-safe guidance in the response message. The same warning behavior applies when the request relies on the default `4.1` setting instead of explicitly sending `"nfs_client_version": "4.1"`.
 
 ### Discover Available Shares
 

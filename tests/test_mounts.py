@@ -1652,6 +1652,7 @@ def test_validate_mount_candidate_reports_nfs_3_fallback_when_nfs_41_times_out(m
         )
 
     assert response.status_code == 409
+    assert response.json()["code"] == "MOUNT_VALIDATION_ADVISORY"
     assert "NFS 4.1 validation timed out or was too slow" in response.json()["message"]
     assert "NFS 3 validated much faster on this server" in response.json()["message"]
     assert attempted_versions == ["4.1", "3"]

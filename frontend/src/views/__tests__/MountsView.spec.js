@@ -777,6 +777,7 @@ describe('MountsView removal flow', () => {
       response: {
         status: 409,
         data: {
+          code: 'MOUNT_VALIDATION_ADVISORY',
           detail: 'NFS 4.1 validation timed out or was too slow. NFS 3 validated much faster on this server (0.1s).',
         },
       },

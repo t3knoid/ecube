@@ -118,13 +118,13 @@ const nfsClientVersionSelectOptions = computed(() => [
   ...nfsClientVersionOptions.value.map((option) => ({ value: option, label: option })),
 ])
 
+const MOUNT_VALIDATION_ADVISORY_CODE = 'MOUNT_VALIDATION_ADVISORY'
+
 function extractMountValidationAdvisory(requestError) {
-  const status = requestError?.response?.status
-  const detail = normalizeErrorMessage(requestError?.response?.data, '').trim()
-  if (status !== 409 || !detail) return ''
-  if (!detail.includes('validated much faster on this server')) return ''
-  if (!detail.includes('NFS ')) return ''
-  return detail
+  const response = requestError?.response
+  const code = String(response?.data?.code || '').trim().toUpperCase()
+  if (response?.status !== 409 || code !== MOUNT_VALIDATION_ADVISORY_CODE) return ''
+  return normalizeErrorMessage(response?.data, '').trim()
 }
 
 function networkMountTimeoutMs() {
