@@ -924,6 +924,69 @@ def test_stale_paused_run_does_not_override_resumed_job(db, tmp_path):
     assert job.started_at == resumed_started_at.replace(tzinfo=None)
 
 
+def test_stale_resumed_run_does_not_reset_newer_in_flight_files(db, tmp_path):
+    """An older worker must not reset newer-run COPYING files back to PENDING during finalization."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "resume.txt").write_bytes(b"resume data")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    original_started_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    resumed_started_at = original_started_at + timedelta(seconds=30)
+    job.status = JobStatus.RUNNING
+    job.started_at = original_started_at
+    db.commit()
+
+    class _FakeFuture:
+        def result(self):
+            return None
+
+        def done(self):
+            return True
+
+        def cancel(self):
+            return None
+
+    class _FakeExecutor:
+        def __init__(self, *args, **kwargs):
+            self.futures = []
+
+        def submit(self, fn, *args, **kwargs):
+            future = _FakeFuture()
+            self.futures.append(future)
+            return future
+
+        def shutdown(self, wait=True, cancel_futures=True):
+            return None
+
+    def _fake_as_completed(futures):
+        resumed_job = db.get(ExportJob, job.id)
+        resumed_job.status = JobStatus.RUNNING
+        resumed_job.started_at = resumed_started_at
+        resumed_job.completed_at = None
+        export_file = db.query(ExportFile).filter(ExportFile.job_id == job.id).one()
+        export_file.status = FileStatus.COPYING
+        db.commit()
+        for future in list(futures):
+            yield future
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine.ThreadPoolExecutor", _FakeExecutor):
+            with patch("app.services.copy_engine.as_completed", side_effect=_fake_as_completed):
+                copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+    export_file = db.query(ExportFile).filter(ExportFile.job_id == job.id).one()
+
+    assert job.status == JobStatus.RUNNING
+    assert job.started_at == resumed_started_at.replace(tzinfo=None)
+    assert export_file.status == FileStatus.COPYING
+
+
 def test_run_copy_job_with_file_errors_still_completes(db, tmp_path):
     """run_copy_job completes when files fail but all file outcomes are recorded."""
     source_dir = tmp_path / "source"
@@ -1050,7 +1113,7 @@ def test_run_copy_job_automatically_continues_overflow_on_next_project_drive(db,
     assert assignments[1].drive_id == second_drive.id
     assert all(file.status == FileStatus.DONE for file in files)
     assert files[0].drive_assignment_id == assignments[1].id
-    assert {file.drive_assignment_id for file in files} == {assignments[0].id, assignments[1].id}
+    assert {file.drive_assignment_id for file in files} == {assignments[1].id}
     assert overflow_audit is not None
     assert overflow_audit.details["automatic"] is True
     assert target_full_audit is not None

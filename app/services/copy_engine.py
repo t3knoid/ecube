@@ -354,6 +354,14 @@ def _read_copy_job_runtime_state(db: Session, job_id: int) -> tuple[Optional[Job
         read_db.close()
 
 
+def _job_has_active_assignment(db: Session, job_id: int) -> bool:
+    read_db = Session(bind=db.get_bind())
+    try:
+        return DriveAssignmentRepository(read_db).get_active_for_job(job_id) is not None
+    finally:
+        read_db.close()
+
+
 def _remaining_estimated_bytes(job: ExportJob) -> int:
     return max(0, int(job.startup_analysis_total_bytes or 0) - int(job.copied_bytes or 0))
 
@@ -1982,7 +1990,7 @@ def run_copy_job(job_id: int) -> None:
                                     if not pending.done():
                                         pending.cancel()
                             return True
-                        if should_attempt_target_full and DriveAssignmentRepository(db).get_active_for_job(job_id) is not None:
+                        if should_attempt_target_full and _job_has_active_assignment(db, job_id):
                             stop_for_target_full = True
                             return False
                         return False
@@ -2033,6 +2041,14 @@ def run_copy_job(job_id: int) -> None:
 
                 # Determine final job status.
                 db.expire_all()
+                latest_status, latest_started_at, _ = _read_copy_job_runtime_state(db, job_id)
+                latest_started_at_key = _normalize_started_at(latest_started_at)
+                if latest_status is not None and latest_started_at_key != run_started_at_key:
+                    logger.info(
+                        "Skipping stale copy finalization after newer resume",
+                        extra={"job_id": job_id, "started_at": str(run_started_at)},
+                    )
+                    return
                 lingering_copy_state_count = (
                     db.query(ExportFile)
                     .filter(
@@ -2074,15 +2090,6 @@ def run_copy_job(job_id: int) -> None:
                     if target_full_outcome == "continued":
                         db.expire_all()
                         continue
-
-                latest_status, latest_started_at, _ = _read_copy_job_runtime_state(db, job_id)
-                latest_started_at_key = _normalize_started_at(latest_started_at)
-                if latest_status is not None and latest_started_at_key != run_started_at_key:
-                    logger.info(
-                        "Skipping stale copy finalization after newer resume",
-                        extra={"job_id": job_id, "started_at": str(run_started_at)},
-                    )
-                    return
 
                 job = job_repo.get(job_id)
                 if job:
