@@ -1278,7 +1278,7 @@ Managers cannot view or trigger password policy, webhook secret, logging infrast
 </li><li>
 <code>Mount Share Discovery Timeout (seconds)</code> controls how long ECUBE allows SMB share browsing and NFS export discovery to run before treating them as failed. Increase it when the Add Mount <code>Browse</code> dialog times out against slow servers or high-latency networks.
 </li><li>
-<code>Copy Chunk Size</code>, <code>Progress Flush Threshold</code>, and <code>Default Copy Worker Count</code> let managers tune copy throughput for different workloads. Larger values reduce loop or transaction overhead but use more memory per active worker.
+<code>Copy Chunk Size</code>, <code>Progress Flush Threshold</code>, and <code>Default Copy Worker Count</code> let managers tune copy throughput for different workloads. Larger values reduce loop or transaction overhead but use more memory per active worker. <code>Default Copy Worker Count</code> is the fallback ECUBE uses when a job request omits its per-job <code>Thread count</code> value.
 </li><li>
 <code>Force per-file disk sync</code> controls whether ECUBE calls <code>fsync()</code> after every copied file. Leave it disabled for maximum throughput when restart recovery from the last committed <code>DONE</code> file is acceptable.
 </li><li>
