@@ -25,6 +25,22 @@ class TestConfigurationSchemaValidation:
         req = ConfigurationUpdateRequest(copy_job_timeout=120)
         assert req.copy_job_timeout == 120
 
+    def test_update_accepts_copy_chunk_size_bytes(self):
+        req = ConfigurationUpdateRequest(copy_chunk_size_bytes=8_388_608)
+        assert req.copy_chunk_size_bytes == 8_388_608
+
+    def test_update_accepts_copy_progress_flush_bytes(self):
+        req = ConfigurationUpdateRequest(copy_progress_flush_bytes=134_217_728)
+        assert req.copy_progress_flush_bytes == 134_217_728
+
+    def test_update_accepts_copy_default_thread_count(self):
+        req = ConfigurationUpdateRequest(copy_default_thread_count=12)
+        assert req.copy_default_thread_count == 12
+
+    def test_update_accepts_copy_file_fsync_enabled(self):
+        req = ConfigurationUpdateRequest(copy_file_fsync_enabled=True)
+        assert req.copy_file_fsync_enabled is True
+
     def test_update_accepts_usb_discovery_interval(self):
         req = ConfigurationUpdateRequest(usb_discovery_interval=0)
         assert req.usb_discovery_interval == 0
@@ -122,6 +138,14 @@ class TestConfigurationSchemaValidation:
         with pytest.raises(ValidationError):
             ConfigurationUpdateRequest(startup_analysis_batch_size=5001)
 
+    def test_update_rejects_copy_chunk_size_bytes_below_minimum(self):
+        with pytest.raises(ValidationError):
+            ConfigurationUpdateRequest(copy_chunk_size_bytes=131_072)
+
+    def test_update_rejects_copy_default_thread_count_above_maximum(self):
+        with pytest.raises(ValidationError):
+            ConfigurationUpdateRequest(copy_default_thread_count=33)
+
     def test_update_rejects_unknown_mkfs_exfat_cluster_size(self):
         with pytest.raises(ValidationError):
             ConfigurationUpdateRequest(mkfs_exfat_cluster_size="48K")
@@ -141,6 +165,10 @@ class TestConfigurationEndpoints:
         "network_mount_timeout_seconds",
         "mount_share_discovery_timeout_seconds",
         "copy_job_timeout",
+        "copy_chunk_size_bytes",
+        "copy_progress_flush_bytes",
+        "copy_default_thread_count",
+        "copy_file_fsync_enabled",
         "usb_discovery_interval",
         "job_detail_files_page_size",
     }
@@ -280,6 +308,41 @@ class TestConfigurationEndpoints:
             assert written.get("COPY_JOB_TIMEOUT") == "4200"
         finally:
             settings.copy_job_timeout = original_value
+
+    @patch("app.services.configuration_service.database_service._write_env_settings")
+    def test_manager_update_configuration_persists_copy_tuning_fields(
+        self,
+        mock_write_env,
+        manager_client,
+    ):
+        original_values = {
+            "copy_chunk_size_bytes": settings.copy_chunk_size_bytes,
+            "copy_progress_flush_bytes": settings.copy_progress_flush_bytes,
+            "copy_default_thread_count": settings.copy_default_thread_count,
+            "copy_file_fsync_enabled": settings.copy_file_fsync_enabled,
+        }
+        payload = {
+            "copy_chunk_size_bytes": 8_388_608,
+            "copy_progress_flush_bytes": 134_217_728,
+            "copy_default_thread_count": 12,
+            "copy_file_fsync_enabled": True,
+        }
+        try:
+            resp = manager_client.put("/configuration", json=payload)
+            assert resp.status_code == 200, resp.json()
+
+            body = resp.json()
+            assert set(body["changed_settings"]) == set(payload)
+            assert body["restart_required"] is False
+
+            written = mock_write_env.call_args.args[0]
+            assert written.get("COPY_CHUNK_SIZE_BYTES") == "8388608"
+            assert written.get("COPY_PROGRESS_FLUSH_BYTES") == "134217728"
+            assert written.get("COPY_DEFAULT_THREAD_COUNT") == "12"
+            assert written.get("COPY_FILE_FSYNC_ENABLED") == "True"
+        finally:
+            for key, value in original_values.items():
+                setattr(settings, key, value)
 
     def test_manager_update_configuration_rejects_admin_only_field(self, manager_client):
         resp = manager_client.put(

@@ -1,7 +1,7 @@
 <script setup>
 import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 
-const threadCountOptions = [1, 2, 3, 4, 5, 6, 7, 8]
+const threadCountOptions = Array.from({ length: 16 }, (_unused, index) => index + 1)
 
 const props = defineProps({
   title: {
@@ -36,7 +36,15 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  evidenceEditable: {
+    type: Boolean,
+    default: true,
+  },
   showNotesField: {
+    type: Boolean,
+    default: true,
+  },
+  notesEditable: {
     type: Boolean,
     default: true,
   },
@@ -44,7 +52,35 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  overflowSelectionEnabled: {
+    type: Boolean,
+    default: true,
+  },
   showExecutionGroup: {
+    type: Boolean,
+    default: true,
+  },
+  showSourceGroup: {
+    type: Boolean,
+    default: true,
+  },
+  sourceEditable: {
+    type: Boolean,
+    default: true,
+  },
+  showPrimaryDriveField: {
+    type: Boolean,
+    default: true,
+  },
+  primaryDriveEditable: {
+    type: Boolean,
+    default: true,
+  },
+  showCallbackUrlField: {
+    type: Boolean,
+    default: true,
+  },
+  callbackUrlEditable: {
     type: Boolean,
     default: true,
   },
@@ -260,23 +296,23 @@ const emit = defineEmits(['close', 'submit', 'toggle-source-browser'])
               </span>
               <span class="sr-only">required</span>
             </label>
-            <input id="job-evidence" v-model="form.evidence_number" type="text" :disabled="!projectSelected" required aria-required="true" />
+            <input id="job-evidence" v-model="form.evidence_number" type="text" :disabled="!projectSelected || !evidenceEditable" required aria-required="true" />
           </div>
         </div>
 
         <template v-if="showNotesField">
           <label for="job-notes">{{ notesLabel }}</label>
-          <textarea id="job-notes" v-model="form.notes" rows="3" :disabled="!projectSelected" :placeholder="notesHint"></textarea>
+          <textarea id="job-notes" v-model="form.notes" rows="3" :disabled="!projectSelected || !notesEditable" :placeholder="notesHint"></textarea>
         </template>
 
         <div class="details-secondary-row">
-          <div class="details-secondary-field details-secondary-field--callback">
+          <div v-if="showCallbackUrlField" class="details-secondary-field details-secondary-field--callback">
             <label for="job-callback-url">{{ callbackUrlLabel }}</label>
             <input
               id="job-callback-url"
               v-model="form.callback_url"
               type="url"
-              :disabled="!projectSelected"
+              :disabled="!projectSelected || !callbackUrlEditable"
               :placeholder="callbackUrlHint"
             />
           </div>
@@ -304,7 +340,7 @@ const emit = defineEmits(['close', 'submit', 'toggle-source-browser'])
         </div>
       </fieldset>
 
-      <fieldset class="dialog-group dialog-group--source">
+      <fieldset v-if="showSourceGroup" class="dialog-group dialog-group--source">
         <legend>{{ sourceGroupLabel }}</legend>
 
         <label for="job-mount">
@@ -316,7 +352,7 @@ const emit = defineEmits(['close', 'submit', 'toggle-source-browser'])
           </span>
           <span class="sr-only">required</span>
         </label>
-        <select id="job-mount" v-model="form.mount_id" :disabled="!projectSelected" required aria-required="true">
+        <select id="job-mount" v-model="form.mount_id" :disabled="!projectSelected || !sourceEditable" required aria-required="true">
           <option :value="null">{{ chooseMountLabel }}</option>
           <option v-for="mount in eligibleMounts" :key="mount.id" :value="mount.id">
             {{ formatMountLabel(mount) }}
@@ -332,13 +368,13 @@ const emit = defineEmits(['close', 'submit', 'toggle-source-browser'])
           </span>
           <span class="sr-only">required</span>
         </label>
-        <input id="job-source-path" v-model="form.source_path" type="text" :disabled="!projectSelected" :readonly="projectSelected || undefined" :placeholder="sourcePathHint" required aria-required="true" />
+        <input id="job-source-path" v-model="form.source_path" type="text" :disabled="!projectSelected || !sourceEditable" :readonly="projectSelected || undefined" :placeholder="sourcePathHint" required aria-required="true" />
         <div v-if="showSourceBrowserToggle" class="source-browser-actions">
           <button
             id="job-source-browse-toggle"
             type="button"
             class="btn"
-            :disabled="!canBrowseSelectedMount"
+            :disabled="!canBrowseSelectedMount || !sourceEditable"
             @click="emit('toggle-source-browser')"
           >
             {{ showSourceBrowser ? closeLabel : browseLabel }}
@@ -360,21 +396,23 @@ const emit = defineEmits(['close', 'submit', 'toggle-source-browser'])
       <fieldset class="dialog-group dialog-group--destination">
         <legend>{{ destinationGroupLabel }}</legend>
 
-        <label for="job-drive">
-          {{ selectDriveLabel }}
-          <span class="required-indicator" aria-hidden="true">
-            <svg class="required-indicator-icon" viewBox="0 0 16 16" focusable="false">
-              <path d="M8 0.75 9.41 5.59 14.25 4.18 10.82 8l3.43 3.82-4.84-1.41L8 15.25l-1.41-4.84-4.84 1.41L5.18 8 1.75 4.18l4.84 1.41L8 0.75Z" />
-            </svg>
-          </span>
-          <span class="sr-only">required</span>
-        </label>
-        <select id="job-drive" v-model="form.drive_id" :disabled="!projectSelected" required aria-required="true">
-          <option :value="null">{{ chooseDriveLabel }}</option>
-          <option v-for="drive in primaryEligibleDrives" :key="drive.id" :value="drive.id">
-            {{ formatDriveLabel(drive) }}
-          </option>
-        </select>
+        <template v-if="showPrimaryDriveField">
+          <label for="job-drive">
+            {{ selectDriveLabel }}
+            <span class="required-indicator" aria-hidden="true">
+              <svg class="required-indicator-icon" viewBox="0 0 16 16" focusable="false">
+                <path d="M8 0.75 9.41 5.59 14.25 4.18 10.82 8l3.43 3.82-4.84-1.41L8 15.25l-1.41-4.84-4.84 1.41L5.18 8 1.75 4.18l4.84 1.41L8 0.75Z" />
+              </svg>
+            </span>
+            <span class="sr-only">required</span>
+          </label>
+          <select id="job-drive" v-model="form.drive_id" :disabled="!projectSelected || !primaryDriveEditable" required aria-required="true">
+            <option :value="null">{{ chooseDriveLabel }}</option>
+            <option v-for="drive in primaryEligibleDrives" :key="drive.id" :value="drive.id">
+              {{ formatDriveLabel(drive) }}
+            </option>
+          </select>
+        </template>
 
         <div v-if="showOverflowPanel" class="overflow-panel">
           <p class="overflow-panel-title">{{ overflowPanelTitle }}</p>
@@ -382,7 +420,7 @@ const emit = defineEmits(['close', 'submit', 'toggle-source-browser'])
           <p v-if="projectSelected && !overflowEligibleDrives.length" class="muted">{{ noEligibleOverflowDrivesLabel }}</p>
           <div v-else class="overflow-drive-list">
             <label v-for="drive in overflowEligibleDrives" :key="drive.id" class="checkbox-row overflow-drive-option">
-              <input v-model="form.overflow_drive_ids" type="checkbox" :value="drive.id" :disabled="!projectSelected" />
+              <input v-model="form.overflow_drive_ids" type="checkbox" :value="drive.id" :disabled="!projectSelected || !overflowSelectionEnabled" />
               <span>{{ formatDriveLabel(drive) }}</span>
             </label>
           </div>

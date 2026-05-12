@@ -130,6 +130,34 @@ def test_copy_file_reports_chunk_progress(tmp_path):
     assert seen == [4, 4, 2]
 
 
+def test_copy_file_skips_fsync_by_default(tmp_path):
+    src = tmp_path / "src.txt"
+    dst = tmp_path / "dst.txt"
+    src.write_bytes(b"hello world")
+
+    with patch.object(copy_engine.os, "fsync") as mock_fsync:
+        success, checksum, err = copy_engine.copy_file(src, dst)
+
+    assert success is True
+    assert checksum is not None
+    assert err is None
+    mock_fsync.assert_not_called()
+
+
+def test_copy_file_fsyncs_when_enabled(tmp_path):
+    src = tmp_path / "src.txt"
+    dst = tmp_path / "dst.txt"
+    src.write_bytes(b"hello world")
+
+    with patch.object(copy_engine.settings, "copy_file_fsync_enabled", True), patch.object(copy_engine.os, "fsync") as mock_fsync:
+        success, checksum, err = copy_engine.copy_file(src, dst)
+
+    assert success is True
+    assert checksum is not None
+    assert err is None
+    mock_fsync.assert_called_once()
+
+
 # ---------------------------------------------------------------------------
 # _process_file retry tests
 # ---------------------------------------------------------------------------
@@ -424,7 +452,96 @@ def test_process_file_batches_copied_bytes_updates(db, tmp_path):
     db.expire_all()
     refreshed_job = db.get(ExportJob, job.id)
     assert refreshed_job.copied_bytes == len(payload)
-    assert progress_updates == [8, 4]
+    assert progress_updates == [8]
+
+
+def test_process_file_persists_small_success_progress_with_completion_commit(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    payload = b"small"
+    test_file = source_dir / "small-progress.txt"
+    test_file.write_bytes(payload)
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), max_file_retries=0, retry_delay_seconds=0, target_mount_path=str(target_dir))
+
+    ef = ExportFile(
+        job_id=job.id,
+        relative_path="small-progress.txt",
+        size_bytes=len(payload),
+        status=FileStatus.PENDING,
+        retry_attempts=0,
+    )
+    db.add(ef)
+    db.commit()
+    db.refresh(ef)
+
+    progress_updates: list[int] = []
+    original_increment = copy_engine.FileRepository.increment_copy_progress
+
+    def _record_increment(self, job_id, assignment_id, size_bytes):
+        progress_updates.append(size_bytes)
+        return original_increment(self, job_id, assignment_id, size_bytes)
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch.object(copy_engine.settings, "copy_chunk_size_bytes", 4), patch.object(
+            copy_engine.settings,
+            "copy_progress_flush_bytes",
+            8,
+        ), patch.object(copy_engine.FileRepository, "increment_copy_progress", autospec=True, side_effect=_record_increment):
+            copy_engine._process_file(ef.id, test_file, target_dir, max_retries=0, retry_delay=0)
+
+    db.expire_all()
+    refreshed_job = db.get(ExportJob, job.id)
+    assert refreshed_job.copied_bytes == len(payload)
+    assert progress_updates == []
+
+
+def test_process_file_ends_initial_read_transaction_before_copy(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    payload = b"hello world"
+    test_file = source_dir / "txn-boundary.txt"
+    test_file.write_bytes(payload)
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), max_file_retries=0, retry_delay_seconds=0, target_mount_path=str(target_dir))
+    _assign_drive(db, job)
+
+    ef = ExportFile(
+        job_id=job.id,
+        relative_path="txn-boundary.txt",
+        size_bytes=len(payload),
+        status=FileStatus.PENDING,
+        retry_attempts=0,
+    )
+    db.add(ef)
+    db.commit()
+    db.refresh(ef)
+
+    session_factory_calls = 0
+
+    def _tracking_session_factory():
+        nonlocal session_factory_calls
+        session_factory_calls += 1
+        return _session_factory(db)()
+
+    def _assert_copy_starts_with_fresh_worker_session(*args, **kwargs):
+        assert session_factory_calls >= 2
+        return True, "checksum", None
+
+    with patch("app.services.copy_engine.SessionLocal", side_effect=_tracking_session_factory):
+        with patch("app.services.copy_engine.copy_file", side_effect=_assert_copy_starts_with_fresh_worker_session):
+            copy_engine._process_file(ef.id, test_file, target_dir, max_retries=0, retry_delay=0)
+
+    db.expire_all()
+    refreshed = db.get(ExportFile, ef.id)
+    assert refreshed is not None
+    assert refreshed.status == FileStatus.DONE
 
 
 def test_process_file_retry_audit_entries_created(db, tmp_path):
@@ -515,6 +632,75 @@ def test_run_copy_job_fresh_run(db, tmp_path):
     assert job.file_count == 2
     files = db.query(ExportFile).filter(ExportFile.job_id == job.id).all()
     assert all(f.status == FileStatus.DONE for f in files)
+
+
+def test_run_copy_job_marks_job_preparing_before_startup_analysis(db, tmp_path):
+    """run_copy_job exposes PREPARING while startup work runs before workers start."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "file.txt").write_bytes(b"data")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    assignment = _assign_drive(db, job)
+    drive = db.query(UsbDrive).filter(UsbDrive.id == assignment.drive_id).one()
+    drive.mount_path = str(target_dir)
+    db.commit()
+
+    observed_statuses = []
+    original_prepare = copy_engine.prepare_job_startup_analysis
+
+    def fake_prepare(job_id):
+        db.expire_all()
+        db.refresh(job)
+        observed_statuses.append(job.status)
+        return original_prepare(job_id)
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine.prepare_job_startup_analysis", side_effect=fake_prepare):
+            copy_engine.run_copy_job(job.id)
+
+    assert observed_statuses == [JobStatus.PREPARING]
+
+def test_read_copy_job_runtime_state_avoids_loading_full_incomplete_backlog(db):
+    job = _make_job(db, "/tmp/source")
+    job.status = JobStatus.RUNNING
+    db.add_all(
+        [
+            ExportFile(
+                job_id=job.id,
+                relative_path="done.txt",
+                size_bytes=1,
+                status=FileStatus.DONE,
+            ),
+            ExportFile(
+                job_id=job.id,
+                relative_path="pending.txt",
+                size_bytes=1,
+                status=FileStatus.PENDING,
+            ),
+            ExportFile(
+                job_id=job.id,
+                relative_path="target-full.txt",
+                size_bytes=1,
+                status=FileStatus.ERROR,
+                error_message="Target storage is full",
+            ),
+        ]
+    )
+    db.commit()
+
+    with patch("app.services.copy_engine.Session", side_effect=lambda **kwargs: db.__class__(bind=db.get_bind())):
+        with patch(
+            "app.services.copy_engine.FileRepository.list_incomplete_by_job",
+            side_effect=AssertionError("full backlog load should not be used"),
+        ):
+            latest_status, _started_at, should_attempt_target_full = copy_engine._read_copy_job_runtime_state(db, job.id)
+
+    assert latest_status == JobStatus.RUNNING
+    assert should_attempt_target_full is True
 
 
 def test_run_copy_job_generates_manifest_for_clean_completion(db, tmp_path):
@@ -2325,6 +2511,114 @@ def test_prepare_job_startup_analysis_refresh_failure_preserves_previous_cache(d
     assert job.startup_analysis_total_bytes == len(b"content")
     assert [(row.relative_path, row.startup_analysis_revision) for row in file_rows] == [("file.txt", 1)]
     assert [(row.entry_type, row.relative_path) for row in directory_rows] == [("directory", "")]
+
+
+def test_prepare_job_startup_analysis_reuses_ready_cache_without_full_validation(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "file.txt").write_bytes(b"content")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    job.startup_analysis_status = StartupAnalysisStatus.READY
+    job.startup_analysis_file_count = 1
+    job.startup_analysis_total_bytes = len(b"content")
+    job.startup_analysis_cache_present = True
+    job.startup_analysis_revision = 1
+    db.add(
+        ExportFile(
+            job_id=job.id,
+            relative_path="file.txt",
+            size_bytes=len(b"content"),
+            status=FileStatus.PENDING,
+            startup_analysis_revision=1,
+        )
+    )
+    db.add(
+        StartupAnalysisEntry(
+            job_id=job.id,
+            entry_type="directory",
+            relative_path="",
+            mtime_ns=source_dir.stat().st_mtime_ns,
+        )
+    )
+    db.commit()
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine._cached_startup_analysis_is_current", side_effect=AssertionError("full validation should be skipped")):
+            result = copy_engine.prepare_job_startup_analysis(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+
+    assert result["reused_cached_analysis"] is True
+    assert job.startup_analysis_status == StartupAnalysisStatus.READY
+    assert job.file_count == 1
+    assert job.total_bytes == len(b"content")
+
+
+def test_prepare_job_startup_analysis_recomputes_done_bytes_when_reusing_ready_cache(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    done_payload = b"done"
+    pending_payload = b"pending"
+    (source_dir / "done.txt").write_bytes(done_payload)
+    (source_dir / "pending.txt").write_bytes(pending_payload)
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    job.startup_analysis_status = StartupAnalysisStatus.READY
+    job.startup_analysis_file_count = 2
+    job.startup_analysis_total_bytes = len(done_payload) + len(pending_payload)
+    job.startup_analysis_cache_present = True
+    job.startup_analysis_revision = 1
+    job.copied_bytes = 0
+    db.add_all(
+        [
+            ExportFile(
+                job_id=job.id,
+                relative_path="done.txt",
+                size_bytes=len(done_payload),
+                status=FileStatus.DONE,
+                startup_analysis_revision=1,
+            ),
+            ExportFile(
+                job_id=job.id,
+                relative_path="pending.txt",
+                size_bytes=len(pending_payload),
+                status=FileStatus.COPYING,
+                startup_analysis_revision=1,
+            ),
+        ]
+    )
+    db.add(
+        StartupAnalysisEntry(
+            job_id=job.id,
+            entry_type="directory",
+            relative_path="",
+            mtime_ns=source_dir.stat().st_mtime_ns,
+        )
+    )
+    db.commit()
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        result = copy_engine.prepare_job_startup_analysis(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+    files = {
+        export_file.relative_path: export_file
+        for export_file in db.query(ExportFile).filter(ExportFile.job_id == job.id).all()
+    }
+
+    assert result["reused_cached_analysis"] is True
+    assert job.copied_bytes == len(done_payload)
+    assert files["done.txt"].status == FileStatus.DONE
+    assert files["pending.txt"].status == FileStatus.PENDING
 
 
 def test_run_copy_job_accumulates_active_duration_on_resume(db, tmp_path):

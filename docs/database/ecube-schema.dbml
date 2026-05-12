@@ -23,6 +23,7 @@ Enum ecube_role {
 
 Enum job_status {
   PENDING
+  PREPARING
   RUNNING
   PAUSING
   PAUSED

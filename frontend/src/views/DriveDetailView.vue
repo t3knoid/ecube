@@ -94,7 +94,7 @@ const initializeDialogHelpId = 'drive-initialize-dialog-help'
 const initializeDialogStatusId = 'drive-initialize-dialog-status'
 const DEFAULT_DRIVE_MOUNT_TIMEOUT_SECONDS = 120
 const EJECT_PREFLIGHT_TIMEOUT_MS = 5000
-const EJECT_BLOCKING_JOB_STATUSES = ['RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING']
+const EJECT_BLOCKING_JOB_STATUSES = ['PREPARING', 'RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING']
 
 const { driveStateLabel } = useStatusLabels()
 

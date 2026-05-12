@@ -46,6 +46,7 @@ def _log_startup_analysis_service_failure(
 
 _ACTIVE_SOURCE_OVERLAP_STATUSES = (
     JobStatus.PENDING,
+    JobStatus.PREPARING,
     JobStatus.RUNNING,
     JobStatus.PAUSING,
     JobStatus.PAUSED,
@@ -59,6 +60,14 @@ _NON_ARCHIVED_DUPLICATE_STATUSES = _ACTIVE_SOURCE_OVERLAP_STATUSES + (
 
 _ARCHIVABLE_JOB_STATUSES = (
     JobStatus.COMPLETED,
+    JobStatus.FAILED,
+)
+
+_STARTED_JOB_EDITABLE_STATUSES = (
+    JobStatus.PREPARING,
+    JobStatus.RUNNING,
+    JobStatus.PAUSING,
+    JobStatus.PAUSED,
     JobStatus.FAILED,
 )
 
@@ -1235,10 +1244,44 @@ def _has_persisted_startup_analysis_state(job_row: Any) -> bool:
 
 def _require_editable_job(job: ExportJob) -> None:
     job_row = _row(job)
-    if cast(JobStatus, job_row.status) is not JobStatus.PENDING:
+    status = cast(JobStatus, job_row.status)
+    if status not in (JobStatus.PENDING, *_STARTED_JOB_EDITABLE_STATUSES):
         raise service_exception(
             status_code=409,
-            detail="Only pending jobs can be edited from Job Detail",
+            detail="This job cannot be edited from Job Detail",
+        )
+
+
+def _started_job_update_only_allows_runtime_fields(
+    job: ExportJob,
+    body: JobUpdate,
+    *,
+    resolved_source_path: str,
+    current_drive_id: Optional[int],
+    requested_drive_id: Optional[int],
+) -> None:
+    job_row = _row(job)
+    immutable_changes: list[str] = []
+
+    if body.project_id != cast(Optional[str], job_row.project_id):
+        immutable_changes.append("project_id")
+    if body.evidence_number != cast(Optional[str], job_row.evidence_number):
+        immutable_changes.append("evidence_number")
+    if resolved_source_path != cast(Optional[str], job_row.source_path):
+        immutable_changes.append("source_path")
+    if requested_drive_id != current_drive_id:
+        immutable_changes.append("drive_id")
+    if int(cast(Optional[int], job_row.max_file_retries) or 0) != int(body.max_file_retries):
+        immutable_changes.append("max_file_retries")
+    if int(cast(Optional[int], job_row.retry_delay_seconds) or 0) != int(body.retry_delay_seconds):
+        immutable_changes.append("retry_delay_seconds")
+    if body.callback_url != cast(Optional[str], job_row.callback_url):
+        immutable_changes.append("callback_url")
+
+    if immutable_changes:
+        raise service_exception(
+            status_code=409,
+            detail="Started jobs can only update thread count and overflow drive selections",
         )
 
 
@@ -1457,7 +1500,7 @@ def continue_job_overflow(
     )
     drive_row.current_state = DriveState.IN_USE
     job_row.target_mount_path = drive_mount_path
-    job_row.status = JobStatus.RUNNING
+    job_row.status = JobStatus.PREPARING
     job_row.started_by = actor
     job_row.started_at = datetime.now(timezone.utc)
     job_row.completed_at = None
@@ -1535,19 +1578,44 @@ def update_job(
     _require_editable_job(job)
     _reject_when_startup_analysis_running(job, action="edit this job")
 
+    update_is_limited_to_runtime_fields = cast(JobStatus, job_row.status) in _STARTED_JOB_EDITABLE_STATUSES
+
     if body.project_id != cast(Optional[str], job_row.project_id):
+        if update_is_limited_to_runtime_fields:
+            raise service_exception(
+                status_code=409,
+                detail="Started jobs can only update thread count and overflow drive selections",
+            )
         raise service_exception(
             status_code=409,
             detail="Project cannot be changed for an existing job",
         )
 
     resolved_source_path = _resolve_job_source_path(body, db)
+    job_assignments = assignment_repo.list_for_job(job_id)
+    current_reserved_overflow_drive_ids = [
+        int(assignment.drive_id)
+        for assignment in job_assignments
+        if assignment.activated_at is None and assignment.released_at is None
+    ]
     active_assignment = assignment_repo.get_active_for_job(job_id)
     assignment_row = _row(active_assignment) if active_assignment is not None else None
     current_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
     requested_drive_id = body.drive_id if body.drive_id is not None else current_drive_id
     if requested_drive_id is None:
         raise service_exception(status_code=409, detail="Job has no assigned drive")
+
+    if body.drive_id is not None and int(body.drive_id) in {int(value) for value in body.overflow_drive_ids}:
+        raise service_exception(status_code=422, detail="Overflow drive list must not include the primary destination drive")
+
+    if update_is_limited_to_runtime_fields:
+        _started_job_update_only_allows_runtime_fields(
+            job,
+            body,
+            resolved_source_path=resolved_source_path,
+            current_drive_id=current_drive_id,
+            requested_drive_id=requested_drive_id,
+        )
 
     drive = drive_repo.get_for_update(int(requested_drive_id))
     if not drive:
@@ -1586,32 +1654,35 @@ def update_job(
     except ValueError as exc:
         raise service_exception(status_code=422, detail=str(exc)) from exc
 
-    _reject_source_path_overlap(
-        db=db,
-        audit_repo=audit_repo,
-        actor=actor,
-        client_ip=client_ip,
-        project_id=cast(str, job_row.project_id),
-        drive_id=int(requested_drive_id),
-        new_source_path=validated_source_path,
-        exclude_job_id=job_id,
-    )
+    if not update_is_limited_to_runtime_fields:
+        _reject_source_path_overlap(
+            db=db,
+            audit_repo=audit_repo,
+            actor=actor,
+            client_ip=client_ip,
+            project_id=cast(str, job_row.project_id),
+            drive_id=int(requested_drive_id),
+            new_source_path=validated_source_path,
+            exclude_job_id=job_id,
+        )
 
     changed_fields: list[str] = []
-    if cast(Optional[str], job_row.evidence_number) != body.evidence_number:
+    if not update_is_limited_to_runtime_fields and cast(Optional[str], job_row.evidence_number) != body.evidence_number:
         changed_fields.append("evidence_number")
-    if cast(Optional[str], job_row.source_path) != validated_source_path:
+    if not update_is_limited_to_runtime_fields and cast(Optional[str], job_row.source_path) != validated_source_path:
         changed_fields.append("source_path")
     if int(cast(Optional[int], job_row.thread_count) or 0) != int(body.thread_count):
         changed_fields.append("thread_count")
-    if int(cast(Optional[int], job_row.max_file_retries) or 0) != int(body.max_file_retries):
+    if not update_is_limited_to_runtime_fields and int(cast(Optional[int], job_row.max_file_retries) or 0) != int(body.max_file_retries):
         changed_fields.append("max_file_retries")
-    if int(cast(Optional[int], job_row.retry_delay_seconds) or 0) != int(body.retry_delay_seconds):
+    if not update_is_limited_to_runtime_fields and int(cast(Optional[int], job_row.retry_delay_seconds) or 0) != int(body.retry_delay_seconds):
         changed_fields.append("retry_delay_seconds")
-    if current_drive_id != requested_drive_id:
+    if not update_is_limited_to_runtime_fields and current_drive_id != requested_drive_id:
         changed_fields.append("drive_id")
+    if current_reserved_overflow_drive_ids != [int(value) for value in body.overflow_drive_ids]:
+        changed_fields.append("overflow_drive_ids")
 
-    if assignment_row is not None and current_drive_id != requested_drive_id:
+    if not update_is_limited_to_runtime_fields and assignment_row is not None and current_drive_id != requested_drive_id:
         assignment_row.released_at = datetime.now(timezone.utc)
         if current_drive_id is not None:
             previous_drive = drive_repo.get_for_update(int(current_drive_id))
@@ -1627,7 +1698,7 @@ def update_job(
                 activated_at=datetime.now(timezone.utc),
             )
         )
-    elif assignment_row is None:
+    elif not update_is_limited_to_runtime_fields and assignment_row is None:
         db.add(
             DriveAssignment(
                 drive_id=int(requested_drive_id),
@@ -1636,17 +1707,84 @@ def update_job(
             )
         )
 
+    desired_overflow_drive_ids = [int(value) for value in body.overflow_drive_ids]
+    desired_overflow_drive_id_set = set(desired_overflow_drive_ids)
+    for assignment in job_assignments:
+        if assignment.activated_at is None and assignment.released_at is None and int(assignment.drive_id) not in desired_overflow_drive_id_set:
+            assignment.released_at = datetime.now(timezone.utc)
+            released_drive = drive_repo.get_for_update(int(assignment.drive_id))
+            if released_drive and not _is_drive_assigned_to_another_job(
+                db,
+                drive_id=int(assignment.drive_id),
+                exclude_job_id=job_id,
+            ):
+                _row(released_drive).current_state = DriveState.AVAILABLE
+
+    existing_unreleased_assignments = {
+        int(assignment.drive_id): assignment
+        for assignment in assignment_repo.list_for_job(job_id)
+        if assignment.released_at is None
+    }
+
+    for overflow_drive_id in desired_overflow_drive_ids:
+        if overflow_drive_id == int(requested_drive_id):
+            raise service_exception(status_code=422, detail="Overflow drive list must not include the primary destination drive")
+
+        existing_assignment = existing_unreleased_assignments.get(overflow_drive_id)
+        if existing_assignment is not None:
+            continue
+
+        overflow_drive = drive_repo.get_for_update(overflow_drive_id)
+        if not overflow_drive:
+            raise service_exception(status_code=404, detail="Drive not found")
+
+        overflow_drive_row = _row(overflow_drive)
+        overflow_project_id = cast(Optional[str], overflow_drive_row.current_project_id)
+        overflow_state = cast(DriveState, overflow_drive_row.current_state)
+        overflow_mount_path = cast(Optional[str], overflow_drive_row.mount_path)
+
+        if overflow_project_id not in (None, cast(Optional[str], job_row.project_id)):
+            _audit_project_isolation_violation(
+                audit_repo=audit_repo,
+                actor=actor,
+                client_ip=client_ip,
+                requested_project_id=cast(str, job_row.project_id),
+                drive_id=overflow_drive_id,
+                existing_project_id=overflow_project_id,
+                job_id=job_id,
+            )
+            raise service_exception(status_code=403, detail="Drive belongs to a different project")
+        if overflow_state not in (DriveState.AVAILABLE, DriveState.IN_USE):
+            raise service_exception(status_code=409, detail="Drive is not available")
+        if not overflow_mount_path:
+            raise service_exception(status_code=409, detail="Assigned drive is not mounted")
+        if _is_drive_assigned_to_another_job(db, drive_id=overflow_drive_id, exclude_job_id=job_id):
+            raise service_exception(status_code=409, detail="Drive is already assigned to another job")
+
+        if overflow_project_id is None:
+            overflow_drive_row.current_project_id = cast(Optional[str], job_row.project_id)
+
+        db.add(
+            DriveAssignment(
+                drive_id=overflow_drive_id,
+                job_id=job_id,
+                activated_at=None,
+            )
+        )
+        overflow_drive_row.current_state = DriveState.IN_USE
+
     drive_row.current_state = DriveState.IN_USE
     source_path_changed = cast(Optional[str], job_row.source_path) != validated_source_path
 
-    job_row.evidence_number = body.evidence_number
-    job_row.source_path = validated_source_path
-    job_row.target_mount_path = drive_mount_path
     job_row.thread_count = int(body.thread_count)
-    job_row.max_file_retries = int(body.max_file_retries)
-    job_row.retry_delay_seconds = int(body.retry_delay_seconds)
-    job_row.callback_url = body.callback_url
-    if source_path_changed:
+    if not update_is_limited_to_runtime_fields:
+        job_row.evidence_number = body.evidence_number
+        job_row.source_path = validated_source_path
+        job_row.target_mount_path = drive_mount_path
+        job_row.max_file_retries = int(body.max_file_retries)
+        job_row.retry_delay_seconds = int(body.retry_delay_seconds)
+        job_row.callback_url = body.callback_url
+    if not update_is_limited_to_runtime_fields and source_path_changed:
         db.query(ExportFile).filter(ExportFile.job_id == job_id).delete(synchronize_session=False)
         db.query(StartupAnalysisEntry).filter(StartupAnalysisEntry.job_id == job_id).delete(synchronize_session=False)
         job_row.file_count = 0
@@ -1675,6 +1813,7 @@ def update_job(
                 "project_id": cast(Optional[str], job_row.project_id),
                 "drive_id": int(requested_drive_id),
                 "updated_fields": changed_fields,
+                "overflow_drive_ids": desired_overflow_drive_ids,
             },
             client_ip=client_ip,
         )
@@ -2046,10 +2185,10 @@ def start_job(
         assignment=assignment,
     )
 
-    # Transition to RUNNING inside the locked transaction so that any concurrent
+    # Transition to PREPARING inside the locked transaction so that any concurrent
     # request arriving after this commit will observe the updated state and be
     # rejected with 409 before the background copy task begins.
-    job_row.status = JobStatus.RUNNING
+    job_row.status = JobStatus.PREPARING
     job_row.started_by = actor
     job_row.started_at = datetime.now(timezone.utc)
     job_row.active_duration_seconds = int(cast(Optional[int], job_row.active_duration_seconds) or 0)
@@ -2159,7 +2298,7 @@ def retry_failed_files(
         raise service_exception(status_code=409, detail="Job has no failed files to retry")
 
     file_repo.reset_failed_for_retry(job_id)
-    job_row.status = JobStatus.RUNNING
+    job_row.status = JobStatus.PREPARING
     job_row.started_by = actor
     job_row.started_at = datetime.now(timezone.utc)
     job_row.active_duration_seconds = int(cast(Optional[int], job_row.active_duration_seconds) or 0)

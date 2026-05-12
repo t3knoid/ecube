@@ -26,7 +26,7 @@ const router = useRouter()
 const { t } = useI18n()
 const authStore = useAuthStore()
 const COC_PRINT_BODY_CLASS = 'printing-coc-report'
-const THREAD_COUNT_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8]
+const THREAD_COUNT_OPTIONS = Array.from({ length: 16 }, (_unused, index) => index + 1)
 
 const jobId = computed(() => {
   const parsed = Number(route.params.id)
@@ -89,6 +89,7 @@ const editForm = ref({
   mount_id: null,
   source_path: '/',
   drive_id: null,
+  overflow_drive_ids: [],
   thread_count: 4,
   callback_url: '',
 })
@@ -220,6 +221,7 @@ const canEdit = computed(() => {
     startupAnalysisStatus: currentStartupAnalysisStatus.value,
   })
 })
+const startedJobEditMode = computed(() => canEdit.value && currentStatus.value !== 'PENDING')
 const canComplete = computed(() => {
   return canOperateOnInactiveJob({
     canOperate: canOperate.value,
@@ -416,7 +418,7 @@ const actionItems = computed(() => {
       label: t('common.actions.edit'),
       disabled: !canEdit.value || acting.value,
       run: () => openEditDialog(),
-      visible: currentStatus.value === 'PENDING',
+      visible: canEdit.value,
     },
     {
       key: 'analyze',
@@ -545,6 +547,28 @@ const editEligibleDrives = computed(() => {
   })
 })
 
+const editOverflowEligibleDrives = computed(() => {
+  const projectId = normalizeProjectId(editForm.value.project_id)
+  const activeDriveId = Number(job.value?.drive?.id || 0)
+  const selectedOverflowDriveIds = new Set(
+    Array.isArray(editForm.value.overflow_drive_ids)
+      ? editForm.value.overflow_drive_ids.map((value) => Number(value)).filter((value) => Number.isInteger(value))
+      : [],
+  )
+
+  if (!projectId) return []
+
+  return supportingDrives.value.filter((drive) => {
+    const driveId = Number(drive?.id || 0)
+    const state = String(drive?.current_state || '').toUpperCase()
+    const boundProject = normalizeProjectId(drive?.current_project_id)
+    return driveId !== activeDriveId
+      && !!drive?.mount_path
+      && (!boundProject || boundProject === projectId)
+      && (['AVAILABLE', 'IN_USE'].includes(state) || selectedOverflowDriveIds.has(driveId))
+  })
+})
+
 const editSelectedMountRecord = computed(() => (
   editEligibleMounts.value.find((mount) => Number(mount.id) === Number(editForm.value.mount_id)) || null
 ))
@@ -556,7 +580,7 @@ function calculateDurationSeconds(currentJob) {
 
   const status = String(currentJob.status || '').toUpperCase()
   const storedSeconds = Number(currentJob.active_duration_seconds || 0)
-  if (['RUNNING', 'PAUSING', 'VERIFYING'].includes(status) && currentJob.started_at) {
+  if (['PREPARING', 'RUNNING', 'PAUSING', 'VERIFYING'].includes(status) && currentJob.started_at) {
     const started = new Date(currentJob.started_at)
     if (!Number.isNaN(started.getTime())) {
       const liveSeconds = Math.max(0, Math.round((currentTimeMs.value - started.getTime()) / 1000))
@@ -632,6 +656,10 @@ const completionSummaryHasFailures = computed(() => {
 const overflowAssignments = computed(() => {
   if (!Array.isArray(job.value?.overflow_assignments)) return []
   return job.value.overflow_assignments
+})
+
+const reservedOverflowAssignments = computed(() => {
+  return overflowAssignments.value.filter((assignment) => String(assignment?.state || '').toUpperCase() === 'RESERVED')
 })
 
 const manifestSummary = computed(() => {
@@ -1199,6 +1227,7 @@ async function openEditDialog() {
     mount_id: inferredMount?.id ?? null,
     source_path: buildEditSourcePath(job.value, inferredMount),
     drive_id: job.value.drive?.id ?? null,
+    overflow_drive_ids: reservedOverflowAssignments.value.map((assignment) => Number(assignment.drive_id)),
     thread_count: Number(job.value.thread_count || 4),
     callback_url: String(job.value.callback_url || ''),
   }
@@ -1238,6 +1267,10 @@ async function submitOverflowContinuation() {
 }
 
 function editFormReady() {
+  if (startedJobEditMode.value) {
+    return Number.isInteger(Number(editForm.value.thread_count || NaN))
+  }
+
   return !!normalizeProjectId(editForm.value.project_id)
     && !!String(editForm.value.evidence_number || '').trim()
     && !!String(editForm.value.source_path || '').trim()
@@ -1253,10 +1286,12 @@ async function submitEditJob() {
     const updated = await updateJob(job.value.id, {
       project_id: normalizeProjectId(editForm.value.project_id),
       evidence_number: String(editForm.value.evidence_number || '').trim(),
-      notes: String(editForm.value.notes || '').trim() || null,
       mount_id: Number(editForm.value.mount_id),
       source_path: String(editForm.value.source_path || '').trim(),
       drive_id: Number(editForm.value.drive_id),
+      overflow_drive_ids: Array.isArray(editForm.value.overflow_drive_ids)
+        ? editForm.value.overflow_drive_ids.map((value) => Number(value)).filter((value) => Number.isInteger(value))
+        : [],
       thread_count: Number(editForm.value.thread_count || 4),
       max_file_retries: Number(job.value.max_file_retries || 3),
       retry_delay_seconds: Number(job.value.retry_delay_seconds || 1),
@@ -1551,7 +1586,7 @@ async function runCompare() {
 }
 
 watch(currentStatus, (status) => {
-  if (!['RUNNING', 'PAUSING'].includes(status)) {
+  if (!['PREPARING', 'RUNNING', 'PAUSING'].includes(status)) {
     closePausePendingDialog()
   }
 })
@@ -2047,17 +2082,26 @@ onUnmounted(() => {
             :description="t('jobs.editDialogDescription')"
             :project-selected="true"
             :project-editable="false"
-            :show-notes-field="true"
-            :show-overflow-panel="false"
+            :evidence-editable="!startedJobEditMode"
+            :show-notes-field="false"
+            :notes-editable="false"
+            :show-overflow-panel="true"
+            :overflow-selection-enabled="true"
             :show-execution-group="false"
-            :show-source-browser-toggle="true"
+            :show-source-group="!startedJobEditMode"
+            :source-editable="!startedJobEditMode"
+            :show-primary-drive-field="!startedJobEditMode"
+            :primary-drive-editable="!startedJobEditMode"
+            :show-callback-url-field="!startedJobEditMode"
+            :callback-url-editable="!startedJobEditMode"
+            :show-source-browser-toggle="!startedJobEditMode"
             :show-source-browser="showEditSourceBrowser"
             :can-browse-selected-mount="canBrowseEditMount"
             :selected-mount-record="editSelectedMountRecord"
             :available-projects="[]"
             :eligible-mounts="editEligibleMounts"
             :primary-eligible-drives="editEligibleDrives"
-            :overflow-eligible-drives="[]"
+            :overflow-eligible-drives="editOverflowEligibleDrives"
             :form="editForm"
             :saving="acting"
             :can-submit="editFormReady()"

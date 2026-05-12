@@ -2,7 +2,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from sqlalchemy import and_, case, func, update
+from sqlalchemy import and_, case, func, not_, or_, update
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, joinedload
 
@@ -82,12 +82,12 @@ class JobRepository:
         return job
 
     def count_active(self) -> int:
-        """Return the number of currently running jobs."""
+        """Return the number of currently active jobs."""
         from app.models.jobs import JobStatus
 
         return (
             self.db.query(ExportJob)
-            .filter(ExportJob.status == JobStatus.RUNNING)
+            .filter(ExportJob.status.in_((JobStatus.PREPARING, JobStatus.RUNNING)))
             .count()
         )
 
@@ -300,7 +300,6 @@ class FileRepository:
     def list_incomplete_by_job(self, job_id: int) -> List[ExportFile]:
         """Return files that are not yet successfully completed for *job_id*.
 
-        This includes files in ``PENDING``, ``COPYING``, ``RETRYING``,
         ``ERROR``, and ``TIMEOUT`` states — everything except ``DONE``.
         """
         return (
@@ -311,6 +310,52 @@ class FileRepository:
             )
             .all()
         )
+
+    def should_attempt_target_full_continuation(self, job_id: int) -> bool:
+        """Return whether the active incomplete set is compatible with target-full continuation.
+
+        This avoids materializing the full incomplete-file backlog when callers only
+        need the aggregate continuation decision.
+        """
+        incomplete_filter = (
+            ExportFile.job_id == job_id,
+            ExportFile.status != FileStatus.DONE,
+        )
+        has_incomplete = self.db.query(ExportFile.id).filter(*incomplete_filter).first() is not None
+        if not has_incomplete:
+            return False
+
+        has_target_full_error = (
+            self.db.query(ExportFile.id)
+            .filter(
+                ExportFile.job_id == job_id,
+                ExportFile.status == FileStatus.ERROR,
+                ExportFile.error_message == "Target storage is full",
+            )
+            .first()
+            is not None
+        )
+        if not has_target_full_error:
+            return False
+
+        has_incompatible_incomplete = (
+            self.db.query(ExportFile.id)
+            .filter(
+                *incomplete_filter,
+                not_(
+                    or_(
+                        ExportFile.status.in_((FileStatus.PENDING, FileStatus.COPYING, FileStatus.RETRYING)),
+                        and_(
+                            ExportFile.status == FileStatus.ERROR,
+                            ExportFile.error_message == "Target storage is full",
+                        ),
+                    )
+                ),
+            )
+            .first()
+            is not None
+        )
+        return not has_incompatible_incomplete
 
     def add(self, export_file: ExportFile) -> ExportFile:
         """Persist a new export file record."""

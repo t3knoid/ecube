@@ -261,7 +261,7 @@ class TestBuildPayload:
             evidence_number="EV-LIFECYCLE",
             created_by="creator",
             started_by="operator",
-            status=JobStatus.RUNNING,
+            status=JobStatus.PREPARING,
             source_path="/data/lifecycle",
             total_bytes=2048,
             copied_bytes=512,
@@ -283,7 +283,7 @@ class TestBuildPayload:
         )
 
         assert payload["event"] == "JOB_STARTED"
-        assert payload["status"] == "RUNNING"
+        assert payload["status"] == "PREPARING"
         assert payload["created_by"] == "creator"
         assert payload["event_actor"] == "processor"
         assert payload["event_at"] == "2026-05-01T12:05:30+00:00"
@@ -784,7 +784,7 @@ class TestDeliverCallback:
         mock_client_instance.post.return_value = mock_response
         mock_client_cls.return_value = mock_client_instance
 
-        job = self._make_db_job(db, status=JobStatus.RUNNING)
+        job = self._make_db_job(db, status=JobStatus.PREPARING)
         job.created_by = "creator"
         job.completed_at = None
 
@@ -800,7 +800,7 @@ class TestDeliverCallback:
 
         sent_payload = json.loads(mock_client_instance.post.call_args.kwargs["content"].decode("utf-8"))
         assert sent_payload["event"] == "JOB_STARTED"
-        assert sent_payload["status"] == "RUNNING"
+        assert sent_payload["status"] == "PREPARING"
         assert sent_payload["event_actor"] == "processor"
         assert sent_payload["event_details"] == {"thread_count": 4}
 

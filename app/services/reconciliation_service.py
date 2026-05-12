@@ -851,7 +851,7 @@ def run_manual_managed_mount_reconciliation(
 # Job reconciliation
 # -----------------------------------------------------------------------
 
-_IN_PROGRESS_STATUSES = (JobStatus.RUNNING, JobStatus.VERIFYING)
+_IN_PROGRESS_STATUSES = (JobStatus.PREPARING, JobStatus.RUNNING, JobStatus.VERIFYING)
 
 
 def _reconcile_stale_startup_analysis(

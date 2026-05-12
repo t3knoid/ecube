@@ -17,13 +17,15 @@ describe('job action helpers', () => {
   it('shares the inactive-job eligibility rule across edit, analyze, complete, and start states', () => {
     expect(canOperateOnInactiveJob({ canOperate: true, jobStatus: 'FAILED', startupAnalysisStatus: 'READY' })).toBe(true)
     expect(canOperateOnInactiveJob({ canOperate: true, jobStatus: 'RUNNING', startupAnalysisStatus: 'READY' })).toBe(false)
+    expect(canOperateOnInactiveJob({ canOperate: true, jobStatus: 'PREPARING', startupAnalysisStatus: 'READY' })).toBe(false)
   })
 
-  it('allows edit only while the job is still pending', () => {
+  it('allows edit for pending and started jobs while startup analysis is not running', () => {
     expect(canEditJob({ canOperate: true, jobStatus: 'PENDING', startupAnalysisStatus: 'READY' })).toBe(true)
+    expect(canEditJob({ canOperate: true, jobStatus: 'RUNNING', startupAnalysisStatus: 'READY' })).toBe(true)
+    expect(canEditJob({ canOperate: true, jobStatus: 'FAILED', startupAnalysisStatus: 'READY' })).toBe(true)
     expect(canEditJob({ canOperate: true, jobStatus: 'PENDING', startupAnalysisStatus: 'ANALYZING' })).toBe(false)
-    expect(canEditJob({ canOperate: true, jobStatus: 'PAUSED', startupAnalysisStatus: 'READY' })).toBe(false)
-    expect(canEditJob({ canOperate: true, jobStatus: 'FAILED', startupAnalysisStatus: 'READY' })).toBe(false)
+    expect(canEditJob({ canOperate: true, jobStatus: 'COMPLETED', startupAnalysisStatus: 'READY' })).toBe(false)
   })
 
   it('allows pause only for running jobs', () => {
@@ -36,6 +38,10 @@ describe('job action helpers', () => {
     expect(getJobLifecycleToggleAction({ canOperate: true, jobStatus: 'PENDING', startupAnalysisStatus: 'READY' })).toEqual({
       key: 'start',
       enabled: true,
+    })
+    expect(getJobLifecycleToggleAction({ canOperate: true, jobStatus: 'PREPARING', startupAnalysisStatus: 'READY' })).toEqual({
+      key: 'pause',
+      enabled: false,
     })
     expect(getJobLifecycleToggleAction({ canOperate: true, jobStatus: 'RUNNING', startupAnalysisStatus: 'READY' })).toEqual({
       key: 'pause',
@@ -58,6 +64,9 @@ describe('job action helpers', () => {
     expect(getJobListLifecycleActions({ canOperate: true, jobStatus: 'PENDING', startupAnalysisStatus: 'READY' })).toEqual([
       { key: 'start', enabled: true },
     ])
+    expect(getJobListLifecycleActions({ canOperate: true, jobStatus: 'PREPARING', startupAnalysisStatus: 'READY' })).toEqual([
+      { key: 'pause', enabled: false },
+    ])
     expect(getJobListLifecycleActions({ canOperate: true, jobStatus: 'RUNNING', startupAnalysisStatus: 'READY' })).toEqual([
       { key: 'pause', enabled: true },
     ])
@@ -71,6 +80,7 @@ describe('job action helpers', () => {
   })
 
   it('shares the Jobs list polling rule for active and analyzing jobs', () => {
+    expect(shouldPollJobListEntry({ jobStatus: 'PREPARING', startupAnalysisStatus: 'READY' })).toBe(true)
     expect(shouldPollJobListEntry({ jobStatus: 'RUNNING', startupAnalysisStatus: 'READY' })).toBe(true)
     expect(shouldPollJobListEntry({ jobStatus: 'PAUSING', startupAnalysisStatus: 'READY' })).toBe(true)
     expect(shouldPollJobListEntry({ jobStatus: 'COMPLETED', startupAnalysisStatus: 'ANALYZING' })).toBe(true)
@@ -79,9 +89,10 @@ describe('job action helpers', () => {
 
   it('derives primary Job Detail actions from one shared status helper', () => {
     expect(getJobDetailPrimaryActionKeys({ jobStatus: 'PENDING', canRetryFailed: false, canReadCoc: false })).toEqual(['edit', 'analyze', 'lifecycle-toggle'])
-    expect(getJobDetailPrimaryActionKeys({ jobStatus: 'PAUSED', canRetryFailed: false, canReadCoc: false })).toEqual(['analyze', 'lifecycle-toggle'])
-    expect(getJobDetailPrimaryActionKeys({ jobStatus: 'FAILED', canRetryFailed: false, canReadCoc: false })).toEqual(['analyze', 'lifecycle-toggle'])
-    expect(getJobDetailPrimaryActionKeys({ jobStatus: 'RUNNING', canRetryFailed: false, canReadCoc: false })).toEqual(['lifecycle-toggle'])
+    expect(getJobDetailPrimaryActionKeys({ jobStatus: 'PAUSED', canRetryFailed: false, canReadCoc: false })).toEqual(['edit', 'analyze', 'lifecycle-toggle'])
+    expect(getJobDetailPrimaryActionKeys({ jobStatus: 'FAILED', canRetryFailed: false, canReadCoc: false })).toEqual(['edit', 'analyze', 'lifecycle-toggle'])
+    expect(getJobDetailPrimaryActionKeys({ jobStatus: 'PREPARING', canRetryFailed: false, canReadCoc: false })).toEqual(['edit', 'lifecycle-toggle'])
+    expect(getJobDetailPrimaryActionKeys({ jobStatus: 'RUNNING', canRetryFailed: false, canReadCoc: false })).toEqual(['edit', 'lifecycle-toggle'])
     expect(getJobDetailPrimaryActionKeys({ jobStatus: 'COMPLETED', canRetryFailed: false, canReadCoc: true })).toEqual(['verify', 'manifest', 'coc'])
     expect(getJobDetailPrimaryActionKeys({ jobStatus: 'COMPLETED', canRetryFailed: true, canReadCoc: true })).toEqual(['retry-failed', 'coc'])
     expect(getJobDetailPrimaryActionKeys({ jobStatus: 'COMPLETED', canRetryFailed: false, canReadCoc: false })).toEqual(['verify', 'manifest'])
@@ -90,6 +101,7 @@ describe('job action helpers', () => {
   it('derives dashboard next-step guidance from trusted job and custody state', () => {
     expect(getDashboardNextStepKey({ jobStatus: 'PENDING', startupAnalysisStatus: 'READY' })).toBe('dashboard.nextStepReviewAndStart')
     expect(getDashboardNextStepKey({ jobStatus: 'PENDING', startupAnalysisStatus: 'ANALYZING' })).toBe('dashboard.nextStepAwaitAnalysis')
+    expect(getDashboardNextStepKey({ jobStatus: 'PREPARING', startupAnalysisStatus: 'READY' })).toBe('dashboard.nextStepMonitorProgress')
     expect(getDashboardNextStepKey({ jobStatus: 'RUNNING', startupAnalysisStatus: 'READY' })).toBe('dashboard.nextStepMonitorProgress')
     expect(getDashboardNextStepKey({ jobStatus: 'FAILED', failedFiles: 1, timedOutFiles: 0 })).toBe('dashboard.nextStepReviewFailedFiles')
     expect(getDashboardNextStepKey({ jobStatus: 'PAUSED', failedFiles: 0, timedOutFiles: 0 })).toBe('dashboard.nextStepReviewAndResume')

@@ -287,6 +287,7 @@
     "checksum": "Checksum",
     "statuses": {
       "pending": "Pending",
+      "preparing": "Preparing",
       "running": "Running",
       "pausing": "Pausing",
       "paused": "Paused",
@@ -652,6 +653,13 @@
       "copyJobs": "Copy Jobs",
       "webhooks": "Webhooks"
     },
+    "copyProfiles": {
+      "help": "Quick presets bias copy tuning for the expected workload. Apply a preset, then fine-tune the fields below before saving.",
+      "smallFiles": "Small-file heavy",
+      "mixed": "Mixed workload",
+      "largeFiles": "Large-file heavy",
+      "greedy": "Greedy throughput"
+    },
     "fields": {
       "log_level": {
         "label": "Log Level",
@@ -714,6 +722,22 @@
       "copy_job_timeout": {
         "label": "Per-file Copy Timeout (seconds)",
         "help": "Maximum time allowed for one file copy/checksum attempt. Set to 0 to disable timeout enforcement."
+      },
+      "copy_chunk_size_bytes": {
+        "label": "Copy Chunk Size",
+        "help": "Larger chunks reduce Python loop overhead and use more memory per worker. Larger values help most on large-file workloads."
+      },
+      "copy_progress_flush_bytes": {
+        "label": "Progress Flush Threshold",
+        "help": "How much copied data the engine buffers before committing progress to the database. Higher values reduce transaction overhead and use more memory."
+      },
+      "copy_default_thread_count": {
+        "label": "Default Copy Worker Count",
+        "help": "Number of copy workers used when a job does not override thread count. Higher values improve overlap for many small files when the source and target can sustain it."
+      },
+      "copy_file_fsync_enabled": {
+        "label": "Force per-file disk sync",
+        "help": "When enabled, ECUBE calls fsync() after every copied file. Leave disabled for maximum throughput and rely on restart recovery to resume from the last committed DONE file."
       },
       "usb_discovery_interval": {
         "label": "Auto USB Discovery Interval (seconds)",

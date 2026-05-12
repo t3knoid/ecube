@@ -3,7 +3,7 @@ function clampPercent(value) {
 }
 
 function isActiveStatus(status) {
-  return ['RUNNING', 'PAUSING', 'VERIFYING'].includes(String(status || '').toUpperCase())
+  return ['PREPARING', 'RUNNING', 'PAUSING', 'VERIFYING'].includes(String(status || '').toUpperCase())
 }
 
 export function calculateJobProgress(job) {

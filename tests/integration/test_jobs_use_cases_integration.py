@@ -223,7 +223,7 @@ def test_retry_failed_files_requeues_failed_rows_and_audits(integration_client, 
         response = integration_client.post(f"/jobs/{job.id}/retry-failed")
 
     assert response.status_code == 200
-    assert response.json()["status"] == "RUNNING"
+    assert response.json()["status"] == "PREPARING"
     assert response.json()["files_failed"] == 0
     assert response.json()["files_timed_out"] == 0
     mock_copy.assert_called_once_with(job.id)

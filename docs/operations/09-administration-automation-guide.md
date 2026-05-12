@@ -997,26 +997,26 @@ through verification and manifest generation.
 Every export job passes through a defined set of states:
 
 ```text
-  ┌──────────┐    start     ┌──────────┐                ┌─────────────┐
-  │ PENDING  │ ────────────►│ RUNNING  │──────────────► │  COMPLETED  │
-  └──────────┘              └──────────┘   success      └─────────────┘
-       │                         │                             ▲
-       │                         │ failure    ┌──────────┐     │ pass
-       │                         └──────────► │  FAILED  │     │
-       │                                      └──────────┘     │
-       │                                                       │
-       │                    ┌────────────┐    verify           │
-       │                    │ VERIFYING  │────────────────────►│
-       │                    └────────────┘         ▲           │
-       │                                           │           │
-       └───────────────────────────────────────────┘           │
-                         (after RUNNING completes)     fail ──►│
-                                                        FAILED
+    ┌──────────┐    start     ┌────────────┐            ┌──────────┐                ┌─────────────┐
+    │ PENDING  │ ────────────►│ PREPARING  │───────────►│ RUNNING  │──────────────► │  COMPLETED  │
+    └──────────┘              └────────────┘            └──────────┘   success      └─────────────┘
+      │                           │                       │                             ▲
+      │                           │ failure               │ failure    ┌──────────┐     │ pass
+      │                           └──────────────────────►│──────────► │  FAILED  │     │
+      │                                                   │            └──────────┘     │
+      │                                                   │                             │
+      │                    ┌────────────┐    verify       │                             │
+      │                    │ VERIFYING  │──────────────────────────────────────────────►│
+      │                    └────────────┘         ▲                                     │
+      │                                           │                                     │
+      └───────────────────────────────────────────┴─────────────────────────────────────┘
+            (after RUNNING completes)                                fail ──► FAILED
 ```
 
 | State | Meaning |
 |-------|----------|
 | `PENDING` | Job created but not yet started |
+| `PREPARING` | Startup preparation is in progress before copy threads begin or resume |
 | `RUNNING` | Copy is actively in progress (background task) |
 | `VERIFYING` | Hash verification of copied files in progress |
 | `COMPLETED` | All files copied and (optionally) verified successfully |
@@ -1025,7 +1025,7 @@ Every export job passes through a defined set of states:
 Key behaviors:
 
 - **Create** registers the job with source path, project ID, and evidence number. The job starts in `PENDING`.
-- **Start** launches the background copy process (`PENDING → RUNNING`). Progress is tracked via `copied_bytes` and per-file status. Immediately after start, ECUBE can legitimately return `RUNNING` with `total_bytes=0`, `copied_bytes=0`, and `file_count=0` while startup analysis is still scanning the source and calculating totals.
+- **Start** launches the background copy process (`PENDING → PREPARING → RUNNING`). Progress is tracked via `copied_bytes` and per-file status. Immediately after start, ECUBE can legitimately return `PREPARING` with `total_bytes=0`, `copied_bytes=0`, and `file_count=0` while startup analysis is still scanning the source and calculating totals.
 - **Verify** (optional) compares checksums of copied files against source (`RUNNING/completed → VERIFYING → COMPLETED` or `FAILED`).
 - **Manifest** generates a JSON document on the USB drive listing all copied files with their checksums, sizes, and metadata.
 - Failed files are automatically retried up to `max_file_retries` times with a configurable delay.

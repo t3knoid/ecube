@@ -24,7 +24,7 @@ export function classifyMountWorkflowBucket(mount) {
     return MOUNT_WORKFLOW_BUCKETS.ASSIGNED
   }
 
-  if (['RUNNING', 'PAUSING', 'VERIFYING'].includes(status)) {
+  if (['PREPARING', 'RUNNING', 'PAUSING', 'VERIFYING'].includes(status)) {
     return MOUNT_WORKFLOW_BUCKETS.ACTIVE
   }
 

@@ -9,6 +9,7 @@ const DRIVE_STATE_KEYS = {
 
 const JOB_STATUS_KEYS = {
   PENDING: 'jobs.statuses.pending',
+  PREPARING: 'jobs.statuses.preparing',
   RUNNING: 'jobs.statuses.running',
   PAUSING: 'jobs.statuses.pausing',
   PAUSED: 'jobs.statuses.paused',

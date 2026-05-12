@@ -108,7 +108,7 @@ def test_start_job_without_body_succeeds(admin_client, db):
         response = admin_client.post(f'/jobs/{job.id}/start')
 
     assert response.status_code == 200
-    assert response.json()['status'] == 'RUNNING'
+    assert response.json()['status'] == 'PREPARING'
     assert response.json()['thread_count'] == 4
 
 

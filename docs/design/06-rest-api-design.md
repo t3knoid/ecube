@@ -462,7 +462,7 @@ Optional query parameter: `confirm_incomplete` (boolean, default `false`).
 Performs the following steps in sequence:
 
 1. **Fast-fail validation:** Checks that drive is in `IN_USE` state before performing expensive OS operations
-2. Checks for active unreleased drive assignments whose job has started and is not yet completed (`RUNNING`, `PAUSING`, `PAUSED`, or `VERIFYING`)
+2. Checks for active unreleased drive assignments whose job has started and is not yet completed (`PREPARING`, `RUNNING`, `PAUSING`, `PAUSED`, or `VERIFYING`)
     - If one exists, returns `409 Conflict` and does not eject
 3. Checks active drive assignments for incomplete files (`TIMEOUT` or `ERROR`)
     - If incomplete files exist and `confirm_incomplete=false`, returns `409 Conflict` with confirmation-required detail and does not eject

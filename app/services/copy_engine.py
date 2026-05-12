@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterator, List, Optional, Protocol, Tuple
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -177,8 +178,9 @@ def copy_file(
                 fdst.write(chunk)
                 if progress_callback is not None:
                     progress_callback(len(chunk))
-            fdst.flush()
-            os.fsync(fdst.fileno())
+            if settings.copy_file_fsync_enabled:
+                fdst.flush()
+                os.fsync(fdst.fileno())
         return True, h.hexdigest(), None
     except TimeoutError:
         raise
@@ -346,8 +348,7 @@ def _read_copy_job_runtime_state(db: Session, job_id: int) -> tuple[Optional[Job
         latest_started_at = latest_job.started_at if latest_job else None
         should_attempt_target_full = False
         if latest_job is not None:
-            incomplete_files = FileRepository(read_db).list_incomplete_by_job(job_id)
-            should_attempt_target_full = _should_attempt_target_full_continuation(incomplete_files)
+            should_attempt_target_full = FileRepository(read_db).should_attempt_target_full_continuation(job_id)
         return latest_status, latest_started_at, should_attempt_target_full
     finally:
         read_db.close()
@@ -1354,8 +1355,38 @@ def prepare_job_startup_analysis(
         source = Path(job.source_path)
         reused_cached_analysis = False
         sample_files: list[Path] = []
+        root_directory_rows = startup_entry_repo.list_by_job(job_id, entry_type="directory", limit=1)
+        cached_root_directory = root_directory_rows[0] if root_directory_rows else None
+        root_directory_matches = True
+        if source.is_dir():
+            root_directory_matches = (
+                cached_root_directory is not None
+                and cached_root_directory.relative_path == ""
+                and int(cached_root_directory.mtime_ns or 0) == source.stat().st_mtime_ns
+            )
 
-        if bool(job.startup_analysis_cache_present) and _cached_startup_analysis_is_current(job, source, file_repo, startup_entry_repo):
+        # For normal copy runs, trust a previously prepared READY cache when the
+        # persisted file rows already match the cached file count. Re-validating
+        # every cached path with stat() can make large restarts appear frozen
+        # before any copy workers are scheduled.
+        if (
+            not manual
+            and job.startup_analysis_status == StartupAnalysisStatus.READY
+            and bool(job.startup_analysis_cache_present)
+            and int(job.startup_analysis_file_count or 0) > 0
+            and root_directory_matches
+            and file_repo.count_by_job(job_id) == int(job.startup_analysis_file_count or 0)
+        ):
+            reused_cached_analysis = True
+            cached_file_count = int(job.startup_analysis_file_count or 0)
+            cached_total_bytes = int(job.startup_analysis_total_bytes or 0)
+            sample_rows = file_repo.list_by_job(job_id, limit=STARTUP_ANALYSIS_SAMPLE_LIMIT)
+            sample_files = [
+                _source_path_for_relative_path(source, file_row.relative_path)
+                for file_row in sample_rows
+            ]
+
+        elif bool(job.startup_analysis_cache_present) and _cached_startup_analysis_is_current(job, source, file_repo, startup_entry_repo):
             reused_cached_analysis = True
             cached_file_count = int(job.startup_analysis_file_count or 0)
             cached_total_bytes = int(job.startup_analysis_total_bytes or 0)
@@ -1569,6 +1600,27 @@ def _process_file(
     """
     db: Session = SessionLocal()
     worker_snapshot: Optional[dict[str, object]] = None
+
+    def _commit_with_staged_audit(
+        *,
+        commit_error_message: str,
+        action: Optional[str] = None,
+        details: Optional[dict[str, object]] = None,
+    ) -> bool:
+        if action is not None:
+            audit_repo.add_uncommitted(
+                action=action,
+                job_id=ef.job_id,
+                details=details,
+            )
+        try:
+            db.commit()
+            return True
+        except Exception:
+            db.rollback()
+            logger.exception(commit_error_message, export_file_id)
+            return False
+
     try:
         file_repo = FileRepository(db)
         audit_repo = AuditRepository(db)
@@ -1592,23 +1644,28 @@ def _process_file(
                 logger.exception("DB commit failed restoring PENDING status for file %s", export_file_id)
             return
 
+        # Do not hold the worker's initial read transaction open across the
+        # potentially long-running copy/checksum operation. Reopen a fresh
+        # session for the copy/update path so pause requests are not blocked by
+        # a worker that is idle in transaction while doing file I/O.
+        db.rollback()
+        db.close()
+        db = SessionLocal()
+        file_repo = FileRepository(db)
+        audit_repo = AuditRepository(db)
+        ef = file_repo.get(export_file_id)
+        if ef is None:
+            return
+
         worker_snapshot = register_active_copy_worker(job_id=ef.job_id)
 
         ef.status = FileStatus.COPYING
-        try:
-            file_repo.save(ef)
-        except Exception:
-            logger.exception("DB commit failed setting file %s to COPYING", export_file_id)
+        if not _commit_with_staged_audit(
+            commit_error_message="DB commit failed setting file %s to COPYING",
+            action="FILE_COPY_START",
+            details={"file_id": ef.id, "relative_path": ef.relative_path},
+        ):
             return
-
-        try:
-            audit_repo.add(
-                action="FILE_COPY_START",
-                job_id=ef.job_id,
-                details={"file_id": ef.id, "relative_path": ef.relative_path},
-            )
-        except Exception:
-            logger.exception("Failed to write audit log for FILE_COPY_START")
 
         last_err: Optional[str] = None
         success = False
@@ -1644,28 +1701,40 @@ def _process_file(
                 pending_progress_bytes += delta
                 _flush_progress()
 
+            def _stage_remaining_progress() -> None:
+                nonlocal pending_progress_bytes
+                if pending_progress_bytes <= 0:
+                    return
+                self_execute = db.execute
+                self_execute(
+                    update(ExportJob)
+                    .where(ExportJob.id == ef.job_id)
+                    .values(copied_bytes=ExportJob.copied_bytes + pending_progress_bytes)
+                )
+                if active_assignment_id is not None:
+                    self_execute(
+                        update(DriveAssignment)
+                        .where(DriveAssignment.id == active_assignment_id)
+                        .values(copied_bytes=DriveAssignment.copied_bytes + pending_progress_bytes)
+                    )
+                pending_progress_bytes = 0
+
             if attempt > 0:
                 # Exponential backoff: retry_delay * 2^(attempt-1)
                 delay = retry_delay * (2 ** (attempt - 1))
                 ef.status = FileStatus.RETRYING
                 ef.retry_attempts = attempt
-                try:
-                    file_repo.save(ef)
-                except Exception:
-                    logger.exception("DB commit failed setting file %s to RETRYING", export_file_id)
-                try:
-                    audit_repo.add(
-                        action="FILE_COPY_RETRY",
-                        job_id=ef.job_id,
-                        details={
-                            "file_id": ef.id,
-                            "relative_path": ef.relative_path,
-                            "attempt": attempt,
-                            "delay_seconds": delay,
-                        },
-                    )
-                except Exception:
-                    logger.exception("Failed to write audit log for FILE_COPY_RETRY")
+                if not _commit_with_staged_audit(
+                    commit_error_message="DB commit failed setting file %s to RETRYING",
+                    action="FILE_COPY_RETRY",
+                    details={
+                        "file_id": ef.id,
+                        "relative_path": ef.relative_path,
+                        "attempt": attempt,
+                        "delay_seconds": delay,
+                    },
+                ):
+                    return
                 time.sleep(delay)
                 ef.status = FileStatus.COPYING
                 try:
@@ -1704,7 +1773,8 @@ def _process_file(
                     success = False
                     err = str(timeout_exc)
 
-            _flush_progress(force=True)
+            if not success:
+                _flush_progress(force=True)
 
             if success:
                 break
@@ -1761,7 +1831,7 @@ def _process_file(
                 },
             )
             try:
-                audit_repo.add(
+                audit_repo.add_uncommitted(
                     action="FILE_COPY_FAILURE",
                     job_id=ef.job_id,
                     details={
@@ -1772,29 +1842,36 @@ def _process_file(
                         "error_detail": safe_error_message,
                     },
                 )
+                db.commit()
             except Exception:
+                db.rollback()
                 logger.exception("Failed to write audit log for FILE_COPY_FAILURE")
 
         ef.checksum = checksum
         if success:
             ef.status = FileStatus.DONE
+            _stage_remaining_progress()
+            if active_assignment_id is not None:
+                db.execute(
+                    update(DriveAssignment)
+                    .where(DriveAssignment.id == active_assignment_id)
+                    .values(file_count=DriveAssignment.file_count + 1)
+                )
             try:
-                file_repo.save_completed_copy(ef, active_assignment_id)
+                audit_repo.add_uncommitted(
+                    action="FILE_COPY_SUCCESS",
+                    job_id=ef.job_id,
+                    details={"file_id": ef.id, "relative_path": ef.relative_path},
+                )
+                db.commit()
             except Exception:
+                db.rollback()
                 logger.exception("DB commit failed saving DONE status for file %s", export_file_id)
                 if bytes_reported:
                     try:
                         file_repo.decrement_copy_progress(ef.job_id, active_assignment_id, bytes_reported)
                     except Exception:
                         logger.exception("DB commit failed restoring copied_bytes for file %s", export_file_id)
-            try:
-                audit_repo.add(
-                    action="FILE_COPY_SUCCESS",
-                    job_id=ef.job_id,
-                    details={"file_id": ef.id, "relative_path": ef.relative_path},
-                )
-            except Exception:
-                logger.exception("Failed to write audit log for FILE_COPY_SUCCESS")
         elif timed_out:
             # Mark file as TIMEOUT (not ERROR) so job continues; timeout can be retried later.
             ef.status = FileStatus.TIMEOUT
@@ -1845,7 +1922,7 @@ def run_copy_job(job_id: int) -> None:
         if job.status == JobStatus.PAUSED:
             return
 
-        job.status = JobStatus.RUNNING
+        job.status = JobStatus.PREPARING
         if not job.started_at:
             job.started_at = datetime.now(timezone.utc)
         run_started_at = job.started_at
@@ -1856,7 +1933,7 @@ def run_copy_job(job_id: int) -> None:
         try:
             job_repo.save(job)
         except Exception:
-            logger.error("DB commit failed setting job %s to RUNNING", job_id)
+            logger.error("DB commit failed setting job %s to PREPARING", job_id)
             return
 
         done_count = 0
@@ -1889,80 +1966,90 @@ def run_copy_job(job_id: int) -> None:
                     except Exception:
                         logger.error("Failed to write audit log for JOB_STARTUP_ANALYSIS_REUSED")
 
+                pause_requested = False
+                stop_for_target_full = False
+                if job.status in (JobStatus.PAUSING, JobStatus.PAUSED):
+                    pause_requested = True
+                else:
+                    job.status = JobStatus.RUNNING
+                    try:
+                        job_repo.save(job)
+                    except Exception:
+                        logger.error("DB commit failed setting job %s to RUNNING", job_id)
+                        return
+
                 max_retries = job.max_file_retries if job.max_file_retries is not None else settings.copy_default_max_retries
                 retry_delay = float(job.retry_delay_seconds) if job.retry_delay_seconds is not None else settings.copy_default_retry_delay_seconds
 
-                pause_requested = False
-                stop_for_target_full = False
-
-                executor = ThreadPoolExecutor(
-                    max_workers=job.thread_count or settings.copy_default_thread_count,
-                    thread_name_prefix=f"copy-job-{job_id}",
-                )
-                try:
-                    pending_after_id: int | None = None
-                    batch_limit = max(1, (job.thread_count or settings.copy_default_thread_count) * COPY_PENDING_BATCH_MULTIPLIER)
-                    while True:
-                        pending_files = file_repo.list_pending_by_job_after_id(
-                            job_id,
-                            after_id=pending_after_id,
-                            limit=batch_limit,
-                        )
-                        if not pending_files:
-                            break
-                        pending_after_id = pending_files[-1].id
-                        futures = {
-                            executor.submit(
-                                _process_file,
-                                ef.id,
-                                _source_path_for_relative_path(source, ef.relative_path),
-                                target,
-                                max_retries,
-                                retry_delay,
-                            ): ef.id
-                            for ef in pending_files
-                        }
-                        for future in as_completed(futures):
-                            try:
-                                future.result()
-                            except Exception:
-                                # Worker already recorded FileStatus.ERROR in its own session;
-                                # unexpected exceptions are caught here to let other workers finish.
-                                pass
-
-                            latest_status, latest_started_at, should_attempt_target_full = _read_copy_job_runtime_state(db, job_id)
-                            latest_started_at_key = _normalize_started_at(latest_started_at)
-                            if latest_status is not None and latest_started_at_key and latest_started_at_key != run_started_at_key:
-                                for pending in futures:
-                                    if not pending.done():
-                                        pending.cancel()
-                                logger.info(
-                                    "Skipping stale copy worker after newer resume",
-                                    extra={"job_id": job_id, "started_at": str(run_started_at)},
-                                )
-                                return
-                            if latest_status in (JobStatus.PAUSING, JobStatus.PAUSED):
-                                pause_requested = True
-                                for pending in futures:
-                                    if not pending.done():
-                                        pending.cancel()
+                if not pause_requested:
+                    executor = ThreadPoolExecutor(
+                        max_workers=job.thread_count or settings.copy_default_thread_count,
+                        thread_name_prefix=f"copy-job-{job_id}",
+                    )
+                    try:
+                        pending_after_id: int | None = None
+                        batch_limit = max(1, (job.thread_count or settings.copy_default_thread_count) * COPY_PENDING_BATCH_MULTIPLIER)
+                        while True:
+                            pending_files = file_repo.list_pending_by_job_after_id(
+                                job_id,
+                                after_id=pending_after_id,
+                                limit=batch_limit,
+                            )
+                            if not pending_files:
                                 break
-                            if should_attempt_target_full:
-                                stop_for_target_full = True
-                                for pending in futures:
-                                    if not pending.done():
-                                        pending.cancel()
-                                break
-                        if pause_requested:
-                            break
-                        if stop_for_target_full:
-                            break
+                            pending_after_id = pending_files[-1].id
+                            futures = {
+                                executor.submit(
+                                    _process_file,
+                                    ef.id,
+                                    _source_path_for_relative_path(source, ef.relative_path),
+                                    target,
+                                    max_retries,
+                                    retry_delay,
+                                ): ef.id
+                                for ef in pending_files
+                            }
+                            for future in as_completed(futures):
+                                try:
+                                    future.result()
+                                except Exception:
+                                    # Worker already recorded FileStatus.ERROR in its own session;
+                                    # unexpected exceptions are caught here to let other workers finish.
+                                    pass
 
-                finally:
-                    # Always wait for running workers to finish so the DB session is
-                    # idle before the main thread uses it.  cancel_futures=True
-                    # prevents queued (not-yet-started) tasks from running.
-                    executor.shutdown(wait=True, cancel_futures=True)
+                                latest_status, latest_started_at, should_attempt_target_full = _read_copy_job_runtime_state(db, job_id)
+                                latest_started_at_key = _normalize_started_at(latest_started_at)
+                                if latest_status is not None and latest_started_at_key and latest_started_at_key != run_started_at_key:
+                                    for pending in futures:
+                                        if not pending.done():
+                                            pending.cancel()
+                                    logger.info(
+                                        "Skipping stale copy worker after newer resume",
+                                        extra={"job_id": job_id, "started_at": str(run_started_at)},
+                                    )
+                                    return
+                                if latest_status in (JobStatus.PAUSING, JobStatus.PAUSED):
+                                    pause_requested = True
+                                    for pending in futures:
+                                        if not pending.done():
+                                            pending.cancel()
+                                    break
+                                if should_attempt_target_full:
+                                    stop_for_target_full = True
+                                    for pending in futures:
+                                        if not pending.done():
+                                            pending.cancel()
+                                    break
+                            if pause_requested:
+                                break
+                            if stop_for_target_full:
+                                break
+
+                    finally:
+                        # Always wait for running workers to finish so the DB session is
+                        # idle before the main thread uses it.  cancel_futures=True
+                        # prevents queued (not-yet-started) tasks from running.
+                        executor.shutdown(wait=True, cancel_futures=True)
 
                 # Determine final job status.
                 db.expire_all()
@@ -1983,7 +2070,7 @@ def run_copy_job(job_id: int) -> None:
                 if job:
                     if _normalize_started_at(job.started_at) != run_started_at_key:
                         logger.info(
-                            "Skipping stale finalization for resumed copy job",
+                            "Skipping stale copy finalization after newer resume",
                             extra={"job_id": job_id, "started_at": str(run_started_at)},
                         )
                         return

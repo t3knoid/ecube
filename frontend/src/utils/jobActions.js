@@ -8,8 +8,9 @@ export function normalizeStartupAnalysisStatus(status) {
 
 const INACTIVE_JOB_STATUSES = ['PENDING', 'FAILED', 'PAUSED']
 const COC_READABLE_JOB_STATUSES = ['COMPLETED', 'ARCHIVED']
-const ACTIVE_JOB_POLLING_STATUSES = ['RUNNING', 'PAUSING', 'VERIFYING']
-const PAUSE_VISIBLE_JOB_STATUSES = ['RUNNING', 'PAUSING']
+const ACTIVE_JOB_POLLING_STATUSES = ['PREPARING', 'RUNNING', 'PAUSING', 'VERIFYING']
+const PAUSE_VISIBLE_JOB_STATUSES = ['PREPARING', 'RUNNING', 'PAUSING']
+const EDITABLE_JOB_STATUSES = ['PENDING', 'PREPARING', 'RUNNING', 'PAUSING', 'PAUSED', 'FAILED']
 
 export function canOperateOnInactiveJob({ canOperate, jobStatus, startupAnalysisStatus }) {
   return Boolean(canOperate)
@@ -23,7 +24,7 @@ export function canStartJob({ canOperate, jobStatus, startupAnalysisStatus }) {
 
 export function canEditJob({ canOperate, jobStatus, startupAnalysisStatus }) {
   return Boolean(canOperate)
-    && normalizeJobStatus(jobStatus) === 'PENDING'
+    && EDITABLE_JOB_STATUSES.includes(normalizeJobStatus(jobStatus))
     && normalizeStartupAnalysisStatus(startupAnalysisStatus) !== 'ANALYZING'
 }
 
@@ -35,6 +36,13 @@ export function getJobLifecycleToggleAction({ canOperate, jobStatus, startupAnal
   const status = normalizeJobStatus(jobStatus)
 
   if (status === 'PAUSING') {
+    return {
+      key: 'pause',
+      enabled: false,
+    }
+  }
+
+  if (status === 'PREPARING') {
     return {
       key: 'pause',
       enabled: false,
@@ -95,7 +103,7 @@ export function getDashboardNextStepKey({ jobStatus, startupAnalysisStatus, cust
     return 'dashboard.nextStepOpenDetail'
   }
 
-  if (['RUNNING', 'PAUSING', 'VERIFYING'].includes(status)) {
+  if (['PREPARING', 'RUNNING', 'PAUSING', 'VERIFYING'].includes(status)) {
     return 'dashboard.nextStepMonitorProgress'
   }
 
@@ -132,11 +140,14 @@ export function getJobDetailPrimaryActionKeys({ jobStatus, canRetryFailed, canRe
   if (status === 'PENDING') {
     return ['edit', 'analyze', 'lifecycle-toggle']
   }
-  if (status === 'FAILED' || status === 'PAUSED' || status === 'ARCHIVED') {
+  if (status === 'FAILED' || status === 'PAUSED') {
+    return ['edit', 'analyze', 'lifecycle-toggle']
+  }
+  if (status === 'ARCHIVED') {
     return ['analyze', 'lifecycle-toggle']
   }
-  if (status === 'RUNNING' || status === 'PAUSING') {
-    return ['lifecycle-toggle']
+  if (status === 'PREPARING' || status === 'RUNNING' || status === 'PAUSING') {
+    return ['edit', 'lifecycle-toggle']
   }
   if (status === 'COMPLETED') {
     const keys = canRetryFailed ? ['retry-failed'] : ['verify', 'manifest']

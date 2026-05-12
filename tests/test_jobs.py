@@ -2258,7 +2258,7 @@ def test_start_job(client, db):
     assert response.status_code == 200
 
 
-def test_start_job_returns_running_startup_state_before_copy_totals_are_known(client, db):
+def test_start_job_returns_preparing_startup_state_before_copy_totals_are_known(client, db):
     db.add(UsbDrive(
         device_identifier="USB-START-INIT-001",
         current_state=DriveState.AVAILABLE,
@@ -2284,7 +2284,7 @@ def test_start_job_returns_running_startup_state_before_copy_totals_are_known(cl
 
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "RUNNING"
+    assert data["status"] == "PREPARING"
     assert data["copied_bytes"] == 0
     assert data["total_bytes"] == 0
     assert data["file_count"] == 0
@@ -2481,7 +2481,7 @@ def test_retry_failed_files_requeues_only_failed_terminal_files(client, db):
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["status"] == "RUNNING"
+    assert payload["status"] == "PREPARING"
     assert payload["files_failed"] == 0
     assert payload["files_timed_out"] == 0
     mock_copy.assert_called_once_with(job.id)
@@ -2491,7 +2491,7 @@ def test_retry_failed_files_requeues_only_failed_terminal_files(client, db):
     db.refresh(error_file)
     db.refresh(timeout_file)
 
-    assert job.status == JobStatus.RUNNING
+    assert job.status == JobStatus.PREPARING
     assert done_file.status == FileStatus.DONE
     assert done_file.checksum == "done-checksum"
     assert error_file.status == FileStatus.PENDING
@@ -2623,7 +2623,7 @@ def test_start_job_allowed_after_startup_reconciliation_clears_stale_analysis(cl
         response = client.post(f"/jobs/{job.id}/start", json={})
 
     assert response.status_code == 200
-    assert response.json()["status"] == "RUNNING"
+    assert response.json()["status"] == "PREPARING"
     mock_copy.assert_called_once_with(job.id)
 
 
@@ -2746,7 +2746,7 @@ def test_continue_job_overflow_reassigns_drive_and_requeues_failed_files(client,
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["status"] == "RUNNING"
+    assert payload["status"] == "PREPARING"
     assert payload["target_mount_path"] == next_drive.mount_path
     assert payload["drive"]["id"] == next_drive.id
     mock_copy.assert_called_once_with(job.id)
@@ -2984,7 +2984,7 @@ def test_start_paused_job(client, db):
         response = client.post(f"/jobs/{job.id}/start", json={})
 
     assert response.status_code == 200
-    assert response.json()["status"] == "RUNNING"
+    assert response.json()["status"] == "PREPARING"
 
 
 def test_start_pausing_job_conflict(client, db):
@@ -4046,10 +4046,11 @@ def test_update_job_rejects_started_job_states(client, db):
             f"/jobs/{job.id}",
             json={
                 "project_id": "PROJ-EDIT-STATE-001",
-                "evidence_number": f"EV-EDIT-{status.value}",
+                "evidence_number": f"EV-EDIT-{status.value}-UPDATED",
                 "source_path": "/evidence-updated",
                 "mount_id": mount.id,
                 "drive_id": drive.id,
+                "overflow_drive_ids": [],
                 "thread_count": 4,
                 "max_file_retries": 3,
                 "retry_delay_seconds": 1,
@@ -4059,13 +4060,149 @@ def test_update_job_rejects_started_job_states(client, db):
 
         assert response.status_code == 409
         payload = response.json()
-        assert payload.get("detail") == "Only pending jobs can be edited from Job Detail" \
-            or payload.get("message") == "Only pending jobs can be edited from Job Detail"
+        assert payload.get("detail") == "Started jobs can only update thread count and overflow drive selections" \
+            or payload.get("message") == "Started jobs can only update thread count and overflow drive selections"
 
         assignment = db.query(DriveAssignment).filter(DriveAssignment.job_id == job.id).one()
         db.delete(assignment)
         db.delete(job)
         db.commit()
+
+
+def test_update_started_job_allows_thread_count_and_overflow_drive_changes(client, db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="server:/exports/project-started-edit",
+        project_id="PROJ-STARTED-EDIT-001",
+        local_mount_point="/nfs/project-started-edit-001",
+        status=MountStatus.MOUNTED,
+    )
+    drive = UsbDrive(
+        device_identifier="USB-STARTED-EDIT-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-STARTED-EDIT-001",
+        mount_path="/mnt/ecube/started-edit-001",
+    )
+    overflow_drive = UsbDrive(
+        device_identifier="USB-STARTED-EDIT-002",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-STARTED-EDIT-001",
+        mount_path="/mnt/ecube/started-edit-002",
+    )
+    db.add_all([mount, drive, overflow_drive])
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-STARTED-EDIT-001",
+        evidence_number="EV-STARTED-EDIT-001",
+        source_path="/nfs/project-started-edit-001/evidence",
+        target_mount_path=drive.mount_path,
+        status=JobStatus.RUNNING,
+        thread_count=4,
+        max_file_retries=3,
+        retry_delay_seconds=1,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id, activated_at=datetime.now(timezone.utc)))
+    db.commit()
+
+    response = client.put(
+        f"/jobs/{job.id}",
+        json={
+            "project_id": "PROJ-STARTED-EDIT-001",
+            "evidence_number": "EV-STARTED-EDIT-001",
+            "source_path": "/evidence",
+            "mount_id": mount.id,
+            "drive_id": drive.id,
+            "overflow_drive_ids": [overflow_drive.id],
+            "thread_count": 16,
+            "max_file_retries": 3,
+            "retry_delay_seconds": 1,
+            "callback_url": None,
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["thread_count"] == 16
+    assert [assignment["drive_id"] for assignment in data["overflow_assignments"]] == [overflow_drive.id]
+    db.refresh(job)
+    db.refresh(overflow_drive)
+    assert job.thread_count == 16
+    assert overflow_drive.current_state == DriveState.IN_USE
+    reserved_assignment = db.query(DriveAssignment).filter(
+        DriveAssignment.job_id == job.id,
+        DriveAssignment.drive_id == overflow_drive.id,
+        DriveAssignment.activated_at.is_(None),
+        DriveAssignment.released_at.is_(None),
+    ).one_or_none()
+    assert reserved_assignment is not None
+
+
+def test_update_started_job_releases_removed_reserved_overflow_drive(client, db):
+    mount = NetworkMount(
+        type=MountType.NFS,
+        remote_path="server:/exports/project-started-edit-release",
+        project_id="PROJ-STARTED-EDIT-002",
+        local_mount_point="/nfs/project-started-edit-002",
+        status=MountStatus.MOUNTED,
+    )
+    drive = UsbDrive(
+        device_identifier="USB-STARTED-EDIT-003",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-STARTED-EDIT-002",
+        mount_path="/mnt/ecube/started-edit-003",
+    )
+    overflow_drive = UsbDrive(
+        device_identifier="USB-STARTED-EDIT-004",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-STARTED-EDIT-002",
+        mount_path="/mnt/ecube/started-edit-004",
+    )
+    db.add_all([mount, drive, overflow_drive])
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-STARTED-EDIT-002",
+        evidence_number="EV-STARTED-EDIT-002",
+        source_path="/nfs/project-started-edit-002/evidence",
+        target_mount_path=drive.mount_path,
+        status=JobStatus.PAUSED,
+        thread_count=4,
+        max_file_retries=3,
+        retry_delay_seconds=1,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id, activated_at=datetime.now(timezone.utc)))
+    db.add(DriveAssignment(drive_id=overflow_drive.id, job_id=job.id, activated_at=None))
+    db.commit()
+
+    response = client.put(
+        f"/jobs/{job.id}",
+        json={
+            "project_id": "PROJ-STARTED-EDIT-002",
+            "evidence_number": "EV-STARTED-EDIT-002",
+            "source_path": "/evidence",
+            "mount_id": mount.id,
+            "drive_id": drive.id,
+            "overflow_drive_ids": [],
+            "thread_count": 6,
+            "max_file_retries": 3,
+            "retry_delay_seconds": 1,
+            "callback_url": None,
+        },
+    )
+
+    assert response.status_code == 200
+    db.refresh(overflow_drive)
+    assert overflow_drive.current_state == DriveState.AVAILABLE
+    released_assignment = db.query(DriveAssignment).filter(
+        DriveAssignment.job_id == job.id,
+        DriveAssignment.drive_id == overflow_drive.id,
+    ).one()
+    assert released_assignment.released_at is not None
 
 
 def test_clear_job_startup_analysis_cache_manager_allowed_and_audited(manager_client, db):
@@ -4598,7 +4735,7 @@ def test_restart_failed_job_resets_completed_at(client, db):
         response = client.post(f"/jobs/{job.id}/start", json={})
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "RUNNING"
+    assert data["status"] == "PREPARING"
     assert data["completed_at"] is None
     assert data["started_at"] is not None
 

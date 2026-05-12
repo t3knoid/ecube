@@ -295,14 +295,19 @@ class Settings(BaseSettings):
     startup_analysis_batch_size: int = Field(default=500, ge=1, le=5000)
 
     #: Chunk size in bytes for file copy and checksum computation.
-    copy_chunk_size_bytes: int = 1_048_576
+    copy_chunk_size_bytes: int = Field(default=4_194_304, ge=262_144, le=67_108_864)
+
+    #: Force a destination-file ``fsync()`` after every copied file. Disabling
+    #: this favors throughput and relies on restart recovery to resume from the
+    #: last committed ``DONE`` file after crashes or restarts.
+    copy_file_fsync_enabled: bool = False
 
     #: Minimum buffered byte count before the copy engine flushes
     #: ``copied_bytes`` progress to the database.
-    copy_progress_flush_bytes: int = 8_388_608
+    copy_progress_flush_bytes: int = Field(default=67_108_864, ge=1_048_576, le=1_073_741_824)
 
     #: Default thread pool size when ``ExportJob.thread_count`` is ``None``.
-    copy_default_thread_count: int = 4
+    copy_default_thread_count: int = Field(default=12, ge=1, le=32)
 
     #: Default maximum file-level retries when ``ExportJob.max_file_retries``
     #: is ``None``.

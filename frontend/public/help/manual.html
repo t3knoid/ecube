@@ -369,7 +369,7 @@ Number of active jobs
 </li><li>
 Drive state summary (<code>DISCONNECTED</code>, <code>DISABLED</code>, <code>AVAILABLE</code>, <code>IN_USE</code>)
 </li><li>
-Mount workflow summary (<code>Unassigned</code>, <code>Assigned</code>, <code>Active</code>, <code>Blocked</code>, <code>Custody Pending</code>, <code>Completed</code>, <code>Unavailable</code>), where <code>Assigned</code> means a job exists but has not started, <code>Active</code> includes running, pausing, and verifying work, <code>Blocked</code> captures paused or failed work, <code>Custody Pending</code> captures completed or archived jobs whose handoff is still pending, and <code>Unavailable</code> marks mounts whose trusted related-job or custody state could not be derived
+Mount workflow summary (<code>Unassigned</code>, <code>Assigned</code>, <code>Active</code>, <code>Blocked</code>, <code>Custody Pending</code>, <code>Completed</code>, <code>Unavailable</code>), where <code>Assigned</code> means a job exists but has not started, <code>Active</code> includes preparing, running, pausing, and verifying work, <code>Blocked</code> captures paused or failed work, <code>Custody Pending</code> captures completed or archived jobs whose handoff is still pending, and <code>Unavailable</code> marks mounts whose trusted related-job or custody state could not be derived
 </li><li>
 Table of active jobs with derived <code>Next Step</code> guidance plus trusted source, destination, and live-copy context on wider screens with compact status and progress treatment on smaller screens
 </li></ul>
@@ -380,7 +380,7 @@ Table of active jobs with derived <code>Next Step</code> guidance plus trusted s
 <ul><li>
 Is the system healthy?
 </li><li>
-Are any jobs currently running or verifying?
+Are any jobs currently preparing, running, or verifying?
 </li><li>
 Which jobs are blocked, waiting to start, or still waiting on custody closeout?
 </li><li>
@@ -530,7 +530,7 @@ The drive can be physically removed once the operation completes.
 </li></ul>
 <p>If ECUBE reports that the drive is still busy, the confirmation dialog closes cleanly and the page shows a specific retry message. Close any open shell, file browser, or process still using the mounted drive, then retry <code>Prepare Eject</code>.</p>
 <p>If the drive is already <code>AVAILABLE</code> but still mounted, a failed prepare-eject leaves it in <code>AVAILABLE</code> so the operator can retry after resolving the blocking condition.</p>
-<p>If the drive is still assigned to a job that has started and is not yet completed, <code>Prepare Eject</code> is blocked. This includes jobs in <code>RUNNING</code>, <code>PAUSING</code>, <code>PAUSED</code>, or <code>VERIFYING</code>. Complete or otherwise finish the active job before retrying <code>Prepare Eject</code>.</p>
+<p>If the drive is still assigned to a job that has started and is not yet completed, <code>Prepare Eject</code> is blocked. This includes jobs in <code>PREPARING</code>, <code>RUNNING</code>, <code>PAUSING</code>, <code>PAUSED</code>, or <code>VERIFYING</code>. Complete or otherwise finish the active job before retrying <code>Prepare Eject</code>.</p>
 <p>If ECUBE detects timed-out or failed files in active drive assignments, the first <code>Prepare Eject</code> attempt is blocked with an explicit confirmation-required warning. Review the warning details, then confirm a second prompt to continue with ejection.</p>
 <blockquote><p>Use <code>Chain of Custody</code> from <code>Job Detail</code> to record legal handoff details for the job's assigned drive. The handoff is stored in ECUBE's audit and CoC records without adding a separate archived drive state.</p></blockquote>
 <p class="help-back-to-top"><a href="#help-toc-title">Back to top</a></p>
@@ -578,7 +578,7 @@ Credentials file
 <ul><li>
 The dialog pre-fills the current type, remote path, and project ID.
 </li><li>
-Mount Detail shows Type, Project, NFS Client version, Last Checked, Latest Read Speed, Last Throughput Test, Job ID, Job Status, and mount Status before you open the dialog. <code>Job Status</code> is sourced from trusted backend job data when a related job exists, falls back to <code>No related job</code> when the project has no current related job, and falls back to <code>Status unavailable</code> instead of guessing when authoritative job status cannot be determined. The dashboard mount workflow summary separately considers trusted related-job custody status, so running, pausing, or verifying jobs appear under <code>Active</code>, paused or failed jobs appear under <code>Blocked</code>, completed or archived jobs with pending handoff appear under <code>Custody Pending</code>, and <code>Unavailable</code> remains the fallback when trusted related-job or custody classification cannot be derived for that mount. <code>admin</code> and <code>manager</code> users also see the raw Remote Path and Local Mount Point values there; read-only roles see those path fields redacted.
+Mount Detail shows Type, Project, NFS Client version, Last Checked, Latest Read Speed, Last Throughput Test, Job ID, Job Status, and mount Status before you open the dialog. <code>Job Status</code> is sourced from trusted backend job data when a related job exists, falls back to <code>No related job</code> when the project has no current related job, and falls back to <code>Status unavailable</code> instead of guessing when authoritative job status cannot be determined. The dashboard mount workflow summary separately considers trusted related-job custody status, so preparing, running, pausing, or verifying jobs appear under <code>Active</code>, paused or failed jobs appear under <code>Blocked</code>, completed or archived jobs with pending handoff appear under <code>Custody Pending</code>, and <code>Unavailable</code> remains the fallback when trusted related-job or custody classification cannot be derived for that mount. <code>admin</code> and <code>manager</code> users also see the raw Remote Path and Local Mount Point values there; read-only roles see those path fields redacted.
 </li><li>
 The local mount point is shown as read-only informational context and is not directly editable.
 </li><li>
@@ -651,10 +651,12 @@ Current status
 </li><li>
 Progress label or percentage
 </li></ul>
-<p>For active jobs, the progress value stays synchronized with both copied bytes and completed file counts. During startup analysis, a newly started job can show <code>Preparing...</code> in the Jobs list while ECUBE scans the source files and calculates totals. A running, pausing, or verifying job does not show 100% until the finished-file totals also indicate completion.</p>
+<p>For active jobs, the progress value stays synchronized with both copied bytes and completed file counts. During startup analysis, a newly started, resumed, or retrying job can show <code>Preparing...</code> in the Jobs list while ECUBE scans the source files and calculates totals. A <code>PREPARING</code>, <code>RUNNING</code>, <code>PAUSING</code>, or <code>VERIFYING</code> job does not show 100% until the finished-file totals also indicate completion.</p>
 <p>Common statuses include:</p>
 <ul><li>
 <code>PENDING</code>
+</li><li>
+<code>PREPARING</code>
 </li><li>
 <code>RUNNING</code>
 </li><li>
@@ -668,7 +670,7 @@ Progress label or percentage
 </li><li>
 <code>FAILED</code>
 </li></ul>
-<p>The <code>Job ID</code> value on the Jobs page acts as the direct navigation entry point into Job Detail. On desktop, authorized rows show one stateful lifecycle action. That action shows <code>Start</code> when the job can begin or resume, shows <code>Pause</code> when the job can safely stop after current work finishes, and stays disabled or hidden for ineligible states. <code>PAUSING</code> means ECUBE is waiting for in-flight copy threads to finish their current work before the job becomes fully <code>PAUSED</code>.</p>
+<p>The <code>Job ID</code> value on the Jobs page acts as the direct navigation entry point into Job Detail. On desktop, authorized rows show one stateful lifecycle action. That action shows <code>Start</code> when the job can begin or resume, shows <code>Pause</code> when the job has entered active work, stays visible as a disabled <code>Pause</code> while the job is still entering copy work during <code>PREPARING</code>, and also stays disabled while the job is draining in-flight work during <code>PAUSING</code>. Other ineligible states keep that action hidden or disabled.</p>
 <h2 id="6-2-creating-a-job">6.2 Creating a Job</h2>
 <p>Job creation uses a grouped dialog. The same grouped dialog shell is also reused when you edit an eligible job from Job Detail, so the overall section layout and required-field treatment stay consistent.</p>
 <p>The dialog is organized into four sections:</p>
@@ -723,7 +725,9 @@ Run manual startup analysis before copy starts so the operator can review discov
 </li><li>
 Edit a pending job before copy work has started, including after startup analysis completes while the job remains pending
 </li><li>
-Use the lifecycle toggle to start a pending job, resume a paused one, or pause a running one
+Adjust thread count and reserved overflow-drive selections after a job has started without redefining the source, project, or primary destination
+</li><li>
+Use the lifecycle toggle to start a pending job, resume a paused one, or pause an active job; start, retry, and continuation requests first move through <code>PREPARING</code> before copy threads resume in <code>RUNNING</code>
 </li><li>
 Continue remaining work on another mounted destination drive when the original destination fills or a partial-success run must move to new media
 </li><li>
@@ -751,11 +755,13 @@ Compare a file's source version against its copied destination version
 <ul><li>
 <code>Analyze</code> to run startup analysis for an eligible job without starting copy
 </li><li>
-<code>Edit</code> to reopen the same grouped job dialog used for creation and adjust evidence number, operator notes, source path, drive, thread count, or the job-specific webhook callback URL for a <code>PENDING</code>, <code>PAUSED</code>, or <code>FAILED</code> job
+<code>Edit</code> to reopen the grouped job dialog from Job Detail. For a <code>PENDING</code> job, the dialog supports the pre-start edit flow for the mutable copy-definition fields. For a started job, the dialog switches to a restricted runtime-tuning view that allows only <code>Thread count</code> and reserved overflow-drive selection changes.
 </li></ul>
 <p>When the edit dialog contains more content than fits on screen, ECUBE keeps the header and footer pinned and scrolls only the dialog body so the title, required-field legend, and save/cancel actions stay visible.</p>
 <ul><li>
-The lifecycle toggle to show <code>Start</code> when a job can begin or resume, <code>Pause</code> when a running job can safely stop after its current copy work finishes, and a disabled <code>Pause</code> while the job is still draining in-flight work during <code>PAUSING</code>
+After a job has started, ECUBE keeps the existing evidence number, project, source path, mount, primary destination drive, notes, and callback URL fixed. The restricted edit dialog leaves those fields read-only or hidden and saves only the allowed runtime-tuning values.
+</li><li>
+The lifecycle toggle to show <code>Start</code> when a job can begin or resume, <code>Pause</code> when an active job can safely stop after its current copy work finishes, and a disabled <code>Pause</code> while the job is still entering active copy work during <code>PREPARING</code> or draining in-flight work during <code>PAUSING</code>
 </li><li>
 <code>Continue on Another Drive</code> to choose a different mounted destination drive and continue the remaining work for an eligible <code>PENDING</code>, <code>PAUSED</code>, <code>FAILED</code>, or partial-success <code>COMPLETED</code> job
 </li><li>
@@ -774,9 +780,9 @@ The lifecycle toggle to show <code>Start</code> when a job can begin or resume, 
 <code>Manifest</code> to generate the manifest output once the job is fully complete with no failed or timed-out files
 </li></ul>
 <p>When a pause is requested, the Jobs list and Job Detail page can show a <code>Pause in progress</code> dialog while ECUBE waits for active copy threads to drain. During <code>PAUSING</code>, the lifecycle toggle remains visible as a disabled <code>Pause</code> button and returns to <code>Start</code> once the job reaches <code>PAUSED</code>.</p>
-<p>While a job is actively copying, Job Detail shows a live summary with the current run <code>Started at</code> timestamp and a <code>Duration</code> field that reflects cumulative active runtime only. The displayed duration continues updating while the job is <code>RUNNING</code>, does not add paused time while the job is <code>PAUSED</code>, and resumes from the previously stored active runtime after a later restart instead of resetting to zero.</p>
+<p>While a job is active, Job Detail shows a live summary with the current run <code>Started at</code> timestamp and a <code>Duration</code> field that reflects cumulative active runtime only. The displayed duration continues updating while the job is <code>PREPARING</code> or <code>RUNNING</code>, does not add paused time while the job is <code>PAUSED</code>, and resumes from the previously stored active runtime after a later restart instead of resetting to zero.</p>
 <p>Verify and Manifest stay disabled until the job reaches a truly complete 100% state. After manifest generation, the detail page shows a success banner for the latest refreshed <code>manifest.json</code> file and immediately starts a browser download of that generated manifest without an extra confirmation step. For jobs that used overflow media, ECUBE refreshes a separate <code>manifest.json</code> on each drive that received successful copies, and each file lists only the files written to that specific drive.</p>
-<p>For a partial-success <code>COMPLETED</code> job, Job Detail can show <code>Retry Failed Files</code> instead of exposing Verify or Manifest too early. This action is available only to <code>admin</code>, <code>manager</code>, and <code>processor</code>, moves the job back into <code>RUNNING</code>, re-queues only failed or timed-out files, and preserves already successful copies.</p>
+<p>For a partial-success <code>COMPLETED</code> job, Job Detail can show <code>Retry Failed Files</code> instead of exposing Verify or Manifest too early. This action is available only to <code>admin</code>, <code>manager</code>, and <code>processor</code>, moves the job back into <code>PREPARING</code>, re-queues only failed or timed-out files, preserves already successful copies, and returns to <code>RUNNING</code> after preparation completes.</p>
 <p>If the original destination drive fills or the remaining copy work must move to new media, ECUBE first checks for the next reserved overflow drive that was preassigned to the job during creation. When that reserved drive is still mounted, still belongs to the same project, and passes the trusted backend free-space check for the remaining estimated bytes, ECUBE keeps the same job ID, activates that reserved drive assignment for chain-of-custody purposes, and automatically resumes only the remaining work on that next drive. If no assigned drive is available or can be validated for continuation, ECUBE marks the job <code>FAILED</code> with a safe destination-capacity reason. Job Detail can then show <code>Continue on Another Drive</code> so the operator can choose another mounted project-compatible drive and optionally adjust thread count. Automatic manifest generation still waits for a later clean completion, but it refreshes manifests per drive assignment instead of only on the final drive.</p>
 <p>This is not limited to only two drives. If the second drive also fills, the same job can be continued again onto a third drive, and later onto additional drives if needed, as long as each new drive is mounted and project-compatible.</p>
 <p>This continuation happens automatically only when another reserved overflow drive for the same job is still mounted, still project-compatible, and passes the remaining-capacity probe. If there is no eligible prepared drive, the copy run stops with a failed destination-capacity result so an operator can open <code>Job Detail</code>, review the safe failure reason, and explicitly choose <code>Continue on Another Drive</code> for the next destination.</p>
@@ -1254,7 +1260,7 @@ Click <code>Save</code>.
 </li></ol>
 <p>Important operational notes:</p>
 <ul><li>
-The <code>Configuration</code> page contains only operational settings: <code>log_level</code>, <code>mkfs_exfat_cluster_size</code>, <code>drive_format_timeout_seconds</code>, <code>drive_mount_timeout_seconds</code>, <code>usb_discovery_interval</code>, <code>network_mount_timeout_seconds</code>, <code>mount_share_discovery_timeout_seconds</code>, <code>copy_job_timeout</code>, and <code>job_detail_files_page_size</code>.
+The <code>Configuration</code> page contains only operational settings: <code>log_level</code>, <code>mkfs_exfat_cluster_size</code>, <code>drive_format_timeout_seconds</code>, <code>drive_mount_timeout_seconds</code>, <code>usb_discovery_interval</code>, <code>network_mount_timeout_seconds</code>, <code>mount_share_discovery_timeout_seconds</code>, <code>copy_job_timeout</code>, <code>copy_chunk_size_bytes</code>, <code>copy_progress_flush_bytes</code>, <code>copy_default_thread_count</code>, <code>copy_file_fsync_enabled</code>, and <code>job_detail_files_page_size</code>.
 </li><li>
 The <code>Configuration</code> page also shows the current effective log file name as a read-only value so managers can verify the target log file without exposing host path details.
 </li><li>
@@ -1271,6 +1277,12 @@ Managers cannot view or trigger password policy, webhook secret, logging infrast
 <code>Network Mount Timeout (seconds)</code> controls how long ECUBE allows SMB and NFS mount workflows to run before treating them as failed. The same setting also governs related unmount and mount-state verification checks, so increase it when slow servers, DNS resolution, or authentication handshakes make network shares slow to validate or reconnect.
 </li><li>
 <code>Mount Share Discovery Timeout (seconds)</code> controls how long ECUBE allows SMB share browsing and NFS export discovery to run before treating them as failed. Increase it when the Add Mount <code>Browse</code> dialog times out against slow servers or high-latency networks.
+</li><li>
+<code>Copy Chunk Size</code>, <code>Progress Flush Threshold</code>, and <code>Default Copy Worker Count</code> let managers tune copy throughput for different workloads. Larger values reduce loop or transaction overhead but use more memory per active worker.
+</li><li>
+<code>Force per-file disk sync</code> controls whether ECUBE calls <code>fsync()</code> after every copied file. Leave it disabled for maximum throughput when restart recovery from the last committed <code>DONE</code> file is acceptable.
+</li><li>
+The <code>Copy and Job Workflow</code> section also includes workload profile shortcuts for <code>Small-file heavy</code>, <code>Mixed workload</code>, <code>Large-file heavy</code>, and <code>Greedy throughput</code> so operators can apply a tested tuning bundle before making fine-grained adjustments.
 </li><li>
 Drive formatting keeps the browser request open without the prior UI-side 30-second timeout. If a format still fails, operators should review the server log for <code>Drive format timed out</code> or <code>Drive format command failed</code> and adjust the Configuration values rather than treating the failure as a browser connectivity problem.
 </li></ul>

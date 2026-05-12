@@ -6,6 +6,7 @@ describe('mount workflow helpers', () => {
   it('separates active, blocked, custody-pending, completed, and unavailable buckets', () => {
     expect(classifyMountWorkflowBucket({ related_job: { status: 'NO_RELATED_JOB', custody_status: 'NO_RELATED_JOB' } })).toBe(MOUNT_WORKFLOW_BUCKETS.UNASSIGNED)
     expect(classifyMountWorkflowBucket({ related_job: { status: 'PENDING', custody_status: 'PENDING_HANDOFF' } })).toBe(MOUNT_WORKFLOW_BUCKETS.ASSIGNED)
+    expect(classifyMountWorkflowBucket({ related_job: { status: 'PREPARING', custody_status: 'PENDING_HANDOFF' } })).toBe(MOUNT_WORKFLOW_BUCKETS.ACTIVE)
     expect(classifyMountWorkflowBucket({ related_job: { status: 'RUNNING', custody_status: 'PENDING_HANDOFF' } })).toBe(MOUNT_WORKFLOW_BUCKETS.ACTIVE)
     expect(classifyMountWorkflowBucket({ related_job: { status: 'FAILED', custody_status: 'PENDING_HANDOFF' } })).toBe(MOUNT_WORKFLOW_BUCKETS.BLOCKED)
     expect(classifyMountWorkflowBucket({ related_job: { status: 'COMPLETED', custody_status: 'PENDING_HANDOFF' } })).toBe(MOUNT_WORKFLOW_BUCKETS.CUSTODY_PENDING)

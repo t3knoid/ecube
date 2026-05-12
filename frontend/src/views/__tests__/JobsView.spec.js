@@ -153,7 +153,7 @@ describe('JobsView grouped create dialog', () => {
     mocks.listJobs.mockResolvedValue([])
     mocks.hasArchivedJobs.mockResolvedValue(false)
     mocks.createJob.mockResolvedValue({ id: 44, project_id: 'PROJ-001', status: 'PENDING' })
-    mocks.startJob.mockResolvedValue({ id: 44, project_id: 'PROJ-001', status: 'RUNNING' })
+    mocks.startJob.mockResolvedValue({ id: 44, project_id: 'PROJ-001', status: 'PREPARING' })
     mocks.pauseJob.mockResolvedValue({ id: 45, project_id: 'PROJ-001', status: 'PAUSING' })
     mocks.getDrives.mockResolvedValue([
       buildDrive({ id: 1, current_project_id: 'PROJ-001' }),
@@ -639,7 +639,7 @@ describe('JobsView grouped create dialog', () => {
       limit: 1000,
       offset: 0,
       drive_id: 1,
-      statuses: ['PENDING', 'RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING'],
+      statuses: ['PENDING', 'PREPARING', 'RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING'],
     })
     expect(wrapper.text()).toContain('A job is already copying from this exact source path to the selected drive (job #55).')
   })
@@ -757,13 +757,13 @@ describe('JobsView grouped create dialog', () => {
       limit: 1000,
       offset: 0,
       drive_id: 1,
-      statuses: ['PENDING', 'RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING'],
+      statuses: ['PENDING', 'PREPARING', 'RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING'],
     })
     expect(mocks.listJobs).toHaveBeenNthCalledWith(3, {
       limit: 1000,
       offset: 1000,
       drive_id: 1,
-      statuses: ['PENDING', 'RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING'],
+      statuses: ['PENDING', 'PREPARING', 'RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING'],
     })
     expect(wrapper.text()).toContain('A job is already copying from this exact source path to the selected drive (job #5001).')
   })

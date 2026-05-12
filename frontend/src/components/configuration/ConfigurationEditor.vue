@@ -49,7 +49,6 @@ const CALLBACK_PAYLOAD_FIELD_MAP_PLACEHOLDER = `{
   "type": "event",
   "summary": "project=${'${project_id}'};result=${'${completion_result}'}"
 }`
-
 const managerFieldOrder = [
   'log_level',
   'mkfs_exfat_cluster_size',
@@ -58,6 +57,10 @@ const managerFieldOrder = [
   'network_mount_timeout_seconds',
   'mount_share_discovery_timeout_seconds',
   'copy_job_timeout',
+  'copy_chunk_size_bytes',
+  'copy_progress_flush_bytes',
+  'copy_default_thread_count',
+  'copy_file_fsync_enabled',
   'usb_discovery_interval',
   'job_detail_files_page_size',
 ]
@@ -107,6 +110,10 @@ const form = ref({
   network_mount_timeout_seconds: 120,
   mount_share_discovery_timeout_seconds: 60,
   copy_job_timeout: 3600,
+  copy_chunk_size_bytes: 4_194_304,
+  copy_progress_flush_bytes: 67_108_864,
+  copy_default_thread_count: 12,
+  copy_file_fsync_enabled: false,
   usb_discovery_interval: 30,
   job_detail_files_page_size: 40,
   callback_default_url: '',
@@ -135,6 +142,55 @@ const levelOptions = ['DEBUG', 'INFO', 'WARNING', 'ERROR']
 const formatOptions = ['text', 'json']
 const nfsClientVersionOptions = ['4.2', '4.1', '4.0', '3']
 const exfatClusterSizeOptions = ['4K', '64K', '128K', '256K']
+const copyChunkSizeOptions = [
+  { value: 1_048_576, label: '1 MiB' },
+  { value: 4_194_304, label: '4 MiB' },
+  { value: 8_388_608, label: '8 MiB' },
+  { value: 16_777_216, label: '16 MiB' },
+]
+const copyProgressFlushOptions = [
+  { value: 8_388_608, label: '8 MiB' },
+  { value: 33_554_432, label: '32 MiB' },
+  { value: 67_108_864, label: '64 MiB' },
+  { value: 134_217_728, label: '128 MiB' },
+  { value: 268_435_456, label: '256 MiB' },
+]
+const copyWorkloadProfiles = {
+  smallFiles: {
+    copy_chunk_size_bytes: 1_048_576,
+    copy_progress_flush_bytes: 33_554_432,
+    copy_default_thread_count: 12,
+    copy_file_fsync_enabled: false,
+  },
+  mixed: {
+    copy_chunk_size_bytes: 4_194_304,
+    copy_progress_flush_bytes: 67_108_864,
+    copy_default_thread_count: 12,
+    copy_file_fsync_enabled: false,
+  },
+  largeFiles: {
+    copy_chunk_size_bytes: 8_388_608,
+    copy_progress_flush_bytes: 134_217_728,
+    copy_default_thread_count: 6,
+    copy_file_fsync_enabled: false,
+  },
+  greedy: {
+    copy_chunk_size_bytes: 16_777_216,
+    copy_progress_flush_bytes: 268_435_456,
+    copy_default_thread_count: 12,
+    copy_file_fsync_enabled: false,
+  },
+}
+
+function applyCopyWorkloadProfile(profileKey) {
+  const profile = copyWorkloadProfiles[profileKey]
+  if (!profile) return
+
+  form.value.copy_chunk_size_bytes = profile.copy_chunk_size_bytes
+  form.value.copy_progress_flush_bytes = profile.copy_progress_flush_bytes
+  form.value.copy_default_thread_count = profile.copy_default_thread_count
+  form.value.copy_file_fsync_enabled = profile.copy_file_fsync_enabled
+}
 const displayedLogFile = computed(() => collapseDefaultLogDirectoryPath(form.value.log_file))
 const editableLogFile = computed({
   get: () => collapseDefaultLogDirectoryPath(form.value.log_file),
@@ -571,9 +627,39 @@ onMounted(loadConfiguration)
         <article class="panel">
           <h2>{{ t('configuration.sections.copyAndJobWorkflow') }}</h2>
 
+          <p class="field-help">{{ t('configuration.copyProfiles.help') }}</p>
+          <div class="profile-chip-row">
+            <button type="button" class="chip-button" @click="applyCopyWorkloadProfile('smallFiles')">{{ t('configuration.copyProfiles.smallFiles') }}</button>
+            <button type="button" class="chip-button" @click="applyCopyWorkloadProfile('mixed')">{{ t('configuration.copyProfiles.mixed') }}</button>
+            <button type="button" class="chip-button" @click="applyCopyWorkloadProfile('largeFiles')">{{ t('configuration.copyProfiles.largeFiles') }}</button>
+            <button type="button" class="chip-button" @click="applyCopyWorkloadProfile('greedy')">{{ t('configuration.copyProfiles.greedy') }}</button>
+          </div>
+
           <label for="cfg-copy-job-timeout">{{ t('configuration.fields.copy_job_timeout.label') }}</label>
           <input id="cfg-copy-job-timeout" v-model.number="form.copy_job_timeout" type="number" min="0" />
           <p class="field-help">{{ t('configuration.fields.copy_job_timeout.help') }}</p>
+
+          <label for="cfg-copy-chunk-size-bytes">{{ t('configuration.fields.copy_chunk_size_bytes.label') }}</label>
+          <select id="cfg-copy-chunk-size-bytes" v-model.number="form.copy_chunk_size_bytes">
+            <option v-for="option in copyChunkSizeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+          </select>
+          <p class="field-help">{{ t('configuration.fields.copy_chunk_size_bytes.help') }}</p>
+
+          <label for="cfg-copy-progress-flush-bytes">{{ t('configuration.fields.copy_progress_flush_bytes.label') }}</label>
+          <select id="cfg-copy-progress-flush-bytes" v-model.number="form.copy_progress_flush_bytes">
+            <option v-for="option in copyProgressFlushOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+          </select>
+          <p class="field-help">{{ t('configuration.fields.copy_progress_flush_bytes.help') }}</p>
+
+          <label for="cfg-copy-default-thread-count">{{ t('configuration.fields.copy_default_thread_count.label') }}</label>
+          <input id="cfg-copy-default-thread-count" v-model.number="form.copy_default_thread_count" type="number" min="1" max="32" />
+          <p class="field-help">{{ t('configuration.fields.copy_default_thread_count.help') }}</p>
+
+          <label class="checkbox-row" for="cfg-copy-file-fsync-enabled">
+            <input id="cfg-copy-file-fsync-enabled" v-model="form.copy_file_fsync_enabled" type="checkbox" />
+            <span>{{ t('configuration.fields.copy_file_fsync_enabled.label') }}</span>
+          </label>
+          <p class="field-help">{{ t('configuration.fields.copy_file_fsync_enabled.help') }}</p>
 
           <label for="cfg-job-detail-files-page-size">{{ t('configuration.fields.job_detail_files_page_size.label') }}</label>
           <input
@@ -841,6 +927,24 @@ onMounted(loadConfiguration)
   display: flex;
   align-items: center;
   gap: var(--space-xs);
+}
+
+.profile-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.chip-button {
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-input);
+  color: var(--color-text-primary);
+  border-radius: 999px;
+  font: inherit;
+  line-height: 1.2;
+  padding: 0.45em 0.8em;
+  cursor: pointer;
 }
 
 input,

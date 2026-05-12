@@ -511,12 +511,12 @@ describe('JobDetailView start action', () => {
 
     expect(wrapper.text()).toContain(i18n.global.t('jobs.startupAnalysisCompleted'))
     expect(wrapper.text()).not.toContain(i18n.global.t('jobs.startupAnalysisStarted'))
-    expect(editButton.attributes('disabled')).toBeUndefined()
-    expect(analyzeButton.attributes('disabled')).toBeUndefined()
-    expect(startButton.attributes('disabled')).toBeUndefined()
-    expect(completeButton.attributes('disabled')).toBeUndefined()
-    expect(deleteButton.attributes('disabled')).toBeUndefined()
-    expect(cleanupButton.attributes('disabled')).toBeUndefined()
+    expect(wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit'))?.attributes('disabled')).toBeUndefined()
+    expect(wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.analyze'))?.attributes('disabled')).toBeUndefined()
+    expect(wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.start'))?.attributes('disabled')).toBeUndefined()
+    expect(wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.complete'))?.attributes('disabled')).toBeUndefined()
+    expect(wrapper.findAll('.actions button').find((node) => node.text() === i18n.global.t('common.actions.delete'))?.attributes('disabled')).toBeUndefined()
+    expect(wrapper.findAll('.actions button').find((node) => node.text() === i18n.global.t('jobs.clearStartupAnalysis'))?.attributes('disabled')).toBeUndefined()
   })
 
   it('shows analyze failure details and allows start when analysis is already ready', async () => {
@@ -2544,6 +2544,7 @@ describe('JobDetailView start action', () => {
       source_path: '/nfs/project-001/evidence',
       target_mount_path: '/mnt/ecube/1',
       thread_count: 4,
+      overflow_assignments: [],
       copied_bytes: 0,
       total_bytes: 0,
       callback_url: 'https://example.com/current-webhook',
@@ -2564,7 +2565,7 @@ describe('JobDetailView start action', () => {
     expect(wrapper.find('#job-source-browse-toggle').exists()).toBe(true)
     expect(wrapper.find('#job-source-path').attributes('readonly')).toBeDefined()
     expect(wrapper.find('#job-evidence').element.value).toBe('EV-006')
-    expect(wrapper.find('#job-notes').element.value).toBe('Original note')
+    expect(wrapper.find('#job-notes').exists()).toBe(false)
     expect(wrapper.find('#job-callback-url').element.value).toBe('https://example.com/current-webhook')
     const driveOptions = wrapper.find('#job-drive').findAll('option').map((node) => node.text())
     expect(wrapper.text()).toContain(i18n.global.t('jobs.selectDrive'))
@@ -2572,7 +2573,6 @@ describe('JobDetailView start action', () => {
     expect(driveOptions.join(' ')).not.toContain('#1 -')
     expect(driveOptions.join(' ')).not.toContain('USB-001')
     await wrapper.find('#job-evidence').setValue('EV-UPDATED')
-    await wrapper.find('#job-notes').setValue('Updated note')
     await wrapper.find('#job-mount').setValue('4')
     await wrapper.find('#job-drive').setValue('1')
     await wrapper.find('#job-source-browse-toggle').trigger('click')
@@ -2584,8 +2584,94 @@ describe('JobDetailView start action', () => {
 
     expect(mocks.updateJob).toHaveBeenCalledWith(6, expect.objectContaining({
       evidence_number: 'EV-UPDATED',
-      notes: 'Updated note',
       source_path: '/updated/folder',
+      overflow_drive_ids: [],
+      callback_url: 'https://example.com/current-webhook',
+    }))
+  })
+
+  it('opens a restricted edit form for started jobs and only updates runtime fields', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'RUNNING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      notes: 'Original note',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 512,
+      total_bytes: 1024,
+      callback_url: 'https://example.com/current-webhook',
+      drive: { id: 1, available_bytes: 2048 },
+      overflow_assignments: [
+        {
+          id: 44,
+          drive_id: 2,
+          state: 'RESERVED',
+          drive: {
+            id: 2,
+            device_identifier: 'USB-002',
+            port_system_path: '2-2',
+            current_project_id: 'PROJ-001',
+            current_state: 'IN_USE',
+            mount_path: '/mnt/ecube/2',
+          },
+        },
+      ],
+    })
+    mocks.getDrives.mockResolvedValue([
+      { id: 1, device_identifier: 'USB-001', port_system_path: '2-1', current_project_id: 'PROJ-001', current_state: 'IN_USE', mount_path: '/mnt/ecube/1' },
+      { id: 2, device_identifier: 'USB-002', port_system_path: '2-2', current_project_id: 'PROJ-001', current_state: 'IN_USE', mount_path: '/mnt/ecube/2' },
+      { id: 3, device_identifier: 'USB-003', port_system_path: '2-3', current_project_id: 'PROJ-001', current_state: 'IN_USE', mount_path: '/mnt/ecube/3' },
+    ])
+    mocks.updateJob.mockResolvedValue({
+      id: 6,
+      status: 'RUNNING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      thread_count: 8,
+      copied_bytes: 512,
+      total_bytes: 1024,
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      drive: { id: 1, available_bytes: 2048 },
+      overflow_assignments: [],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const editButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit'))
+    expect(editButton).toBeTruthy()
+    await editButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('#job-evidence').exists()).toBe(true)
+    expect(wrapper.find('#job-evidence').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('#job-notes').exists()).toBe(false)
+    expect(wrapper.find('#job-callback-url').exists()).toBe(false)
+    expect(wrapper.find('#job-mount').exists()).toBe(false)
+    expect(wrapper.find('#job-drive').exists()).toBe(false)
+    expect(wrapper.find('#job-thread-count').element.value).toBe('4')
+    const overflowCheckbox = wrapper.find('input[type="checkbox"][value="2"]')
+    expect(overflowCheckbox.exists()).toBe(true)
+    expect(overflowCheckbox.element.checked).toBe(true)
+    const newlyAddedDriveCheckbox = wrapper.find('input[type="checkbox"][value="3"]')
+    expect(newlyAddedDriveCheckbox.exists()).toBe(true)
+    expect(newlyAddedDriveCheckbox.element.checked).toBe(false)
+
+    await wrapper.find('#job-thread-count').setValue('16')
+    await overflowCheckbox.setChecked(false)
+    await wrapper.find('#job-submit').trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateJob).toHaveBeenCalledWith(6, expect.objectContaining({
+      evidence_number: 'EV-006',
+      source_path: '/evidence',
+      drive_id: 1,
+      thread_count: 16,
+      overflow_drive_ids: [],
       callback_url: 'https://example.com/current-webhook',
     }))
   })
@@ -2676,7 +2762,7 @@ describe('JobDetailView start action', () => {
     expect(wrapper.find('.detail-action-menu-delete').exists()).toBe(true)
   })
 
-  it('keeps pause primary for running jobs and moves the rest into overflow', async () => {
+  it('keeps edit and pause primary for running jobs and moves the rest into overflow', async () => {
     setMobileViewport(true)
     mocks.getJob.mockResolvedValue({
       id: 6,
@@ -2698,11 +2784,12 @@ describe('JobDetailView start action', () => {
 
     const primaryButtons = findJobActionButtons(wrapper)
     expect(primaryButtons.map((button) => button.text())).toEqual([
+      i18n.global.t('common.actions.edit'),
       i18n.global.t('jobs.pause'),
     ])
     expect(wrapper.find('.detail-action-menu-edit').exists()).toBe(false)
 
-    await primaryButtons[0].trigger('click')
+    await primaryButtons[1].trigger('click')
     await flushPromises()
 
     expect(mocks.pauseJob).toHaveBeenCalledWith(6)
@@ -2731,7 +2818,7 @@ describe('JobDetailView start action', () => {
     expect(editButton.attributes('disabled')).toBeUndefined()
   })
 
-  it('hides edit once the job has started even if it later pauses or fails', async () => {
+  it('keeps edit available after the job has started when it later pauses or fails', async () => {
     for (const status of ['PAUSED', 'FAILED']) {
       mocks.getJob.mockResolvedValue({
         id: 6,
@@ -2751,7 +2838,8 @@ describe('JobDetailView start action', () => {
       await flushPromises()
 
       const editButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit'))
-      expect(editButton).toBeUndefined()
+      expect(editButton).toBeTruthy()
+      expect(editButton.attributes('disabled')).toBeUndefined()
       wrapper.unmount()
     }
   })

@@ -315,9 +315,9 @@ def test_double_start_prevented(manager_client, db):
     with patch("app.services.copy_engine.run_copy_job"):
         response1 = manager_client.post(f"/jobs/{job.id}/start", json={})
     assert response1.status_code == 200
-    assert response1.json()["status"] == "RUNNING"
+    assert response1.json()["status"] == "PREPARING"
 
-    # Second start attempt must be rejected because the job is now RUNNING.
+    # Second start attempt must be rejected because the job is now active.
     response2 = manager_client.post(f"/jobs/{job.id}/start", json={})
     assert response2.status_code == 409
     assert response2.json()["code"] == "CONFLICT"
@@ -400,12 +400,12 @@ def test_start_job_transitions_to_running_atomically(manager_client, db):
         response = manager_client.post(f"/jobs/{job.id}/start", json={})
 
     assert response.status_code == 200
-    assert response.json()["status"] == "RUNNING"
+    assert response.json()["status"] == "PREPARING"
 
-    # Verify the DB row is RUNNING before the background task has a chance to run.
+    # Verify the DB row is PREPARING before the background task has a chance to run.
     db.expire_all()
     db.refresh(job)
-    assert job.status == JobStatus.RUNNING
+    assert job.status == JobStatus.PREPARING
 
 
 def test_handoff_lock_conflict_returns_409(manager_client, db):

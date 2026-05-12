@@ -211,7 +211,7 @@ def get_system_health(
     active_jobs = 0
     if db_status == "connected":
         try:
-            active_jobs = db.query(ExportJob).filter(ExportJob.status == JobStatus.RUNNING).count()
+            active_jobs = db.query(ExportJob).filter(ExportJob.status.in_((JobStatus.PREPARING, JobStatus.RUNNING))).count()
         except Exception:
             pass
 
@@ -557,7 +557,7 @@ def _build_ecube_process_metrics(
         try:
             running_jobs = (
                 db.query(ExportJob)
-                .filter(ExportJob.status == JobStatus.RUNNING)
+                .filter(ExportJob.status.in_((JobStatus.PREPARING, JobStatus.RUNNING)))
                 .order_by(ExportJob.id.asc())
                 .all()
             )

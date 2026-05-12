@@ -44,6 +44,10 @@ function buildManagerResponse(overrides = {}) {
     network_mount_timeout_seconds: 120,
     mount_share_discovery_timeout_seconds: 60,
     copy_job_timeout: 3600,
+    copy_chunk_size_bytes: 4_194_304,
+    copy_progress_flush_bytes: 67_108_864,
+    copy_default_thread_count: 12,
+    copy_file_fsync_enabled: false,
     usb_discovery_interval: 30,
     job_detail_files_page_size: 40,
     ...overrides,
@@ -167,6 +171,31 @@ describe('ConfigurationView', () => {
     await flushPromises()
 
     expect(mocks.updateConfiguration).toHaveBeenCalledWith({ usb_discovery_interval: 45 })
+  })
+
+  it('applies a greedy copy profile and saves the tuned values', async () => {
+    mocks.getConfiguration.mockResolvedValue(buildManagerResponse())
+    mocks.updateConfiguration.mockResolvedValue({
+      restart_required: false,
+      restart_required_settings: [],
+      applied_immediately: [
+        'copy_chunk_size_bytes',
+        'copy_progress_flush_bytes',
+        'copy_default_thread_count',
+      ],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.findAll('.chip-button')[3].trigger('click')
+    await wrapper.find('.action-row .btn.btn-primary').trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateConfiguration).toHaveBeenCalledWith({
+      copy_chunk_size_bytes: 16_777_216,
+      copy_progress_flush_bytes: 268_435_456,
+    })
   })
 
   it('loads and saves log level without exposing admin-only controls', async () => {

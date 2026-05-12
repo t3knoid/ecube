@@ -726,7 +726,7 @@ describe('DriveDetailView mount workflow', () => {
     await flushPromises()
     expect(mocks.listJobs).toHaveBeenLastCalledWith({
       drive_id: 7,
-      statuses: ['RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING'],
+      statuses: ['PREPARING', 'RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING'],
       limit: 1,
     }, {
       timeout: 5000,
@@ -893,7 +893,7 @@ describe('DriveDetailView mount workflow', () => {
 
     expect(mocks.listJobs).toHaveBeenCalledWith({
       drive_id: 7,
-      statuses: ['RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING'],
+      statuses: ['PREPARING', 'RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING'],
       limit: 1,
     }, { timeout: 5000 })
     expect(mocks.prepareEjectDrive).not.toHaveBeenCalled()

@@ -90,11 +90,19 @@ class TestSettingsDefaults:
 
     def test_copy_chunk_size_bytes_default(self):
         s = Settings(database_url="sqlite://")
-        assert s.copy_chunk_size_bytes == 1_048_576
+        assert s.copy_chunk_size_bytes == 4_194_304
+
+    def test_copy_file_fsync_enabled_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.copy_file_fsync_enabled is False
+
+    def test_copy_progress_flush_bytes_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.copy_progress_flush_bytes == 67_108_864
 
     def test_copy_default_thread_count_default(self):
         s = Settings(database_url="sqlite://")
-        assert s.copy_default_thread_count == 4
+        assert s.copy_default_thread_count == 12
 
     def test_copy_default_max_retries_default(self):
         s = Settings(database_url="sqlite://")

@@ -4,7 +4,7 @@
 |---|---|
 | Title | ECUBE Configuration Reference |
 | Purpose | Documents all ECUBE application and deployment configuration settings, environment variables, and their defaults. |
-| Updated on | 04/28/26 |
+| Updated on | 05/12/26 |
 | Audience | Systems administrators, operators, IT staff. |
 
 ## Table of Contents
@@ -269,10 +269,14 @@ Operational notes:
 
 | Variable                           | Default   | Description                                                        |
 | ---------------------------------- | --------- | ------------------------------------------------------------------ |
-| `COPY_CHUNK_SIZE_BYTES`            | `1048576` | Chunk size in bytes for file copy and checksum computation (1 MB). |
-| `COPY_DEFAULT_THREAD_COUNT`        | `4`       | Default worker thread pool size when not set on a job.             |
+| `COPY_CHUNK_SIZE_BYTES`            | `4194304` | Chunk size in bytes for file copy and checksum computation. Minimum `262144`, maximum `67108864`. Larger values reduce loop overhead and generally help large-file workloads at the cost of more memory per active worker. |
+| `COPY_PROGRESS_FLUSH_BYTES`        | `67108864` | Copied-byte threshold ECUBE buffers before committing progress updates to the database. Minimum `1048576`, maximum `1073741824`. Larger values reduce transaction overhead and increase buffered progress between commits. |
+| `COPY_DEFAULT_THREAD_COUNT`        | `12`      | Default worker thread pool size when not set on a job. Minimum `1`, maximum `32`. Higher values can improve overlap on many small files when the source and destination can sustain it. |
+| `COPY_FILE_FSYNC_ENABLED`          | `false`   | When `true`, ECUBE calls `fsync()` after every copied file. Leave disabled for maximum throughput when restart recovery from the last committed `DONE` file is sufficient. |
 | `COPY_DEFAULT_MAX_RETRIES`         | `3`       | Default maximum per-file retries when not set on a job.            |
 | `COPY_DEFAULT_RETRY_DELAY_SECONDS` | `1.0`     | Default retry delay in seconds when not set on a job.              |
+
+`admin` and `manager` users can adjust the copy-engine settings above from the `Configuration` page. The UI exposes direct controls for chunk size, progress flush threshold, default worker count, and per-file disk sync together with workload profile shortcuts for `Small-file heavy`, `Mixed workload`, `Large-file heavy`, and `Greedy throughput`.
 
 ---
 

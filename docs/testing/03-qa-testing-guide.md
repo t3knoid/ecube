@@ -4,7 +4,7 @@
 |---|---|
 | Title | QA Testing Guide |
 | Purpose | Guides QA personnel through manual hands-on ECUBE UI and functional testing in a Linux-based test environment. |
-| Updated on | 05/08/26 |
+| Updated on | 05/12/26 |
 | Audience | QA personnel. |
 
 ## Table of Contents
@@ -53,6 +53,30 @@ Add the following manual checks when a release includes the archived-job workflo
 | Archive confirmation flow is role-gated | After `Prepare Eject` has been completed for the related drive, open the same `COMPLETED` or `FAILED` job, click `Archive`, then confirm | The confirmation dialog explains that archiving sunsets the job and allows recreation of the same work definition, and the job transitions to `ARCHIVED` |
 | Archived Job Detail is read-only for lifecycle actions | Open an archived job in Job Detail | The job remains viewable, Edit is not shown, Analyze stays visible but disabled, the lifecycle toggle is hidden, and no Archive action is shown |
 | Processor cannot archive jobs | Sign in as `processor`, open a completed job in Job Detail | No Archive action is shown in the UI, and direct API use should return `403` |
+
+## Manual Verification Additions for Preparing State and Copy Tuning
+
+Add the following manual checks when a release includes the `PREPARING` job state, copy-engine tuning controls, or updated retry semantics.
+
+| Scenario | Steps | Expected |
+|---|---|---|
+| Start enters preparing before copy threads run | Sign in as `manager` or `processor`, create a job or open a pending job, then click `Start` | The job transitions to `PREPARING`, the Jobs list can show `Preparing...`, and the lifecycle action stays visible as a disabled `Pause` until the job becomes `RUNNING` |
+| Retry failed files re-enters preparing | Seed or create a partial-success `COMPLETED` job with at least one failed or timed-out file, open Job Detail, and click `Retry Failed Files` | Only failed terminal files are re-queued, the job returns to `PREPARING` first, and then moves to `RUNNING` after preparation finishes |
+| Prepare Eject is blocked while a job is preparing | Start or retry a job and navigate to the related drive before copy threads begin | `Prepare Eject` stays blocked while the related job status is `PREPARING`, with the same active-job guidance used for other in-progress states |
+| Copy tuning controls are available only on Configuration | Sign in as `manager` or `admin`, open `Configuration`, and inspect `Copy and Job Workflow` | The page shows `Copy Chunk Size`, `Progress Flush Threshold`, `Default Copy Worker Count`, and `Force per-file disk sync`, plus workload profile shortcuts for `Small-file heavy`, `Mixed workload`, `Large-file heavy`, and `Greedy throughput` |
+| Copy tuning changes persist valid values | Change the copy tuning fields to a different valid combination, save, and refresh the page | The save succeeds, the values persist after reload, and invalid out-of-range values are rejected by the UI or API without changing unrelated settings |
+
+## Manual Verification Additions for Started-Job Edit Restrictions
+
+Add the following manual checks when a release includes the restricted started-job edit workflow on Job Detail.
+
+| Scenario | Steps | Expected |
+|---|---|---|
+| Pending job still supports full edit flow | Open a `PENDING` job in Job Detail and click `Edit` | The dialog shows the full grouped edit form, including source and destination sections, and allows the same pre-start fields that were already editable before the job starts |
+| Started job opens restricted edit mode | Open a `RUNNING`, `PAUSED`, or `FAILED` job in Job Detail and click `Edit` | The dialog still opens, but only `Thread count` and reserved overflow-drive selection remain editable. Source, project, primary destination, notes, and callback editing are not available in that mode |
+| Started job can change thread count only | Open a started job, change `Thread count`, save, and refresh Job Detail | The save succeeds, the updated thread count is shown on the job, and no other job-definition fields change |
+| Started job can add or remove reserved overflow drives | Open a started job with at least one eligible additional drive, change the overflow-drive selection, save, and refresh Job Detail | The save succeeds, the reserved overflow assignment list matches the new selection, and removed reserved drives are no longer shown on the job |
+| Started job cannot redefine immutable fields | Attempt to change the project, source path, or primary destination for a started job through the UI or direct API call | The UI does not expose those edits in started-job mode, and any direct API attempt is rejected with a conflict response rather than mutating the job definition |
 
 
 ---
@@ -1145,7 +1169,7 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 | 8a | Mount a drive when the host lacks filesystem runtime support for that filesystem | 500 with a safe remediation message telling the operator to install the required filesystem runtime and retry; response must not expose device paths |
 | 8b | Mount a drive when the managed mount root is not writable by the ECUBE service account | 500 with a safe remediation message telling the operator to fix host permissions and retry; response must not expose mount paths |
 | 9 | Prepare-eject an `IN_USE` drive | 200, state → `AVAILABLE`, `mount_path` cleared |
-| 10 | Prepare-eject with an assigned job in `RUNNING`, `PAUSING`, `PAUSED`, or `VERIFYING` | 409, `CONFLICT`; drive remains `IN_USE`; provider eject is not called |
+| 10 | Prepare-eject with an assigned job in `PREPARING`, `RUNNING`, `PAUSING`, `PAUSED`, or `VERIFYING` | 409, `CONFLICT`; drive remains `IN_USE`; provider eject is not called |
 | 11 | Prepare-eject with incomplete active-assignment files (first attempt) | 409, `CONFLICT` with confirmation-required detail; drive remains `IN_USE` |
 | 12 | Confirmed prepare-eject with incomplete active-assignment files | Retry with `confirm_incomplete=true`; 200, state → `AVAILABLE`, `mount_path` cleared |
 | 13 | Audit events for incomplete-file prepare-eject flow | Execute rows 11 and 12, then query audit log | Audit includes `DRIVE_EJECT_CONFIRM_REQUIRED` for blocked first attempt and `DRIVE_EJECT_WITH_INCOMPLETE_FILES` for confirmed proceed attempt |
@@ -1320,7 +1344,7 @@ These tests exercise real hardware paths that must be validated during manual QA
 | 1 | Edit a pending job | Open a `PENDING` job, click `Edit`, change evidence number, notes, and source path through `Browse folders`, then save | Updated values persist on the detail page, the job remains bound to the same project, and the edit dialog keeps the source path field read-only outside the browse workflow |
 | 1a | Edit remains available after startup analysis completes | Run `Analyze` for a `PENDING` job, wait until startup analysis reaches `READY`, then click `Edit` | Edit remains available because the job is still pending, and the grouped edit dialog opens with the existing values pre-populated |
 | 1b | Edit dialog reuses the grouped job shell | Open an editable pending job, click `Edit`, and compare the layout with `Create Job` | The edit dialog uses the same grouped sections, required-field marker, footer legend, and pinned header/footer scrolling behavior as `Create Job`, while omitting create-only sections such as overflow selection or run-immediately |
-| 1c | Started jobs do not expose Edit | Open one `PAUSED` job, one `FAILED` job, one `RUNNING` job, and one `ARCHIVED` job in Job Detail | Edit is not shown for any of those states, while the remaining state-appropriate actions stay visible or disabled according to their own eligibility rules |
+| 1c | Started jobs expose restricted Edit only | Open one `PAUSED` job, one `FAILED` job, one `RUNNING` job, and one `ARCHIVED` job in Job Detail | `RUNNING`, `PAUSED`, and `FAILED` jobs still show `Edit` and open the restricted runtime-tuning dialog for thread-count and reserved overflow-drive changes only. `ARCHIVED` jobs do not show `Edit`, while the remaining state-appropriate actions stay visible or disabled according to their own eligibility rules |
 | 2 | Complete action is status-aware | Open one `PENDING` or `PAUSED` job and one `RUNNING` job | `Complete` is available only for the non-active job; the running job does not allow manual completion |
 | 3 | Delete pending job requires confirmation | Open a `PENDING` job, click `Delete`, confirm the dialog | The job is removed, the UI returns to the Jobs list, and the drive assignment is released |
 | 4 | Verify and Manifest are gated by real completion | Open a job that is still copying and watch the action bar, then open the same job after it reaches `COMPLETED` with 100% progress and no failed or timed-out files | `Verify` and `Download Manifest` stay disabled until the job is truly complete, then become available |

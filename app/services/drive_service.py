@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 PREPARE_EJECT_BLOCKING_JOB_STATUSES = (
+    JobStatus.PREPARING,
     JobStatus.RUNNING,
     JobStatus.PAUSING,
     JobStatus.PAUSED,

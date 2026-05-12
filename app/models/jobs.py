@@ -14,6 +14,7 @@ import enum
 
 class JobStatus(str, enum.Enum):
     PENDING = "PENDING"
+    PREPARING = "PREPARING"
     RUNNING = "RUNNING"
     PAUSING = "PAUSING"
     PAUSED = "PAUSED"

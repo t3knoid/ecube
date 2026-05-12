@@ -68,7 +68,7 @@ const mountsByJobId = computed(() => {
 })
 
 const activeJobs = computed(() =>
-  jobs.value.filter((job) => ['PENDING', 'RUNNING', 'VERIFYING'].includes(String(job.status || '').toUpperCase())),
+  jobs.value.filter((job) => ['PENDING', 'PREPARING', 'RUNNING', 'VERIFYING'].includes(String(job.status || '').toUpperCase())),
 )
 
 const needsAttentionColumns = computed(() => [
@@ -235,7 +235,7 @@ function calculateDurationSeconds(job) {
   const storedSeconds = Number(job?.active_duration_seconds || 0)
   const status = normalizeJobStatus(job?.status)
 
-  if (['RUNNING', 'VERIFYING', 'PAUSING'].includes(status) && job?.started_at) {
+  if (['PREPARING', 'RUNNING', 'VERIFYING', 'PAUSING'].includes(status) && job?.started_at) {
     const started = new Date(job.started_at)
     if (!Number.isNaN(started.getTime())) {
       const liveSeconds = Math.max(0, Math.round((Date.now() - started.getTime()) / 1000))
@@ -287,7 +287,7 @@ function jobActivityEntry(job) {
   if (['COMPLETED', 'ARCHIVED'].includes(status) && job?.completed_at) {
     return { label: t('jobs.completedAt'), value: formatTimestamp(job.completed_at) }
   }
-  if (['RUNNING', 'VERIFYING', 'PAUSING', 'PAUSED'].includes(status) && job?.started_at) {
+  if (['PREPARING', 'RUNNING', 'VERIFYING', 'PAUSING', 'PAUSED'].includes(status) && job?.started_at) {
     return { label: t('jobs.startedAt'), value: formatTimestamp(job.started_at) }
   }
   return null
@@ -310,7 +310,7 @@ function failureEntries(job) {
 
 function liveTransferEntries(job) {
   const status = normalizeJobStatus(job?.status)
-  if (!['RUNNING', 'VERIFYING', 'PAUSING'].includes(status)) return []
+  if (!['PREPARING', 'RUNNING', 'VERIFYING', 'PAUSING'].includes(status)) return []
 
   const durationSeconds = calculateDurationSeconds(job)
   const copiedBytes = Number(job?.copied_bytes || 0)

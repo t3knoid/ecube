@@ -66,7 +66,7 @@ const form = ref({
 })
 
 const canOperate = computed(() => authStore.hasAnyRole(['admin', 'manager', 'processor']))
-const ACTIVE_OVERLAP_STATUSES = new Set(['PENDING', 'RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING'])
+const ACTIVE_OVERLAP_STATUSES = new Set(['PENDING', 'PREPARING', 'RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING'])
 const OVERLAP_QUERY_LIMIT = 1000
 
 const columns = computed(() => {
@@ -98,6 +98,9 @@ function jobStatusTone(status) {
   if (['FAILED', 'ERROR', 'DISCONNECTED', 'UNMOUNTED', 'FALSE'].includes(value)) {
     return 'danger'
   }
+  if (value === 'PREPARING') {
+    return 'info'
+  }
   if (['RUNNING', 'VERIFYING', 'COPYING', 'IN_USE', 'DEGRADED', 'PAUSING'].includes(value)) {
     return 'warning'
   }
@@ -109,6 +112,8 @@ function jobStatusTone(status) {
 }
 
 function jobStatusIcon(status) {
+  if (normalizeJobStatus(status) === 'PREPARING') return 'i'
+
   const tone = jobStatusTone(status)
 
   if (tone === 'success') return '✓'
@@ -729,6 +734,7 @@ onBeforeUnmount(() => {
       <select v-model="statusFilter" :aria-label="t('common.labels.status')">
         <option value="ALL">{{ t('jobs.allStatuses') }}</option>
         <option value="PENDING">{{ t('jobs.statuses.pending') }}</option>
+        <option value="PREPARING">{{ t('jobs.statuses.preparing') }}</option>
         <option value="RUNNING">{{ t('jobs.statuses.running') }}</option>
         <option value="PAUSING">{{ t('jobs.statuses.pausing') }}</option>
         <option value="PAUSED">{{ t('jobs.statuses.paused') }}</option>

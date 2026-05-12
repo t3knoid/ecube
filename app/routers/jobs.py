@@ -356,10 +356,10 @@ def update_job(
     current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
     request: Request,
 ):
-    """Update a pending job from the Job Detail workflow.
+    """Update a job from the Job Detail workflow.
 
-    Editing remains available after startup analysis completes only while the
-    job is still pending so that started work cannot be redefined mid-lifecycle.
+    Pending jobs support full edits. Started jobs are limited to runtime tuning
+    fields so the copy definition cannot be redefined mid-lifecycle.
 
     **Roles:** ``admin``, ``manager``, ``processor``
     """
