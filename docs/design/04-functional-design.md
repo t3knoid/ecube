@@ -370,7 +370,7 @@ Reconciliation runs during application startup, before the service begins normal
 
 - Query all persisted `network_mounts` rows and compare them with live OS mount-table state.
 - For persisted `MOUNTED` rows, restore the expected managed mount when possible, or downgrade the row to `UNMOUNTED` or `ERROR` if the mount cannot be recovered.
-- For persisted `UNMOUNTED` or `ERROR` rows, remove any unexpected live ECUBE-managed mount still present under `/nfs/*` or `/smb/*`.
+- For persisted `UNMOUNTED` or `ERROR` rows, remove any unexpected live ECUBE-managed mount still present under `/mnt/ecube-network/*`.
 - Remove orphaned ECUBE-managed network mount points that no longer have a matching DB row.
 - For persisted USB drives that still have a managed mount assignment, restore the expected ECUBE mount slot under the configured USB mount base when possible, unmounting an unexpected live location first if necessary.
 - Remove orphaned ECUBE-managed USB mount points that no longer belong to a persisted drive assignment.

@@ -176,9 +176,9 @@ def test_prepare_managed_mount_roots_honors_usb_mount_base_path_from_env(tmp_pat
 
     assert result.returncode == 0, f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
     commands = command_log.read_text(encoding="utf-8")
-    assert "mkdir -p /nfs /smb /srv/ecube-usb" in commands
-    assert "chown ecube:ecube /nfs /smb /srv/ecube-usb" in commands
-    assert "chmod 755 /nfs /smb /srv/ecube-usb" in commands
+    assert "mkdir -p /mnt/ecube-network /srv/ecube-usb" in commands
+    assert "chown ecube:ecube /mnt/ecube-network /srv/ecube-usb" in commands
+    assert "chmod 755 /mnt/ecube-network /srv/ecube-usb" in commands
 
 
 def test_prepare_managed_mount_roots_honors_installer_environment_before_env_exists(tmp_path):
@@ -212,9 +212,9 @@ def test_prepare_managed_mount_roots_honors_installer_environment_before_env_exi
 
     assert result.returncode == 0, f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
     commands = command_log.read_text(encoding="utf-8")
-    assert "mkdir -p /nfs /smb /srv/ecube-usb" in commands
-    assert "chown ecube:ecube /nfs /smb /srv/ecube-usb" in commands
-    assert "chmod 755 /nfs /smb /srv/ecube-usb" in commands
+    assert "mkdir -p /mnt/ecube-network /srv/ecube-usb" in commands
+    assert "chown ecube:ecube /mnt/ecube-network /srv/ecube-usb" in commands
+    assert "chmod 755 /mnt/ecube-network /srv/ecube-usb" in commands
 
 
 def test_install_os_user_mgmt_sudoers_uses_canonical_template_with_modprobe(tmp_path):
@@ -290,6 +290,7 @@ def test_write_env_file_persists_configured_usb_mount_base_path(tmp_path):
     assert result.returncode == 0, f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
     env_text = (install_dir / ".env").read_text(encoding="utf-8")
     assert "USB_MOUNT_BASE_PATH=/srv/ecube-usb\n" in env_text
+    assert "NETWORK_MOUNT_BASE_PATH=/mnt/ecube-network\n" in env_text
 
 
 def test_ensure_host_password_policy_defaults_enables_pam_pwquality_and_seeds_policy(tmp_path):

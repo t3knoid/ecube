@@ -679,15 +679,15 @@ Accessible from the Drive Management screen via a "Manage Hubs" button. Visible 
 │  ◉ Mounts    │  │ ID │ Type │ Remote Path              │ Local Mount      │  │
 │  ◎ Jobs      │  │    │      │                          │                  │  │
 │              │  ├────┼──────┼──────────────────────────┼──────────────────┤  │
-│              │  │ 1  │ NFS  │ nfs.example.com:/evidence│ /nfs/evidence    │  │
+│              │  │ 1  │ NFS  │ nfs.example.com:/evidence│ /mnt/ecube-net…  │  │
 │              │  │    │      │ Status: 🟢 MOUNTED       │ Checked: 14:30   │  │
 │              │  │    │      │              [ Validate ] │ [ Remove ]       │  │
 │              │  ├────┼──────┼──────────────────────────┼──────────────────┤  │
-│              │  │ 2  │ SMB  │ //fileserver/cases       │ /smb/cases       │  │
+│              │  │ 2  │ SMB  │ //fileserver/cases       │ /mnt/ecube-net…  │  │
 │              │  │    │      │ Status: 🔴 ERROR         │ Checked: 14:30   │  │
 │              │  │    │      │              [ Validate ] │ [ Remove ]       │  │
 │              │  ├────┼──────┼──────────────────────────┼──────────────────┤  │
-│              │  │ 3  │ NFS  │ nfs2.example.com:/archive│ /nfs/archive     │  │
+│              │  │ 3  │ NFS  │ nfs2.example.com:/archive│ /mnt/ecube-net…  │  │
 │              │  │    │      │ Status: 🟢 MOUNTED       │ Checked: 14:30   │  │
 │              │  │    │      │              [ Validate ] │ [ Remove ]       │  │
 │              │  └────┴──────┴──────────────────────────┴──────────────────┘  │
@@ -706,7 +706,7 @@ Accessible from the Drive Management screen via a "Manage Hubs" button. Visible 
 │                                                               │
 │  Remote Path:       [ nfs.example.com:/evidence            ]  │
 │  Local Mount Point: [ Auto-generated after create          ]  │
-│  Example result:    [ /nfs/evidence                        ]  │
+│  Example result:    [ /mnt/ecube-network/evidence          ]  │
 │                                                               │
 │  ┌─ SMB Credentials (shown only when SMB selected) ────────┐ │
 │  │  Username:  [ svc-ecube                               ]  │ │
@@ -769,7 +769,7 @@ Archived jobs are hidden from the default Jobs list. The list view exposes a `Sh
 │                                                                              │
 │  ┌─ Overview ──────────────────────────────────────────────────────────┐     │
 │  │  Project:      PROJ-042             Evidence #:  EV-2026-003       │     │
-│  │  Source:       /nfs/evidence/case-003                               │     │
+│  │  Source:       /mnt/ecube-network/evidence/case-003                 │     │
 │  │  Target:       /mnt/usb/drive1                                      │     │
 │  │  Drive:        #1 (4C530000220226...)    Threads: 4                 │     │
 │  │  Retries:      3 max / 1s delay                                     │     │
@@ -1036,7 +1036,7 @@ and management remain available through admin API endpoints only.
 │              │  │  Device         │ Mount Point     │ FS Type │ Options     │ │
 │              │  │  /dev/sda1      │ /               │ ext4    │ rw,relatime │ │
 │              │  │  /dev/sdg1      │ /mnt/usb/drive1 │ ext4    │ rw,nosuid   │ │
-│              │  │  nfs.example... │ /nfs/evidence   │ nfs4    │ rw,vers=4.1 │ │
+│              │  │  nfs.example... │ /mnt/ecube-ne…  │ nfs4    │ rw,vers=4.1 │ │
 │              │  └──────────────────────────────────────────────────────────┘  │
 │              │                                                               │
 └──────────────┴───────────────────────────────────────────────────────────────┘

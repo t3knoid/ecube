@@ -51,6 +51,7 @@ from app.services.demo_seed_service import seed_runtime_demo_environment
 from app.services.mount_check_utils import check_mounted_with_configured_timeout
 from app.services.operation_context import details_with_operation_id as _details_with_operation_id, operation_extra as _operation_extra
 from app.constants import ECUBE_GROUP_ROLE_MAP
+from app.utils.network_mount_paths import cleanup_target_for_generated_network_mount_point, managed_network_mount_root
 from app.utils.sanitize import normalize_project_id
 
 logger = logging.getLogger(__name__)
@@ -244,10 +245,9 @@ def _is_direct_child_of(path: str, managed_root: str) -> bool:
 
 
 def _cleanup_generated_network_mount_directory(path: str) -> None:
-    if _is_direct_child_of(path, "/nfs"):
-        _cleanup_managed_mount_directory(path, "/nfs")
-    elif _is_direct_child_of(path, "/smb"):
-        _cleanup_managed_mount_directory(path, "/smb")
+    target = cleanup_target_for_generated_network_mount_point(path)
+    if target is not None:
+        _cleanup_managed_mount_directory(target, managed_network_mount_root())
 
 
 def _normalized_usb_mount_candidates(*paths: object) -> set[str]:
@@ -700,7 +700,7 @@ def reconcile_mounts(
         normalized_target = os.path.normpath(target)
         if normalized_target in persisted_targets:
             continue
-        managed_root = "/nfs" if _is_direct_child_of(normalized_target, "/nfs") else "/smb" if _is_direct_child_of(normalized_target, "/smb") else None
+        managed_root = managed_network_mount_root() if cleanup_target_for_generated_network_mount_point(normalized_target) else None
         if managed_root is None:
             continue
 
@@ -719,7 +719,7 @@ def reconcile_mounts(
             "old_status": MountStatus.MOUNTED.value,
             "new_status": MountStatus.UNMOUNTED.value,
             "reason": "orphan_managed_mount_removed",
-            "managed_area": managed_root.lstrip("/"),
+            "managed_area": os.path.basename(managed_root),
         })
 
     if checked:

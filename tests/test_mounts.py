@@ -103,7 +103,7 @@ def test_list_mounts_uses_no_related_job_fallback(client, db):
         type=MountType.NFS,
         remote_path="server:/exports/evidence",
         project_id="PROJ-NONE",
-        local_mount_point="/nfs/evidence",
+        local_mount_point=f"{settings.network_mount_base_path}/evidence",
         status=MountStatus.UNMOUNTED,
     )
     db.add(mount)
@@ -243,7 +243,7 @@ def test_add_mount(manager_client, db):
     assert data["type"] == "NFS"
     assert data["project_id"] == "PROJ-001"
     assert data["nfs_client_version"] is None
-    assert data["local_mount_point"] == "/nfs/evidence"
+    assert data["local_mount_point"] == f"{settings.network_mount_base_path}/evidence"
     assert data["status"] == "MOUNTED"
 
 
@@ -846,7 +846,7 @@ def test_add_mount_logs_attempt_and_success(manager_client, db, caplog):
     assert any("Mount attempt started" in m for m in messages)
     assert any("Mount attempt succeeded" in m for m in messages)
     assert not any("/exports/audit" in m for m in messages)
-    assert not any("/nfs/audit" in m for m in messages)
+    assert not any(f"{settings.network_mount_base_path}/audit" in m for m in messages)
     assert not any("sudo -n" in m for m in messages)
 
 
@@ -866,8 +866,8 @@ def test_add_mount_uses_unique_generated_local_mount_point(manager_client, db):
 
     assert first.status_code == 200
     assert second.status_code == 200
-    assert first.json()["local_mount_point"] == "/nfs/evidence"
-    assert second.json()["local_mount_point"] == "/nfs/evidence-2"
+    assert first.json()["local_mount_point"] == f"{settings.network_mount_base_path}/evidence"
+    assert second.json()["local_mount_point"] == f"{settings.network_mount_base_path}/evidence-2"
 
 
 def test_add_mount_acquires_create_lock(manager_client, db):
@@ -1007,7 +1007,10 @@ def test_add_mount_failure(manager_client, db):
          patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(
             returncode=1,
-            stderr="mount.nfs: access denied by server while mounting 192.168.1.1:/exports/evidence on /nfs/evidence",
+            stderr=(
+                "mount.nfs: access denied by server while mounting "
+                f"192.168.1.1:/exports/evidence on {settings.network_mount_base_path}/evidence"
+            ),
             stdout="",
         )
         response = manager_client.post(
@@ -1028,7 +1031,7 @@ def test_add_mount_failure(manager_client, db):
     assert audit.details["message"] == "Provider mount operation failed"
     assert "remote_path" not in audit.details
     assert "/exports/evidence" not in str(audit.details)
-    assert "/nfs/evidence" not in str(audit.details)
+    assert f"{settings.network_mount_base_path}/evidence" not in str(audit.details)
 
 
 def test_add_mount_fails_when_mountpoint_owned_by_root(manager_client, db):
@@ -1080,11 +1083,15 @@ def test_add_mount_logs_failure(manager_client, db, caplog):
         "Mount command raw error" in m
         and "access denied by server while mounting 192.168.1.3:/exports/audit" in m
         and "remote_path=192.168.1.3:/exports/audit" in m
-        and "local_mount_point=/nfs/audit" in m
+        and f"local_mount_point={settings.network_mount_base_path}/audit" in m
         for m in messages
     )
     assert not any("/exports/audit" in m for m in messages if "Mount attempt failed" in m)
-    assert not any("/nfs/audit" in m for m in messages if "Mount attempt failed" in m)
+    assert not any(
+        f"{settings.network_mount_base_path}/audit" in m
+        for m in messages
+        if "Mount attempt failed" in m
+    )
     assert not any("sudo -n" in m for m in messages)
 
 
@@ -1117,7 +1124,7 @@ def test_add_mount_logs_useful_info_on_nfs_failure(manager_client, db, caplog):
         and "failure_category=mount_add" in message
         and "reason=Permission or authentication failure" in message
         and "/exports/info" not in message
-        and "/nfs/info" not in message
+        and f"{settings.network_mount_base_path}/info" not in message
         for message in info_messages
     )
 
@@ -1179,7 +1186,7 @@ def test_delete_mount_removes_generated_mount_directory(manager_client, db):
     mount = NetworkMount(
         type=MountType.NFS,
         remote_path="192.168.1.1:/share",
-        local_mount_point="/nfs/share",
+        local_mount_point=f"{settings.network_mount_base_path}/share",
         status=MountStatus.MOUNTED,
     )
     db.add(mount)
@@ -1190,14 +1197,14 @@ def test_delete_mount_removes_generated_mount_directory(manager_client, db):
         response = manager_client.delete(f"/mounts/{mount.id}")
 
     assert response.status_code == 204
-    mock_rmdir.assert_called_once_with("/nfs/share")
+    mock_rmdir.assert_called_once_with(f"{settings.network_mount_base_path}/share")
 
 
 def test_delete_mount_does_not_remove_legacy_mount_directory(manager_client, db):
     mount = NetworkMount(
         type=MountType.NFS,
         remote_path="192.168.1.1:/share",
-        local_mount_point="/mnt/share",
+        local_mount_point="/nfs/share",
         status=MountStatus.MOUNTED,
     )
     db.add(mount)
@@ -1215,7 +1222,7 @@ def test_delete_mount_does_not_remove_nested_managed_path(manager_client, db):
     mount = NetworkMount(
         type=MountType.NFS,
         remote_path="192.168.1.1:/share",
-        local_mount_point="/nfs/team/music",
+        local_mount_point=f"{settings.network_mount_base_path}/team/music",
         status=MountStatus.MOUNTED,
     )
     db.add(mount)
@@ -1235,7 +1242,7 @@ def test_cleanup_generated_mount_directory_does_not_use_sudo(monkeypatch):
 
     with patch("app.services.mount_service.os.rmdir", side_effect=PermissionError("denied")), \
          patch("subprocess.run") as mock_run:
-        _cleanup_generated_mount_directory("/nfs/share")
+        _cleanup_generated_mount_directory(f"{settings.network_mount_base_path}/share")
 
     mock_run.assert_not_called()
 
@@ -1256,13 +1263,27 @@ def test_ensure_mount_directory_uses_sudo_mkdir_and_chown_for_managed_paths(monk
             MagicMock(returncode=0, stderr="", stdout=""),
         ]
 
-        err = _ensure_mount_directory("/nfs/music")
+        err = _ensure_mount_directory(f"{settings.network_mount_base_path}/music")
 
     assert err is None
     first_cmd = mock_run.call_args_list[0].args[0]
     second_cmd = mock_run.call_args_list[1].args[0]
-    assert first_cmd == ["sudo", "-n", "mkdir", "-p", "/nfs", "/nfs/music"]
-    assert second_cmd == ["sudo", "-n", "chown", "ecube:ecube", "/nfs", "/nfs/music"]
+    assert first_cmd == [
+        "sudo",
+        "-n",
+        "mkdir",
+        "-p",
+        settings.network_mount_base_path,
+        f"{settings.network_mount_base_path}/music",
+    ]
+    assert second_cmd == [
+        "sudo",
+        "-n",
+        "chown",
+        "ecube:ecube",
+        settings.network_mount_base_path,
+        f"{settings.network_mount_base_path}/music",
+    ]
 
 
 def test_delete_mount_not_found(manager_client, db):
@@ -1457,7 +1478,7 @@ def test_validate_mount_candidate_returns_candidate_without_persisting(manager_c
     assert data["remote_path"] == "192.168.1.1:/exports/evidence"
     assert data["project_id"] == "PROJ-NEW"
     assert data["nfs_client_version"] is None
-    assert data["local_mount_point"] == "/nfs/evidence"
+    assert data["local_mount_point"] == f"{settings.network_mount_base_path}/evidence"
     assert data["status"] == "MOUNTED"
     assert data["last_checked_at"] is not None
     assert db.query(NetworkMount).count() == 0
@@ -1465,13 +1486,13 @@ def test_validate_mount_candidate_returns_candidate_without_persisting(manager_c
         {
             "mount_type": MountType.NFS,
             "remote_path": "192.168.1.1:/exports/evidence",
-            "local_mount_point": "/nfs/evidence",
+            "local_mount_point": f"{settings.network_mount_base_path}/evidence",
             "credentials_file": None,
             "username": "svc-reader",
             "password": "top-secret",
         }
     ]
-    assert provider.unmount_calls == ["/nfs/evidence"]
+    assert provider.unmount_calls == [f"{settings.network_mount_base_path}/evidence"]
     info_messages = [record.getMessage() for record in caplog.records if record.levelname == "INFO"]
     assert any("Mount candidate validation started" in message for message in info_messages)
     assert any("Mount candidate validation succeeded" in message for message in info_messages)
@@ -1521,7 +1542,10 @@ def test_validate_mount_candidate_warns_when_nfs_41_is_slow_and_nfs_3_is_faster(
     assert "Selected NFS 4.1 validation was slow" in data["validation_warning"]
     assert "NFS 3 validated much faster on this server" in data["validation_warning"]
     assert attempted_versions == ["4.1", "3"]
-    assert provider.unmount_calls == ["/nfs/demo-case-002", "/nfs/demo-case-002"]
+    assert provider.unmount_calls == [
+        f"{settings.network_mount_base_path}/demo-case-002",
+        f"{settings.network_mount_base_path}/demo-case-002",
+    ]
 
 
 def test_validate_mount_candidate_warns_when_default_nfs_41_is_slow_and_nfs_3_is_faster(manager_client, db):
@@ -1568,7 +1592,10 @@ def test_validate_mount_candidate_warns_when_default_nfs_41_is_slow_and_nfs_3_is
     assert "Selected NFS 4.1 validation was slow" in data["validation_warning"]
     assert "NFS 3 validated much faster on this server" in data["validation_warning"]
     assert attempted_versions == ["4.1", "3"]
-    assert provider.unmount_calls == ["/nfs/demo-case-002", "/nfs/demo-case-002"]
+    assert provider.unmount_calls == [
+        f"{settings.network_mount_base_path}/demo-case-002",
+        f"{settings.network_mount_base_path}/demo-case-002",
+    ]
 
 
 def test_validate_mount_candidate_timeout_returns_conflict(manager_client, db, caplog):
@@ -1656,7 +1683,7 @@ def test_validate_mount_candidate_reports_nfs_3_fallback_when_nfs_41_times_out(m
     assert "NFS 4.1 validation timed out or was too slow" in response.json()["message"]
     assert "NFS 3 validated much faster on this server" in response.json()["message"]
     assert attempted_versions == ["4.1", "3"]
-    assert provider.unmount_calls == ["/nfs/demo-case-002"]
+    assert provider.unmount_calls == [f"{settings.network_mount_base_path}/demo-case-002"]
 
 
 def test_discover_mount_shares_returns_sanitized_remote_paths_and_reuses_credentials(manager_client, db):

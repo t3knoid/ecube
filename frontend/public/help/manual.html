@@ -569,7 +569,7 @@ Credentials file
 <p>Project assignment is required when creating a mount. Drives can only be initialized for projects that have at least one assigned share in the <code>MOUNTED</code> state.</p>
 <p>ECUBE rejects exact duplicate remote paths and blocks overlapping parent or child remote paths across different projects. Nested paths for the same project remain allowed. If two operators submit changes at the same time, one request may briefly return a conflict while ECUBE finishes the in-progress update.</p>
 <p>For security, the standard mount list and browse labels intentionally redact raw remote paths and local mount points in operator-facing views.</p>
-<p>ECUBE creates the local mount point automatically based on the remote path and mount type (for example, NFS mounts are created under <code>/nfs/<em></code> and SMB mounts under <code>/smb/</em></code>).</p>
+<p>ECUBE creates the local mount point automatically based on the remote path. Generated ECUBE-managed SMB and NFS mounts are created under <code>/mnt/ecube-network/*</code>.</p>
 <p>After a service restart, ECUBE may automatically restore an expected managed share mount or remove a stale ECUBE-managed mount point that no longer matches persisted system state. These startup corrections are intentional and are recorded in the audit log with sanitized details.</p>
 <p>The exact credential fields required depend on the mount type and your environment.</p>
 <p>If share browsing is unavailable because the ECUBE host is missing a required discovery tool, the dialog  shows an actionable message telling the operator which host package to install before retrying. Demo mode does not hide the browse control or block share discovery.</p>

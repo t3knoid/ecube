@@ -506,7 +506,7 @@ ECUBE rejects exact duplicate remote paths and blocks overlapping parent or chil
 
 For security, the standard mount list and browse labels intentionally redact raw remote paths and local mount points in operator-facing views.
 
-ECUBE creates the local mount point automatically based on the remote path and mount type (for example, NFS mounts are created under `/nfs/*` and SMB mounts under `/smb/*`).
+ECUBE creates the local mount point automatically based on the remote path. Generated ECUBE-managed SMB and NFS mounts are created under `/mnt/ecube-network/*`.
 
 After a service restart, ECUBE may automatically restore an expected managed share mount or remove a stale ECUBE-managed mount point that no longer matches persisted system state. These startup corrections are intentional and are recorded in the audit log with sanitized details.
 

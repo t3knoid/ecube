@@ -586,7 +586,7 @@ Use this scenario to verify restart-time recovery of managed mounts and startup 
 
 1. Create and mount a network share through ECUBE so it has a persisted `MOUNTED` row.
 2. Initialize and mount a USB drive through ECUBE so it has a managed mount assignment under `/mnt/ecube/<drive_id>`.
-3. Create one stale ECUBE-managed mount artifact that should not survive restart, such as an orphan `/nfs/*` or `/smb/*` mount point with no matching DB row.
+3. Create one stale ECUBE-managed mount artifact that should not survive restart, such as an orphan `/mnt/ecube-network/*` mount point with no matching DB row.
 4. Restart the ECUBE service.
 5. Verify the expected USB drive is again mounted at its managed ECUBE slot, verify the stale managed network mount is gone, and verify `GET /audit` shows `MOUNT_RECONCILED` and/or `DRIVE_MOUNT_RECONCILED` entries with sanitized details rather than raw host paths.
 
@@ -1355,7 +1355,7 @@ These tests exercise real hardware paths that must be validated during manual QA
 | 6 | Source versus destination compare is clear | Click `View Hashes` for a file, then run the compare action from Job Detail | Results show `Source`, `Destination`, and match details for path, size, and checksum; missing sides produce a sanitized conflict message |
 | 7 | Manifest download uses the stable file path | Let a job finish cleanly, then click `Download Manifest` from Job Detail | The browser starts a `manifest.json` download and the UI shows the stable destination path on the assigned drive |
 | 8 | Persisted failure reason outranks file summary | Open a failed job that has both a persisted job-level failure reason and file error rows | Job Detail shows the persisted failure reason first and does not replace it with the derived `error_summary` |
-| 9 | Unexpected copy failures redact absolute paths | Trigger a failed copy tied to a known file, then open Job Detail | The failure summary uses `Unexpected copy failure` with optional `source:` and `destination:` relative hints, and no absolute `/mnt/...` or `/nfs/...` path appears in the UI |
+| 9 | Unexpected copy failures redact absolute paths | Trigger a failed copy tied to a known file, then open Job Detail | The failure summary uses `Unexpected copy failure` with optional `source:` and `destination:` relative hints, and no absolute `/mnt/...` or `/mnt/ecube-network/...` path appears in the UI |
 | 10 | Startup-analysis cleanup control is role-gated | Open the same failed cached job as `manager` and as processor-only | `manager` sees `Clear startup analysis cache`; processor-only does not |
 | 11 | Startup-analysis cleanup requires confirmation | Open a failed cached job, click `Clear startup analysis cache`, then cancel and repeat with confirmation | Cancel leaves the cache in place; confirm clears it and removes the action from Job Detail |
 | 12 | Manual completion clears cached startup analysis | Open a `FAILED` or `PAUSED` job that still has cached startup analysis, then click `Complete` | The job moves to `COMPLETED` and a follow-up `GET /jobs/{job_id}` reports `startup_analysis_cached: false` |

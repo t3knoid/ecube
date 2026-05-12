@@ -1248,6 +1248,29 @@ _configured_usb_mount_base_path() {
   printf '%s' "/mnt/ecube"
 }
 
+_configured_network_mount_base_path() {
+  local env_file="${INSTALL_DIR}/.env"
+  local configured_path=""
+
+  if configured_path="$(_extract_env_value "${env_file}" "NETWORK_MOUNT_BASE_PATH" 2>/dev/null)"; then
+    if [[ "${configured_path}" == /* ]]; then
+      printf '%s' "${configured_path}"
+      return 0
+    fi
+    warn "Ignoring non-absolute NETWORK_MOUNT_BASE_PATH from ${env_file}: ${configured_path}"
+  fi
+
+  if [[ -n "${NETWORK_MOUNT_BASE_PATH:-}" ]]; then
+    if [[ "${NETWORK_MOUNT_BASE_PATH}" == /* ]]; then
+      printf '%s' "${NETWORK_MOUNT_BASE_PATH}"
+      return 0
+    fi
+    warn "Ignoring non-absolute NETWORK_MOUNT_BASE_PATH from installer environment: ${NETWORK_MOUNT_BASE_PATH}"
+  fi
+
+  printf '%s' "/mnt/ecube-network"
+}
+
 _ensure_runtime_host_packages() {
   local packages=(exfatprogs nfs-common cifs-utils smbclient usbutils util-linux passwd libpam-pwquality)
   local missing_packages=()
@@ -1327,7 +1350,9 @@ _install_password_policy_writer_helper() {
 _prepare_managed_mount_roots() {
   local usb_mount_root
   usb_mount_root="$(_configured_usb_mount_base_path)"
-  local roots=(/nfs /smb)
+  local network_mount_root
+  network_mount_root="$(_configured_network_mount_base_path)"
+  local roots=("${network_mount_root}")
 
   if [[ ! " ${roots[*]} " =~ " ${usb_mount_root} " ]]; then
     roots+=("${usb_mount_root}")
@@ -2340,6 +2365,8 @@ _write_env_file() {
 
   local usb_mount_root
   usb_mount_root="$(_configured_usb_mount_base_path)"
+  local network_mount_root
+  network_mount_root="$(_configured_network_mount_base_path)"
 
   if [[ "${DRY_RUN}" != true ]]; then
     cat > "${env_file}" <<EOF
@@ -2355,6 +2382,9 @@ TRUST_PROXY_HEADERS=false
 
 # Base directory for managed USB drive mount points.
 USB_MOUNT_BASE_PATH=${usb_mount_root}
+
+# Base directory for generated ECUBE-managed SMB and NFS mount points.
+NETWORK_MOUNT_BASE_PATH=${network_mount_root}
 
 # Path to the pre-built frontend served by FastAPI (standalone mode).
 SERVE_FRONTEND_PATH=${INSTALL_DIR}/www

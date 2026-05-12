@@ -175,13 +175,13 @@ sudo apt-get install -y \
 
 ```bash
 sudo useradd --system --create-home --home-dir /opt/ecube --shell /usr/sbin/nologin ecube
-sudo mkdir -p /opt/ecube /var/lib/ecube /var/log/ecube /nfs /smb /mnt/ecube
+sudo mkdir -p /opt/ecube /var/lib/ecube /var/log/ecube /mnt/ecube-network /mnt/ecube
 sudo chown -R ecube:ecube /opt/ecube /var/lib/ecube /var/log/ecube
-sudo chown ecube:ecube /nfs /smb /mnt/ecube
+sudo chown ecube:ecube /mnt/ecube-network /mnt/ecube
 sudo chmod 750 /opt/ecube
 sudo chmod 700 /var/lib/ecube
 sudo chmod 750 /var/log/ecube
-sudo chmod 755 /nfs /smb /mnt/ecube
+sudo chmod 755 /mnt/ecube-network /mnt/ecube
 
 # Optional hardware groups when present on the host
 getent group plugdev >/dev/null && sudo usermod -aG plugdev ecube
@@ -191,7 +191,7 @@ getent group dialout >/dev/null && sudo usermod -aG dialout ecube
 getent group shadow >/dev/null && sudo usermod -aG shadow ecube
 ```
 
-The managed mount roots (`/nfs`, `/smb`, and the configured USB mount base path, default `/mnt/ecube`) must be owned by the `ecube` service account. Runtime mount requests can use narrowly scoped sudo to create missing leaf folders and repair ownership under these roots.
+The managed mount roots (the configured network mount base path, default `/mnt/ecube-network`, and the configured USB mount base path, default `/mnt/ecube`) must be owned by the `ecube` service account. Runtime mount requests can use narrowly scoped sudo to create missing leaf folders and repair ownership under these roots.
 
 The `shadow` group membership allows the non-root `ecube` service process to
 perform local PAM (`pam_unix`) authentication consistently on hosts where
@@ -674,7 +674,7 @@ sudo rm -rf /var/log/ecube
 Only remove if these directories were created solely for ECUBE and are no longer needed:
 
 ```bash
-sudo rm -rf /nfs /smb
+sudo rm -rf /mnt/ecube-network
 ```
 
 #### 7. Remove service account and group

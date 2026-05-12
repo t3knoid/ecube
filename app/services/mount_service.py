@@ -26,6 +26,12 @@ from app.exceptions import ConflictError, ECUBEException, EncodingError, service
 from app.services.mount_credentials_service import decrypt_mount_secret, encrypt_mount_secret
 from app.services.mount_check_utils import check_mounted_with_configured_timeout
 from app.services.audit_service import get_job_custody_summaries
+from app.utils.network_mount_paths import (
+    cleanup_target_for_generated_network_mount_point,
+    is_generated_network_mount_point,
+    is_within_managed_network_mount_root,
+    managed_network_mount_root,
+)
 
 from app.utils.sanitize import is_encoding_error, normalize_project_id, sanitize_error_message
 
@@ -847,7 +853,7 @@ def _with_host_mount_namespace(cmd: list[str]) -> list[str]:
 
 
 def _mount_root_for_type(mount_type: MountType) -> str:
-    return "/nfs" if mount_type == MountType.NFS else "/smb"
+    return managed_network_mount_root()
 
 
 def _extract_remote_leaf(mount_type: MountType, remote_path: str) -> str:
@@ -887,11 +893,8 @@ def _generate_local_mount_point(
 
 
 def _managed_mount_root(local_mount_point: str) -> Optional[str]:
-    normalized = os.path.normpath(local_mount_point)
-    if normalized.startswith("/nfs/"):
-        return "/nfs"
-    if normalized.startswith("/smb/"):
-        return "/smb"
+    if is_within_managed_network_mount_root(local_mount_point):
+        return managed_network_mount_root()
     return None
 
 
@@ -995,27 +998,18 @@ def _validate_mount_directory_owner(local_mount_point: str) -> Optional[str]:
 
 
 def _is_generated_mount_point(local_mount_point: str) -> bool:
-    return local_mount_point.startswith("/nfs/") or local_mount_point.startswith("/smb/")
+    return is_generated_network_mount_point(local_mount_point)
 
 
 def _cleanup_target_for_generated_mount_point(local_mount_point: str) -> Optional[str]:
-    normalized = os.path.normpath(local_mount_point)
-    if normalized.startswith("/nfs/"):
-        root = "/nfs"
-    elif normalized.startswith("/smb/"):
-        root = "/smb"
-    else:
-        return None
-
-    rel = os.path.relpath(normalized, root)
-    # Only allow one generated leaf directly under /nfs or /smb.
-    if rel in (".", "..") or rel.startswith("../") or "/" in rel:
+    target = cleanup_target_for_generated_network_mount_point(local_mount_point)
+    if target is None:
         logger.warning(
             "Skipping generated mount cleanup for non-leaf managed path label=%s",
             _redacted_mount_label(local_mount_point),
         )
         return None
-    return os.path.join(root, rel)
+    return target
 
 
 def _cleanup_generated_mount_directory(local_mount_point: str) -> None:

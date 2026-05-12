@@ -132,6 +132,14 @@ class TestSettingsDefaults:
         s = Settings(database_url="sqlite://")
         assert s.mount_share_discovery_timeout_seconds == 60
 
+    def test_network_mount_base_path_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.network_mount_base_path == "/mnt/ecube-network"
+
+    def test_browse_allowed_prefixes_default(self):
+        s = Settings(database_url="sqlite://")
+        assert s.browse_allowed_prefixes == ["/mnt/ecube/", "/mnt/ecube-network/"]
+
     def test_nfs_client_version_default(self):
         s = Settings(database_url="sqlite://")
         assert s.nfs_client_version == "4.1"

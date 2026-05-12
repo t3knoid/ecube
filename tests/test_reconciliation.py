@@ -314,31 +314,31 @@ class TestReconcileMounts:
         assert provider.seen_nfs_versions == ["4.2"]
 
     def test_unexpected_live_unmounted_mount_is_removed(self, db: Session):
-        mount = _make_mount(db, MountStatus.UNMOUNTED, "/nfs/unexpected")
-        provider = FakeMountProvider(mounted_sources={"/nfs/unexpected": "server:/wrong-export"})
+        mount = _make_mount(db, MountStatus.UNMOUNTED, f"{settings.network_mount_base_path}/unexpected")
+        provider = FakeMountProvider(mounted_sources={f"{settings.network_mount_base_path}/unexpected": "server:/wrong-export"})
 
-        with patch("app.services.reconciliation_service.read_mount_table", return_value={"/nfs/unexpected": "server:/wrong-export"}):
+        with patch("app.services.reconciliation_service.read_mount_table", return_value={f"{settings.network_mount_base_path}/unexpected": "server:/wrong-export"}):
             result = reconcile_mounts(db, provider)
 
         db.refresh(mount)
         assert mount.status == MountStatus.MOUNTED
         assert result["mounts_corrected"] == 1
-        assert provider.unmount_calls == ["/nfs/unexpected"]
-        assert provider.mount_calls == [(MountType.NFS, "server:/export", "/nfs/unexpected")]
+        assert provider.unmount_calls == [f"{settings.network_mount_base_path}/unexpected"]
+        assert provider.mount_calls == [(MountType.NFS, "server:/export", f"{settings.network_mount_base_path}/unexpected")]
 
     def test_orphan_generated_network_mount_is_removed(self, db: Session):
-        provider = FakeMountProvider(mounted_sources={"/nfs/orphan": "server:/orphan"})
+        provider = FakeMountProvider(mounted_sources={f"{settings.network_mount_base_path}/orphan": "server:/orphan"})
 
-        with patch("app.services.reconciliation_service.read_mount_table", return_value={"/nfs/orphan": "server:/orphan"}):
+        with patch("app.services.reconciliation_service.read_mount_table", return_value={f"{settings.network_mount_base_path}/orphan": "server:/orphan"}):
             result = reconcile_mounts(db, provider)
 
         assert result["mounts_corrected"] == 1
-        assert provider.unmount_calls == ["/nfs/orphan"]
+        assert provider.unmount_calls == [f"{settings.network_mount_base_path}/orphan"]
 
     def test_orphan_generated_network_mount_emits_audit_record(self, db: Session):
-        provider = FakeMountProvider(mounted_sources={"/nfs/orphan": "server:/orphan"})
+        provider = FakeMountProvider(mounted_sources={f"{settings.network_mount_base_path}/orphan": "server:/orphan"})
 
-        with patch("app.services.reconciliation_service.read_mount_table", return_value={"/nfs/orphan": "server:/orphan"}):
+        with patch("app.services.reconciliation_service.read_mount_table", return_value={f"{settings.network_mount_base_path}/orphan": "server:/orphan"}):
             reconcile_mounts(db, provider)
 
         audit = (
@@ -350,7 +350,7 @@ class TestReconcileMounts:
         assert audit is not None
         assert audit.details["old_status"] == "MOUNTED"
         assert audit.details["new_status"] == "UNMOUNTED"
-        assert audit.details["managed_area"] == "nfs"
+        assert audit.details["managed_area"] == os.path.basename(settings.network_mount_base_path)
 
     def test_persisted_usb_mount_is_remounted_to_expected_slot(self, db: Session):
         drive = _make_drive(db, "USB-STARTUP", DriveState.IN_USE)
@@ -645,10 +645,10 @@ class TestReconcileMounts:
         assert provider.mount_calls == [(MountType.NFS, "server:/export", "/mnt/error")]
 
     def test_unmounted_live_expected_mount_is_marked_mounted(self, db: Session):
-        mount = _make_mount(db, MountStatus.UNMOUNTED, "/nfs/expected-live")
-        provider = FakeMountProvider(mounted_sources={"/nfs/expected-live": "server:/export"})
+        mount = _make_mount(db, MountStatus.UNMOUNTED, f"{settings.network_mount_base_path}/expected-live")
+        provider = FakeMountProvider(mounted_sources={f"{settings.network_mount_base_path}/expected-live": "server:/export"})
 
-        with patch("app.services.reconciliation_service.read_mount_table", return_value={"/nfs/expected-live": "server:/export"}):
+        with patch("app.services.reconciliation_service.read_mount_table", return_value={f"{settings.network_mount_base_path}/expected-live": "server:/export"}):
             result = reconcile_mounts(db, provider)
 
         db.refresh(mount)
@@ -708,18 +708,18 @@ class TestReconcileMounts:
         assert result["mounts_corrected"] == 2
 
     def test_mismatched_live_network_mount_cleanup_and_remount_counts_once(self, db: Session):
-        mount = _make_mount(db, MountStatus.MOUNTED, "/nfs/project-a")
-        provider = FakeMountProvider(mounted_sources={"/nfs/project-a": "server:/wrong-export"})
+        mount = _make_mount(db, MountStatus.MOUNTED, f"{settings.network_mount_base_path}/project-a")
+        provider = FakeMountProvider(mounted_sources={f"{settings.network_mount_base_path}/project-a": "server:/wrong-export"})
 
-        with patch("app.services.reconciliation_service.read_mount_table", return_value={"/nfs/project-a": "server:/wrong-export"}):
+        with patch("app.services.reconciliation_service.read_mount_table", return_value={f"{settings.network_mount_base_path}/project-a": "server:/wrong-export"}):
             result = reconcile_mounts(db, provider)
 
         db.refresh(mount)
         assert mount.status == MountStatus.MOUNTED
         assert result["mounts_checked"] == 1
         assert result["mounts_corrected"] == 1
-        assert provider.unmount_calls == ["/nfs/project-a"]
-        assert provider.mount_calls == [(MountType.NFS, "server:/export", "/nfs/project-a")]
+        assert provider.unmount_calls == [f"{settings.network_mount_base_path}/project-a"]
+        assert provider.mount_calls == [(MountType.NFS, "server:/export", f"{settings.network_mount_base_path}/project-a")]
 
     def test_reconcile_mounts_passes_configured_timeout(self, db: Session):
         mount = _make_mount(db, MountStatus.MOUNTED, "/mnt/timeout-aware")

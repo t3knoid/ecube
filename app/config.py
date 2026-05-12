@@ -386,6 +386,11 @@ class Settings(BaseSettings):
     #: ``<usb_mount_base_path>/<drive_db_id>``, e.g. ``/mnt/ecube/7``.
     usb_mount_base_path: str = "/mnt/ecube"
 
+    #: Base directory for generated ECUBE-managed SMB and NFS mount points.
+    #: Each generated network mount is placed at
+    #: ``<network_mount_base_path>/<generated-leaf>``.
+    network_mount_base_path: str = "/mnt/ecube-network"
+
     # ---------------------------------------------------------------------------
     # OS user/group management binary paths
     # ---------------------------------------------------------------------------
@@ -465,9 +470,7 @@ class Settings(BaseSettings):
     #: The defaults cover common ECUBE layouts.  Operators should override this
     #: via the ``BROWSE_ALLOWED_PREFIXES`` environment variable (JSON array) to
     #: match the actual mount hierarchy on their deployment.
-    browse_allowed_prefixes: List[str] = Field(
-        default=["/mnt/ecube/", "/nfs/", "/smb/"]
-    )
+    browse_allowed_prefixes: List[str] = Field(default_factory=list)
 
     #: Maximum number of entries a single directory may contain before the
     #: browse endpoint rejects the request with 400.  Prevents DoS from
@@ -768,6 +771,11 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _samesite_none_requires_secure(self) -> "Settings":
+        if "browse_allowed_prefixes" not in self.model_fields_set:
+            self.browse_allowed_prefixes = [
+                self.usb_mount_base_path.rstrip("/") + "/",
+                self.network_mount_base_path.rstrip("/") + "/",
+            ]
         if self.session_cookie_samesite == "none" and not self.session_cookie_secure:
             raise ValueError(
                 "SESSION_COOKIE_SECURE must be true when "

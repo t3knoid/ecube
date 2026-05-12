@@ -308,6 +308,7 @@ Operational notes:
 | `SYSFS_USB_DEVICES_PATH`     | `/sys/bus/usb/devices` | Sysfs USB devices directory.                                   |
 | `SYSFS_BLOCK_PATH`           | `/sys/block`           | Sysfs block devices directory.                                 |
 | `USB_MOUNT_BASE_PATH`        | `/mnt/ecube`           | Base directory for USB drive mount points. Each drive is mounted at `<USB_MOUNT_BASE_PATH>/<drive_db_id>`. |
+| `NETWORK_MOUNT_BASE_PATH`    | `/mnt/ecube-network`   | Base directory for generated ECUBE-managed SMB and NFS mount points. Each generated network mount is created at `<NETWORK_MOUNT_BASE_PATH>/<generated-leaf>`. |
 
 ---
 
@@ -334,7 +335,7 @@ Operational notes:
 
 | Variable                    | Default                            | Description |
 | --------------------------- | ---------------------------------- | ----------- |
-| `BROWSE_ALLOWED_PREFIXES`   | `["/mnt/ecube/", "/nfs/", "/smb/"]` | JSON array of filesystem path prefixes permitted as browse roots. Only paths whose `realpath` starts with one of these prefixes are served by `GET /browse`. Override via environment variable to match the actual mount hierarchy on your deployment. |
+| `BROWSE_ALLOWED_PREFIXES`   | `["/mnt/ecube/", "/mnt/ecube-network/"]` | JSON array of filesystem path prefixes permitted as browse roots. Only paths whose `realpath` starts with one of these prefixes are served by `GET /browse`. Override via environment variable to match the actual mount hierarchy on your deployment. |
 | `BROWSE_MAX_DIR_ENTRIES`    | `50000`                            | Maximum number of entries a directory may contain before the browse endpoint rejects the request with HTTP 400. Prevents denial-of-service from directories with hundreds of thousands of files. Set to `0` to disable the limit. |
 
 ---

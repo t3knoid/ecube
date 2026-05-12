@@ -306,7 +306,7 @@ class TestBrowseSecurity:
         _make_network_mount(db, mount_point)
 
         # Restrict allowed prefixes to something that does NOT include tmp_path
-        with patch("app.config.settings.browse_allowed_prefixes", ["/mnt/ecube/", "/nfs/", "/smb/"]):
+        with patch("app.config.settings.browse_allowed_prefixes", ["/mnt/ecube/", "/mnt/ecube-network/"]):
             response = client.get(f"/browse?path={mount_point}")
 
         assert response.status_code == 403
