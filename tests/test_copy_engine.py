@@ -1058,6 +1058,144 @@ def test_run_copy_job_automatically_continues_overflow_on_next_project_drive(db,
     assert target_full_audit.details["selected_drive_id"] == second_drive.id
 
 
+def test_run_copy_job_resume_reassigns_queued_pending_file_to_resumed_drive(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    first_file = source_dir / "first.txt"
+    second_file = source_dir / "second.txt"
+    first_file.write_bytes(b"alpha")
+    second_file.write_bytes(b"bravo")
+
+    first_target = tmp_path / "target-1"
+    second_target = tmp_path / "target-2"
+    first_target.mkdir()
+    second_target.mkdir()
+
+    first_drive = UsbDrive(
+        device_identifier="USB-RESUME-QUEUE-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        mount_path=str(first_target),
+    )
+    second_drive = UsbDrive(
+        device_identifier="USB-RESUME-QUEUE-002",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        mount_path=str(second_target),
+    )
+    db.add_all([first_drive, second_drive])
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-001",
+        evidence_number="EV-RESUME-QUEUE-001",
+        source_path=str(source_dir),
+        target_mount_path=str(first_target),
+        status=JobStatus.PENDING,
+        thread_count=2,
+        max_file_retries=0,
+        retry_delay_seconds=0,
+        startup_analysis_total_bytes=len(b"alpha") + len(b"bravo"),
+        startup_analysis_file_count=2,
+        startup_analysis_status=StartupAnalysisStatus.READY,
+        startup_analysis_cache_present=True,
+    )
+    db.add(job)
+    db.flush()
+
+    first_assignment = DriveAssignment(drive_id=first_drive.id, job_id=job.id)
+    second_assignment = DriveAssignment(drive_id=second_drive.id, job_id=job.id, activated_at=None)
+    db.add_all([first_assignment, second_assignment])
+    db.flush()
+    first_export = ExportFile(job_id=job.id, relative_path="first.txt", size_bytes=len(b"alpha"), status=FileStatus.PENDING)
+    second_export = ExportFile(job_id=job.id, relative_path="second.txt", size_bytes=len(b"bravo"), status=FileStatus.PENDING)
+    db.add_all([first_export, second_export])
+    db.commit()
+
+    class _QueuedFuture:
+        def __init__(self, fn, *args):
+            self._fn = fn
+            self._args = args
+            self._ran = False
+            self._cancelled = False
+
+        def result(self):
+            if not self._cancelled and not self._ran:
+                self._fn(*self._args)
+                self._ran = True
+            return None
+
+        def done(self):
+            return self._ran or self._cancelled
+
+        def cancel(self):
+            self._cancelled = True
+            return True
+
+    class _Executor:
+        def __init__(self, *args, **kwargs):
+            self.futures = []
+
+        def submit(self, fn, *args, **kwargs):
+            future = _QueuedFuture(fn, *args)
+            self.futures.append(future)
+            return future
+
+        def shutdown(self, wait=True, cancel_futures=True):
+            return None
+
+    def _pause_after_first_completed(futures):
+        first_future = list(futures)[0]
+        yield first_future
+        paused_job = db.get(ExportJob, job.id)
+        paused_job.status = JobStatus.PAUSING
+        db.commit()
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine.ThreadPoolExecutor", _Executor):
+            with patch("app.services.copy_engine.as_completed", side_effect=_pause_after_first_completed):
+                with patch(
+                    "app.services.copy_engine.scan_source_files",
+                    return_value=[first_file, second_file],
+                ):
+                    copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+    db.refresh(first_assignment)
+    db.refresh(second_assignment)
+    db.refresh(first_export)
+    db.refresh(second_export)
+
+    assert job.status == JobStatus.PAUSED
+    assert first_export.status == FileStatus.DONE
+    assert first_export.drive_assignment_id == first_assignment.id
+    assert second_export.status == FileStatus.PENDING
+
+    first_assignment.released_at = datetime.now(timezone.utc)
+    second_assignment.activated_at = datetime.now(timezone.utc)
+    job.status = JobStatus.PENDING
+    job.target_mount_path = str(second_target)
+    job.completed_at = None
+    db.commit()
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch(
+            "app.services.copy_engine.scan_source_files",
+            return_value=[first_file, second_file],
+        ):
+            copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+    db.refresh(first_export)
+    db.refresh(second_export)
+
+    assert job.status == JobStatus.COMPLETED
+    assert first_export.drive_assignment_id == first_assignment.id
+    assert second_export.drive_assignment_id == second_assignment.id
+
+
 def test_run_copy_job_automatically_continues_overflow_with_mixed_incomplete_backlog(db, tmp_path):
     first_target = tmp_path / "target-1"
     second_target = tmp_path / "target-2"

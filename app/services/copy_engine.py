@@ -1630,6 +1630,7 @@ def _process_file(
         worker_snapshot = register_active_copy_worker(job_id=ef.job_id)
 
         ef.status = FileStatus.COPYING
+        ef.drive_assignment_id = active_assignment_id
         if not _commit_with_staged_audit(
             commit_error_message="DB commit failed setting file %s to COPYING",
             action="FILE_COPY_START",
@@ -1707,6 +1708,7 @@ def _process_file(
                     return
                 time.sleep(delay)
                 ef.status = FileStatus.COPYING
+                ef.drive_assignment_id = active_assignment_id
                 try:
                     file_repo.save(ef)
                 except Exception:
@@ -1820,8 +1822,7 @@ def _process_file(
         ef.checksum = checksum
         if success:
             ef.status = FileStatus.DONE
-            if ef.drive_assignment_id is None:
-                ef.drive_assignment_id = active_assignment_id
+            ef.drive_assignment_id = active_assignment_id
             _stage_remaining_progress()
             if active_assignment_id is not None:
                 db.execute(
@@ -1999,21 +2000,6 @@ def run_copy_job(job_id: int) -> None:
                             )
                             if not pending_files:
                                 break
-                            active_assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
-                            batch_assignment_id = int(active_assignment.id) if active_assignment is not None else None
-                            if batch_assignment_id is not None:
-                                assignment_updated = False
-                                for ef in pending_files:
-                                    if ef.drive_assignment_id is None:
-                                        ef.drive_assignment_id = batch_assignment_id
-                                        assignment_updated = True
-                                if assignment_updated:
-                                    try:
-                                        db.commit()
-                                    except Exception:
-                                        db.rollback()
-                                        logger.error("DB commit failed assigning pending files for job %s", job_id)
-                                        return
                             futures = {
                                 executor.submit(
                                     _process_file,
