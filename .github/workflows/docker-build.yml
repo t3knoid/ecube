@@ -1,76 +1,27 @@
 name: Docker Build
 
-# Builds both application images, runs a smoke test against the full stack,
-# and (on release) pushes images to GHCR and publishes a production
-# docker-compose.yml as a release asset.
+# Builds the release-tagged application image, runs a smoke test against the
+# full stack, then pushes the smoke-tested image to GHCR and attaches a
+# production docker-compose.yml to the matching GitHub Release.
 #
-# Jobs:
-#   version-check         — detects whether pyproject.toml version field changed
-#   build-and-smoke-test  — runs only when version changed (or on release/dispatch)
-#   publish               — runs on published releases only; pushes images and
-#                           attaches docker-compose.yml to the GitHub Release
+# This workflow runs only when the tag-release workflow creates a fresh tag and
+# draft release, then explicitly dispatches this workflow with the tag and sha.
 
 on:
-  workflow_dispatch:
-  push:
-    branches: [main]
-    # Only trigger when pyproject.toml could have changed (version-check job
-    # further verifies the version field itself was bumped).
-    paths:
-      - pyproject.toml
-  release:
-    types: [published]
+  repository_dispatch:
+    types: [docker-release-build]
 
-# Cancel any in-progress run for the same branch/PR when a new commit is pushed.
-# Release and workflow_dispatch runs are never cancelled.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.event.client_payload.tag || github.run_id }}
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
   APP_IMAGE: ghcr.io/${{ github.repository_owner }}/ecube-app
 
 jobs:
-  version-check:
-    name: Check version changed
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    outputs:
-      changed: ${{ steps.check.outputs.changed }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          # Need the previous commit to diff the version field.
-          fetch-depth: 2
-
-      - name: Verify version field changed
-        id: check
-        run: |
-          if [[ "${{ github.event_name }}" != "push" ]]; then
-            # release and workflow_dispatch always build.
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          OLD=$(git show HEAD~1:pyproject.toml 2>/dev/null \
-            | grep -E '^version\s*=' | sed 's/.*"\(.*\)".*/\1/')
-          NEW=$(grep -E '^version\s*=' pyproject.toml | sed 's/.*"\(.*\)".*/\1/')
-          echo "Previous version: ${OLD:-<none>}"
-          echo "Current version:  $NEW"
-          if [ "$OLD" != "$NEW" ]; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "Version bumped: ${OLD:-<none>} → $NEW"
-          else
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Version unchanged ($NEW) — skipping Docker build."
-          fi
-
   build-and-smoke-test:
     name: Build and smoke test
-    needs: version-check
-    if: needs.version-check.outputs.changed == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -84,21 +35,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.client_payload.sha }}
 
       - name: Determine image tag
         id: tag
         run: |
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            # Released via a git tag (e.g. v1.2.3).
-            echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ github.event_name }}" == "push" ]]; then
-            # Push to main that bumped the version — derive tag from pyproject.toml.
-            VERSION=$(grep -E '^version\s*=' pyproject.toml | sed 's/.*"\(.*\)".*/\1/')
-            echo "value=v${VERSION}" >> "$GITHUB_OUTPUT"
-          else
-            # workflow_dispatch or any other trigger — use the commit SHA.
-            echo "value=sha-${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+          TAG='${{ github.event.client_payload.tag }}'
+          if [[ -z "$TAG" || ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Expected a semantic version tag in repository_dispatch payload, got '$TAG'."
+            exit 1
           fi
+          echo "value=${TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Build images
         run: docker compose -f docker-compose.ecube.yml build
@@ -108,14 +56,12 @@ jobs:
           docker tag ecube-app ${{ env.APP_IMAGE }}:${{ steps.tag.outputs.value }}
 
       - name: Save smoke-tested images as artifacts
-        if: github.event_name == 'release'
         run: |
           mkdir -p /tmp/docker-images
           docker save "${{ env.APP_IMAGE }}:${{ steps.tag.outputs.value }}" \
             | gzip > /tmp/docker-images/ecube-app.tar.gz
 
       - name: Upload smoke-tested images
-        if: github.event_name == 'release'
         uses: actions/upload-artifact@v4
         with:
           name: docker-images
@@ -193,7 +139,6 @@ jobs:
   publish:
     name: Push images and publish release compose
     needs: build-and-smoke-test
-    if: github.event_name == 'release'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -202,6 +147,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.client_payload.sha }}
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -265,4 +212,6 @@ jobs:
       - name: Upload production docker-compose to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.build-and-smoke-test.outputs.tag }}
           files: dist/docker-compose.yml
+          overwrite_files: true
