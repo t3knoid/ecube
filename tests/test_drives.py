@@ -1,11 +1,14 @@
+from pathlib import Path
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy import text
 
+from app.infrastructure import throughput_benchmark
 from app.exceptions import ConflictError
 from app.infrastructure.drive_eject import EjectResult
+from app.infrastructure.throughput_benchmark import LinuxThroughputBenchmarkProvider
 from app.models.audit import AuditLog
 from app.models.hardware import UsbDrive, DriveState, UsbHub, UsbPort
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobChainOfCustodySnapshot, JobStatus
@@ -142,6 +145,8 @@ def test_drive_throughput_test_persists_latest_measurement(manager_client, db, t
         response = manager_client.post(f"/drives/{drive.id}/throughput-test")
 
     assert response.status_code == 200
+    provider.measure_drive_write_mbps.assert_called_once()
+    provider.measure_share_read_mbps.assert_not_called()
     data = response.json()
     assert data["throughput_write_mbps"] == 145.6
     assert data["throughput_tested_at"] is not None
@@ -162,6 +167,66 @@ def test_drive_throughput_test_requires_mounted_drive(manager_client, db):
 
     assert response.status_code == 409
     assert "Drive throughput test requires a mounted managed drive" in str(response.json())
+
+
+def test_drive_write_benchmark_uses_one_contiguous_file(tmp_path):
+    provider = LinuxThroughputBenchmarkProvider()
+    sample_plan = [
+        (tmp_path / "small.bin", 16 * 1024),
+        (tmp_path / "medium.bin", 128 * 1024),
+        (tmp_path / "large.bin", 1024 * 1024),
+    ]
+
+    write_mbps, elapsed_seconds, stream_seconds = provider.measure_drive_write_mbps(
+        str(tmp_path),
+        sample_plan,
+        benchmark_id="contiguous",
+    )
+
+    assert write_mbps is not None
+    assert elapsed_seconds >= stream_seconds >= 0.0
+    assert not list(tmp_path.glob(".throughput-benchmark-contiguous-*.tmp"))
+
+
+def test_drive_write_benchmark_rejects_zero_byte_sample_plan(tmp_path):
+    provider = LinuxThroughputBenchmarkProvider()
+
+    write_mbps, elapsed_seconds, stream_seconds = provider.measure_drive_write_mbps(
+        str(tmp_path),
+        [(tmp_path / "empty.bin", 0)],
+        benchmark_id="zero",
+    )
+
+    assert write_mbps is None
+    assert elapsed_seconds == 0.0
+    assert stream_seconds == 0.0
+
+
+def test_drive_write_benchmark_excludes_cleanup_time_from_elapsed_seconds(tmp_path):
+    provider = LinuxThroughputBenchmarkProvider()
+    current_tick = {"value": 0.0}
+    original_unlink = Path.unlink
+
+    def fake_perf_counter():
+        value = current_tick["value"]
+        current_tick["value"] += 1.0
+        return value
+
+    def delayed_unlink(path_obj, *args, **kwargs):
+        current_tick["value"] += 100.0
+        return original_unlink(path_obj, *args, **kwargs)
+
+    with patch.object(throughput_benchmark.time, "perf_counter", side_effect=fake_perf_counter):
+        with patch.object(Path, "unlink", new=delayed_unlink):
+            write_mbps, elapsed_seconds, stream_seconds = provider.measure_drive_write_mbps(
+                str(tmp_path),
+                [(tmp_path / "sample.bin", 1)],
+                benchmark_id="cleanup-timing",
+            )
+
+    assert write_mbps == 0.01
+    assert elapsed_seconds == 3.0
+    assert stream_seconds == 1.0
 
 
 def test_list_drives_filter_by_project(client, db):

@@ -7,6 +7,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
+from app.infrastructure import throughput_benchmark
+from app.infrastructure.throughput_benchmark import LinuxThroughputBenchmarkProvider
 from app.models.jobs import ExportJob, JobStatus
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.config import settings
@@ -170,6 +172,8 @@ def test_mount_throughput_test_persists_latest_measurement(manager_client, db, t
         response = manager_client.post(f"/mounts/{mount.id}/throughput-test")
 
     assert response.status_code == 200
+    provider.measure_share_read_mbps.assert_called_once()
+    provider.measure_drive_write_mbps.assert_not_called()
     data = response.json()
     assert data["throughput_read_mbps"] == 98.7
     assert data["throughput_tested_at"] is not None
@@ -195,6 +199,30 @@ def test_mount_throughput_test_requires_readable_files(manager_client, db, tmp_p
 
     assert response.status_code == 409
     assert "Mounted share has no readable files available for throughput testing" in str(response.json())
+
+
+def test_share_read_benchmark_uses_best_effort_cache_hints(tmp_path):
+    provider = LinuxThroughputBenchmarkProvider()
+    sample_file = tmp_path / "sample.bin"
+    sample_file.write_bytes(b"a" * 4096)
+    calls = []
+
+    def record_fadvise(file_descriptor, offset, length, advice):
+        calls.append(advice)
+
+    with patch.object(throughput_benchmark.os, "posix_fadvise", side_effect=record_fadvise):
+        read_mbps, actual_read_bytes, elapsed_seconds, stream_seconds = provider.measure_share_read_mbps(
+            [(sample_file, 4096)]
+        )
+
+    assert read_mbps is not None
+    assert actual_read_bytes == 4096
+    assert elapsed_seconds >= stream_seconds >= 0.0
+    assert calls == [
+        throughput_benchmark.os.POSIX_FADV_SEQUENTIAL,
+        throughput_benchmark.os.POSIX_FADV_DONTNEED,
+        throughput_benchmark.os.POSIX_FADV_DONTNEED,
+    ]
 
 
 def test_add_mount(manager_client, db):

@@ -169,10 +169,11 @@ class Settings(BaseSettings):
     #: ``0`` disables periodic discovery.
     usb_discovery_interval: int = 30
 
-    #: Maximum number of bytes sampled during manual startup-analysis transfer
-    #: benchmarking. The benchmark reads up to this many bytes from the source
-    #: share and writes the same amount to the assigned target drive.
-    startup_analysis_benchmark_bytes: int = 8_388_608
+    #: Maximum number of bytes sampled during startup-analysis transfer
+    #: benchmarking and manual throughput tests. Share benchmarks read up to
+    #: this many bytes from mounted shares, and drive benchmarks write the same
+    #: amount to mounted destination media.
+    startup_analysis_benchmark_bytes: int = 67_108_864
 
     #: Timeout in seconds for each mountpoint check during ``GET /health/ready``.
     #: Keep this low so readiness fails fast even when a mount check hangs.

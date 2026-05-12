@@ -21,6 +21,16 @@ def _calculate_transfer_rate_mbps(transferred_bytes: int, elapsed_seconds: float
     return max(0.01, round(rate_mbps, 2))
 
 
+def _best_effort_posix_fadvise(file_descriptor: int, advice: int) -> None:
+    if not hasattr(os, "posix_fadvise"):
+        return
+
+    try:
+        os.posix_fadvise(file_descriptor, 0, 0, advice)
+    except (AttributeError, OSError, ValueError):
+        return
+
+
 class ThroughputBenchmarkProvider(Protocol):
     def measure_share_read_mbps(self, sample_plan: list[tuple[Path, int]]) -> tuple[Optional[float], int, float, float]: ...
 
@@ -46,6 +56,14 @@ class LinuxThroughputBenchmarkProvider:
         for file_path, planned_bytes in sample_plan:
             remaining = planned_bytes
             with open(file_path, "rb") as handle:
+                sequential_advice = getattr(os, "POSIX_FADV_SEQUENTIAL", None)
+                if sequential_advice is not None:
+                    _best_effort_posix_fadvise(handle.fileno(), sequential_advice)
+
+                dontneed_advice = getattr(os, "POSIX_FADV_DONTNEED", None)
+                if dontneed_advice is not None:
+                    _best_effort_posix_fadvise(handle.fileno(), dontneed_advice)
+
                 while remaining > 0:
                     chunk_started_at = time.perf_counter()
                     chunk = handle.read(min(settings.copy_chunk_size_bytes, remaining))
@@ -57,6 +75,9 @@ class LinuxThroughputBenchmarkProvider:
                     bytes_read += chunk_len
                     remaining -= chunk_len
                     stream_elapsed_seconds += time.perf_counter() - chunk_started_at
+
+                if dontneed_advice is not None:
+                    _best_effort_posix_fadvise(handle.fileno(), dontneed_advice)
 
         elapsed_seconds = time.perf_counter() - total_started_at
         checksum.digest()
@@ -76,36 +97,39 @@ class LinuxThroughputBenchmarkProvider:
         if not str(target_mount_path or "").strip() or not target_root.exists() or not target_root.is_dir():
             raise RuntimeError("Target drive is unavailable for throughput testing")
 
+        planned_bytes = sum(max(0, planned_size) for _sample_path, planned_size in sample_plan)
+        if planned_bytes <= 0:
+            return None, 0.0, 0.0
+
         bytes_written = 0
         total_started_at = time.perf_counter()
         stream_elapsed_seconds = 0.0
+        elapsed_seconds = 0.0
+        chunk_size = max(1, min(settings.copy_chunk_size_bytes, planned_bytes))
+        chunk = b"\0" * chunk_size
+        benchmark_path = target_root / f".throughput-benchmark-{benchmark_id}-{time.time_ns()}.tmp"
 
-        for sample_index, (_source_file, planned_bytes) in enumerate(sample_plan):
-            chunk_size = max(1, min(settings.copy_chunk_size_bytes, planned_bytes))
-            chunk = b"\0" * chunk_size
-            benchmark_path = target_root / f".throughput-benchmark-{benchmark_id}-{sample_index}-{time.time_ns()}.tmp"
-
+        try:
+            with open(benchmark_path, "wb") as handle:
+                remaining = planned_bytes
+                while remaining > 0:
+                    chunk_started_at = time.perf_counter()
+                    write_size = min(chunk_size, remaining)
+                    handle.write(chunk[:write_size])
+                    bytes_written += write_size
+                    remaining -= write_size
+                    stream_elapsed_seconds += time.perf_counter() - chunk_started_at
+                handle.flush()
+                os.fsync(handle.fileno())
+            elapsed_seconds = time.perf_counter() - total_started_at
+        finally:
             try:
-                with open(benchmark_path, "wb") as handle:
-                    remaining = planned_bytes
-                    while remaining > 0:
-                        chunk_started_at = time.perf_counter()
-                        write_size = min(chunk_size, remaining)
-                        handle.write(chunk[:write_size])
-                        bytes_written += write_size
-                        remaining -= write_size
-                        stream_elapsed_seconds += time.perf_counter() - chunk_started_at
-                    handle.flush()
-                    os.fsync(handle.fileno())
-            finally:
-                try:
-                    if benchmark_path.exists():
-                        benchmark_path.unlink()
-                except OSError:
-                    logger.debug(
-                        "Could not remove throughput benchmark file",
-                        extra={"benchmark_id": benchmark_id},
-                    )
+                if benchmark_path.exists():
+                    benchmark_path.unlink()
+            except OSError:
+                logger.debug(
+                    "Could not remove throughput benchmark file",
+                    extra={"benchmark_id": benchmark_id},
+                )
 
-        elapsed_seconds = time.perf_counter() - total_started_at
         return _calculate_transfer_rate_mbps(bytes_written, elapsed_seconds), elapsed_seconds, stream_elapsed_seconds
