@@ -1271,6 +1271,62 @@ _configured_network_mount_base_path() {
   printf '%s' "/mnt/ecube-network"
 }
 
+_normalize_managed_mount_root_path() {
+  local path="$1"
+  local trimmed="${path%/}"
+  local segment
+  local -a parts=()
+  local -a normalized_parts=()
+
+  if [[ -z "${trimmed}" ]]; then
+    trimmed="/"
+  fi
+
+  IFS='/' read -r -a parts <<< "${trimmed#/}"
+  for segment in "${parts[@]}"; do
+    if [[ -z "${segment}" || "${segment}" == "." ]]; then
+      continue
+    fi
+    if [[ "${segment}" == ".." ]]; then
+      if (( ${#normalized_parts[@]} > 0 )); then
+        unset 'normalized_parts[${#normalized_parts[@]}-1]'
+      fi
+      continue
+    fi
+    normalized_parts+=("${segment}")
+  done
+
+  if (( ${#normalized_parts[@]} == 0 )); then
+    printf '/'
+    return 0
+  fi
+
+  local normalized=""
+  for segment in "${normalized_parts[@]}"; do
+    normalized+="/${segment}"
+  done
+  printf '%s' "${normalized}"
+}
+
+_validate_managed_mount_root_pair() {
+  local usb_mount_root
+  usb_mount_root="$(_normalize_managed_mount_root_path "$1")"
+  local network_mount_root
+  network_mount_root="$(_normalize_managed_mount_root_path "$2")"
+
+  if [[ "${usb_mount_root}" == "/" || "${network_mount_root}" == "/" ]]; then
+    error "Managed mount roots must not be the system root."
+    exit 1
+  fi
+
+  if [[ "${usb_mount_root}" == "${network_mount_root}" || \
+        "${usb_mount_root}" == "${network_mount_root}"/* || \
+        "${network_mount_root}" == "${usb_mount_root}"/* ]]; then
+    error "NETWORK_MOUNT_BASE_PATH must not equal, contain, or be contained within USB_MOUNT_BASE_PATH."
+    exit 1
+  fi
+}
+
 _ensure_runtime_host_packages() {
   local packages=(exfatprogs nfs-common cifs-utils smbclient usbutils util-linux passwd libpam-pwquality)
   local missing_packages=()
@@ -1352,6 +1408,7 @@ _prepare_managed_mount_roots() {
   usb_mount_root="$(_configured_usb_mount_base_path)"
   local network_mount_root
   network_mount_root="$(_configured_network_mount_base_path)"
+  _validate_managed_mount_root_pair "${usb_mount_root}" "${network_mount_root}"
   local roots=("${network_mount_root}")
 
   if [[ ! " ${roots[*]} " =~ " ${usb_mount_root} " ]]; then
@@ -2367,6 +2424,7 @@ _write_env_file() {
   usb_mount_root="$(_configured_usb_mount_base_path)"
   local network_mount_root
   network_mount_root="$(_configured_network_mount_base_path)"
+  _validate_managed_mount_root_pair "${usb_mount_root}" "${network_mount_root}"
 
   if [[ "${DRY_RUN}" != true ]]; then
     cat > "${env_file}" <<EOF

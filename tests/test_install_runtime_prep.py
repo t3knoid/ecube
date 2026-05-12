@@ -217,6 +217,41 @@ def test_prepare_managed_mount_roots_honors_installer_environment_before_env_exi
     assert "chmod 755 /mnt/ecube-network /srv/ecube-usb" in commands
 
 
+def test_prepare_managed_mount_roots_rejects_overlapping_network_and_usb_roots(tmp_path):
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    command_log = tmp_path / "commands.log"
+    install_dir = tmp_path / "install"
+    install_dir.mkdir()
+
+    for command in ("mkdir", "chown", "chmod"):
+        (fake_bin / command).write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            f"printf '{command} %s\\n' \"$*\" >> \"${{COMMAND_LOG:?}}\"\n",
+            encoding="utf-8",
+        )
+        (fake_bin / command).chmod(0o755)
+
+    env = {
+        **os.environ,
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "COMMAND_LOG": str(command_log),
+        "LOG_FILE": str(tmp_path / "install.log"),
+        "USB_MOUNT_BASE_PATH": "/mnt/ecube",
+        "NETWORK_MOUNT_BASE_PATH": "/mnt/ecube/network",
+    }
+    result = _run_install_function(
+        tmp_path,
+        f"INSTALL_DIR={install_dir}\nDRY_RUN=false\n_prepare_managed_mount_roots\n",
+        env,
+    )
+
+    assert result.returncode != 0
+    assert "must not equal, contain, or be contained" in result.stderr
+    assert not command_log.exists()
+
+
 def test_install_os_user_mgmt_sudoers_uses_canonical_template_with_modprobe(tmp_path):
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
@@ -291,6 +326,69 @@ def test_write_env_file_persists_configured_usb_mount_base_path(tmp_path):
     env_text = (install_dir / ".env").read_text(encoding="utf-8")
     assert "USB_MOUNT_BASE_PATH=/srv/ecube-usb\n" in env_text
     assert "NETWORK_MOUNT_BASE_PATH=/mnt/ecube-network\n" in env_text
+
+
+def test_write_env_file_persists_configured_network_mount_base_path(tmp_path):
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    install_dir = tmp_path / "install"
+    install_dir.mkdir()
+
+    (fake_bin / "chown").write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    (fake_bin / "chown").chmod(0o755)
+
+    env = {
+        **os.environ,
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "USB_MOUNT_BASE_PATH": "/srv/ecube-usb",
+        "NETWORK_MOUNT_BASE_PATH": "/srv/ecube-network",
+    }
+    result = _run_install_function(
+        tmp_path,
+        f"INSTALL_DIR={install_dir}\nLOG_FILE={tmp_path / 'install.log'}\nDRY_RUN=false\n_write_env_file\n",
+        env,
+    )
+
+    assert result.returncode == 0, f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+    env_text = (install_dir / ".env").read_text(encoding="utf-8")
+    assert "USB_MOUNT_BASE_PATH=/srv/ecube-usb\n" in env_text
+    assert "NETWORK_MOUNT_BASE_PATH=/srv/ecube-network\n" in env_text
+
+
+def test_write_env_file_rejects_overlapping_network_and_usb_roots(tmp_path):
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    install_dir = tmp_path / "install"
+    install_dir.mkdir()
+
+    (fake_bin / "chown").write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    (fake_bin / "chown").chmod(0o755)
+
+    env = {
+        **os.environ,
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "USB_MOUNT_BASE_PATH": "/mnt/ecube",
+        "NETWORK_MOUNT_BASE_PATH": "/mnt/ecube/network",
+    }
+    result = _run_install_function(
+        tmp_path,
+        f"INSTALL_DIR={install_dir}\nLOG_FILE={tmp_path / 'install.log'}\nDRY_RUN=false\n_write_env_file\n",
+        env,
+    )
+
+    assert result.returncode != 0
+    assert "must not equal, contain, or be contained" in result.stderr
+    assert not (install_dir / ".env").exists()
 
 
 def test_ensure_host_password_policy_defaults_enables_pam_pwquality_and_seeds_policy(tmp_path):
