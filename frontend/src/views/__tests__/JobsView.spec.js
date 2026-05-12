@@ -998,6 +998,21 @@ describe('JobsView grouped create dialog', () => {
     expect(mocks.pauseJob).toHaveBeenCalledWith(45)
   })
 
+  it('omits the thread-count override when starting a job without a stored value', async () => {
+    mocks.listJobs.mockResolvedValue([
+      { id: 44, project_id: 'PROJ-001', evidence_number: 'EV-044', status: 'PENDING', source_path: '/nfs/project-001', thread_count: null },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const startButton = wrapper.findAll('.row-actions-stub')[0].findAll('button')[0]
+    await startButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.startJob).toHaveBeenCalledWith(44, {})
+  })
+
   it('does not fall back to the drive serial when the device value is missing', async () => {
     mocks.listJobs.mockResolvedValue([
       {

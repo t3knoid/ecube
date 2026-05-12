@@ -1511,7 +1511,8 @@ async function runAction(action) {
   try {
     if (action === 'start') {
       closePausePendingDialog()
-      job.value = await startJob(job.value.id, { thread_count: job.value.thread_count || 4 })
+      const startPayload = job.value.thread_count == null ? {} : { thread_count: Number(job.value.thread_count) }
+      job.value = await startJob(job.value.id, startPayload)
     } else if (action === 'retry-failed') {
       closePausePendingDialog()
       job.value = await retryFailedJob(job.value.id)

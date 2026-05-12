@@ -172,9 +172,10 @@ async function runJobAction(job, action) {
   actingJobId.value = job.id
   pageError.value = ''
   try {
+    const startPayload = job?.thread_count == null ? {} : { thread_count: Number(job.thread_count) }
     const updated = normalizeProjectRecord(
       action === 'start'
-        ? await startJob(job.id, { thread_count: Number(job.thread_count || 4) })
+        ? await startJob(job.id, startPayload)
         : await pauseJob(job.id),
       ['project_id'],
     )

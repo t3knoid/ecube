@@ -327,6 +327,30 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).not.toContain(i18n.global.t('common.errors.requestConflict'))
   })
 
+  it('omits the thread-count override when starting a job without a stored value', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      status: 'PENDING',
+      thread_count: null,
+      copied_bytes: 0,
+      total_bytes: 0,
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      drive: { id: 1, available_bytes: 4096 },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const startButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.start'))
+    await startButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.startJob).toHaveBeenCalledWith(6, {})
+  })
+
   it('opens the job-scoped CoC dialog on initial load when requested by route query', async () => {
     routeState.query = { coc: '1' }
     mocks.getJob.mockResolvedValue({
