@@ -191,7 +191,7 @@ getent group dialout >/dev/null && sudo usermod -aG dialout ecube
 getent group shadow >/dev/null && sudo usermod -aG shadow ecube
 ```
 
-The managed mount roots (the configured network mount base path, default `/mnt/ecube-network`, and the configured USB mount base path, default `/mnt/ecube`) must be owned by the `ecube` service account. Runtime mount requests can use narrowly scoped sudo to create missing leaf folders and repair ownership under these roots.
+The managed mount roots (the configured network mount base path, default `/mnt/ecube-network`, and the configured USB mount base path, default `/mnt/ecube`) must be owned by the `ecube` service account. Keep them as separate absolute paths that do not overlap each other. Runtime mount requests can use narrowly scoped sudo to create missing leaf folders and repair ownership under these roots.
 
 The `shadow` group membership allows the non-root `ecube` service process to
 perform local PAM (`pam_unix`) authentication consistently on hosts where

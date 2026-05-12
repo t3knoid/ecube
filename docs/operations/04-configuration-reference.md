@@ -307,8 +307,8 @@ Operational notes:
 | `PROCFS_DISKSTATS_PATH`      | `/proc/diskstats`      | Path to `/proc/diskstats` for block-device I/O statistics. |
 | `SYSFS_USB_DEVICES_PATH`     | `/sys/bus/usb/devices` | Sysfs USB devices directory.                                   |
 | `SYSFS_BLOCK_PATH`           | `/sys/block`           | Sysfs block devices directory.                                 |
-| `USB_MOUNT_BASE_PATH`        | `/mnt/ecube`           | Base directory for USB drive mount points. Each drive is mounted at `<USB_MOUNT_BASE_PATH>/<drive_db_id>`. |
-| `NETWORK_MOUNT_BASE_PATH`    | `/mnt/ecube-network`   | Base directory for generated ECUBE-managed SMB and NFS mount points. Each generated network mount is created at `<NETWORK_MOUNT_BASE_PATH>/<generated-leaf>`. |
+| `USB_MOUNT_BASE_PATH`        | `/mnt/ecube`           | Base directory for USB drive mount points. Each drive is mounted at `<USB_MOUNT_BASE_PATH>/<drive_db_id>`. This path must be absolute and must not overlap the managed network mount root. |
+| `NETWORK_MOUNT_BASE_PATH`    | `/mnt/ecube-network`   | Base directory for generated ECUBE-managed SMB and NFS mount points. Each generated network mount is created at `<NETWORK_MOUNT_BASE_PATH>/<generated-leaf>`. This path must be absolute and must not equal, contain, or sit inside `<USB_MOUNT_BASE_PATH>`. |
 
 ---
 
