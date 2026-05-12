@@ -724,6 +724,7 @@ For the current Jobs page UI, verify the grouped `Create Job` dialog behaves as 
 - If a manual analyze run finishes while the Jobs page stays open, verify the page shows a completion banner identifying the job and final startup-analysis state.
 - Pressing the lifecycle toggle while it shows `Pause` on a running job opens a `Pause in progress` dialog while the system waits for in-flight copy threads to finish.
 - During `PAUSING`, the lifecycle toggle remains visible as a disabled `Pause` button and returns to `Start` once the job reaches `PAUSED`.
+- While a running job still has at least one in-flight file, trigger `Pause`, then resume the same job immediately from another session or browser tab before the older worker finishes unwinding. The resumed run remains authoritative, the job returns to or stays in `RUNNING`, and in-flight file rows are not reset back to `PENDING` by the older worker.
 - After a pause and resume cycle, the final duration and copy-rate summary remain additive across the full run rather than resetting to only the most recent segment.
 - For a failed or paused job with cached startup analysis, `admin` and `manager` see `Clear startup analysis cache`, processor-only users do not, and the confirmation dialog explains that the next restart will rescan the source.
 - After confirming cleanup, the success message appears, the cleanup action disappears, and later restart behavior performs a fresh startup analysis.
