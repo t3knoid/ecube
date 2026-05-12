@@ -13,6 +13,8 @@ RUN npm run build
 # Stage 2: Python application with bundled frontend
 FROM python:3.11.11-slim-bookworm
 
+LABEL org.opencontainers.image.source="https://github.com/t3knoid/ecube"
+
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
