@@ -8,6 +8,7 @@ import tempfile
 import pwd
 import grp
 from datetime import datetime, timezone
+import time
 from typing import Optional, Tuple
 
 from sqlalchemy.exc import IntegrityError
@@ -19,7 +20,7 @@ from app.infrastructure.mount_namespace import shares_host_mount_namespace
 from app.infrastructure.subprocess_runner import resolve_binary, run_subprocess
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.mount_repository import MountRepository
-from app.schemas.network import MountCreate, MountRelatedJobSchema, MountShareDiscoveryItem, MountShareDiscoveryRequest, MountShareDiscoveryResponse, MountUpdate, NetworkMountSchema
+from app.schemas.network import CandidateNetworkMountSchema, MountCreate, MountRelatedJobSchema, MountShareDiscoveryItem, MountShareDiscoveryRequest, MountShareDiscoveryResponse, MountUpdate, NetworkMountSchema
 from app.config import settings
 from app.exceptions import ConflictError, ECUBEException, EncodingError, service_exception
 from app.services.mount_credentials_service import decrypt_mount_secret, encrypt_mount_secret
@@ -40,6 +41,7 @@ def _default_provider() -> "MountProvider":
 logger = logging.getLogger(__name__)
 
 _SUPPORTED_NFS_CLIENT_VERSIONS = ("4.2", "4.1", "4.0", "3")
+_NFS_VALIDATION_SLOW_SECONDS = 5.0
 
 _CREDENTIAL_FIELD_NAMES = ("username", "password", "credentials_file")
 _ENCRYPTED_CREDENTIAL_ATTRS = {
@@ -188,6 +190,132 @@ def _log_mount_debug_failure(
         return
 
     logger.debug("%s: %s raw_error=%s", message, " ".join(context_parts), raw_text)
+
+
+def _timed_mount_attempt(
+    provider: "MountProvider",
+    mount_type: MountType,
+    remote_path: str,
+    local_mount_point: str,
+    *,
+    credentials_file: Optional[str] = None,
+    username: Optional[str] = None,
+    password: Optional[str] = None,
+    nfs_client_version: Optional[str] = None,
+) -> tuple[bool, Optional[str], float]:
+    started_at = time.perf_counter()
+    success, error = provider.os_mount(
+        mount_type,
+        remote_path,
+        local_mount_point,
+        credentials_file=credentials_file,
+        username=username,
+        password=password,
+        nfs_client_version=nfs_client_version,
+    )
+    return success, error, time.perf_counter() - started_at
+
+
+def _cleanup_candidate_probe_mount(
+    mount: NetworkMount,
+    *,
+    provider: "MountProvider",
+    mount_type: MountType,
+    remote_path: str,
+) -> Optional[str]:
+    return _restore_mount_after_candidate_validation(
+        mount,
+        provider=provider,
+        original_mount_type=mount_type,
+        original_remote_path=remote_path,
+        original_was_mounted=False,
+    )
+
+
+def _build_nfs_validation_warning(selected_version: str, selected_elapsed_seconds: float, fallback_elapsed_seconds: float) -> str:
+    return (
+        f"Selected NFS {selected_version} validation was slow ({selected_elapsed_seconds:.1f}s). "
+        f"NFS 3 validated much faster on this server ({fallback_elapsed_seconds:.1f}s)."
+    )
+
+
+def _build_nfs_timeout_fallback_message(selected_version: str, fallback_elapsed_seconds: float) -> str:
+    return (
+        f"NFS {selected_version} validation timed out or was too slow. "
+        f"NFS 3 validated much faster on this server ({fallback_elapsed_seconds:.1f}s)."
+    )
+
+
+def _should_probe_nfs_v3_fallback(
+    mount_type: MountType,
+    selected_version: Optional[str],
+    selected_elapsed_seconds: float,
+    validation_error: Optional[object],
+) -> bool:
+    if mount_type != MountType.NFS or selected_version != "4.1":
+        return False
+    if selected_elapsed_seconds >= _NFS_VALIDATION_SLOW_SECONDS:
+        return True
+    return "timed out" in sanitize_error_message(validation_error, "").strip().lower()
+
+
+def _probe_nfs_v3_validation_warning(
+    mount: NetworkMount,
+    mount_data: MountCreate,
+    *,
+    provider: "MountProvider",
+    resolved_credentials: dict[str, Optional[str]],
+    selected_success: bool,
+    selected_elapsed_seconds: float,
+    validation_error: Optional[object],
+) -> tuple[Optional[str], Optional[str]]:
+    if not _should_probe_nfs_v3_fallback(
+        mount_data.type,
+        mount.nfs_client_version,
+        selected_elapsed_seconds,
+        validation_error,
+    ):
+        return None, None
+
+    if selected_success:
+        cleanup_error = _cleanup_candidate_probe_mount(
+            mount,
+            provider=provider,
+            mount_type=mount_data.type,
+            remote_path=mount_data.remote_path,
+        )
+        if cleanup_error:
+            return None, cleanup_error
+
+    fallback_success, _fallback_error, fallback_elapsed_seconds = _timed_mount_attempt(
+        provider,
+        mount_data.type,
+        mount_data.remote_path,
+        mount.local_mount_point,
+        credentials_file=resolved_credentials["credentials_file"],
+        username=resolved_credentials["username"],
+        password=resolved_credentials["password"],
+        nfs_client_version="3",
+    )
+
+    cleanup_error = _cleanup_candidate_probe_mount(
+        mount,
+        provider=provider,
+        mount_type=mount_data.type,
+        remote_path=mount_data.remote_path,
+    )
+    if cleanup_error:
+        return None, cleanup_error
+
+    if not fallback_success:
+        return None, None
+
+    if selected_success:
+        if selected_elapsed_seconds >= max(_NFS_VALIDATION_SLOW_SECONDS, fallback_elapsed_seconds * 3):
+            return _build_nfs_validation_warning(str(mount.nfs_client_version), selected_elapsed_seconds, fallback_elapsed_seconds), None
+        return None, None
+
+    return _build_nfs_timeout_fallback_message(str(mount.nfs_client_version), fallback_elapsed_seconds), None
 
 
 def _mount_command_path(cmd: list[str]) -> str:
@@ -1216,7 +1344,7 @@ def _restore_mount_after_candidate_validation(
 
 def validate_mount_candidate(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
                              provider: Optional["MountProvider"] = None,
-                             client_ip: Optional[str] = None) -> NetworkMount:
+                             client_ip: Optional[str] = None) -> CandidateNetworkMountSchema:
     normalized_project_id = normalize_project_id(mount_data.project_id)
     if not isinstance(normalized_project_id, str) or not normalized_project_id:
         raise service_exception(status_code=422, detail="project_id must not be empty")
@@ -1251,6 +1379,7 @@ def validate_mount_candidate(mount_data: MountCreate, db: Session, actor: Option
     )
 
     validation_error = None
+    validation_warning: Optional[str] = None
     candidate_status = MountStatus.ERROR
     logger.info(
         "Mount candidate validation started: type=%s mount_label=%s actor=%s",
@@ -1282,7 +1411,8 @@ def validate_mount_candidate(mount_data: MountCreate, db: Session, actor: Option
                 )
             else:
                 resolved_credentials = _resolve_mount_operation_credentials(mount, mount_data)
-                success, validation_error = provider.os_mount(
+                success, validation_error, selected_elapsed_seconds = _timed_mount_attempt(
+                    provider,
                     mount_data.type,
                     mount_data.remote_path,
                     mount.local_mount_point,
@@ -1292,13 +1422,26 @@ def validate_mount_candidate(mount_data: MountCreate, db: Session, actor: Option
                     nfs_client_version=mount.nfs_client_version,
                 )
                 candidate_status = MountStatus.MOUNTED if success else MountStatus.ERROR
+                validation_warning, fallback_cleanup_error = _probe_nfs_v3_validation_warning(
+                    mount,
+                    mount_data,
+                    provider=provider,
+                    resolved_credentials=resolved_credentials,
+                    selected_success=success,
+                    selected_elapsed_seconds=selected_elapsed_seconds,
+                    validation_error=validation_error,
+                )
+                if fallback_cleanup_error:
+                    raise service_exception(
+                        status_code=500,
+                        detail="Mount validation could not restore original mount state",
+                    )
     finally:
-        restore_error = _restore_mount_after_candidate_validation(
+        restore_error = _cleanup_candidate_probe_mount(
             mount,
             provider=provider,
-            original_mount_type=mount_data.type,
-            original_remote_path=mount_data.remote_path,
-            original_was_mounted=False,
+            mount_type=mount_data.type,
+            remote_path=mount_data.remote_path,
         )
 
     if restore_error:
@@ -1366,6 +1509,7 @@ def validate_mount_candidate(mount_data: MountCreate, db: Session, actor: Option
                 "project_id": normalized_project_id,
                 "mount_label": _redacted_mount_label(str(mount.local_mount_point)),
                 "status": candidate_status.value,
+                "validation_warning": validation_warning,
             },
             client_ip=client_ip,
         )
@@ -1376,12 +1520,17 @@ def validate_mount_candidate(mount_data: MountCreate, db: Session, actor: Option
         )
 
     if candidate_status != MountStatus.MOUNTED:
+        if validation_warning:
+            raise service_exception(
+                status_code=409,
+                detail=validation_warning,
+            )
         raise service_exception(
             status_code=409,
             detail=sanitize_error_message(validation_error, "Mount validation failed"),
         )
 
-    return NetworkMount(
+    return CandidateNetworkMountSchema(
         type=mount_data.type,
         remote_path=mount_data.remote_path,
         project_id=normalized_project_id,
@@ -1389,6 +1538,7 @@ def validate_mount_candidate(mount_data: MountCreate, db: Session, actor: Option
         local_mount_point=local_mount_point,
         status=candidate_status,
         last_checked_at=checked_at,
+        validation_warning=validation_warning,
     )
 
 

@@ -86,5 +86,6 @@ class CandidateNetworkMountSchema(BaseModel):
     local_mount_point: str = Field(..., description="Local filesystem path that would be used for the mount")
     status: MountStatus = Field(..., description="Current mount status (MOUNTED, UNMOUNTED, ERROR)")
     last_checked_at: Optional[datetime] = Field(default=None, description="Timestamp of last connectivity check")
+    validation_warning: Optional[str] = Field(default=None, description="Optional operator-facing warning produced during validation-only probing")
 
     model_config = {"from_attributes": True}
