@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, mock_open, patch
 
 from app.exceptions import ConflictError
 from app.infrastructure.usb_discovery import discover_usb_topology
