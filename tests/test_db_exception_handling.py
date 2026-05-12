@@ -546,7 +546,7 @@ class TestCopyEngineDBFailures:
                 """Fail the commit that persists DONE status and assignment file count."""
                 nonlocal call_count
                 call_count += 1
-                if call_count == 3:
+                if call_count == 2:
                     raise Exception("simulated DONE-save failure")
                 return original_save()
 

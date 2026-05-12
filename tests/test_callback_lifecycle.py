@@ -82,7 +82,9 @@ def test_job_service_emits_create_start_and_pause_callbacks(db):
             db,
             actor="processor",
         )
-        job_service.start_job(job.id, JobStart(thread_count=3), BackgroundTasks(), db, actor="processor")
+        started_job = job_service.start_job(job.id, JobStart(thread_count=3), BackgroundTasks(), db, actor="processor")
+        started_job.status = JobStatus.RUNNING
+        db.commit()
         job_service.pause_job(job.id, db, actor="processor")
 
     events = [call.kwargs["event"] for call in mock_callback.call_args_list]

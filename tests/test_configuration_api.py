@@ -321,10 +321,11 @@ class TestConfigurationEndpoints:
             "copy_default_thread_count": settings.copy_default_thread_count,
             "copy_file_fsync_enabled": settings.copy_file_fsync_enabled,
         }
+        next_thread_count = 16 if original_values["copy_default_thread_count"] != 16 else 12
         payload = {
             "copy_chunk_size_bytes": 8_388_608,
             "copy_progress_flush_bytes": 134_217_728,
-            "copy_default_thread_count": 12,
+            "copy_default_thread_count": next_thread_count,
             "copy_file_fsync_enabled": True,
         }
         try:
@@ -338,7 +339,7 @@ class TestConfigurationEndpoints:
             written = mock_write_env.call_args.args[0]
             assert written.get("COPY_CHUNK_SIZE_BYTES") == "8388608"
             assert written.get("COPY_PROGRESS_FLUSH_BYTES") == "134217728"
-            assert written.get("COPY_DEFAULT_THREAD_COUNT") == "12"
+            assert written.get("COPY_DEFAULT_THREAD_COUNT") == str(next_thread_count)
             assert written.get("COPY_FILE_FSYNC_ENABLED") == "True"
         finally:
             for key, value in original_values.items():
