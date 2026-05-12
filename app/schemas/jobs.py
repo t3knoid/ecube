@@ -310,6 +310,7 @@ class ExportJobSchema(BaseModel):
     callback_url: Optional[str] = Field(default=None, description="HTTPS callback URL (null if none was provided)")
     created_at: Optional[datetime] = Field(default=None, description="When the job was created")
     started_at: Optional[datetime] = Field(default=None, description="When the copy was started")
+    copy_started_at: Optional[datetime] = Field(default=None, description="When the current active copy phase entered RUNNING")
     completed_at: Optional[datetime] = Field(default=None, description="When the job reached a terminal state")
     latest_manifest_created_at: Optional[datetime] = Field(default=None, description="When the most recent manifest for this job was generated")
     drive: Optional[DriveInfoSchema] = Field(default=None, description="Assigned drive metadata (null if no drive assigned)")

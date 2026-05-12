@@ -168,6 +168,10 @@ def _export_jobs_has_startup_analysis_revision(inspector: sa.Inspector) -> bool:
     return any(column.get("name") == "startup_analysis_revision" for column in inspector.get_columns("export_jobs"))
 
 
+def _export_jobs_has_copy_started_at(inspector: sa.Inspector) -> bool:
+    return any(column.get("name") == "copy_started_at" for column in inspector.get_columns("export_jobs"))
+
+
 def _export_files_has_startup_analysis_revision(inspector: sa.Inspector) -> bool:
     return any(column.get("name") == "startup_analysis_revision" for column in inspector.get_columns("export_files"))
 
@@ -464,6 +468,9 @@ def _upgrade_legacy_project_schema(inspector: sa.Inspector, existing_tables: set
 
 
 def _upgrade_startup_analysis_schema(inspector: sa.Inspector) -> None:
+    if not _export_jobs_has_copy_started_at(inspector):
+        with op.batch_alter_table("export_jobs") as batch_op:
+            batch_op.add_column(sa.Column("copy_started_at", sa.DateTime(timezone=True), nullable=True))
     if not _export_jobs_has_startup_analysis_cache_present(inspector):
         with op.batch_alter_table("export_jobs") as batch_op:
             batch_op.add_column(sa.Column("startup_analysis_cache_present", sa.Boolean(), nullable=False, server_default="0"))
@@ -630,6 +637,7 @@ def upgrade() -> None:
         sa.Column("retry_delay_seconds", sa.Integer(), nullable=True, server_default="1"),
         sa.Column("active_duration_seconds", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("copy_started_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_by", sa.String, nullable=True),
         sa.Column("started_by", sa.String(), nullable=True),

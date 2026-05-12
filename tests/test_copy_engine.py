@@ -2759,7 +2759,7 @@ def test_prepare_job_startup_analysis_reuses_ready_cache_when_cached_entries_are
     assert job.total_bytes == len(b"content")
 
 
-def test_prepare_job_startup_analysis_invalidates_ready_cache_when_file_changes_in_place(db, tmp_path):
+def test_prepare_job_startup_analysis_invalidates_ready_cache_when_file_changes_in_place(db, tmp_path, caplog):
     source_dir = tmp_path / "source"
     source_dir.mkdir()
     source_file = source_dir / "file.txt"
@@ -2796,7 +2796,8 @@ def test_prepare_job_startup_analysis_invalidates_ready_cache_when_file_changes_
     source_file.write_bytes(b"content updated")
 
     with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
-        result = copy_engine.prepare_job_startup_analysis(job.id)
+        with caplog.at_level("DEBUG"):
+            result = copy_engine.prepare_job_startup_analysis(job.id)
 
     db.expire_all()
     db.refresh(job)
@@ -2807,6 +2808,51 @@ def test_prepare_job_startup_analysis_invalidates_ready_cache_when_file_changes_
     assert job.file_count == 1
     assert job.total_bytes == len(b"content updated")
     assert refreshed_file.size_bytes == len(b"content updated")
+    invalidation_records = [
+        record for record in caplog.records if record.getMessage() == "Startup analysis cache invalidated"
+    ]
+    assert invalidation_records
+    assert invalidation_records[-1].job_id == job.id
+    assert invalidation_records[-1].reason == "file_size_mismatch"
+    assert invalidation_records[-1].relative_path == "file.txt"
+
+
+def test_prepare_job_startup_analysis_logs_legacy_cache_invalidation_reason(db, tmp_path, caplog):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    source_file = source_dir / "file.txt"
+    source_file.write_bytes(b"content")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    job.startup_analysis_status = StartupAnalysisStatus.READY
+    job.startup_analysis_file_count = 1
+    job.startup_analysis_total_bytes = len(b"content")
+    job.startup_analysis_entries = [
+        {"relative_path": "file.txt", "size_bytes": len(b"content")},
+        {"entry_type": "directory", "relative_path": "", "mtime_ns": source_dir.stat().st_mtime_ns},
+    ]
+    db.commit()
+
+    source_file.write_bytes(b"content updated")
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with caplog.at_level("DEBUG"):
+            result = copy_engine.prepare_job_startup_analysis(job.id)
+
+    assert result["reused_cached_analysis"] is False
+    decision_records = [record for record in caplog.records if record.getMessage() == "Startup analysis cache decision"]
+    assert decision_records
+    assert any(getattr(record, "decision", None) == "cache_recomputed" for record in decision_records)
+    invalidation_records = [
+        record for record in caplog.records if record.getMessage() == "Startup analysis cache invalidated"
+    ]
+    assert invalidation_records
+    assert invalidation_records[-1].job_id == job.id
+    assert invalidation_records[-1].reason == "legacy_file_size_mismatch"
+    assert invalidation_records[-1].relative_path == "file.txt"
 
 
 def test_prepare_job_startup_analysis_recomputes_done_bytes_when_reusing_ready_cache(db, tmp_path):
@@ -2869,6 +2915,115 @@ def test_prepare_job_startup_analysis_recomputes_done_bytes_when_reusing_ready_c
     assert job.copied_bytes == len(done_payload)
     assert files["done.txt"].status == FileStatus.DONE
     assert files["pending.txt"].status == FileStatus.PENDING
+
+
+def test_prepare_job_startup_analysis_reuses_ready_cache_without_full_file_reload(db, tmp_path, monkeypatch):
+    from app.repositories.job_repository import FileRepository
+
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    done_payload = b"done"
+    pending_payload = b"pending"
+    (source_dir / "done.txt").write_bytes(done_payload)
+    (source_dir / "pending.txt").write_bytes(pending_payload)
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    job.startup_analysis_status = StartupAnalysisStatus.READY
+    job.startup_analysis_file_count = 2
+    job.startup_analysis_total_bytes = len(done_payload) + len(pending_payload)
+    job.startup_analysis_cache_present = True
+    job.startup_analysis_revision = 1
+    db.add_all(
+        [
+            ExportFile(
+                job_id=job.id,
+                relative_path="done.txt",
+                size_bytes=len(done_payload),
+                status=FileStatus.DONE,
+                startup_analysis_revision=1,
+            ),
+            ExportFile(
+                job_id=job.id,
+                relative_path="pending.txt",
+                size_bytes=len(pending_payload),
+                status=FileStatus.COPYING,
+                startup_analysis_revision=1,
+            ),
+        ]
+    )
+    db.add(
+        StartupAnalysisEntry(
+            job_id=job.id,
+            entry_type="directory",
+            relative_path="",
+            mtime_ns=source_dir.stat().st_mtime_ns,
+        )
+    )
+    db.commit()
+
+    original_list_by_job = FileRepository.list_by_job
+
+    def _guarded_list_by_job(self, job_id, *, limit=None, offset=0):
+        if limit is None:
+            raise AssertionError("prepare_job_startup_analysis should not fully reload job files on cache reuse")
+        return original_list_by_job(self, job_id, limit=limit, offset=offset)
+
+    monkeypatch.setattr(FileRepository, "list_by_job", _guarded_list_by_job)
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        result = copy_engine.prepare_job_startup_analysis(job.id)
+
+    assert result["reused_cached_analysis"] is True
+
+
+def test_prepare_job_startup_analysis_logs_phase_split_timings(db, tmp_path, caplog):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "file.txt").write_bytes(b"content")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    job.startup_analysis_status = StartupAnalysisStatus.READY
+    job.startup_analysis_file_count = 1
+    job.startup_analysis_total_bytes = len(b"content")
+    job.startup_analysis_cache_present = True
+    job.startup_analysis_revision = 1
+    db.add(
+        ExportFile(
+            job_id=job.id,
+            relative_path="file.txt",
+            size_bytes=len(b"content"),
+            status=FileStatus.PENDING,
+            startup_analysis_revision=1,
+        )
+    )
+    db.add(
+        StartupAnalysisEntry(
+            job_id=job.id,
+            entry_type="directory",
+            relative_path="",
+            mtime_ns=source_dir.stat().st_mtime_ns,
+        )
+    )
+    db.commit()
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with caplog.at_level("INFO"):
+            result = copy_engine.prepare_job_startup_analysis(job.id)
+
+    assert result["reused_cached_analysis"] is True
+    timing_records = [record for record in caplog.records if record.getMessage() == "Startup analysis preparation timings"]
+    assert timing_records
+    assert timing_records[-1].job_id == job.id
+    assert timing_records[-1].reused_cached_analysis is True
+    assert timing_records[-1].cache_resolution_seconds >= 0
+    assert timing_records[-1].reset_pending_seconds >= 0
+    assert timing_records[-1].total_seconds >= 0
 
 
 def test_run_copy_job_accumulates_active_duration_on_resume(db, tmp_path):
@@ -3069,6 +3224,58 @@ def test_run_copy_job_emits_job_completed_audit(db, tmp_path):
     assert log.details["copy_rate_mb_s"] >= 0
 
 
+def test_run_copy_job_uses_copy_phase_duration_for_rate_and_logs_phase_split(db, tmp_path, caplog):
+    """Completion rate uses RUNNING time only and logs preparation vs running durations."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "file.txt").write_bytes(b"data")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    preparing_started_at = datetime(2026, 4, 24, 15, 0, 0, tzinfo=timezone.utc)
+    running_started_at = datetime(2026, 4, 24, 15, 0, 40, tzinfo=timezone.utc)
+    finished_at = datetime(2026, 4, 24, 15, 1, 0, tzinfo=timezone.utc)
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine.prepare_job_startup_analysis", return_value={"reused_cached_analysis": False, "file_count": 1, "total_bytes": 4}):
+            with patch(
+                "app.services.copy_engine.datetime",
+                wraps=copy_engine.datetime,
+            ) as mocked_datetime:
+                mocked_datetime.now.side_effect = [
+                    preparing_started_at,
+                    running_started_at,
+                    finished_at,
+                    finished_at,
+                ]
+                with caplog.at_level("INFO"):
+                    copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+
+    assert job.active_duration_seconds == 20
+    assert job.copy_started_at is None
+
+    log = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "JOB_COMPLETED", AuditLog.job_id == job.id)
+        .first()
+    )
+    assert log is not None
+    assert log.details["elapsed_seconds"] == 20
+    assert log.details["preparing_duration_seconds"] == 40.0
+    assert log.details["copy_rate_mb_s"] == 0.0
+
+    phase_messages = [record for record in caplog.records if record.getMessage() == "Copy job phase durations finalized"]
+    assert phase_messages
+    assert phase_messages[-1].job_id == job.id
+    assert phase_messages[-1].preparing_duration_seconds == 40.0
+    assert phase_messages[-1].running_duration_seconds == 20
+
+
 def test_run_copy_job_emits_job_completed_audit_for_partial_success(db, tmp_path):
     """A job with file errors still emits JOB_COMPLETED with error counts."""
     source_dir = tmp_path / "source"
@@ -3179,6 +3386,7 @@ def test_run_copy_job_logs_job_completed_with_job_id(db, tmp_path, caplog):
         and "files_copied=1" in message
         and "copied_bytes=9" in message
         and "total_bytes=9" in message
+        and "preparing_seconds=" in message
         and "elapsed_seconds=" in message
         and "copy_rate_mb_s=" in message
         for message in completed_messages

@@ -132,6 +132,7 @@ Table export_jobs {
   retry_delay_seconds int [default: 1]
   active_duration_seconds int [not null, default: 0]
   started_at timestamptz
+  copy_started_at timestamptz
   completed_at timestamptz
   created_by varchar
   started_by varchar

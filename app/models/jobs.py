@@ -62,6 +62,7 @@ class ExportJob(Base):
     retry_delay_seconds = Column(Integer, default=1)
     active_duration_seconds = Column(Integer, default=0, nullable=False)
     started_at = Column(DateTime(timezone=True))
+    copy_started_at = Column(DateTime(timezone=True))
     completed_at = Column(DateTime(timezone=True))
     created_by = Column(String)
     started_by = Column(String)

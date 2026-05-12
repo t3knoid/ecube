@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 from app.database import SessionLocal, is_database_configured
+from app.exceptions import ConflictError
 from app.infrastructure import DriveSpaceProbe, get_drive_space_probe
 from app.models.hardware import UsbDrive
 from app.repositories.drive_repository import DriveRepository
@@ -114,6 +115,15 @@ def _refresh_available_space_sync(drive_id: int, probe: Optional[DriveSpaceProbe
             drive_repo.save(drive)
         finally:
             db.close()
+    except ConflictError as exc:
+        logger.info(
+            "Drive available-space refresh skipped",
+            extra={"drive_id": drive_id, "failure_class": "available_space_refresh_conflict"},
+        )
+        logger.debug(
+            "Drive available-space refresh conflict diagnostics",
+            extra={"drive_id": drive_id, "raw_error": str(exc)},
+        )
     except Exception as exc:
         logger.info(
             "Drive available-space refresh failed",

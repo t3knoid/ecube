@@ -290,6 +290,36 @@ def _log_job_path_context(job_id: int, source_path: str, target_mount_path: Opti
     )
 
 
+def _log_startup_analysis_cache_invalidation(
+    job_id: int,
+    reason: str,
+    **context: object,
+) -> None:
+    logger.debug(
+        "Startup analysis cache invalidated",
+        extra={
+            "job_id": job_id,
+            "reason": reason,
+            **context,
+        },
+    )
+
+
+def _log_startup_analysis_cache_decision(
+    job_id: int,
+    decision: str,
+    **context: object,
+) -> None:
+    logger.debug(
+        "Startup analysis cache decision",
+        extra={
+            "job_id": job_id,
+            "decision": decision,
+            **context,
+        },
+    )
+
+
 def _normalize_started_at(value: Optional[datetime]) -> Optional[datetime]:
     """Return a timezone-stable value for comparing job run ownership."""
     if value is None:
@@ -311,6 +341,18 @@ def _calculate_total_active_seconds(
     if start is None or end is None:
         return max(0.0, total)
     return max(0.0, total + max(0.0, (end - start).total_seconds()))
+
+
+def _calculate_phase_elapsed_seconds(
+    started_at: Optional[datetime],
+    ended_at: Optional[datetime] = None,
+) -> float:
+    """Return elapsed seconds for a single lifecycle phase."""
+    start = _normalize_started_at(started_at)
+    end = _normalize_started_at(ended_at or datetime.now(timezone.utc))
+    if start is None or end is None:
+        return 0.0
+    return max(0.0, (end - start).total_seconds())
 
 
 def _relative_path(f: Path, source: Path) -> Path:
@@ -996,9 +1038,18 @@ def _load_legacy_startup_analysis_cache(
 def _legacy_startup_analysis_cache_is_current(
     source: Path,
     legacy_cache: tuple[list[dict[str, int | str]], list[dict[str, int | str]], int, int],
+    *,
+    job_id: Optional[int] = None,
 ) -> bool:
     file_entries, directory_entries, file_count, total_bytes = legacy_cache
     if len(file_entries) != file_count:
+        if job_id is not None:
+            _log_startup_analysis_cache_invalidation(
+                job_id,
+                "legacy_file_count_mismatch",
+                cached_file_entries=len(file_entries),
+                expected_file_count=file_count,
+            )
         return False
 
     computed_total_bytes = 0
@@ -1008,14 +1059,46 @@ def _legacy_startup_analysis_cache_is_current(
         file_path = _source_path_for_relative_path(source, relative_path)
         try:
             if not file_path.is_file():
+                if job_id is not None:
+                    _log_startup_analysis_cache_invalidation(
+                        job_id,
+                        "legacy_missing_file",
+                        relative_path=relative_path,
+                        file_path=str(file_path),
+                    )
                 return False
-            if file_path.stat().st_size != expected_size:
+            actual_size = file_path.stat().st_size
+            if actual_size != expected_size:
+                if job_id is not None:
+                    _log_startup_analysis_cache_invalidation(
+                        job_id,
+                        "legacy_file_size_mismatch",
+                        relative_path=relative_path,
+                        file_path=str(file_path),
+                        actual_size=actual_size,
+                        expected_size=expected_size,
+                    )
                 return False
-        except OSError:
+        except OSError as exc:
+            if job_id is not None:
+                _log_startup_analysis_cache_invalidation(
+                    job_id,
+                    "legacy_file_stat_failed",
+                    relative_path=relative_path,
+                    file_path=str(file_path),
+                    error_type=type(exc).__name__,
+                )
             return False
         computed_total_bytes += expected_size
 
     if computed_total_bytes != total_bytes:
+        if job_id is not None:
+            _log_startup_analysis_cache_invalidation(
+                job_id,
+                "legacy_total_bytes_mismatch",
+                computed_total_bytes=computed_total_bytes,
+                expected_total_bytes=total_bytes,
+            )
         return False
 
     saw_root_directory = not source.is_dir()
@@ -1024,14 +1107,42 @@ def _legacy_startup_analysis_cache_is_current(
         directory_path = source if relative_path == "" else source / relative_path
         try:
             if not directory_path.is_dir():
+                if job_id is not None:
+                    _log_startup_analysis_cache_invalidation(
+                        job_id,
+                        "legacy_missing_directory",
+                        relative_path=relative_path,
+                        directory_path=str(directory_path),
+                    )
                 return False
-            if directory_path.stat().st_mtime_ns != int(entry["mtime_ns"]):
+            actual_mtime_ns = directory_path.stat().st_mtime_ns
+            expected_mtime_ns = int(entry["mtime_ns"])
+            if actual_mtime_ns != expected_mtime_ns:
+                if job_id is not None:
+                    _log_startup_analysis_cache_invalidation(
+                        job_id,
+                        "legacy_directory_mtime_mismatch",
+                        relative_path=relative_path,
+                        directory_path=str(directory_path),
+                        actual_mtime_ns=actual_mtime_ns,
+                        expected_mtime_ns=expected_mtime_ns,
+                    )
                 return False
-        except OSError:
+        except OSError as exc:
+            if job_id is not None:
+                _log_startup_analysis_cache_invalidation(
+                    job_id,
+                    "legacy_directory_stat_failed",
+                    relative_path=relative_path,
+                    directory_path=str(directory_path),
+                    error_type=type(exc).__name__,
+                )
             return False
         if relative_path == "":
             saw_root_directory = True
 
+    if not saw_root_directory and job_id is not None:
+        _log_startup_analysis_cache_invalidation(job_id, "legacy_missing_root_directory_entry")
     return saw_root_directory
 
 
@@ -1287,6 +1398,13 @@ def _cached_startup_analysis_is_current(
     total_bytes = int(job.startup_analysis_total_bytes or 0)
     revision = int(job.startup_analysis_revision or 0)
     if file_count <= 0 or total_bytes < 0 or revision <= 0:
+        _log_startup_analysis_cache_invalidation(
+            int(job.id),
+            "invalid_cache_header",
+            file_count=file_count,
+            total_bytes=total_bytes,
+            revision=revision,
+        )
         return False
 
     validated_file_count = 0
@@ -1299,20 +1417,58 @@ def _cached_startup_analysis_is_current(
         last_file_id = file_rows[-1].id
         for file_row in file_rows:
             if int(file_row.startup_analysis_revision or 0) != revision:
+                _log_startup_analysis_cache_invalidation(
+                    int(job.id),
+                    "file_revision_mismatch",
+                    file_id=int(file_row.id),
+                    relative_path=file_row.relative_path,
+                    cached_revision=int(file_row.startup_analysis_revision or 0),
+                    expected_revision=revision,
+                )
                 return False
             file_path = _source_path_for_relative_path(source, file_row.relative_path)
             expected_size = int(file_row.size_bytes or 0)
             try:
                 if not file_path.is_file():
+                    _log_startup_analysis_cache_invalidation(
+                        int(job.id),
+                        "missing_file",
+                        relative_path=file_row.relative_path,
+                        file_path=str(file_path),
+                    )
                     return False
-                if file_path.stat().st_size != expected_size:
+                actual_size = file_path.stat().st_size
+                if actual_size != expected_size:
+                    _log_startup_analysis_cache_invalidation(
+                        int(job.id),
+                        "file_size_mismatch",
+                        relative_path=file_row.relative_path,
+                        file_path=str(file_path),
+                        actual_size=actual_size,
+                        expected_size=expected_size,
+                    )
                     return False
-            except OSError:
+            except OSError as exc:
+                _log_startup_analysis_cache_invalidation(
+                    int(job.id),
+                    "file_stat_failed",
+                    relative_path=file_row.relative_path,
+                    file_path=str(file_path),
+                    error_type=type(exc).__name__,
+                )
                 return False
             validated_file_count += 1
             validated_total_bytes += expected_size
 
     if validated_file_count != file_count or validated_total_bytes != total_bytes:
+        _log_startup_analysis_cache_invalidation(
+            int(job.id),
+            "aggregate_mismatch",
+            validated_file_count=validated_file_count,
+            expected_file_count=file_count,
+            validated_total_bytes=validated_total_bytes,
+            expected_total_bytes=total_bytes,
+        )
         return False
 
     saw_root_directory = not source.is_dir()
@@ -1331,14 +1487,42 @@ def _cached_startup_analysis_is_current(
             directory_path = source if directory_row.relative_path == "" else source / directory_row.relative_path
             try:
                 if not directory_path.is_dir():
+                    _log_startup_analysis_cache_invalidation(
+                        int(job.id),
+                        "missing_directory",
+                        relative_path=directory_row.relative_path,
+                        directory_path=str(directory_path),
+                    )
                     return False
-                if directory_path.stat().st_mtime_ns != int(directory_row.mtime_ns or 0):
+                actual_mtime_ns = directory_path.stat().st_mtime_ns
+                expected_mtime_ns = int(directory_row.mtime_ns or 0)
+                if actual_mtime_ns != expected_mtime_ns:
+                    _log_startup_analysis_cache_invalidation(
+                        int(job.id),
+                        "directory_mtime_mismatch",
+                        relative_path=directory_row.relative_path,
+                        directory_path=str(directory_path),
+                        actual_mtime_ns=actual_mtime_ns,
+                        expected_mtime_ns=expected_mtime_ns,
+                    )
                     return False
-            except OSError:
+            except OSError as exc:
+                _log_startup_analysis_cache_invalidation(
+                    int(job.id),
+                    "directory_stat_failed",
+                    relative_path=directory_row.relative_path,
+                    directory_path=str(directory_path),
+                    error_type=type(exc).__name__,
+                )
                 return False
             if directory_row.relative_path == "":
                 saw_root_directory = True
 
+    if not saw_root_directory:
+        _log_startup_analysis_cache_invalidation(
+            int(job.id),
+            "missing_root_directory_entry",
+        )
     return saw_root_directory
 
 
@@ -1363,6 +1547,15 @@ def prepare_job_startup_analysis(
         source = Path(job.source_path)
         reused_cached_analysis = False
         sample_files: list[Path] = []
+        preparation_started_at = time.monotonic()
+        cache_resolution_started_at = preparation_started_at
+        _log_startup_analysis_cache_decision(
+            int(job.id),
+            "evaluation_started",
+            cache_present=bool(job.startup_analysis_cache_present),
+            startup_analysis_cached=bool(job.startup_analysis_cached),
+            startup_analysis_status=getattr(job.startup_analysis_status, "value", str(job.startup_analysis_status)),
+        )
 
         if bool(job.startup_analysis_cache_present) and _cached_startup_analysis_is_current(job, source, file_repo, startup_entry_repo):
             reused_cached_analysis = True
@@ -1373,6 +1566,13 @@ def prepare_job_startup_analysis(
                 _source_path_for_relative_path(source, file_row.relative_path)
                 for file_row in sample_rows
             ]
+            _log_startup_analysis_cache_decision(
+                int(job.id),
+                "persisted_cache_reused",
+                cached_file_count=cached_file_count,
+                cached_total_bytes=cached_total_bytes,
+                cache_resolution_seconds=round(time.monotonic() - cache_resolution_started_at, 2),
+            )
         else:
             legacy_cache = _load_legacy_startup_analysis_cache(job)
             previous_file_count = int(job.startup_analysis_file_count or 0)
@@ -1383,12 +1583,26 @@ def prepare_job_startup_analysis(
                 except Exception:
                     logger.exception("DB commit failed while marking startup analysis stale", extra={"job_id": job_id})
 
-            if legacy_cache is not None and _legacy_startup_analysis_cache_is_current(source, legacy_cache):
+            if legacy_cache is not None and _legacy_startup_analysis_cache_is_current(source, legacy_cache, job_id=int(job.id)):
                 sample_files = _persist_legacy_startup_analysis_cache(db, job, source, startup_entry_repo, legacy_cache)
                 cached_file_count = int(job.startup_analysis_file_count or 0)
                 cached_total_bytes = int(job.startup_analysis_total_bytes or 0)
                 reused_cached_analysis = True
+                _log_startup_analysis_cache_decision(
+                    int(job.id),
+                    "legacy_cache_reused",
+                    cached_file_count=cached_file_count,
+                    cached_total_bytes=cached_total_bytes,
+                    cache_resolution_seconds=round(time.monotonic() - cache_resolution_started_at, 2),
+                )
             else:
+                _log_startup_analysis_cache_decision(
+                    int(job.id),
+                    "cache_recomputed",
+                    had_legacy_cache=legacy_cache is not None,
+                    previous_file_count=previous_file_count,
+                    cache_resolution_seconds=round(time.monotonic() - cache_resolution_started_at, 2),
+                )
                 cached_file_count, cached_total_bytes, sample_files = _persist_startup_analysis_cache(
                     db,
                     job,
@@ -1426,12 +1640,8 @@ def prepare_job_startup_analysis(
         if cached_file_count <= 0:
             raise ValueError("Source path contains no transferable files")
 
-        existing_files = file_repo.list_by_job(job_id)
-        for ef in existing_files:
-            if ef.status != FileStatus.DONE:
-                ef.status = FileStatus.PENDING
-                ef.retry_attempts = 0
-                ef.error_message = None
+        cache_resolution_completed_at = time.monotonic()
+        reset_file_count = file_repo.reset_non_done_for_restart(job_id)
         try:
             db.commit()
         except Exception:
@@ -1440,14 +1650,26 @@ def prepare_job_startup_analysis(
 
         job.file_count = cached_file_count
         job.total_bytes = cached_total_bytes
-        committed_files = file_repo.list_by_job(job_id)
-        job.copied_bytes = sum(
-            ef.size_bytes or 0
-            for ef in committed_files
-            if ef.status == FileStatus.DONE
-        )
+        done_file_count, done_bytes = file_repo.summarize_done_progress(job_id)
+        job.copied_bytes = done_bytes
         _set_startup_analysis_ready(job)
         job_repo.save(job)
+
+        reset_completed_at = time.monotonic()
+        logger.info(
+            "Startup analysis preparation timings",
+            extra={
+                "job_id": job_id,
+                "project_id": job.project_id,
+                "reused_cached_analysis": reused_cached_analysis,
+                "cache_resolution_seconds": round(cache_resolution_completed_at - cache_resolution_started_at, 2),
+                "reset_pending_seconds": round(reset_completed_at - cache_resolution_completed_at, 2),
+                "total_seconds": round(reset_completed_at - preparation_started_at, 2),
+                "reset_file_count": reset_file_count,
+                "done_file_count": done_file_count,
+                "done_bytes": done_bytes,
+            },
+        )
 
         details = {
             "cached_file_count": cached_file_count,
@@ -1952,12 +2174,22 @@ def run_copy_job(job_id: int) -> None:
                 if job.status in (JobStatus.PAUSING, JobStatus.PAUSED):
                     pause_requested = True
                 else:
+                    copy_started_at = datetime.now(timezone.utc)
+                    job.copy_started_at = copy_started_at
                     job.status = JobStatus.RUNNING
                     try:
                         job_repo.save(job)
                     except Exception:
                         logger.error("DB commit failed setting job %s to RUNNING", job_id)
                         return
+                    logger.info(
+                        "Copy job preparation completed",
+                        extra={
+                            "job_id": job_id,
+                            "project_id": job.project_id,
+                            "preparing_duration_seconds": round(_calculate_phase_elapsed_seconds(run_started_at, copy_started_at), 2),
+                        },
+                    )
 
                 max_retries = job.max_file_retries if job.max_file_retries is not None else settings.copy_default_max_retries
                 retry_delay = float(job.retry_delay_seconds) if job.retry_delay_seconds is not None else settings.copy_default_retry_delay_seconds
@@ -2102,10 +2334,12 @@ def run_copy_job(job_id: int) -> None:
                     run_finished_at = datetime.now(timezone.utc)
                     total_active_seconds = _calculate_total_active_seconds(
                         job.active_duration_seconds,
-                        run_started_at,
+                        job.copy_started_at,
                         run_finished_at,
                     )
+                    preparing_seconds = round(_calculate_phase_elapsed_seconds(run_started_at, job.copy_started_at), 2)
                     job.active_duration_seconds = int(round(total_active_seconds))
+                    job.copy_started_at = None
                     all_files_finished = (done_count + error_count + timeout_count) >= int(job.file_count or 0)
                     if (pause_requested or job.status in (JobStatus.PAUSING, JobStatus.PAUSED)) and not all_files_finished:
                         job.status = JobStatus.PAUSED
@@ -2162,6 +2396,15 @@ def run_copy_job(job_id: int) -> None:
                             audit_action = "JOB_COMPLETED" if job.status == JobStatus.COMPLETED else "JOB_FAILED"
                             elapsed_seconds = round(total_active_seconds, 2)
                             copy_rate_mb_s = _calculate_copy_rate_mb_s(job.copied_bytes or 0, elapsed_seconds)
+                            logger.info(
+                                "Copy job phase durations finalized",
+                                extra={
+                                    "job_id": job_id,
+                                    "project_id": job.project_id,
+                                    "preparing_duration_seconds": preparing_seconds,
+                                    "running_duration_seconds": elapsed_seconds,
+                                },
+                            )
                             _log_job_path_context(job_id, job.source_path, job.target_mount_path, "copy-finished")
                             if target_full_failure:
                                 logger.info(
@@ -2181,7 +2424,7 @@ def run_copy_job(job_id: int) -> None:
                                 logger.error(
                                     f"JOB_FAILED job_id={job_id} project_id={job.project_id} "
                                     f"status={job.status.value} started_at={job.started_at.isoformat() if job.started_at else None} failed_at={job.completed_at.isoformat() if job.completed_at else None} "
-                                    f"thread_count={job.thread_count} files_copied={done_count} file_count={job.file_count} error_count={error_count} timeout_count={timeout_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} reason={job.failure_reason or 'Job failed'} elapsed_seconds={elapsed_seconds} copy_rate_mb_s={copy_rate_mb_s}",
+                                    f"thread_count={job.thread_count} files_copied={done_count} file_count={job.file_count} error_count={error_count} timeout_count={timeout_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} reason={job.failure_reason or 'Job failed'} preparing_seconds={preparing_seconds} elapsed_seconds={elapsed_seconds} copy_rate_mb_s={copy_rate_mb_s}",
                                     extra={
                                         "job_id": job_id,
                                         "project_id": job.project_id,
@@ -2195,6 +2438,7 @@ def run_copy_job(job_id: int) -> None:
                                         "copied_bytes": job.copied_bytes or 0,
                                         "total_bytes": job.total_bytes or 0,
                                         "reason": job.failure_reason or "Job failed",
+                                        "preparing_duration_seconds": preparing_seconds,
                                         "elapsed_seconds": elapsed_seconds,
                                         "copy_rate_mb_s": copy_rate_mb_s,
                                     },
@@ -2203,7 +2447,7 @@ def run_copy_job(job_id: int) -> None:
                                 logger.info(
                                     f"JOB_COMPLETED job_id={job_id} project_id={job.project_id} "
                                     f"status={job.status.value} started_at={job.started_at.isoformat() if job.started_at else None} completed_at={job.completed_at.isoformat() if job.completed_at else None} "
-                                    f"thread_count={job.thread_count} files_copied={done_count} file_count={job.file_count} error_count={error_count} timeout_count={timeout_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} elapsed_seconds={elapsed_seconds} copy_rate_mb_s={copy_rate_mb_s}",
+                                    f"thread_count={job.thread_count} files_copied={done_count} file_count={job.file_count} error_count={error_count} timeout_count={timeout_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} preparing_seconds={preparing_seconds} elapsed_seconds={elapsed_seconds} copy_rate_mb_s={copy_rate_mb_s}",
                                     extra={
                                         "job_id": job_id,
                                         "project_id": job.project_id,
@@ -2216,6 +2460,7 @@ def run_copy_job(job_id: int) -> None:
                                         "timeout_count": timeout_count,
                                         "copied_bytes": job.copied_bytes or 0,
                                         "total_bytes": job.total_bytes or 0,
+                                        "preparing_duration_seconds": preparing_seconds,
                                         "elapsed_seconds": elapsed_seconds,
                                         "copy_rate_mb_s": copy_rate_mb_s,
                                     },
@@ -2228,6 +2473,7 @@ def run_copy_job(job_id: int) -> None:
                                     "status": job.status.value,
                                     "started_at": job.started_at.isoformat() if job.started_at else None,
                                     "thread_count": job.thread_count,
+                                    "preparing_duration_seconds": preparing_seconds,
                                     "files_copied": done_count,
                                     "file_count": job.file_count,
                                     "error_count": error_count,
@@ -2278,12 +2524,14 @@ def run_copy_job(job_id: int) -> None:
             job = job_repo.get(job_id)
             if job:
                 run_finished_at = datetime.now(timezone.utc)
+                preparing_seconds = round(_calculate_phase_elapsed_seconds(run_started_at, job.copy_started_at), 2)
                 job.status = JobStatus.FAILED
                 job.completed_at = run_finished_at
                 job.failure_reason = safe_reason
                 job.active_duration_seconds = int(round(
-                    _calculate_total_active_seconds(job.active_duration_seconds, run_started_at, run_finished_at)
+                    _calculate_total_active_seconds(job.active_duration_seconds, job.copy_started_at, run_finished_at)
                 ))
+                job.copy_started_at = None
                 try:
                     job_repo.save(job)
                 except Exception:
@@ -2296,6 +2544,7 @@ def run_copy_job(job_id: int) -> None:
                                 "intended_status": "FAILED",
                                 "reason": safe_reason,
                                 "phase": "copy",
+                                "preparing_duration_seconds": preparing_seconds,
                                 "elapsed_seconds": round(job.active_duration_seconds or 0, 2),
                             },
                         )
@@ -2309,7 +2558,7 @@ def run_copy_job(job_id: int) -> None:
                         f"JOB_FAILED job_id={job_id} project_id={job.project_id} "
                         f"status={JobStatus.FAILED.value} started_at={job.started_at.isoformat() if job.started_at else None} failed_at={job.completed_at.isoformat() if job.completed_at else None} "
                         f"thread_count={job.thread_count} files_copied={done_count} file_count={job.file_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} "
-                        f"reason={safe_reason} elapsed_seconds={elapsed_seconds} copy_rate_mb_s={copy_rate_mb_s}",
+                        f"reason={safe_reason} preparing_seconds={preparing_seconds} elapsed_seconds={elapsed_seconds} copy_rate_mb_s={copy_rate_mb_s}",
                         extra={
                             "job_id": job_id,
                             "project_id": job.project_id,
@@ -2322,6 +2571,7 @@ def run_copy_job(job_id: int) -> None:
                             "total_bytes": job.total_bytes or 0,
                             "reason": safe_reason,
                             "phase": "copy",
+                            "preparing_duration_seconds": preparing_seconds,
                             "elapsed_seconds": elapsed_seconds,
                             "copy_rate_mb_s": copy_rate_mb_s,
                         },
@@ -2340,6 +2590,7 @@ def run_copy_job(job_id: int) -> None:
                                 "total_bytes": job.total_bytes or 0,
                                 "reason": safe_reason,
                                 "phase": "copy",
+                                "preparing_duration_seconds": preparing_seconds,
                                 "elapsed_seconds": elapsed_seconds,
                                 "copy_rate_mb_s": copy_rate_mb_s,
                             },

@@ -81,6 +81,7 @@ from app.config import settings
 # extras.  We use this set to filter them out when building the ``extra`` dict
 # for the JSON formatter.
 _BUILTIN_ATTRS = frozenset(logging.LogRecord("", 0, "", 0, "", (), None).__dict__.keys())
+_UVICORN_ACCESS_LOGGER_NAME = "uvicorn.access"
 
 
 def _record_extra_fields(record: logging.LogRecord) -> dict[str, object]:
@@ -259,6 +260,23 @@ def configure_logging(
             except Exception:
                 pass
         logger_obj.handlers.clear()
+
+    # Uvicorn access logs are transport-level request traces. Keep them out of
+    # INFO so application/service logs remain the primary operational signal.
+    uvicorn_access_logger = logging.getLogger(_UVICORN_ACCESS_LOGGER_NAME)
+    uvicorn_access_logger.disabled = False
+    uvicorn_access_logger.propagate = True
+    uvicorn_access_logger.setLevel(max(logging.WARNING, root.level))
+    for handler in uvicorn_access_logger.handlers[:]:
+        try:
+            handler.flush()
+        except Exception:
+            pass
+        try:
+            handler.close()
+        except Exception:
+            pass
+    uvicorn_access_logger.handlers.clear()
 
     # Emit a brief configuration summary at startup.
     startup_logger = logging.getLogger("app.logging_config")

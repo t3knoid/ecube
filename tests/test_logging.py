@@ -269,6 +269,19 @@ class TestConfigureLogging:
         # Restore
         configure_logging(level="INFO", log_format="text")
 
+    def test_uvicorn_access_logger_is_not_left_at_info(self):
+        access_logger = logging.getLogger("uvicorn.access")
+        handler = logging.StreamHandler()
+        access_logger.addHandler(handler)
+        access_logger.setLevel(logging.INFO)
+        access_logger.propagate = False
+
+        configure_logging(level="INFO", log_format="text")
+
+        assert access_logger.level == logging.WARNING
+        assert access_logger.propagate is True
+        assert access_logger.handlers == []
+
 
 # ---------------------------------------------------------------------------
 # log_and_audit integration tests

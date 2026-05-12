@@ -1786,6 +1786,7 @@ describe('JobDetailView start action', () => {
       files_succeeded: 2,
       files_failed: 0,
       started_at: '2026-04-24T15:00:00Z',
+      copy_started_at: '2026-04-24T15:00:30Z',
       active_duration_seconds: 0,
     })
 
@@ -1798,10 +1799,11 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).toContain('Duration')
     expect(wrapper.text()).toContain('1m 0s')
     expect(wrapper.text()).toContain('Copy rate')
-    expect(wrapper.text()).toContain('1.0 MB/s')
+    expect(wrapper.text()).not.toContain('1.0 MB/s')
+    expect(wrapper.text()).toContain('2.0 MB/s')
     expect(wrapper.text()).toContain('Time remaining')
     expect(wrapper.text()).toContain('Estimated completion')
-    expect(wrapper.text()).toContain(new Date('2026-04-24T15:02:00Z').toLocaleString())
+    expect(wrapper.text()).toContain(new Date('2026-04-24T15:01:30Z').toLocaleString())
 
     wrapper.unmount()
     vi.useRealTimers()

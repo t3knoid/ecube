@@ -682,6 +682,8 @@ Typical functions include:
 - Inspect hashes for individual files
 - Compare a file's source version against its copied destination version
 
+Job Detail keeps full job duration and copy performance as separate read-only values. `Duration` covers the whole active run from `PREPARING` through copy completion, while `Copy rate` and `Time remaining` use only the active copy phase after the job has entered `RUNNING`.
+
 #### 9.4.1 Editing, Lifecycle Actions, Retrying Failed Files, Completing, Verifying, and Generating a Manifest
 
 Action buttons are shown near the top of the job detail screen.

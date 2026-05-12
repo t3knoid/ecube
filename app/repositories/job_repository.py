@@ -417,6 +417,21 @@ class FileRepository:
             .scalar()
         )
 
+    def summarize_done_progress(self, job_id: int) -> Tuple[int, int]:
+        """Return ``(done_count, done_bytes)`` for *job_id* in one query."""
+        row = (
+            self.db.query(
+                func.count(),
+                func.coalesce(func.sum(ExportFile.size_bytes), 0),
+            )
+            .filter(
+                ExportFile.job_id == job_id,
+                ExportFile.status == FileStatus.DONE,
+            )
+            .one()
+        )
+        return int(row[0] or 0), int(row[1] or 0)
+
     def count_errors(self, job_id: int) -> int:
         """Return the number of files in ERROR state for *job_id*."""
         return (
@@ -435,6 +450,25 @@ class FileRepository:
             .filter(
                 ExportFile.job_id == job_id,
                 ExportFile.status.in_((FileStatus.ERROR, FileStatus.TIMEOUT)),
+            )
+            .update(
+                {
+                    ExportFile.status: FileStatus.PENDING,
+                    ExportFile.retry_attempts: 0,
+                    ExportFile.error_message: None,
+                },
+                synchronize_session=False,
+            )
+        )
+        return int(updated or 0)
+
+    def reset_non_done_for_restart(self, job_id: int) -> int:
+        """Reset all non-DONE files to ``PENDING`` for job restart preparation."""
+        updated = (
+            self.db.query(ExportFile)
+            .filter(
+                ExportFile.job_id == job_id,
+                ExportFile.status != FileStatus.DONE,
             )
             .update(
                 {

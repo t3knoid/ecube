@@ -836,6 +836,7 @@ When a supported job lifecycle event is persisted, ECUBE delivers a `POST` reque
 | `files_timed_out` | `integer` | Number of files that timed out. |
 | `completion_result` | `string` | `success`, `partial_success`, or `failed` when the callback reflects a terminal `COMPLETED` or `FAILED` job state. |
 | `active_duration_seconds` | `integer` | Persisted cumulative active runtime for the job in seconds. |
+| `copy_started_at` | `string` or absent | ISO 8601 timestamp when the current active copy phase entered `RUNNING`. |
 | `drive_id` | `integer` or absent | Active destination drive ID when the terminal job still has an unreleased drive assignment. |
 | `drive_manufacturer` | `string` or null or absent | Destination drive manufacturer when available from hardware discovery. |
 | `drive_model` | `string` or null or absent | Destination drive model/product name when available from hardware discovery. |
@@ -869,6 +870,7 @@ When a supported job lifecycle event is persisted, ECUBE delivers a `POST` reque
   "active_duration_seconds": 1845,
   "created_at": "2026-03-18T16:10:00+00:00",
   "started_at": "2026-03-18T16:14:15+00:00",
+  "copy_started_at": "2026-03-18T16:15:02+00:00",
   "event_actor": "processor1",
   "event_at": "2026-03-18T16:45:00+00:00",
   "completed_at": "2026-03-18T16:45:00+00:00"
@@ -876,6 +878,8 @@ When a supported job lifecycle event is persisted, ECUBE delivers a `POST` reque
 ```
 
 For partial-success runs that still end in `JOB_COMPLETED`, rely on `completion_result`, `files_failed`, and `files_timed_out` rather than the event name alone.
+
+Use `started_at` when your integration needs the full active run lifecycle, including startup preparation. Use `copy_started_at` together with `active_duration_seconds` when your integration needs copy-only rate, copy-only elapsed time, or ETA calculations.
 
 The request includes the header `Content-Type: application/json`.
 
@@ -912,6 +916,7 @@ Supported source fields for `CALLBACK_PAYLOAD_FIELDS` and `CALLBACK_PAYLOAD_FIEL
 | `files_timed_out` | `integer` | Files that timed out. |
 | `completion_result` | `string` | `success`, `partial_success`, or `failed`. |
 | `active_duration_seconds` | `integer` | Persisted cumulative active runtime for the job in seconds. |
+| `copy_started_at` | `string` or absent | ISO 8601 timestamp when the current active copy phase entered `RUNNING`. |
 | `drive_id` | `integer` or absent | Active destination drive ID for the job when present. |
 | `drive_manufacturer` | `string` or null or absent | Destination drive manufacturer when present. |
 | `drive_model` | `string` or null or absent | Destination drive model/product name when present. |

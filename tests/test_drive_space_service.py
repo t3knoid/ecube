@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 
+from app.exceptions import ConflictError
 from app.models.hardware import DriveState, UsbDrive
+from app.repositories.drive_repository import DriveRepository
 from app.services import drive_space_service
 
 
@@ -84,3 +86,37 @@ def test_request_available_space_refresh_runs_inline_for_sqlite(db, monkeypatch)
     db.refresh(drive)
     assert probe.paths == ["/mnt/sqlite-drive"]
     assert drive.available_bytes == 4096
+
+
+def test_request_available_space_refresh_skips_lock_conflict_without_exception_trace(db, monkeypatch, caplog):
+    drive = UsbDrive(
+        device_identifier="SPACE-CONFLICT-1",
+        current_state=DriveState.IN_USE,
+        mount_path="/mnt/conflict-drive",
+        available_bytes=1024,
+    )
+    db.add(drive)
+    db.commit()
+
+    def _raise_conflict(self, drive_id: int):
+        raise ConflictError("Drive is currently locked by another operation.")
+
+    monkeypatch.setattr(DriveRepository, "get_for_update", _raise_conflict)
+
+    with caplog.at_level("DEBUG"):
+        drive_space_service._refresh_available_space_sync(drive.id, probe=_Probe(available_bytes=2048))
+
+    assert any(
+        record.getMessage() == "Drive available-space refresh skipped"
+        and getattr(record, "failure_class", None) == "available_space_refresh_conflict"
+        for record in caplog.records
+    )
+    assert any(
+        record.getMessage() == "Drive available-space refresh conflict diagnostics"
+        and getattr(record, "raw_error", None) == "Drive is currently locked by another operation."
+        for record in caplog.records
+    )
+    assert not any(
+        record.getMessage() == "Drive available-space refresh task raised an unexpected exception"
+        for record in caplog.records
+    )

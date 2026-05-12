@@ -256,6 +256,22 @@ function calculateDurationSeconds(job) {
   return null
 }
 
+function calculateCopyDurationSeconds(job) {
+  const storedSeconds = Number(job?.active_duration_seconds || 0)
+  const status = normalizeJobStatus(job?.status)
+
+  if (['RUNNING', 'PAUSING'].includes(status) && job?.copy_started_at) {
+    const started = new Date(job.copy_started_at)
+    if (!Number.isNaN(started.getTime())) {
+      const liveSeconds = Math.max(0, Math.round((Date.now() - started.getTime()) / 1000))
+      return storedSeconds + liveSeconds
+    }
+  }
+
+  if (storedSeconds > 0) return storedSeconds
+  return 0
+}
+
 function resolveSourceMount(job) {
   const jobId = Number(job?.id)
   if (!Number.isInteger(jobId) || jobId < 1) return null
@@ -313,17 +329,18 @@ function liveTransferEntries(job) {
   if (!['PREPARING', 'RUNNING', 'VERIFYING', 'PAUSING'].includes(status)) return []
 
   const durationSeconds = calculateDurationSeconds(job)
+  const copyDurationSeconds = calculateCopyDurationSeconds(job)
   const copiedBytes = Number(job?.copied_bytes || 0)
   const totalBytes = Number(job?.total_bytes || 0)
   const remainingBytes = Math.max(0, totalBytes - copiedBytes)
-  const rateBytesPerSecond = durationSeconds && durationSeconds > 0 ? copiedBytes / durationSeconds : 0
+  const rateBytesPerSecond = copyDurationSeconds > 0 ? copiedBytes / copyDurationSeconds : 0
   const remainingSeconds = rateBytesPerSecond > 0 && remainingBytes > 0
     ? Math.ceil(remainingBytes / rateBytesPerSecond)
     : null
   const entries = []
 
   if (durationSeconds != null) {
-    entries.push({ label: t('jobs.copyRate'), value: formatCopyRate(copiedBytes, durationSeconds) })
+    entries.push({ label: t('jobs.copyRate'), value: formatCopyRate(copiedBytes, copyDurationSeconds) })
   }
   if (remainingSeconds != null) {
     entries.push({ label: t('jobs.timeRemaining'), value: formatDuration(remainingSeconds) })

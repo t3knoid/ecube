@@ -601,6 +601,23 @@ function calculateDurationSeconds(currentJob) {
   return null
 }
 
+function calculateCopyDurationSeconds(currentJob) {
+  if (!currentJob) return 0
+
+  const status = String(currentJob.status || '').toUpperCase()
+  const storedSeconds = Number(currentJob.active_duration_seconds || 0)
+  if (['RUNNING', 'PAUSING'].includes(status) && currentJob.copy_started_at) {
+    const started = new Date(currentJob.copy_started_at)
+    if (!Number.isNaN(started.getTime())) {
+      const liveSeconds = Math.max(0, Math.round((currentTimeMs.value - started.getTime()) / 1000))
+      return storedSeconds + liveSeconds
+    }
+  }
+
+  if (storedSeconds > 0) return storedSeconds
+  return 0
+}
+
 const liveTransferSummary = computed(() => {
   if (!job.value) return null
 
@@ -608,10 +625,11 @@ const liveTransferSummary = computed(() => {
   if (!['RUNNING', 'PAUSING'].includes(status)) return null
 
   const durationSeconds = calculateDurationSeconds(job.value)
+  const copyDurationSeconds = calculateCopyDurationSeconds(job.value)
   const copiedBytes = Number(job.value.copied_bytes || 0)
   const totalBytes = Number(job.value.total_bytes || 0)
   const remainingBytes = Math.max(0, totalBytes - copiedBytes)
-  const rateBytesPerSecond = durationSeconds && durationSeconds > 0 ? copiedBytes / durationSeconds : 0
+  const rateBytesPerSecond = copyDurationSeconds > 0 ? copiedBytes / copyDurationSeconds : 0
   const remainingSeconds = rateBytesPerSecond > 0 && remainingBytes > 0
     ? Math.ceil(remainingBytes / rateBytesPerSecond)
     : null
@@ -619,7 +637,7 @@ const liveTransferSummary = computed(() => {
   return {
     startedAt: formatTimestamp(job.value.started_at),
     duration: formatDuration(durationSeconds),
-    copyRate: formatCopyRate(copiedBytes, durationSeconds),
+    copyRate: formatCopyRate(copiedBytes, copyDurationSeconds),
     timeRemaining: formatDuration(remainingSeconds),
     estimatedCompletion: remainingSeconds != null
       ? formatTimestamp(new Date(currentTimeMs.value + (remainingSeconds * 1000)).toISOString())
@@ -633,6 +651,7 @@ const completionSummary = computed(() => {
   if (status !== 'COMPLETED' && status !== 'FAILED' && status !== 'PAUSED') return null
 
   const durationSeconds = calculateDurationSeconds(job.value)
+  const copyDurationSeconds = calculateCopyDurationSeconds(job.value)
 
   return {
     startedAt: formatTimestamp(job.value.started_at),
@@ -643,7 +662,7 @@ const completionSummary = computed(() => {
     totalFiles: Number(job.value.file_count || 0),
     totalCopied: formatBytes(Number(job.value.copied_bytes || 0)),
     duration: formatDuration(durationSeconds),
-    copyRate: formatCopyRate(Number(job.value.copied_bytes || 0), durationSeconds),
+    copyRate: formatCopyRate(Number(job.value.copied_bytes || 0), copyDurationSeconds),
     completedAt: formatTimestamp(job.value.completed_at),
   }
 })

@@ -1504,6 +1504,7 @@ def continue_job_overflow(
     job_row.status = JobStatus.PREPARING
     job_row.started_by = actor
     job_row.started_at = datetime.now(timezone.utc)
+    job_row.copy_started_at = None
     job_row.completed_at = None
     job_row.failure_reason = None
     job_row.active_duration_seconds = int(cast(Optional[int], job_row.active_duration_seconds) or 0)
@@ -2192,6 +2193,7 @@ def start_job(
     job_row.status = JobStatus.PREPARING
     job_row.started_by = actor
     job_row.started_at = datetime.now(timezone.utc)
+    job_row.copy_started_at = None
     job_row.active_duration_seconds = int(cast(Optional[int], job_row.active_duration_seconds) or 0)
     job_row.completed_at = None
     if body.thread_count:

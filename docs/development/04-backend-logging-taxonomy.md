@@ -23,3 +23,5 @@ Current ticket coverage:
 - Role-based access denials emit `WARNING` logs with `AUTHORIZATION_DENIED` context.
 - Redis session fallback emits a safe `WARNING` plus a `DEBUG` diagnostic record.
 - Global unhandled exception handling in `app/main.py` continues to emit safe `INFO` and `ERROR` logs plus `DEBUG` remediation detail for 5xx paths.
+- Uvicorn transport-level access traces are configured above `INFO`, so routine request lines such as `GET /jobs/1 200 OK` do not crowd the main ECUBE operational log stream.
+- Startup-analysis restart diagnostics emit `DEBUG` cache-decision and cache-invalidation records, while the operator-safe timing split for startup preparation remains at `INFO`.
