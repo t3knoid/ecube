@@ -1200,7 +1200,7 @@ Example response (job in progress):
 ### Start Copy Job
 
 Launches the background copy process. The job transitions from `PENDING` to
-`RUNNING` and files begin copying using the configured thread count.
+`PREPARING`, then to `RUNNING`, and files begin copying using the configured thread count.
 
 ```bash
 # Requires admin, manager, or processor role

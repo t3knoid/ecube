@@ -2199,7 +2199,7 @@ Contributor note: when adding or renumbering QA test cases in this guide, run `p
 | 4 | Disk I/O metrics present | Inspect response body | `disk_read_bytes` and `disk_write_bytes` are non-negative integers |
 | 5 | Active jobs count | Start an export job, call endpoint | `active_jobs` ≥ 1 |
 | 6 | Worker queue size | Create a PENDING job (created but not started), call endpoint | `worker_queue_size` ≥ 1 |
-| 7 | Worker queue size decrements | Start the pending job, call endpoint again | `worker_queue_size` decreases by 1 (is 0 if no other PENDING jobs exist; job moved to RUNNING) |
+| 7 | Worker queue size decrements | Start the pending job, call endpoint again | `worker_queue_size` decreases by 1 (is 0 if no other PENDING jobs exist; job moved out of `PENDING` and can still be in `PREPARING` before it reaches `RUNNING`) |
 | 8 | ECUBE process metrics present | Inspect response body | `ecube_process` object exists with `cpu_percent`, `cpu_time_seconds`, `memory_rss_bytes`, `memory_vms_bytes`, `thread_count`, `active_copy_thread_count`, and `active_copy_threads` |
 | 9 | Active copy-thread correlation | Run an export job with active copy workers, call endpoint during the run | Each returned `active_copy_threads` row includes `job_id`, `project_id`, `job_status`, `configured_thread_count`, `worker_label`, `elapsed_seconds`, and `cpu_time_seconds` |
 | 10 | ECUBE process metrics degrade safely | Exercise the endpoint where process/thread metrics cannot be sampled reliably | `ecube_process` still exists; unavailable per-thread values remain `null` or the list is empty rather than returning unsafe host details |
