@@ -705,7 +705,7 @@ If you need a job-specific webhook, enter the <code>Webhook callback URL</code> 
 </li><li>
 If you enable <code>Run job immediately</code>, the job will start as soon as creation succeeds
 </li></ul>
-<p>For <code>thread count</code>, start with the default value unless your administrator has given you a different recommendation. If you need to change it, a good rule is to choose a value no higher than the number of CPUs visible to the operating system and reduce it again if the host becomes sluggish or copy speed does not improve.</p>
+<p>Leave <code>Thread count</code> on <code>Use configured default</code> when you want the job to inherit the manager-configured worker count. If you need a per-job override, choose a value between <code>1</code> and <code>32</code>; a good rule is to stay at or below the number of CPUs visible to the operating system and reduce it again if the host becomes sluggish or copy speed does not improve.</p>
 <p>The source path is interpreted inside the selected mounted share. Entering only / uses the root of that share, and attempts to navigate outside the selected share are rejected before the job is created. After a project is selected, the visible <code>Source path</code> field becomes read-only in the standard job dialog workflow, so use <code>Browse folders</code> in the <code>Source</code> section after selecting a mount. As you move through the mounted share, ECUBE updates the existing <code>Source path</code> field live, and the browser shows a <code>..</code> row whenever you can move back up to the parent folder.</p>
 <h2 id="6-3-opening-a-job">6.3 Opening a Job</h2>
 <p>Open a job to view details and perform follow-up actions.</p>
