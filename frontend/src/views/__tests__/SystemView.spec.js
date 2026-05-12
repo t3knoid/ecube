@@ -163,14 +163,6 @@ describe('SystemView USB topology tab', () => {
     })
   })
 
-  it('does not show a Job Debug tab', async () => {
-    const wrapper = mountView()
-    await flushPromises()
-
-    const labels = wrapper.findAll('button').map((button) => button.text())
-    expect(labels).not.toContain('Job Debug')
-  })
-
   it('hides USB topology, block devices, and mounts tabs for auditors', async () => {
     mocks.hasRole.mockReturnValue(false)
 

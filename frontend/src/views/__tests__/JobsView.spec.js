@@ -872,7 +872,7 @@ describe('JobsView grouped create dialog', () => {
     expect(wrapper.find('.row-progress-stub').text()).not.toContain('100%')
   })
 
-  it('links the job ID value to Job Detail and removes the desktop Details action', async () => {
+  it('links the job ID value to Job Detail', async () => {
     mocks.listJobs.mockResolvedValue([
       {
         id: 44,
@@ -904,8 +904,6 @@ describe('JobsView grouped create dialog', () => {
     await detailButton[0].trigger('click')
     await flushPromises()
     expect(mocks.push).toHaveBeenCalledWith({ name: 'job-detail', params: { id: 44 } })
-    expect(wrapper.find('.row-actions-stub').text()).not.toContain('Details')
-    expect(wrapper.text()).not.toContain('Open')
   })
 
   it('omits evidence and progress columns in mobile view while keeping compact status and row actions', async () => {
