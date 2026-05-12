@@ -696,6 +696,19 @@ class Settings(BaseSettings):
     def get_demo_disable_password_change(self) -> bool:
         return bool(self.demo_disable_password_change)
 
+    @field_validator("usb_mount_base_path", "network_mount_base_path", mode="before")
+    @classmethod
+    def _normalise_managed_mount_base_path(cls, v: str) -> str:  # noqa: N805
+        if not isinstance(v, str) or v.strip() == "":
+            raise ValueError("Managed mount base path must be an absolute path")
+
+        normalized = os.path.normpath(v.strip())
+        if not os.path.isabs(normalized):
+            raise ValueError(f"Managed mount base path must be an absolute path, got: {v!r}")
+        if normalized == os.path.sep:
+            raise ValueError("Managed mount base path must not be the system root")
+        return normalized
+
     @field_validator("serve_frontend_path", mode="before")
     @classmethod
     def _normalise_serve_frontend_path(cls, v: str) -> str:  # noqa: N805
@@ -771,6 +784,19 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _samesite_none_requires_secure(self) -> "Settings":
+        try:
+            common_mount_root = os.path.commonpath([
+                self.usb_mount_base_path,
+                self.network_mount_base_path,
+            ])
+        except ValueError as exc:
+            raise ValueError("Managed mount base paths must be absolute and on the same filesystem namespace") from exc
+
+        if common_mount_root in (self.usb_mount_base_path, self.network_mount_base_path):
+            raise ValueError(
+                "NETWORK_MOUNT_BASE_PATH must not equal, contain, or be contained within USB_MOUNT_BASE_PATH"
+            )
+
         if "browse_allowed_prefixes" not in self.model_fields_set:
             self.browse_allowed_prefixes = [
                 self.usb_mount_base_path.rstrip("/") + "/",

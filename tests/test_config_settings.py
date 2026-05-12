@@ -140,6 +140,25 @@ class TestSettingsDefaults:
         s = Settings(database_url="sqlite://")
         assert s.browse_allowed_prefixes == ["/mnt/ecube/", "/mnt/ecube-network/"]
 
+    def test_network_mount_base_path_must_be_absolute(self):
+        with pytest.raises(ValueError, match="absolute path"):
+            Settings(database_url="sqlite://", network_mount_base_path="relative/network-root")
+
+    def test_network_mount_base_path_must_not_overlap_usb_mount_base_path(self):
+        with pytest.raises(ValueError, match="must not equal, contain, or be contained"):
+            Settings(
+                database_url="sqlite://",
+                usb_mount_base_path="/mnt/ecube",
+                network_mount_base_path="/mnt/ecube/network",
+            )
+
+        with pytest.raises(ValueError, match="must not equal, contain, or be contained"):
+            Settings(
+                database_url="sqlite://",
+                usb_mount_base_path="/mnt/ecube",
+                network_mount_base_path="/mnt/ecube",
+            )
+
     def test_nfs_client_version_default(self):
         s = Settings(database_url="sqlite://")
         assert s.nfs_client_version == "4.1"
