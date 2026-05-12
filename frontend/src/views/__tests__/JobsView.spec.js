@@ -469,7 +469,6 @@ describe('JobsView grouped create dialog', () => {
       source_path: 'folder',
       drive_id: 1,
       overflow_drive_ids: [],
-      thread_count: 4,
       notes: undefined,
       callback_url: undefined,
     })
@@ -503,7 +502,6 @@ describe('JobsView grouped create dialog', () => {
       source_path: '/folder/subfolder',
       drive_id: 1,
       overflow_drive_ids: [],
-      thread_count: 4,
       notes: undefined,
     })
   })
@@ -564,8 +562,40 @@ describe('JobsView grouped create dialog', () => {
       source_path: '/',
       drive_id: 1,
       overflow_drive_ids: [],
-      thread_count: 4,
       notes: undefined,
+    })
+  })
+
+  it('omits thread_count on create until the operator selects an override', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const createButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.create'))
+    await createButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#job-project').setValue('PROJ-001')
+    await flushPromises()
+    await wrapper.find('#job-evidence').setValue('EVID-DEFAULT')
+    await wrapper.find('#job-mount').setValue('11')
+    await wrapper.find('#job-source-browse-toggle').trigger('click')
+    await flushPromises()
+    await wrapper.findComponent('.directory-browser-stub').vm.$emit('update:currentDirectory', '/folder/default')
+    await flushPromises()
+    await wrapper.find('#job-drive').setValue('1')
+
+    await wrapper.find('#job-submit').trigger('click')
+    await flushPromises()
+
+    expect(mocks.createJob).toHaveBeenCalledWith({
+      project_id: 'PROJ-001',
+      evidence_number: 'EVID-DEFAULT',
+      mount_id: 11,
+      source_path: '/folder/default',
+      drive_id: 1,
+      overflow_drive_ids: [],
+      notes: undefined,
+      callback_url: undefined,
     })
   })
 

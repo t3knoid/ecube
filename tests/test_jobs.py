@@ -4116,7 +4116,7 @@ def test_update_started_job_allows_thread_count_and_overflow_drive_changes(clien
             "mount_id": mount.id,
             "drive_id": drive.id,
             "overflow_drive_ids": [overflow_drive.id],
-            "thread_count": 16,
+            "thread_count": 32,
             "max_file_retries": 3,
             "retry_delay_seconds": 1,
             "callback_url": None,
@@ -4125,11 +4125,11 @@ def test_update_started_job_allows_thread_count_and_overflow_drive_changes(clien
 
     assert response.status_code == 200
     data = response.json()
-    assert data["thread_count"] == 16
+    assert data["thread_count"] == 32
     assert [assignment["drive_id"] for assignment in data["overflow_assignments"]] == [overflow_drive.id]
     db.refresh(job)
     db.refresh(overflow_drive)
-    assert job.thread_count == 16
+    assert job.thread_count == 32
     assert overflow_drive.current_state == DriveState.IN_USE
     reserved_assignment = db.query(DriveAssignment).filter(
         DriveAssignment.job_id == job.id,

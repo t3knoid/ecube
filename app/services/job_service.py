@@ -737,6 +737,7 @@ def create_job(
     drive_repo = DriveRepository(db)
     audit_repo = AuditRepository(db)
     resolved_source_path = _resolve_job_source_path(body, db)
+    resolved_thread_count = int(body.thread_count or settings.copy_default_thread_count)
 
     if seeded_job_id is not None:
         existing_job = db.query(ExportJob).filter(ExportJob.id == seeded_job_id).one_or_none()
@@ -749,7 +750,7 @@ def create_job(
         evidence_number=body.evidence_number,
         source_path=resolved_source_path,
         target_mount_path=None,
-        thread_count=body.thread_count,
+        thread_count=resolved_thread_count,
         max_file_retries=body.max_file_retries,
         retry_delay_seconds=body.retry_delay_seconds,
         created_by=actor,

@@ -57,7 +57,7 @@ class JobCreate(StrictIntMixin, BaseModel):
     mount_id: Optional[StrictInt] = Field(default=None, ge=1, description="Mounted share selected as the trusted source root")
     drive_id: Optional[StrictInt] = Field(default=None, ge=1, description="Pre-assigned USB drive ID")
     overflow_drive_ids: list[StrictInt] = Field(default_factory=list, description="Reserved overflow drive IDs, in continuation order")
-    thread_count: StrictInt = Field(default=4, ge=1, le=16, description="Number of parallel copy threads (1-16)")
+    thread_count: Optional[StrictInt] = Field(default=None, ge=1, le=32, description="Number of parallel copy threads (1-32, optional; defaults to the configured worker count)")
     max_file_retries: StrictInt = Field(default=3, ge=0, le=100, description="Maximum number of retries for failed files (0-100)")
     retry_delay_seconds: StrictInt = Field(default=1, ge=0, le=3600, description="Delay between retries in seconds (0-3600)")
     notes: Optional[SafeStr] = Field(default=None, description="Optional processor notes supplied during job creation")
@@ -111,12 +111,12 @@ class JobCreate(StrictIntMixin, BaseModel):
 
 
 class JobStart(StrictIntMixin, BaseModel):
-    thread_count: Optional[StrictInt] = Field(default=None, ge=1, le=16, description="Override thread count for this job start (1-16, optional)")
+    thread_count: Optional[StrictInt] = Field(default=None, ge=1, le=32, description="Override thread count for this job start (1-32, optional)")
 
 
 class JobOverflowContinueRequest(StrictIntMixin, BaseModel):
     drive_id: StrictInt = Field(..., ge=1, description="Mounted USB drive ID to use for overflow continuation")
-    thread_count: Optional[StrictInt] = Field(default=None, ge=1, le=16, description="Override thread count for this overflow continuation run (1-16, optional)")
+    thread_count: Optional[StrictInt] = Field(default=None, ge=1, le=32, description="Override thread count for this overflow continuation run (1-32, optional)")
 
 
 class JobStartupAnalysisClearRequest(BaseModel):
@@ -146,7 +146,7 @@ class JobUpdate(StrictIntMixin, BaseModel):
     mount_id: Optional[StrictInt] = Field(default=None, ge=1, description="Mounted share selected as the trusted source root")
     drive_id: Optional[StrictInt] = Field(default=None, ge=1, description="Pre-assigned USB drive ID")
     overflow_drive_ids: list[StrictInt] = Field(default_factory=list, description="Reserved overflow drive IDs, in continuation order")
-    thread_count: StrictInt = Field(default=4, ge=1, le=16, description="Number of parallel copy threads (1-16)")
+    thread_count: StrictInt = Field(..., ge=1, le=32, description="Number of parallel copy threads (1-32)")
     max_file_retries: StrictInt = Field(default=3, ge=0, le=100, description="Maximum number of retries for failed files (0-100)")
     retry_delay_seconds: StrictInt = Field(default=1, ge=0, le=3600, description="Delay between retries in seconds (0-3600)")
     callback_url: Optional[SafeStr] = Field(default=None, json_schema_extra={"pattern": "^https://[a-zA-Z0-9]"}, description="HTTPS URL to receive POST callbacks for persisted job lifecycle events such as creation, start, pause, completion, archive, and reconciliation")
@@ -300,7 +300,7 @@ class ExportJobSchema(BaseModel):
     files_succeeded: int = Field(default=0, description="Number of files successfully copied")
     files_failed: int = Field(default=0, description="Number of files that failed")
     files_timed_out: int = Field(default=0, description="Number of files that timed out during copy (can be retried later)")
-    thread_count: int = Field(..., ge=1, le=16, description="Number of parallel threads used (1-16)")
+    thread_count: int = Field(..., ge=1, le=32, description="Number of parallel threads used (1-32)")
     max_file_retries: int = Field(default=3, ge=0, description="Maximum number of retries for failed files (0+)")
     retry_delay_seconds: int = Field(default=1, ge=0, description="Delay between retries in seconds (0+)")
     active_duration_seconds: int = Field(default=0, ge=0, description="Total active copy duration across all run/resume cycles in seconds")

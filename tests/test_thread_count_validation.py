@@ -1,4 +1,5 @@
 """Test thread_count validation on endpoints."""
+from app.config import settings
 from app.models.hardware import DriveState, UsbDrive
 
 
@@ -24,17 +25,38 @@ def test_thread_count_validation_on_create_job(admin_client, db):
     )
     assert response.status_code == 422, f"Expected 422 for thread_count=0, got {response.status_code}"
     
-    # Test thread_count=16 (too high)
+    # Test thread_count=33 (too high)
     response = admin_client.post(
         '/jobs',
         json={
             'project_id': 'PROJ-001',
             'evidence_number': 'EV-001',
             'source_path': '/data',
-            'thread_count': 16
+            'thread_count': 33
         }
     )
-    assert response.status_code == 422, f"Expected 422 for thread_count=16, got {response.status_code}"
+    assert response.status_code == 422, f"Expected 422 for thread_count=33, got {response.status_code}"
+
+    # Test thread_count=32 (valid)
+    response = admin_client.post(
+        '/jobs',
+        json={
+            'project_id': 'PROJ-001',
+            'evidence_number': 'EV-001',
+            'source_path': '/data',
+            'thread_count': 32
+        }
+    )
+    assert response.status_code == 200
+    assert response.json()['thread_count'] == 32
+
+    db.add(UsbDrive(
+        device_identifier="USB-THREAD-002",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-001",
+        mount_path="/mnt/ecube/thread-002",
+    ))
+    db.commit()
     
     # Test thread_count=4 (valid)
     response = admin_client.post(
@@ -71,21 +93,48 @@ def test_thread_count_validation_on_start_job(admin_client, db):
     )
     assert response.status_code == 422, f"Expected 422 for thread_count=0, got {response.status_code}"
 
-    # Test thread_count=100 (too high)
+    # Test thread_count=33 (too high)
     response = admin_client.post(
         f'/jobs/{job.id}/start',
-        json={'thread_count': 100}
+        json={'thread_count': 33}
     )
-    assert response.status_code == 422, f"Expected 422 for thread_count=100, got {response.status_code}"
+    assert response.status_code == 422, f"Expected 422 for thread_count=33, got {response.status_code}"
 
-    # Test thread_count=6 (valid)
+    # Test thread_count=32 (valid)
     from unittest.mock import patch
     with patch("app.services.copy_engine.run_copy_job"):
         response = admin_client.post(
             f'/jobs/{job.id}/start',
-            json={'thread_count': 6}
+            json={'thread_count': 32}
         )
     assert response.status_code == 200
+
+
+def test_create_job_without_thread_count_uses_configured_default(admin_client, db):
+    original_default = settings.copy_default_thread_count
+    settings.copy_default_thread_count = 12
+    try:
+        db.add(UsbDrive(
+            device_identifier="USB-THREAD-DEFAULT-001",
+            current_state=DriveState.AVAILABLE,
+            current_project_id="PROJ-001",
+            mount_path="/mnt/ecube/thread-default-001",
+        ))
+        db.commit()
+
+        response = admin_client.post(
+            '/jobs',
+            json={
+                'project_id': 'PROJ-001',
+                'evidence_number': 'EV-DEFAULT',
+                'source_path': '/data',
+            }
+        )
+
+        assert response.status_code == 200
+        assert response.json()['thread_count'] == 12
+    finally:
+        settings.copy_default_thread_count = original_default
 
 
 def test_start_job_without_body_succeeds(admin_client, db):

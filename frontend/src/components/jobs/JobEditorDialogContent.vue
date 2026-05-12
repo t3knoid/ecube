@@ -1,7 +1,7 @@
 <script setup>
 import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 
-const threadCountOptions = Array.from({ length: 16 }, (_unused, index) => index + 1)
+const threadCountOptions = Array.from({ length: 32 }, (_unused, index) => index + 1)
 
 const props = defineProps({
   title: {
@@ -184,6 +184,14 @@ const props = defineProps({
     type: String,
     required: true,
   },
+  allowThreadCountDefaultOption: {
+    type: Boolean,
+    default: false,
+  },
+  threadCountDefaultOptionLabel: {
+    type: String,
+    default: '',
+  },
   jobDetailsGroupLabel: {
     type: String,
     required: true,
@@ -331,9 +339,10 @@ const emit = defineEmits(['close', 'submit', 'toggle-source-browser'])
               id="job-thread-count"
               v-model.number="form.thread_count"
               :disabled="!projectSelected"
-              required
-              aria-required="true"
+              :required="!allowThreadCountDefaultOption"
+              :aria-required="!allowThreadCountDefaultOption"
             >
+              <option v-if="allowThreadCountDefaultOption" :value="null">{{ threadCountDefaultOptionLabel }}</option>
               <option v-for="count in threadCountOptions" :key="count" :value="count">{{ count }}</option>
             </select>
           </div>

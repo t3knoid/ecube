@@ -59,7 +59,7 @@ const form = ref({
   overflow_drive_ids: [],
   mount_id: null,
   source_path: '/',
-  thread_count: 4,
+  thread_count: null,
   notes: '',
   callback_url: '',
   run_immediately: false,
@@ -251,7 +251,7 @@ function resetForm() {
     overflow_drive_ids: [],
     mount_id: null,
     source_path: '/',
-    thread_count: 4,
+    thread_count: null,
     notes: '',
     callback_url: '',
     run_immediately: false,
@@ -583,9 +583,12 @@ async function submitCreateJob() {
       source_path: resolveSourcePath(),
       drive_id: Number(form.value.drive_id),
       overflow_drive_ids: selectedOverflowDriveIds.value,
-      thread_count: Number(form.value.thread_count),
       notes: form.value.notes.trim() || undefined,
       callback_url: form.value.callback_url.trim() || undefined,
+    }
+
+    if (form.value.thread_count != null && form.value.thread_count !== '') {
+      payload.thread_count = Number(form.value.thread_count)
     }
 
     const created = normalizeProjectRecord(await createJob(payload), ['project_id'])
@@ -863,6 +866,8 @@ onBeforeUnmount(() => {
             :callback-url-label="t('jobs.callbackUrl')"
             :callback-url-hint="t('jobs.callbackUrlHint')"
             :thread-count-label="t('jobs.threadCount')"
+            :allow-thread-count-default-option="true"
+            :thread-count-default-option-label="t('jobs.threadCountUseConfiguredDefault')"
             :job-details-group-label="t('jobs.jobDetailsGroup')"
             :source-group-label="t('jobs.sourceGroup')"
             :select-mount-label="t('jobs.selectMount')"

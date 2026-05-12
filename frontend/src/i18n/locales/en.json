@@ -179,6 +179,7 @@
     "sourcePathHint": "Path inside the selected mount, for example: folder/subfolder",
     "browseSourcePath": "Browse folders",
     "threadCount": "Thread count",
+    "threadCountUseConfiguredDefault": "Use configured default",
     "analyze": "Analyze",
     "start": "Start",
     "continueOverflow": "Continue on Another Drive",
