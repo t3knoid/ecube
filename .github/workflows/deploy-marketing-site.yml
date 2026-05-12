@@ -35,6 +35,14 @@ jobs:
           set -e
           mkdir -p _site/assets
           cp -R website/. _site/
+          cp frontend/e2e/theme.spec.js-snapshots/dashboard-default-chromium-linux.png _site/assets/workflow-dashboard.png
+          cp frontend/e2e/theme.spec.js-snapshots/system-default-chromium-linux.png _site/assets/workflow-system.png
+          cp frontend/e2e/theme.spec.js-snapshots/mounts-default-chromium-linux.png _site/assets/workflow-mounts.png
+          cp frontend/e2e/theme.spec.js-snapshots/drives-default-chromium-linux.png _site/assets/workflow-drives.png
+          cp frontend/e2e/theme.spec.js-snapshots/jobs-list-default-chromium-linux.png _site/assets/workflow-job-create.png
+          cp frontend/e2e/theme.spec.js-snapshots/job-detail-default-chromium-linux.png _site/assets/workflow-job-detail.png
+          cp frontend/e2e/theme.spec.js-snapshots/coc-report-default-chromium-linux.png _site/assets/workflow-coc.png
+          cp frontend/e2e/theme.spec.js-snapshots/audit-default-chromium-linux.png _site/assets/workflow-audit.png
           cp frontend/e2e/theme.spec.js-snapshots/dashboard-default-chromium-linux.png _site/assets/dashboard.png
           cp frontend/e2e/theme.spec.js-snapshots/jobs-list-default-chromium-linux.png _site/assets/jobs.png
           cp frontend/e2e/theme.spec.js-snapshots/drives-default-chromium-linux.png _site/assets/drives.png
