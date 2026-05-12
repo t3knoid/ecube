@@ -1163,6 +1163,7 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 | 21 | Operate the Initialize and Add Mount dialogs with keyboard only | Focus enters the dialog, Tab stays trapped within it, Escape closes it, and focus returns to the triggering control |
 | 22 | Use `Browse` in the Add Mount dialog with many discovered shares | The share picker opens, supports vertical scrolling, and selecting a share fills the `Remote path` field |
 | 23 | Open Add Mount while demo mode is enabled | The share-discovery `Browse` control remains available and opens the share picker normally |
+| 23a | Validate a slow effective `NFS 4.1` candidate mount from Add Share | Open Add Share as `admin` or `manager`, choose `NFS`, leave the dialog on `Use default (4.1)` or explicitly select `4.1`, enter a server/export that validates slowly on `4.1` but quickly on `3`, then click `Test` | The dialog shows the normal test-success banner, keeps `Create` enabled, and also shows a warning banner explaining that the effective `NFS 4.1` validation path is slow on the current server and that `NFS 3` validated much faster |
 | 24 | Trigger share browsing on a host missing `smbclient` or `showmount` | The dialog shows an actionable message telling the operator which host tool to install before retrying |
 
 ### 12.4.1 Filesystem Detection

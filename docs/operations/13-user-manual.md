@@ -139,7 +139,7 @@ Supported browser targets for the current frontend:
 
 Use one of the latest two major browser versions maintained by your organization. Firefox is not currently a supported target for the frontend.
 
-If you do not know your role, ask your ECUBE administrator. ECUBE uses role-based access control, so some pages and buttons are visible only to certain users.
+If you do not kyour role, ask your ECUBE administrator. ECUBE uses role-based access control, so some pages and buttons are visible only to certain users.
 
 ---
 
@@ -429,7 +429,7 @@ Confirm the target drive carefully before proceeding.
 
 Initialization assigns a drive to a project identifier and transitions it to `IN_USE`. Once initialized, project isolation rules apply to all writes performed through ECUBE.
 
-Initialization now requires at least one network share that is both assigned to the same project and currently in the `MOUNTED` state. If no eligible mounted share exists, the UI disables submission and the API rejects the request.
+Initialization  requires at least one network share that is both assigned to the same project and currently in the `MOUNTED` state. If no eligible mounted share exists, the UI disables submission and the API rejects the request.
 
 When you open the Initialize dialog:
 
@@ -506,13 +506,13 @@ ECUBE rejects exact duplicate remote paths and blocks overlapping parent or chil
 
 For security, the standard mount list and browse labels intentionally redact raw remote paths and local mount points in operator-facing views.
 
-ECUBE now creates the local mount point automatically based on the remote path and mount type (for example, NFS mounts are created under `/nfs/*` and SMB mounts under `/smb/*`).
+ECUBE creates the local mount point automatically based on the remote path and mount type (for example, NFS mounts are created under `/nfs/*` and SMB mounts under `/smb/*`).
 
 After a service restart, ECUBE may automatically restore an expected managed share mount or remove a stale ECUBE-managed mount point that no longer matches persisted system state. These startup corrections are intentional and are recorded in the audit log with sanitized details.
 
 The exact credential fields required depend on the mount type and your environment.
 
-If share browsing is unavailable because the ECUBE host is missing a required discovery tool, the dialog now shows an actionable message telling the operator which host package to install before retrying. Demo mode does not hide the browse control or block share discovery.
+If share browsing is unavailable because the ECUBE host is missing a required discovery tool, the dialog  shows an actionable message telling the operator which host package to install before retrying. Demo mode does not hide the browse control or block share discovery.
 
 ### 8.1.1 Editing a Mount
 
@@ -533,6 +533,8 @@ When the selected share is `MOUNTED`, `admin` and `manager` users can run `Test 
 Use `Test` inside the `Add Share` dialog before creating a new mount, or inside the `Edit Share` dialog before saving changes to an existing mount.
 
 The dialog must show a successful test result before `Create` or `Save` becomes available. This keeps mount validation tied to the exact configuration you are about to persist rather than to a separate list-level action.
+
+When a successful validation also returns operator guidance, the dialog keeps the normal success banner and shows a separate warning banner in the same header area. For NFS shares, the warning can explain that the effective `NFS 4.1` validation path is slow on the current server and that `NFS 3` validated much faster during the same test workflow, including when the dialog is left on `Use default (4.1)`.
 
 ### 8.3 Removing a Mount
 
@@ -751,7 +753,7 @@ Recommended workflow:
 6. Leave `Thread count` unchanged unless you have a specific operational reason to change it.
 7. Confirm the action.
 8. ECUBE resumes the same job on the new drive and records the new drive assignment automatically.
-9. Expand the `Files` panel if you need to confirm which files are now landing on which destination drive.
+9. Expand the `Files` panel if you need to confirm which files are landing on which destination drive.
 
 Important operator notes:
 
@@ -799,7 +801,7 @@ When expanded, the file table usually shows:
 - Destination drive
 - Status
 
-The destination-drive column becomes especially important after an overflow continuation, because the same job can now span more than one destination drive while still preserving a single job record.
+The destination-drive column becomes especially important after an overflow continuation, because the same job can span more than one destination drive while still preserving a single job record.
 
 This per-file destination information is more granular than the manifest location. At clean completion, ECUBE refreshes a separate `manifest.json` on each drive assignment that received successful copies, while the table can still show exactly which earlier files were copied to an earlier overflow drive.
 
@@ -820,7 +822,7 @@ The same popup also includes the compare workflow, so operators can inspect hash
 
 #### 9.4.4 Compare Source and Destination
 
-The compare workflow now uses clear `Source` and `Destination` terminology inside the hash viewer popup. After you open hashes for an exported file, choose the source file in the compare selector to evaluate the original source version against the copied destination version.
+The compare workflow uses clear `Source` and `Destination` terminology inside the hash viewer popup. After you open hashes for an exported file, choose the source file in the compare selector to evaluate the original source version against the copied destination version.
 
 Comparison output includes:
 
@@ -935,7 +937,7 @@ This page is useful when:
 
 End users who only perform evidence exports may rarely need this page. Administrators and support personnel are more likely to use it during troubleshooting.
 
-In the `System Health` tab, ECUBE separates host metrics from ECUBE-owned process diagnostics. When the backend reports degraded but non-fatal runtime conditions, the same tab now shows a `Runtime Warnings` panel with the sanitized warning summary, remediation guidance, stable warning code, and any explicit operator repair actions that are safe to expose for that warning. `GET /introspection/system-health` now includes repair-action metadata only for `admin` callers; `manager`, `processor`, and `auditor` users still see the warning details, but they do not receive warning-action metadata from the API and therefore do not see repair-action buttons. For example, when exFAT formatting tools are present but the running kernel has not loaded exFAT runtime support, `admin` users can trigger the explicit repair action from the warning itself instead of relying on `Refresh` to mutate host state. The ECUBE process section shows ECUBE CPU and memory usage, the total ECUBE thread count, the number of active copy workers, and a table that correlates each active copy thread to its parent job and project, including status, configured threads, elapsed time, and CPU time.
+In the `System Health` tab, ECUBE separates host metrics from ECUBE-owned process diagnostics. When the backend reports degraded but non-fatal runtime conditions, the same tab shows a `Runtime Warnings` panel with the sanitized warning summary, remediation guidance, stable warning code, and any explicit operator repair actions that are safe to expose for that warning. `GET /introspection/system-health` includes repair-action metadata only for `admin` callers; `manager`, `processor`, and `auditor` users still see the warning details, but they do not receive warning-action metadata from the API and therefore do not see repair-action buttons. For example, when exFAT formatting tools are present but the running kernel has not loaded exFAT runtime support, `admin` users can trigger the explicit repair action from the warning itself instead of relying on `Refresh` to mutate host state. The ECUBE process section shows ECUBE CPU and memory usage, the total ECUBE thread count, the number of active copy workers, and a table that correlates each active copy thread to its parent job and project, including status, configured threads, elapsed time, and CPU time.
 
 For `admin`, `manager`, and `processor` users, the `USB Topology` tab shows a sorted device table and hides rows with no meaningful USB metadata so the list stays focused on useful hardware entries. The wider-screen table includes negotiated USB speed when the backend exposes it. On smaller screens, the table tightens to primary columns such as `Device` and `Product`, and the remaining hardware details, including negotiated speed, move into a per-row overflow menu.
 
@@ -1109,7 +1111,7 @@ If your role does not include access to this page, the navigation item will not 
 
 ## 13. Configuration and Admin
 
-ECUBE now separates runtime settings into two pages so managers can adjust operational settings without gaining access to infrastructure, password policy, webhook secret, or service-control workflows.
+ECUBE separates runtime settings into two pages so managers can adjust operational settings without gaining access to infrastructure, password policy, webhook secret, or service-control workflows.
 
 ### 13.1 Configuration
 
@@ -1143,7 +1145,7 @@ Important operational notes:
 - `Auto USB Discovery Interval (seconds)` controls how often ECUBE polls for USB topology and drive-state changes in the background. Set it to `0` to pause automatic polling, or set a positive value to resume periodic discovery without restarting the service.
 - `Network Mount Timeout (seconds)` controls how long ECUBE allows SMB and NFS mount workflows to run before treating them as failed. The same setting also governs related unmount and mount-state verification checks, so increase it when slow servers, DNS resolution, or authentication handshakes make network shares slow to validate or reconnect.
 - `Mount Share Discovery Timeout (seconds)` controls how long ECUBE allows SMB share browsing and NFS export discovery to run before treating them as failed. Increase it when the Add Mount `Browse` dialog times out against slow servers or high-latency networks.
-- Drive formatting now keeps the browser request open without the prior UI-side 30-second timeout. If a format still fails, operators should review the server log for `Drive format timed out` or `Drive format command failed` and adjust the Configuration values rather than treating the failure as a browser connectivity problem.
+- Drive formatting keeps the browser request open without the prior UI-side 30-second timeout. If a format still fails, operators should review the server log for `Drive format timed out` or `Drive format command failed` and adjust the Configuration values rather than treating the failure as a browser connectivity problem.
 
 ### 13.2 Admin
 
@@ -1190,7 +1192,7 @@ Important operational notes:
 - When demo mode is enabled and `DEMO_SHARED_PASSWORD` is left empty, ECUBE also derives the login screen's shared demo password from the active `Password Policy` values. After changing the policy, restart ECUBE or otherwise rerun startup reconciliation before expecting existing demo OS accounts to accept the newly displayed implicit password.
 - `enforce_for_root` remains enabled and is not editable from the UI.
 - `Startup Analysis Batch Size` accepts values from `1` to `5000`. Lower values reduce peak memory use during startup analysis; higher values reduce database round trips.
-- Drive formatting and mount timeout controls now live on the `Configuration` page, not the `Admin` page.
+- Drive formatting and mount timeout controls live on the `Configuration` page, not the `Admin` page.
 - The `Default Callback URL` must be a valid `https://` URL and is overridden by any job-specific `Webhook callback URL` entered on the Jobs page or Job Detail edit dialog.
 - The `Outbound Callback Proxy URL` must be a valid `http://` or `https://` URL and must not contain embedded credentials.
 - The `Webhook Signing Secret` field is write-only. Leave it blank to keep the current secret, enter a new value to rotate it, or use the clear checkbox to remove it.
@@ -1365,7 +1367,7 @@ The following source fields can be used in `Callback Payload Source Fields` and 
 6. If the drive is not yet formatted (state is `DISCONNECTED` or filesystem shows `unformatted`), format it using the intended filesystem.
 7. If the drive is not yet mounted to the ECUBE-managed mount root, click `Mount` and wait for the mount path to appear.
 8. Click `Initialize`, choose the project from the dropdown list, and submit.
-9. Confirm the drive now shows `IN_USE` and the expected project association.
+9. Confirm the drive shows `IN_USE` and the expected project association.
 
 Notes:
 

@@ -1524,6 +1524,53 @@ def test_validate_mount_candidate_warns_when_nfs_41_is_slow_and_nfs_3_is_faster(
     assert provider.unmount_calls == ["/nfs/demo-case-002", "/nfs/demo-case-002"]
 
 
+def test_validate_mount_candidate_warns_when_default_nfs_41_is_slow_and_nfs_3_is_faster(manager_client, db):
+    class StatefulProvider:
+        def __init__(self):
+            self.mounted = False
+            self.unmount_calls = []
+
+        def check_mounted(self, local_mount_point: str, *, timeout_seconds=None):
+            return self.mounted
+
+        def os_unmount(self, local_mount_point: str):
+            self.unmount_calls.append(local_mount_point)
+            self.mounted = False
+            return True, None
+
+    provider = StatefulProvider()
+    attempted_versions = []
+
+    def fake_timed_mount_attempt(_provider, _mount_type, _remote_path, _local_mount_point, **kwargs):
+        attempted_versions.append(kwargs.get("nfs_client_version"))
+        provider.mounted = True
+        if kwargs.get("nfs_client_version") == "4.1":
+            return True, None, 8.0
+        return True, None, 0.2
+
+    with patch("app.services.mount_service._default_provider", return_value=provider), \
+         patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
+         patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
+         patch("app.services.mount_service._timed_mount_attempt", side_effect=fake_timed_mount_attempt):
+        response = manager_client.post(
+            "/mounts/test",
+            json={
+                "type": "NFS",
+                "remote_path": "192.168.20.240:/volume1/demo-case-002",
+                "project_id": "proj-default-nfs41",
+            },
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "MOUNTED"
+    assert data["nfs_client_version"] is None
+    assert "Selected NFS 4.1 validation was slow" in data["validation_warning"]
+    assert "NFS 3 validated much faster on this server" in data["validation_warning"]
+    assert attempted_versions == ["4.1", "3"]
+    assert provider.unmount_calls == ["/nfs/demo-case-002", "/nfs/demo-case-002"]
+
+
 def test_validate_mount_candidate_timeout_returns_conflict(manager_client, db, caplog):
     with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \

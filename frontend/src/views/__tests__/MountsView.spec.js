@@ -145,6 +145,10 @@ function findDialogSuccessBanner(wrapper) {
   return wrapper.find('.dialog-panel .success-banner')
 }
 
+function findDialogWarningBanner(wrapper) {
+  return wrapper.find('.dialog-panel .warning-banner')
+}
+
 describe('MountsView removal flow', () => {
   beforeEach(() => {
     authState.roles = ['admin', 'manager']
@@ -733,6 +737,72 @@ describe('MountsView removal flow', () => {
     await flushPromises()
 
     expect(createButton().attributes('disabled')).toBeDefined()
+  })
+
+  it('surfaces validation warnings returned by the add mount test action', async () => {
+    mocks.getMounts.mockResolvedValue([])
+    mocks.validateMountCandidate.mockResolvedValue(
+      buildMount({
+        id: 999,
+        status: 'MOUNTED',
+        validation_warning: 'Selected NFS 4.1 validation was slow (80.2s). NFS 3 validated much faster on this server (0.1s).',
+      }),
+    )
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    expect(addButton).toBeTruthy()
+
+    await addButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#mount-type').setValue('NFS')
+    await wrapper.find('#mount-remote-path').setValue('192.168.20.240:/volume1/demo-case-002')
+    await wrapper.find('#mount-project-id').setValue('proj-new')
+    await wrapper.find('#mount-nfs-client-version').setValue('4.1')
+
+    await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
+    await flushPromises()
+
+    expect(findDialogSuccessBanner(wrapper).text()).toContain(i18n.global.t('mounts.testSuccess'))
+    expect(findDialogWarningBanner(wrapper).text()).toContain('Selected NFS 4.1 validation was slow')
+    expect(findDialogWarningBanner(wrapper).text()).toContain('NFS 3 validated much faster on this server')
+  })
+
+  it('surfaces NFS fallback advisories returned on the add mount test error path', async () => {
+    mocks.getMounts.mockResolvedValue([])
+    mocks.validateMountCandidate.mockRejectedValue({
+      response: {
+        status: 409,
+        data: {
+          detail: 'NFS 4.1 validation timed out or was too slow. NFS 3 validated much faster on this server (0.1s).',
+        },
+      },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    expect(addButton).toBeTruthy()
+
+    await addButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#mount-type').setValue('NFS')
+    await wrapper.find('#mount-remote-path').setValue('192.168.20.240:/volume1/demo-case-002')
+    await wrapper.find('#mount-project-id').setValue('proj-new')
+    await wrapper.find('#mount-nfs-client-version').setValue('4.1')
+
+    await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
+    await flushPromises()
+
+    expect(findDialogWarningBanner(wrapper).text()).toContain('NFS 4.1 validation timed out or was too slow')
+    expect(findDialogWarningBanner(wrapper).text()).toContain('NFS 3 validated much faster on this server')
+    expect(wrapper.find('.error-banner').exists()).toBe(false)
+    expect(findDialogButton(wrapper, i18n.global.t('common.actions.create')).attributes('disabled')).toBeDefined()
   })
 
   it('keeps the add dialog open and shows feedback when the in-dialog test fails', async () => {

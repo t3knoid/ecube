@@ -493,7 +493,7 @@ Available actions such as format, initialize, throughput testing, and prepare ej
 <p>Confirm the target drive carefully before proceeding.</p>
 <h2 id="4-5-initializing-a-drive">4.5 Initializing a Drive</h2>
 <p>Initialization assigns a drive to a project identifier and transitions it to <code>IN_USE</code>. Once initialized, project isolation rules apply to all writes performed through ECUBE.</p>
-<p>Initialization now requires at least one network share that is both assigned to the same project and currently in the <code>MOUNTED</code> state. If no eligible mounted share exists, the UI disables submission and the API rejects the request.</p>
+<p>Initialization  requires at least one network share that is both assigned to the same project and currently in the <code>MOUNTED</code> state. If no eligible mounted share exists, the UI disables submission and the API rejects the request.</p>
 <p>When you open the Initialize dialog:</p>
 <ul><li>
 The <strong>Project</strong> field is shown as a dropdown populated from distinct project IDs on mounted shares only.
@@ -569,10 +569,10 @@ Credentials file
 <p>Project assignment is required when creating a mount. Drives can only be initialized for projects that have at least one assigned share in the <code>MOUNTED</code> state.</p>
 <p>ECUBE rejects exact duplicate remote paths and blocks overlapping parent or child remote paths across different projects. Nested paths for the same project remain allowed. If two operators submit changes at the same time, one request may briefly return a conflict while ECUBE finishes the in-progress update.</p>
 <p>For security, the standard mount list and browse labels intentionally redact raw remote paths and local mount points in operator-facing views.</p>
-<p>ECUBE now creates the local mount point automatically based on the remote path and mount type (for example, NFS mounts are created under <code>/nfs/<em></code> and SMB mounts under <code>/smb/</em></code>).</p>
+<p>ECUBE creates the local mount point automatically based on the remote path and mount type (for example, NFS mounts are created under <code>/nfs/<em></code> and SMB mounts under <code>/smb/</em></code>).</p>
 <p>After a service restart, ECUBE may automatically restore an expected managed share mount or remove a stale ECUBE-managed mount point that no longer matches persisted system state. These startup corrections are intentional and are recorded in the audit log with sanitized details.</p>
 <p>The exact credential fields required depend on the mount type and your environment.</p>
-<p>If share browsing is unavailable because the ECUBE host is missing a required discovery tool, the dialog now shows an actionable message telling the operator which host package to install before retrying. Demo mode does not hide the browse control or block share discovery.</p>
+<p>If share browsing is unavailable because the ECUBE host is missing a required discovery tool, the dialog  shows an actionable message telling the operator which host package to install before retrying. Demo mode does not hide the browse control or block share discovery.</p>
 <h3 id="5-1-1-editing-a-mount">5.1.1 Editing a Mount</h3>
 <p>Use the clickable mount ID on an existing mount row to open Mount Detail, then use <code>Edit</code> from the detail action row to reopen the edit dialog in place.</p>
 <ul><li>
@@ -591,6 +591,7 @@ Use <code>Clear saved credentials</code> if you need to remove previously stored
 <h2 id="5-2-testing-mount-connectivity">5.2 Testing Mount Connectivity</h2>
 <p>Use <code>Test</code> inside the <code>Add Share</code> dialog before creating a new mount, or inside the <code>Edit Share</code> dialog before saving changes to an existing mount.</p>
 <p>The dialog must show a successful test result before <code>Create</code> or <code>Save</code> becomes available. This keeps mount validation tied to the exact configuration you are about to persist rather than to a separate list-level action.</p>
+<p>When a successful validation also returns operator guidance, the dialog keeps the normal success banner and shows a separate warning banner in the same header area. For NFS shares, the warning can explain that the effective <code>NFS 4.1</code> validation path is slow on the current server and that <code>NFS 3</code> validated much faster during the same test workflow, including when the dialog is left on <code>Use default (4.1)</code>.</p>
 <h2 id="5-3-removing-a-mount">5.3 Removing a Mount</h2>
 <p>From Mount Detail, <code>admin</code> and <code>manager</code> users can remove the mount definition when it is no longer needed.</p>
 <p>Remove a mount only if it is no longer needed. If existing workflows depend on it, removing the definition can interrupt job creation or repeatability.</p>
@@ -837,7 +838,7 @@ Confirm the action.
 </li><li>
 ECUBE resumes the same job on the new drive and records the new drive assignment automatically.
 </li><li>
-Expand the <code>Files</code> panel if you need to confirm which files are now landing on which destination drive.
+Expand the <code>Files</code> panel if you need to confirm which files are landing on which destination drive.
 </li></ol>
 <p>Important operator notes:</p>
 <ul><li>
@@ -881,7 +882,7 @@ Destination drive
 </li><li>
 Status
 </li></ul>
-<p>The destination-drive column becomes especially important after an overflow continuation, because the same job can now span more than one destination drive while still preserving a single job record.</p>
+<p>The destination-drive column becomes especially important after an overflow continuation, because the same job can span more than one destination drive while still preserving a single job record.</p>
 <p>This per-file destination information is more granular than the manifest location. At clean completion, ECUBE refreshes a separate <code>manifest.json</code> on each drive assignment that received successful copies, while the table can still show exactly which earlier files were copied to an earlier overflow drive.</p>
 <p>Rows that include a safe file-level error summary are visually emphasized in the Files panel. Select the <code>ERROR</code> or <code>FAILED</code> status badge on desktop, or the matching compact status icon on smaller screens, to open the <code>File Error Details</code> dialog for that row. The dialog shows the file ID, relative path, status, and the sanitized per-file error text returned by the trusted backend.</p>
 <p>Users allowed to inspect hashes open the hash viewer by selecting the file path itself. On smaller screens, ECUBE may replace full status badges with compact status icons and shorten the visible pagination window so the file list stays within the viewport.</p>
@@ -895,7 +896,7 @@ SHA-256
 </li></ul>
 <p>The same popup also includes the compare workflow, so operators can inspect hashes and then compare the selected exported file against its source version without leaving Job Detail.</p>
 <h3 id="6-4-4-compare-source-and-destination">6.4.4 Compare Source and Destination</h3>
-<p>The compare workflow now uses clear <code>Source</code> and <code>Destination</code> terminology inside the hash viewer popup. After you open hashes for an exported file, choose the source file in the compare selector to evaluate the original source version against the copied destination version.</p>
+<p>The compare workflow uses clear <code>Source</code> and <code>Destination</code> terminology inside the hash viewer popup. After you open hashes for an exported file, choose the source file in the compare selector to evaluate the original source version against the copied destination version.</p>
 <p>Comparison output includes:</p>
 <ul><li>
 Overall match
@@ -1028,7 +1029,7 @@ Reviewing mount or log details during issue investigation
 Investigating system errors or performance issues via application logs (<code>admin</code> and <code>manager</code>)
 </li></ul>
 <p>End users who only perform evidence exports may rarely need this page. Administrators and support personnel are more likely to use it during troubleshooting.</p>
-<p>In the <code>System Health</code> tab, ECUBE separates host metrics from ECUBE-owned process diagnostics. When the backend reports degraded but non-fatal runtime conditions, the same tab now shows a <code>Runtime Warnings</code> panel with the sanitized warning summary, remediation guidance, stable warning code, and any explicit operator repair actions that are safe to expose for that warning. <code>GET /introspection/system-health</code> now includes repair-action metadata only for <code>admin</code> callers; <code>manager</code>, <code>processor</code>, and <code>auditor</code> users still see the warning details, but they do not receive warning-action metadata from the API and therefore do not see repair-action buttons. For example, when exFAT formatting tools are present but the running kernel has not loaded exFAT runtime support, <code>admin</code> users can trigger the explicit repair action from the warning itself instead of relying on <code>Refresh</code> to mutate host state. The ECUBE process section shows ECUBE CPU and memory usage, the total ECUBE thread count, the number of active copy workers, and a table that correlates each active copy thread to its parent job and project, including status, configured threads, elapsed time, and CPU time.</p>
+<p>In the <code>System Health</code> tab, ECUBE separates host metrics from ECUBE-owned process diagnostics. When the backend reports degraded but non-fatal runtime conditions, the same tab shows a <code>Runtime Warnings</code> panel with the sanitized warning summary, remediation guidance, stable warning code, and any explicit operator repair actions that are safe to expose for that warning. <code>GET /introspection/system-health</code> includes repair-action metadata only for <code>admin</code> callers; <code>manager</code>, <code>processor</code>, and <code>auditor</code> users still see the warning details, but they do not receive warning-action metadata from the API and therefore do not see repair-action buttons. For example, when exFAT formatting tools are present but the running kernel has not loaded exFAT runtime support, <code>admin</code> users can trigger the explicit repair action from the warning itself instead of relying on <code>Refresh</code> to mutate host state. The ECUBE process section shows ECUBE CPU and memory usage, the total ECUBE thread count, the number of active copy workers, and a table that correlates each active copy thread to its parent job and project, including status, configured threads, elapsed time, and CPU time.</p>
 <p>For <code>admin</code>, <code>manager</code>, and <code>processor</code> users, the <code>USB Topology</code> tab shows a sorted device table and hides rows with no meaningful USB metadata so the list stays focused on useful hardware entries. The wider-screen table includes negotiated USB speed when the backend exposes it. On smaller screens, the table tightens to primary columns such as <code>Device</code> and <code>Product</code>, and the remaining hardware details, including negotiated speed, move into a per-row overflow menu.</p>
 <p>For <code>admin</code>, <code>manager</code>, and <code>processor</code> users, the <code>Mounts</code> tab continues to show device, mount point, filesystem type, and mount options on wider screens. On smaller screens, it keeps <code>Device</code> and <code>Mount Point</code> visible and moves the remaining fields into a per-row overflow menu.</p>
 <p>For users with <code>admin</code> or <code>manager</code> roles, the System tab bar includes a <code>Reconcile managed mounts</code> action button positioned between <code>Mounts</code> and <code>Logs</code>. This action triggers a manual managed-mount reconciliation pass and opens a dedicated results page.</p>
@@ -1225,7 +1226,7 @@ Record administrative password-reset actions according to your SOP.
 </li></ul>
 <p>If your role does not include access to this page, the navigation item will not appear.</p>
 <h1 id="10-configuration-and-admin">10. Configuration and Admin</h1>
-<p>ECUBE now separates runtime settings into two pages so managers can adjust operational settings without gaining access to infrastructure, password policy, webhook secret, or service-control workflows.</p>
+<p>ECUBE separates runtime settings into two pages so managers can adjust operational settings without gaining access to infrastructure, password policy, webhook secret, or service-control workflows.</p>
 <h2 id="10-1-configuration">10.1 Configuration</h2>
 <p><strong>Allowed roles:</strong> <code>admin</code>, <code>manager</code></p>
 <p>Use the <code>Configuration</code> page to update operational runtime settings from the UI without logging into the host terminal.</p>
@@ -1271,7 +1272,7 @@ Managers cannot view or trigger password policy, webhook secret, logging infrast
 </li><li>
 <code>Mount Share Discovery Timeout (seconds)</code> controls how long ECUBE allows SMB share browsing and NFS export discovery to run before treating them as failed. Increase it when the Add Mount <code>Browse</code> dialog times out against slow servers or high-latency networks.
 </li><li>
-Drive formatting now keeps the browser request open without the prior UI-side 30-second timeout. If a format still fails, operators should review the server log for <code>Drive format timed out</code> or <code>Drive format command failed</code> and adjust the Configuration values rather than treating the failure as a browser connectivity problem.
+Drive formatting keeps the browser request open without the prior UI-side 30-second timeout. If a format still fails, operators should review the server log for <code>Drive format timed out</code> or <code>Drive format command failed</code> and adjust the Configuration values rather than treating the failure as a browser connectivity problem.
 </li></ul>
 <h2 id="10-2-admin">10.2 Admin</h2>
 <p><strong>Allowed roles:</strong> <code>admin</code></p>
@@ -1337,7 +1338,7 @@ When demo mode is enabled and <code>DEMO_SHARED_PASSWORD</code> is left empty, E
 </li><li>
 <code>Startup Analysis Batch Size</code> accepts values from <code>1</code> to <code>5000</code>. Lower values reduce peak memory use during startup analysis; higher values reduce database round trips.
 </li><li>
-Drive formatting and mount timeout controls now live on the <code>Configuration</code> page, not the <code>Admin</code> page.
+Drive formatting and mount timeout controls live on the <code>Configuration</code> page, not the <code>Admin</code> page.
 </li><li>
 The <code>Default Callback URL</code> must be a valid <code>https://</code> URL and is overridden by any job-specific <code>Webhook callback URL</code> entered on the Jobs page or Job Detail edit dialog.
 </li><li>
@@ -1642,7 +1643,7 @@ If the drive is not yet mounted to the ECUBE-managed mount root, click <code>Mou
 </li><li>
 Click <code>Initialize</code>, choose the project from the dropdown list, and submit.
 </li><li>
-Confirm the drive now shows <code>IN_USE</code> and the expected project association.
+Confirm the drive shows <code>IN_USE</code> and the expected project association.
 </li></ol>
 <p>Notes:</p>
 <ul><li>

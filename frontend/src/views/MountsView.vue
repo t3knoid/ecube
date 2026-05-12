@@ -29,6 +29,7 @@ const error = ref('')
 const successMessage = ref('')
 const dialogError = ref('')
 const dialogSuccessMessage = ref('')
+const dialogWarningMessage = ref('')
 const editingMountId = ref(null)
 const dialogValidationPassed = ref(false)
 const dialogBrowsing = ref(false)
@@ -116,6 +117,15 @@ const nfsClientVersionSelectOptions = computed(() => [
   },
   ...nfsClientVersionOptions.value.map((option) => ({ value: option, label: option })),
 ])
+
+function extractMountValidationAdvisory(requestError) {
+  const status = requestError?.response?.status
+  const detail = normalizeErrorMessage(requestError?.response?.data, '').trim()
+  if (status !== 409 || !detail) return ''
+  if (!detail.includes('validated much faster on this server')) return ''
+  if (!detail.includes('NFS ')) return ''
+  return detail
+}
 
 function networkMountTimeoutMs() {
   const seconds = Number(publicAuthConfig.value?.network_mount_timeout_seconds)
@@ -271,6 +281,7 @@ function resetForm() {
   dialogTesting.value = false
   dialogError.value = ''
   dialogSuccessMessage.value = ''
+  dialogWarningMessage.value = ''
   form.value = {
     type: 'SMB',
     remote_path: '',
@@ -296,6 +307,7 @@ function invalidateDialogValidation() {
     dialogSuccessMessage.value = ''
   }
   dialogValidationPassed.value = false
+  dialogWarningMessage.value = ''
 }
 
 function markCredentialFieldChanged(fieldName) {
@@ -446,6 +458,7 @@ async function runDialogValidate() {
   dialogValidationPassed.value = false
   dialogError.value = ''
   dialogSuccessMessage.value = ''
+  dialogWarningMessage.value = ''
   try {
     const payload = buildMountPayload()
     const result = isEditMode.value && editingMountId.value !== null
@@ -454,11 +467,18 @@ async function runDialogValidate() {
     if (result?.status === 'MOUNTED') {
       dialogValidationPassed.value = true
       dialogSuccessMessage.value = t('mounts.testSuccess')
+      dialogWarningMessage.value = String(result?.validation_warning || '').trim()
       return
     }
     dialogError.value = t('mounts.testFailed')
   } catch (requestError) {
-    dialogError.value = normalizeErrorMessage(requestError?.response?.data, t('mounts.testFailed'))
+    const advisory = extractMountValidationAdvisory(requestError)
+    if (advisory) {
+      dialogWarningMessage.value = advisory
+      dialogError.value = ''
+    } else {
+      dialogError.value = normalizeErrorMessage(requestError?.response?.data, t('mounts.testFailed'))
+    }
   } finally {
     dialogTesting.value = false
   }
@@ -520,6 +540,7 @@ function openEditDialog(mount, event) {
   dialogTesting.value = false
   dialogError.value = ''
   dialogSuccessMessage.value = ''
+  dialogWarningMessage.value = ''
   form.value = {
     type: mount.type || 'SMB',
     remote_path: mount.remote_path || '',
@@ -548,6 +569,7 @@ function closeAddDialog() {
   closeShareBrowser()
   dialogError.value = ''
   dialogSuccessMessage.value = ''
+  dialogWarningMessage.value = ''
   resetForm()
 }
 
@@ -806,6 +828,7 @@ onBeforeUnmount(() => {
             <h2 :id="addMountDialogTitleId">{{ dialogTitle }}</h2>
             <p v-if="dialogError" class="error-banner" role="alert" aria-live="assertive">{{ dialogError }}</p>
             <p v-if="dialogSuccessMessage" class="success-banner" role="status" aria-live="polite">{{ dialogSuccessMessage }}</p>
+            <p v-if="dialogWarningMessage" class="warning-banner" role="status" aria-live="polite">{{ dialogWarningMessage }}</p>
           </div>
 
           <div class="dialog-body mount-dialog-scroll-region">
@@ -1067,6 +1090,14 @@ select {
   color: var(--color-text-primary);
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  padding: var(--space-sm);
+}
+
+.warning-banner {
+  color: var(--color-alert-warning-text);
+  background: var(--color-alert-warning-bg);
+  border: 1px solid var(--color-alert-warning-border);
   border-radius: var(--border-radius);
   padding: var(--space-sm);
 }

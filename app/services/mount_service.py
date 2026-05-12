@@ -264,6 +264,7 @@ def _probe_nfs_v3_validation_warning(
     mount_data: MountCreate,
     *,
     provider: "MountProvider",
+    selected_version: Optional[str],
     resolved_credentials: dict[str, Optional[str]],
     selected_success: bool,
     selected_elapsed_seconds: float,
@@ -271,7 +272,7 @@ def _probe_nfs_v3_validation_warning(
 ) -> tuple[Optional[str], Optional[str]]:
     if not _should_probe_nfs_v3_fallback(
         mount_data.type,
-        mount.nfs_client_version,
+        selected_version,
         selected_elapsed_seconds,
         validation_error,
     ):
@@ -312,10 +313,10 @@ def _probe_nfs_v3_validation_warning(
 
     if selected_success:
         if selected_elapsed_seconds >= max(_NFS_VALIDATION_SLOW_SECONDS, fallback_elapsed_seconds * 3):
-            return _build_nfs_validation_warning(str(mount.nfs_client_version), selected_elapsed_seconds, fallback_elapsed_seconds), None
+            return _build_nfs_validation_warning(str(selected_version), selected_elapsed_seconds, fallback_elapsed_seconds), None
         return None, None
 
-    return _build_nfs_timeout_fallback_message(str(mount.nfs_client_version), fallback_elapsed_seconds), None
+    return _build_nfs_timeout_fallback_message(str(selected_version), fallback_elapsed_seconds), None
 
 
 def _mount_command_path(cmd: list[str]) -> str:
@@ -1377,6 +1378,11 @@ def validate_mount_candidate(mount_data: MountCreate, db: Session, actor: Option
         local_mount_point=local_mount_point,
         status=MountStatus.UNMOUNTED,
     )
+    selected_nfs_client_version = (
+        _resolve_nfs_client_version(mount_data.nfs_client_version)
+        if mount_data.type == MountType.NFS
+        else None
+    )
 
     validation_error = None
     validation_warning: Optional[str] = None
@@ -1419,13 +1425,14 @@ def validate_mount_candidate(mount_data: MountCreate, db: Session, actor: Option
                     credentials_file=resolved_credentials["credentials_file"],
                     username=resolved_credentials["username"],
                     password=resolved_credentials["password"],
-                    nfs_client_version=mount.nfs_client_version,
+                    nfs_client_version=selected_nfs_client_version,
                 )
                 candidate_status = MountStatus.MOUNTED if success else MountStatus.ERROR
                 validation_warning, fallback_cleanup_error = _probe_nfs_v3_validation_warning(
                     mount,
                     mount_data,
                     provider=provider,
+                    selected_version=selected_nfs_client_version,
                     resolved_credentials=resolved_credentials,
                     selected_success=success,
                     selected_elapsed_seconds=selected_elapsed_seconds,

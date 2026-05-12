@@ -120,6 +120,7 @@ Drive responses include both the stable `device_identifier` and the port-based `
 | ------ | -------- | ---- | ----------- |
 | GET | `/mounts` | admin/manager/processor/auditor | List network mounts |
 | POST | `/mounts` | admin/manager | Add new mount with required project assignment |
+| POST | `/mounts/test` | admin/manager | Validate candidate mount connectivity from the Add Share dialog before persisting the mount |
 | PATCH | `/mounts/{mount_id}` | admin/manager | Update an existing mount in place while preserving the generated local mount point and reapplying the live mount when possible |
 | POST | `/mounts/discover` | admin/manager | Discover SMB shares or NFS exports from the Add Mount dialog using the submitted server seed and optional credentials |
 | POST | `/mounts/{mount_id}/throughput-test` | admin/manager | Measure mounted-share read throughput from Mount Detail and persist the latest `throughput_read_mbps` and `throughput_tested_at` values on the mount record |
@@ -128,6 +129,8 @@ Drive responses include both the stable `device_identifier` and the port-based `
 | DELETE | `/mounts/{mount_id}` | admin/manager | Remove mount |
 
 Project identifiers are canonicalized by trimming surrounding whitespace and converting the value to uppercase before storage and comparison. The mount-create endpoint also rejects exact duplicate remote sources and cross-project parent or child overlaps with `409 Conflict`; same-project nested sources remain allowed. A temporary `409 Conflict` can also be returned when another mount update is already in progress and holds the serialization lock.
+
+`POST /mounts/test` is the validation helper behind the Add Share dialog `Test` action. A successful response can include `validation_warning` when the candidate validation succeeds but also detects an operator-relevant condition, such as an effective `NFS 4.1` validation path that is much slower than a validation-only `NFS 3` probe against the same server. This applies both when the request explicitly submits `"nfs_client_version": "4.1"` and when the request relies on the current default `4.1` setting.
 
 `POST /mounts/discover` is a trusted helper for the Add Mount dialog. It accepts the selected mount type plus the entered server seed and optional credentials, returns sanitized remote paths suitable for populating the dialog even in demo mode, and can return actionable `500` guidance when the ECUBE host is missing required discovery tools such as `smbclient` or `showmount`.
 

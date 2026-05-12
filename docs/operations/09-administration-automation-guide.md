@@ -1446,6 +1446,25 @@ Response: returns the mount object with `status` reflecting the connection resul
 
 > **Note:** As an alternative to inline credentials, use `credentials_file` to reference a file on the host containing credentials.
 
+### Test Candidate Mount Connectivity
+
+Validates an Add Share or Edit Share configuration without persisting a mount row. This endpoint powers the dialog-level `Test` action and returns the candidate mount payload used to enable `Create` or `Save` after a successful validation.
+
+```bash
+# Requires admin or manager role
+curl -k -X POST https://localhost:8443/mounts/test \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "NFS",
+    "remote_path": "192.168.20.240:/volume1/demo-case-002",
+    "project_id": "PROJECT-42",
+    "nfs_client_version": "4.1"
+  }'
+```
+
+Response: returns the candidate mount object with `status` reflecting the validation result and can include `validation_warning` when the validation succeeds but the server exposes an operator-relevant advisory. For example, ECUBE can report that the effective `NFS 4.1` validation path validated slowly while a validation-only `NFS 3` probe against the same server completed much faster. The same warning behavior applies when the request relies on the default `4.1` setting instead of explicitly sending `"nfs_client_version": "4.1"`.
+
 ### Discover Available Shares
 
 Discovers SMB shares or NFS exports before creating a mount. This endpoint is intended for the Add Mount browse dialog and reuses the server seed plus optional credentials entered by the operator.
