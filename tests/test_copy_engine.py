@@ -3276,6 +3276,62 @@ def test_run_copy_job_uses_copy_phase_duration_for_rate_and_logs_phase_split(db,
     assert phase_messages[-1].running_duration_seconds == 20
 
 
+def test_run_copy_job_logs_effective_runtime_parameters_at_debug(db, tmp_path, caplog):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "file.txt").write_bytes(b"data")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(
+        db,
+        str(source_dir),
+        target_mount_path=str(target_dir),
+        max_file_retries=5,
+        retry_delay_seconds=7,
+    )
+    job.thread_count = 3
+    db.commit()
+    db.refresh(job)
+
+    original_timeout = copy_engine.settings.copy_job_timeout
+    original_chunk_size = copy_engine.settings.copy_chunk_size_bytes
+    original_flush_bytes = copy_engine.settings.copy_progress_flush_bytes
+    original_fsync = copy_engine.settings.copy_file_fsync_enabled
+    copy_engine.settings.copy_job_timeout = 123
+    copy_engine.settings.copy_chunk_size_bytes = 2_097_152
+    copy_engine.settings.copy_progress_flush_bytes = 8_388_608
+    copy_engine.settings.copy_file_fsync_enabled = True
+
+    try:
+        with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+            with caplog.at_level("DEBUG"):
+                copy_engine.run_copy_job(job.id)
+    finally:
+        copy_engine.settings.copy_job_timeout = original_timeout
+        copy_engine.settings.copy_chunk_size_bytes = original_chunk_size
+        copy_engine.settings.copy_progress_flush_bytes = original_flush_bytes
+        copy_engine.settings.copy_file_fsync_enabled = original_fsync
+
+    parameter_records = [record for record in caplog.records if record.getMessage() == "Copy job runtime parameters"]
+    assert parameter_records
+    record = parameter_records[-1]
+    assert record.job_id == job.id
+    assert record.thread_count == 3
+    assert record.thread_count_source == "job"
+    assert record.max_file_retries == 5
+    assert record.max_file_retries_source == "job"
+    assert record.retry_delay_seconds == 7.0
+    assert record.retry_delay_source == "job"
+    assert record.copy_job_timeout_seconds == 123
+    assert record.copy_chunk_size_bytes == 2_097_152
+    assert record.copy_progress_flush_threshold_bytes == 8_388_608
+    assert record.copy_file_fsync_enabled is True
+    assert record.pending_batch_limit == 12
+    assert record.pending_batch_multiplier == copy_engine.COPY_PENDING_BATCH_MULTIPLIER
+
+
 def test_run_copy_job_emits_job_completed_audit_for_partial_success(db, tmp_path):
     """A job with file errors still emits JOB_COMPLETED with error counts."""
     source_dir = tmp_path / "source"

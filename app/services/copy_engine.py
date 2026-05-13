@@ -320,6 +320,39 @@ def _log_startup_analysis_cache_decision(
     )
 
 
+def _log_copy_job_runtime_parameters(
+    job: ExportJob,
+    *,
+    max_workers: int,
+    batch_limit: int,
+    max_retries: int,
+    retry_delay_seconds: float,
+    file_timeout_seconds: int,
+    copy_chunk_size_bytes: int,
+    copy_progress_flush_threshold_bytes: int,
+    copy_file_fsync_enabled: bool,
+) -> None:
+    logger.debug(
+        "Copy job runtime parameters",
+        extra={
+            "job_id": int(job.id),
+            "project_id": job.project_id,
+            "thread_count": max_workers,
+            "thread_count_source": "job" if job.thread_count is not None else "default",
+            "max_file_retries": max_retries,
+            "max_file_retries_source": "job" if job.max_file_retries is not None else "default",
+            "retry_delay_seconds": retry_delay_seconds,
+            "retry_delay_source": "job" if job.retry_delay_seconds is not None else "default",
+            "copy_job_timeout_seconds": file_timeout_seconds,
+            "copy_chunk_size_bytes": copy_chunk_size_bytes,
+            "copy_progress_flush_threshold_bytes": copy_progress_flush_threshold_bytes,
+            "copy_file_fsync_enabled": copy_file_fsync_enabled,
+            "pending_batch_limit": batch_limit,
+            "pending_batch_multiplier": COPY_PENDING_BATCH_MULTIPLIER,
+        },
+    )
+
+
 def _normalize_started_at(value: Optional[datetime]) -> Optional[datetime]:
     """Return a timezone-stable value for comparing job run ownership."""
     if value is None:
@@ -2118,6 +2151,10 @@ def run_copy_job(job_id: int) -> None:
     try:
         job_repo = JobRepository(db)
         file_repo = FileRepository(db)
+        file_timeout_seconds = int(getattr(settings, "copy_job_timeout", 0) or 0)
+        copy_chunk_size_bytes = int(getattr(settings, "copy_chunk_size_bytes", 0) or 0)
+        copy_progress_flush_threshold_bytes = _progress_flush_threshold_bytes()
+        copy_file_fsync_enabled = bool(getattr(settings, "copy_file_fsync_enabled", False))
 
         job = job_repo.get(job_id)
         if not job:
@@ -2197,6 +2234,17 @@ def run_copy_job(job_id: int) -> None:
                 if not pause_requested:
                     max_workers = int(job.thread_count or settings.copy_default_thread_count)
                     batch_limit = max(1, max_workers * COPY_PENDING_BATCH_MULTIPLIER)
+                    _log_copy_job_runtime_parameters(
+                        job,
+                        max_workers=max_workers,
+                        batch_limit=batch_limit,
+                        max_retries=int(max_retries),
+                        retry_delay_seconds=retry_delay,
+                        file_timeout_seconds=file_timeout_seconds,
+                        copy_chunk_size_bytes=copy_chunk_size_bytes,
+                        copy_progress_flush_threshold_bytes=copy_progress_flush_threshold_bytes,
+                        copy_file_fsync_enabled=copy_file_fsync_enabled,
+                    )
                     stale_run_detected = False
 
                     def _handle_worker_completion(cancel_pending: list[Any] | None = None) -> bool:
