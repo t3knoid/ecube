@@ -10,7 +10,14 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from app.services.copy_path_diagnostic import run_copy_path_diagnostic
+from app.services.copy_path_diagnostic import DEFAULT_SMALL_FILE_STRESS_SAMPLE_FILE_COUNT, run_copy_path_diagnostic
+
+
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("value must be greater than 0")
+    return parsed
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -27,13 +34,13 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--benchmark-bytes",
-        type=int,
+        type=_positive_int,
         default=None,
         help="Sample-budget cap in bytes. Defaults to ECUBE startup-analysis benchmark size.",
     )
     parser.add_argument(
         "--sample-file-count",
-        type=int,
+        type=_positive_int,
         default=None,
         help="When --sample-mode=small-file-stress, copy up to this many smallest files. Defaults to the service default.",
     )
@@ -83,7 +90,11 @@ def main() -> int:
         args.target_path,
         sample_mode=args.sample_mode,
         benchmark_bytes=args.benchmark_bytes,
-        small_file_stress_sample_file_count=args.sample_file_count or 2000,
+        small_file_stress_sample_file_count=(
+            args.sample_file_count
+            if args.sample_file_count is not None
+            else DEFAULT_SMALL_FILE_STRESS_SAMPLE_FILE_COUNT
+        ),
         keep_sample=args.keep_sample,
     ).as_dict()
     if args.json:

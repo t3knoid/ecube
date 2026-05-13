@@ -1,10 +1,13 @@
 from pathlib import Path
 
+import pytest
+
 from app.services.copy_path_diagnostic import (
     _build_diagnostic_notes,
     _build_small_file_stress_sample_plan,
     run_copy_path_diagnostic,
 )
+from scripts.copy_path_diagnostic import _build_parser
 
 
 def test_build_diagnostic_notes_flags_small_file_fsync_bottleneck():
@@ -100,3 +103,21 @@ def test_run_copy_path_diagnostic_small_file_stress_mode_uses_requested_file_cou
     assert result.sample_small_file_count == 3
     assert result.sample_copied_bytes == 32 + 48 + 64
     assert result.sample_copy_files_per_second is not None
+
+
+def test_copy_path_diagnostic_parser_rejects_nonpositive_numeric_flags():
+    parser = _build_parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["/mnt/share", "/mnt/ecube/1", "--benchmark-bytes", "0"])
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["/mnt/share", "/mnt/ecube/1", "--sample-file-count", "-1"])
+
+
+def test_copy_path_diagnostic_parser_preserves_explicit_sample_file_count():
+    parser = _build_parser()
+
+    args = parser.parse_args(["/mnt/share", "/mnt/ecube/1", "--sample-file-count", "1"])
+
+    assert args.sample_file_count == 1
