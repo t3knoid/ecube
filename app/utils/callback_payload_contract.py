@@ -29,6 +29,7 @@ ALLOWED_CALLBACK_PAYLOAD_SOURCE_FIELDS = (
     "drive_serial_number",
     "created_at",
     "started_at",
+    "copy_started_at",
     "completed_at",
     "event_actor",
     "event_at",

@@ -1332,6 +1332,7 @@ class TestDeliverCallback:
             "completion_result",
             "files_failed",
             "started_at",
+            "copy_started_at",
             "completed_at",
             "active_duration_seconds",
             "drive_id",
@@ -1342,6 +1343,7 @@ class TestDeliverCallback:
             "project": "project_id",
             "operator": "started_by",
             "started": "started_at",
+            "copy_started": "copy_started_at",
             "ended": "completed_at",
             "duration_seconds": "active_duration_seconds",
             "destination_drive_id": "drive_id",
@@ -1363,6 +1365,7 @@ class TestDeliverCallback:
         db.add(DriveAssignment(job_id=job.id, drive_id=drive.id))
         db.commit()
         db.refresh(job)
+        job.copy_started_at = datetime(2026, 1, 1, 0, 0, 10, tzinfo=timezone.utc)
         payload = build_callback_payload(job)
 
         assert payload == {
@@ -1370,6 +1373,7 @@ class TestDeliverCallback:
             "project": job.project_id,
             "operator": job.started_by,
             "started": "2026-01-01T00:00:00+00:00",
+            "copy_started": "2026-01-01T00:00:10+00:00",
             "ended": "2026-01-01T00:00:00+00:00",
             "duration_seconds": 33,
             "destination_drive_id": drive.id,
