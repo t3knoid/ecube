@@ -3,9 +3,9 @@
 #
 # Steps:
 # 1) npm ci
-# 2) playwright browser install (chromium + webkit)
+# 2) npm run playwright:install
 # 3) npm run build
-# 4) playwright test --update-snapshots
+# 4) npm run test:e2e:update-snapshots
 #
 # The script returns Playwright's exit status so callers can detect snapshot
 # update failures in automation.
