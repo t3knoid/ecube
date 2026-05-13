@@ -298,7 +298,7 @@ The dashboard provides a quick operational summary.
 
 The page refreshes system health, drive state, mount workflow counts, the `Needs Attention` section, and the active-jobs table automatically about every 10 seconds. The `Refresh` button requests the same full dashboard snapshot on demand.
 
-The `Drive Summary` and `Mounts Summary` entries act as drill-down controls. Selecting a summary entry opens the matching destination page with the corresponding drive state or mount workflow bucket preselected so the follow-up page stays aligned with the dashboard context.
+The `Drive Summary` and `Shares Summary` entries act as drill-down controls. Selecting a summary entry opens the matching destination page with the corresponding drive state or share workflow bucket preselected so the follow-up page stays aligned with the dashboard context.
 
 Typical information shown:
 
@@ -307,7 +307,7 @@ Typical information shown:
 - Number of active jobs
 - `Needs Attention` table for blocked work, waiting-to-start assignments, and completed jobs that still require chain-of-custody closeout
 - Drive state summary (`DISCONNECTED`, `DISABLED`, `AVAILABLE`, `IN_USE`)
-- Mount workflow summary (`Unassigned`, `Assigned`, `Active`, `Blocked`, `Custody Pending`, `Completed`, `Unavailable`), where `Assigned` means a job exists but has not started, `Active` includes preparing, running, pausing, and verifying work, `Blocked` captures paused or failed work, `Custody Pending` captures completed or archived jobs whose handoff is still pending, and `Unavailable` marks mounts whose trusted related-job or custody state could not be derived
+- Mount workflow summary (`Unassigned`, `Assigned`, `Active`, `Blocked`, `Custody Pending`, `Completed`, `Unavailable`), where `Assigned` means a job exists but has not started, `Active` includes preparing, running, pausing, and verifying work, `Blocked` captures paused or failed work, `Custody Pending` captures completed or archived jobs whose handoff is still pending, and `Unavailable` marks shares whose trusted related-job or custody state could not be derived
 - Table of active jobs with derived `Next Step` guidance plus trusted source, destination, and live-copy context on wider screens with compact status and progress treatment on smaller screens
 
 The `Needs Attention` section highlights trusted workflow items that require follow-up from processors or managers. `Blocked` covers failed or paused jobs, `Waiting to Start` highlights pending assignments, and `Waiting on Custody Closeout` highlights completed or archived jobs whose trusted custody state is still `Pending handoff`. The `Needs Attention` and active-jobs tables both include a read-only `Next Step` column derived from trusted lifecycle, startup-analysis, failed-file, and custody state so operators can triage work before opening Job Detail. Each row uses the `Job ID` value as the direct navigation path into Job Detail. On wider screens, the `Project` column also carries trusted source-mount, source-path, destination-drive, and follow-up context when those fields are available. On smaller screens, the dashboard stacks the summary cards vertically, hides the `Project` column in the `Needs Attention` and active-jobs tables to avoid horizontal overflow, replaces full status badges with compact labeled icons, and reduces active-job progress to the percentage label while preserving `Next Step` guidance. The dashboard source-mount label follows the same role boundary as Mount Detail: `admin` and `manager` users see the raw mount path, while lower-privilege operational roles see a redacted value.
@@ -475,23 +475,23 @@ If ECUBE detects timed-out or failed files in active drive assignments, the firs
 
 > **Access Summary**
 > **Page visibility:** `admin`, `manager`, `processor`, `auditor`
-> **Restricted actions:** `admin` and `manager` can add mounts. Mounted-share browsing from the list and from Mount Detail is available to `admin`, `manager`, and `processor`, but not `auditor`.
+> **Restricted actions:** `admin` and `manager` can add shares. Mounted-share browsing from the list and from Share Detail is available to `admin`, `manager`, and `processor`, but not `auditor`.
 
-The `Mounts` page manages source locations used for export jobs.
+The `Shares` page manages source locations used for export jobs.
 
 You can typically:
 
-- Refresh the mount list
-- Open Mount Detail for an existing mount definition from the clickable mount ID
-- Filter the list by workflow bucket (`Unassigned`, `Assigned`, `Active`, `Blocked`, `Custody Pending`, `Completed`, or `Unavailable`) or search by mount details
+- Refresh the share list
+- Open Share Detail for an existing share definition from the clickable share ID
+- Filter the list by workflow bucket (`Unassigned`, `Assigned`, `Active`, `Blocked`, `Custody Pending`, `Completed`, or `Unavailable`) or search by share details
 
-`admin` and `manager` users can also add a new mount definition and edit or remove a mount from Mount Detail. `processor` users can browse mounted shares from the clickable project value on the Shares page and from Mount Detail. `auditor` users can open the Shares page and Mount Detail, but they do not see browse, `Test Throughput`, `Edit`, or `Remove` actions and sensitive path fields remain redacted.
+`admin` and `manager` users can also add a new share definition and edit or remove a share from Share Detail. `processor` users can browse mounted shares from the clickable project value on the Shares page and from Share Detail. `auditor` users can open the Shares page and Share Detail, but they do not see browse, `Test Throughput`, `Edit`, or `Remove` actions and sensitive path fields remain redacted.
 
-When you arrive from a Dashboard `Mounts Summary` entry, the matching workflow bucket is preselected so the destination list stays aligned with the dashboard context.
+When you arrive from a Dashboard `Shares Summary` entry, the matching workflow bucket is preselected so the destination list stays aligned with the dashboard context.
 
-### 8.1 Adding a Mount
+### 8.1 Adding a Share
 
-The add-mount dialog supports common fields such as:
+The add-share dialog supports common fields such as:
 
 - Type (`SMB` or `NFS`)
 - Project ID
@@ -500,9 +500,9 @@ The add-mount dialog supports common fields such as:
 - Password
 - Credentials file
 
-When adding a new mount, `admin` and `manager` users can use `Browse` inside the dialog to discover available SMB shares or NFS exports from the entered target server. The browse dialog reuses any credentials entered in the form, shows discovered shares in a scrollable picker when the result set is long, and selecting a result fills the `Remote path` field automatically.
+When adding a new share, `admin` and `manager` users can use `Browse` inside the dialog to discover available SMB shares or NFS exports from the entered target server. The browse dialog reuses any credentials entered in the form, shows discovered shares in a scrollable picker when the result set is long, and selecting a result fills the `Remote path` field automatically.
 
-Project assignment is required when creating a mount. Drives can only be initialized for projects that have at least one assigned share in the `MOUNTED` state.
+Project assignment is required when creating a share. Drives can only be initialized for projects that have at least one assigned share in the `MOUNTED` state.
 
 ECUBE rejects exact duplicate remote paths and blocks overlapping parent or child remote paths across different projects. Nested paths for the same project remain allowed. If two operators submit changes at the same time, one request may briefly return a conflict while ECUBE finishes the in-progress update.
 
@@ -516,33 +516,33 @@ The exact credential fields required depend on the mount type and your environme
 
 If share browsing is unavailable because the ECUBE host is missing a required discovery tool, the dialog  shows an actionable message telling the operator which host package to install before retrying. Demo mode does not hide the browse control or block share discovery.
 
-### 8.1.1 Editing a Mount
+### 8.1.1 Editing a Share
 
-Use the clickable mount ID on an existing mount row to open Mount Detail, then use `Edit` from the detail action row to reopen the edit dialog in place.
+Use the clickable share ID on an existing share row to open Share Detail, then use `Edit` from the detail action row to reopen the edit dialog in place.
 
 - The dialog pre-fills the current type, remote path, and project ID.
-- Mount Detail shows Type, Project, NFS Client version, Last Checked, Latest Read Speed, Last Throughput Test, Job ID, Job Status, and mount Status before you open the dialog. `Job Status` is sourced from trusted backend job data when a related job exists, falls back to `No related job` when the project has no current related job, and falls back to `Status unavailable` instead of guessing when authoritative job status cannot be determined. The dashboard mount workflow summary separately considers trusted related-job custody status, so preparing, running, pausing, or verifying jobs appear under `Active`, paused or failed jobs appear under `Blocked`, completed or archived jobs with pending handoff appear under `Custody Pending`, and `Unavailable` remains the fallback when trusted related-job or custody classification cannot be derived for that mount. `admin` and `manager` users also see the raw Remote Path and Local Mount Point values there; read-only roles see those path fields redacted.
+- Share Detail shows Type, Project, NFS Client version, Last Checked, Latest Read Speed, Last Throughput Test, Job ID, Job Status, and share Status before you open the dialog. `Job Status` is sourced from trusted backend job data when a related job exists, falls back to `No related job` when the project has no current related job, and falls back to `Status unavailable` instead of guessing when authoritative job status cannot be determined. The dashboard share workflow summary separately considers trusted related-job custody status, so preparing, running, pausing, or verifying jobs appear under `Active`, paused or failed jobs appear under `Blocked`, completed or archived jobs with pending handoff appear under `Custody Pending`, and `Unavailable` remains the fallback when trusted related-job or custody classification cannot be derived for that share. `admin` and `manager` users also see the raw Remote Path and Local Mount Point values there; read-only roles see those path fields redacted.
 - The local mount point is shown as read-only informational context and is not directly editable.
 - Stored credentials are not returned to the UI. Leaving the credential fields blank preserves the stored values.
 - Use `Clear saved credentials` if you need to remove previously stored SMB credentials without replacing them in the same edit.
 
-When you save, ECUBE updates the existing mount record instead of creating a new one. If the share is currently mounted, ECUBE attempts to remount it immediately with the edited options, including any explicit NFS client-version override. If the backend rejects the change, or if the returned mount status is `ERROR`, the dialog stays open so you can review the returned error state before closing it.
+When you save, ECUBE updates the existing share record instead of creating a new one. If the share is currently mounted, ECUBE attempts to remount it immediately with the edited options, including any explicit NFS client-version override. If the backend rejects the change, or if the returned share status is `ERROR`, the dialog stays open so you can review the returned error state before closing it.
 
-When the selected share is `MOUNTED`, `admin` and `manager` users can run `Test Throughput` from Mount Detail. The action measures read throughput from the mounted share, stores the latest result on the mount record, and refreshes the `Latest Read Speed` plus `Last Throughput Test` fields on the detail page. This action is separate from the `Test` button inside the Add/Edit dialogs, which continues to validate connectivity for the configuration being edited.
+When the selected share is `MOUNTED`, `admin` and `manager` users can run `Test Throughput` from Share Detail. The action measures read throughput from the mounted share, stores the latest result on the share record, and refreshes the `Latest Read Speed` plus `Last Throughput Test` fields on the detail page. This action is separate from the `Test` button inside the Add/Edit dialogs, which continues to validate connectivity for the configuration being edited.
 
-### 8.2 Testing Mount Connectivity
+### 8.2 Testing Share Connectivity
 
-Use `Test` inside the `Add Share` dialog before creating a new mount, or inside the `Edit Share` dialog before saving changes to an existing mount.
+Use `Test` inside the `Add Share` dialog before creating a new share, or inside the `Edit Share` dialog before saving changes to an existing share.
 
-The dialog must show a successful test result before `Create` or `Save` becomes available. This keeps mount validation tied to the exact configuration you are about to persist rather than to a separate list-level action.
+The dialog must show a successful test result before `Create` or `Save` becomes available. This keeps share validation tied to the exact configuration you are about to persist rather than to a separate list-level action.
 
 When a successful validation also returns operator guidance, the dialog keeps the normal success banner and shows a separate warning banner in the same header area. For NFS shares, the warning can explain that the effective `NFS 4.1` validation path is slow on the current server and that `NFS 3` validated much faster during the same test workflow, including when the dialog is left on `Use default (4.1)`.
 
-### 8.3 Removing a Mount
+### 8.3 Removing a Share
 
-From Mount Detail, `admin` and `manager` users can remove the mount definition when it is no longer needed.
+From Share Detail, `admin` and `manager` users can remove the share definition when it is no longer needed.
 
-Remove a mount only if it is no longer needed. If existing workflows depend on it, removing the definition can interrupt job creation or repeatability.
+Remove a share only if it is no longer needed. If existing workflows depend on it, removing the definition can interrupt job creation or repeatability.
 
 ![Shares page with ID link and Browse action (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/mounts-default-chromium-linux.png)
 
@@ -555,7 +555,7 @@ The directory browser allows users to explore the contents of active mount point
 **Accessing the browser:**
 
 - **From Drive Detail:** Click the `Browse` button on any mounted drive to open the directory browser rooted at that drive's mount point.
-- **From Mounts:** Click the mounted share's `Project` value to open browse directly from the list. The browse panel title uses the same project value in the form `Browse mount <project> contents`.
+- **From Shares:** Click the mounted share's `Project` value to open browse directly from the list. The browse panel title uses the same project value in the form `Browse share <project> contents`.
 - **Mounted share root display:** Mounted-share browsing starts at `/`. The breadcrumb must not expose the share name, local mount point, or a doubled leading slash such as `//folder`.
 
 **Navigating:**
@@ -1044,7 +1044,7 @@ The results page shows:
 - A `Current USB Drives` table with drive fields similar to the Drives page.
 - A `Current Shared Mounts` table with mount fields similar to the Shares page.
 
-These tables are post-run snapshots of current drive and mount state to help operators investigate reconciliation outcomes; they are not limited to only rows that were corrected during the run.
+These tables are post-run snapshots of current drive and share state to help operators investigate reconciliation outcomes; they are not limited to only rows that were corrected during the run.
 
 On smaller screens, these tables follow the same compact treatment as the main Drives and Shares pages by keeping the most important columns visible and reducing lower-priority metadata.
 
