@@ -2305,10 +2305,12 @@ $$
 
 Use the repository helper `scripts/copy_path_diagnostic.py` when a mounted-share throughput test, mounted-drive throughput test, or completed job result needs deeper drill-down before repeating a full manual run. The script does not create an ECUBE job or persist database state. It measures isolated share-read throughput, isolated drive-write throughput, and a sampled end-to-end copy through the same `copy_file()` path used by the copy engine.
 
+Run the helper from the repository root and point `target_path` at an ECUBE-managed mounted USB directory under the configured USB mount base. Do not point the diagnostic at arbitrary host directories or reuse the mounted source path as the target.
+
 Run the balanced sample mode when you want a quick byte-budget sample that matches the startup-analysis benchmark shape:
 
 ```bash
-/home/frank/ecube/.venv/bin/python ./scripts/copy_path_diagnostic.py \
+./.venv/bin/python ./scripts/copy_path_diagnostic.py \
   /mnt/ecube-network/demo-case-002 \
   /mnt/ecube/1 \
   --json
@@ -2317,7 +2319,7 @@ Run the balanced sample mode when you want a quick byte-budget sample that match
 Run the small-file stress mode when the source tree is dominated by many small files and you need a result that emphasizes files-per-second and metadata churn on the target:
 
 ```bash
-/home/frank/ecube/.venv/bin/python ./scripts/copy_path_diagnostic.py \
+./.venv/bin/python ./scripts/copy_path_diagnostic.py \
   /mnt/ecube-network/demo-case-002 \
   /mnt/ecube/1 \
   --sample-mode small-file-stress \
