@@ -1060,6 +1060,7 @@ def test_run_copy_job_automatically_continues_overflow_on_next_project_drive(db,
     db.commit()
 
     copy_attempts = {"count": 0}
+    overflowed_relative_path = {"value": None}
     original_copy_file = copy_engine.copy_file
 
     class _Probe:
@@ -1071,6 +1072,7 @@ def test_run_copy_job_automatically_continues_overflow_on_next_project_drive(db,
     def _copy_with_single_overflow(src, dst, **kwargs):
         copy_attempts["count"] += 1
         if copy_attempts["count"] == 1:
+            overflowed_relative_path["value"] = Path(src).name
             return False, None, f"disk full on {first_target}"
         return original_copy_file(src, dst, **kwargs)
 
@@ -1113,8 +1115,14 @@ def test_run_copy_job_automatically_continues_overflow_on_next_project_drive(db,
     assert assignments[0].released_at is not None
     assert assignments[1].drive_id == second_drive.id
     assert all(file.status == FileStatus.DONE for file in files)
-    assert files_by_path["first.txt"].drive_assignment_id == assignments[1].id
-    assert files_by_path["second.txt"].drive_assignment_id == assignments[0].id
+    assert overflowed_relative_path["value"] in files_by_path
+    retained_relative_path = next(
+        relative_path
+        for relative_path in files_by_path
+        if relative_path != overflowed_relative_path["value"]
+    )
+    assert files_by_path[overflowed_relative_path["value"]].drive_assignment_id == assignments[1].id
+    assert files_by_path[retained_relative_path].drive_assignment_id == assignments[0].id
     assert overflow_audit is not None
     assert overflow_audit.details["automatic"] is True
     assert target_full_audit is not None
