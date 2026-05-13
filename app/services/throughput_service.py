@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.exceptions import service_exception
 from app.infrastructure.throughput_benchmark import ThroughputBenchmarkProvider
-from app.models.hardware import DriveState, UsbDrive
+from app.models.hardware import DriveFormatStatus, DriveState, UsbDrive
 from app.models.network import MountStatus, NetworkMount
 from app.repositories.drive_repository import DriveRepository
 from app.repositories.mount_repository import MountRepository
@@ -80,6 +80,12 @@ def test_drive_write_throughput(
     drive = drive_repo.get_for_update(drive_id)
     if drive is None:
         raise service_exception(status_code=404, detail="Drive not found")
+
+    if drive.format_status == DriveFormatStatus.PENDING:
+        raise service_exception(
+            status_code=409,
+            detail="Drive format is in progress; wait for formatting to complete before running throughput testing",
+        )
 
     if drive.current_state not in _MANUAL_DRIVE_THROUGHPUT_STATES or not drive.mount_path:
         log_and_audit(

@@ -48,6 +48,11 @@ Enum drive_state {
   IN_USE
 }
 
+Enum drive_format_status {
+  PENDING
+  FAILED
+}
+
 Enum file_status {
   PENDING
   COPYING
@@ -219,11 +224,16 @@ Table usb_drives {
   mount_path varchar
   throughput_write_mbps float
   throughput_tested_at timestamptz
+  format_status drive_format_status
+  format_failure_message varchar
+  format_started_at timestamptz
+  format_finished_at timestamptz
   last_seen_at timestamptz
 
   indexes {
     current_project_id [name: 'ix_usb_drives_current_project_id']
     current_state [name: 'ix_usb_drives_current_state']
+    format_status [name: 'ix_usb_drives_format_status']
     mount_path [name: 'ix_usb_drives_mount_path']
     (current_state, current_project_id) [name: 'ix_usb_drives_state_project']
   }

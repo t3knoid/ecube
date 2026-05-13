@@ -1,17 +1,20 @@
 import logging
 import os
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
+from fastapi import BackgroundTasks
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.database import SessionLocal
 from app.exceptions import ConflictError, ECUBEException, service_exception
 from app.infrastructure.drive_eject import DriveEjectProvider
 from app.infrastructure.drive_format import DriveFormatter
 from app.infrastructure.drive_mount import DriveMountProvider
 from app.infrastructure import FilesystemDetector, validate_device_path
-from app.models.hardware import DriveState, UsbDrive
+from app.models.hardware import DriveFormatStatus, DriveState, UsbDrive
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
@@ -72,6 +75,27 @@ def _redacted_device_name(path: Optional[str]) -> Optional[str]:
     if not path:
         return None
     return os.path.basename(path.rstrip("/")) or None
+
+
+def _reject_pending_drive_format(drive: Optional[UsbDrive], *, action: str) -> None:
+    if getattr(drive, "format_status", None) != DriveFormatStatus.PENDING:
+        return
+    raise service_exception(
+        status_code=409,
+        detail=f"Drive format is already in progress; wait for formatting to complete before attempting to {action}",
+    )
+
+
+def _set_drive_format_failure(
+    drive: UsbDrive,
+    drive_repo: DriveRepository,
+    *,
+    detail: str,
+) -> UsbDrive:
+    drive.format_status = DriveFormatStatus.FAILED
+    drive.format_failure_message = detail
+    drive.format_finished_at = datetime.now(timezone.utc)
+    return drive_repo.save(drive)
 
 
 def _is_already_mounted_error(error: Optional[str]) -> bool:
@@ -297,6 +321,7 @@ def initialize_drive(
     drive = drive_repo.get_for_update(drive_id)
     if not drive:
         raise service_exception(status_code=404, detail="Drive not found")
+    _reject_pending_drive_format(drive, action="initialize this drive")
 
     # DISCONNECTED drives are physically absent, and DISABLED drives are
     # present on a blocked port. Initialization requires AVAILABLE so the
@@ -543,6 +568,7 @@ def mount_drive(
     drive = drive_repo.get(drive_id)
     if not drive:
         raise service_exception(status_code=404, detail="Drive not found")
+    _reject_pending_drive_format(drive, action="mount this drive")
 
     initial_state = drive.current_state
     initial_filesystem_path = drive.filesystem_path
@@ -796,6 +822,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
     drive = drive_repo.get(drive_id)
     if not drive:
         raise service_exception(status_code=404, detail="Drive not found")
+    _reject_pending_drive_format(drive, action="prepare-eject this drive")
 
     # Capture the precondition state for later validation.
     initial_state = drive.current_state
@@ -1082,9 +1109,10 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
     return drive
 
 
-def format_drive(
+def request_drive_format(
     drive_id: int,
     filesystem_type: str,
+    background_tasks: BackgroundTasks,
     db: Session,
     *,
     formatter: DriveFormatter,
@@ -1092,13 +1120,13 @@ def format_drive(
     actor: Optional[str] = None,
     client_ip: Optional[str] = None,
 ) -> UsbDrive:
-    """Format a drive with the specified filesystem type."""
+    """Queue a drive-format request and return the updated drive status."""
     drive_repo = DriveRepository(db)
-    audit_repo = AuditRepository(db)
 
     drive = drive_repo.get_for_update(drive_id)
     if not drive:
         raise service_exception(status_code=404, detail="Drive not found")
+    _reject_pending_drive_format(drive, action="format this drive again")
 
     if drive.current_state != DriveState.AVAILABLE:
         raise service_exception(
@@ -1130,9 +1158,141 @@ def format_drive(
             detail="Drive is currently mounted; unmount before formatting",
         )
 
+    drive.format_status = DriveFormatStatus.PENDING
+    drive.format_failure_message = None
+    drive.format_started_at = datetime.now(timezone.utc)
+    drive.format_finished_at = None
+    drive_repo.save(drive)
+
+    background_tasks.add_task(
+        _run_drive_format_task,
+        drive_id,
+        filesystem_type,
+        formatter,
+        filesystem_detector,
+        actor,
+        client_ip,
+    )
+
+    _attach_related_job_contexts(db, [drive], include_related_job_custody=True)
+    return drive
+
+
+def _run_drive_format_task(
+    drive_id: int,
+    filesystem_type: str,
+    formatter: DriveFormatter,
+    filesystem_detector: FilesystemDetector,
+    actor: Optional[str] = None,
+    client_ip: Optional[str] = None,
+) -> None:
+    db = SessionLocal()
+    try:
+        _complete_drive_format(
+            drive_id,
+            filesystem_type,
+            db,
+            formatter=formatter,
+            filesystem_detector=filesystem_detector,
+            actor=actor,
+            client_ip=client_ip,
+        )
+    except Exception as exc:
+        logger.info(
+            "Drive format task failed unexpectedly",
+            extra={
+                "drive_id": drive_id,
+                "failure_class": "drive_format_task_failed",
+            },
+        )
+        logger.debug(
+            "Drive format task diagnostics",
+            extra={
+                "drive_id": drive_id,
+                "filesystem_type": filesystem_type,
+                "raw_error": str(exc),
+            },
+        )
+        try:
+            drive_repo = DriveRepository(db)
+            drive = drive_repo.get_for_update(drive_id)
+            if drive and drive.format_status == DriveFormatStatus.PENDING:
+                _set_drive_format_failure(
+                    drive,
+                    drive_repo,
+                    detail="Drive format failed; verify the device is available and retry",
+                )
+        except Exception:
+            logger.exception("Failed to persist drive format background-task failure for drive %s", drive_id)
+    finally:
+        db.close()
+
+
+def _complete_drive_format(
+    drive_id: int,
+    filesystem_type: str,
+    db: Session,
+    *,
+    formatter: DriveFormatter,
+    filesystem_detector: FilesystemDetector,
+    actor: Optional[str] = None,
+    client_ip: Optional[str] = None,
+) -> Optional[UsbDrive]:
+    """Run the drive format operation inside a background task-owned DB session."""
+    drive_repo = DriveRepository(db)
+    audit_repo = AuditRepository(db)
+
+    drive = drive_repo.get_for_update(drive_id)
+    if not drive:
+        logger.info(
+            "Drive format task skipped because the drive no longer exists",
+            extra={
+                "drive_id": drive_id,
+                "failure_class": "drive_format_missing_drive",
+            },
+        )
+        return None
+
+    if drive.format_status != DriveFormatStatus.PENDING:
+        logger.info(
+            "Drive format task skipped because the drive is not pending formatting",
+            extra={
+                "drive_id": drive_id,
+                "failure_class": "drive_format_not_pending",
+            },
+        )
+        return drive
+
+    if drive.current_state != DriveState.AVAILABLE:
+        return _set_drive_format_failure(
+            drive,
+            drive_repo,
+            detail="Drive is no longer available for formatting; refresh drive status and retry",
+        )
+
+    if not drive.filesystem_path or not validate_device_path(drive.filesystem_path):
+        return _set_drive_format_failure(
+            drive,
+            drive_repo,
+            detail="Drive device path is unavailable; refresh drive status and retry",
+        )
+
+    if drive.mount_path or formatter.is_mounted(drive.filesystem_path):
+        return _set_drive_format_failure(
+            drive,
+            drive_repo,
+            detail="Drive is mounted; unmount before formatting and retry",
+        )
+
     try:
         formatter.format(drive.filesystem_path, filesystem_type)
     except RuntimeError as exc:
+        safe_error = sanitize_error_message(exc, "Drive format failed")
+        drive = _set_drive_format_failure(
+            drive,
+            drive_repo,
+            detail=safe_error,
+        )
         try:
             audit_repo.add(
                 action="DRIVE_FORMAT_FAILED",
@@ -1143,17 +1303,14 @@ def format_drive(
                     "drive_id": drive_id,
                     "filesystem_path": drive.filesystem_path,
                     "filesystem_type": filesystem_type,
-                    "error": str(exc),
+                    "error": safe_error,
                     "actor": actor,
                 },
                 client_ip=client_ip,
             )
         except Exception:
             logger.exception("Failed to write audit log for DRIVE_FORMAT_FAILED")
-        raise service_exception(
-            status_code=500,
-            detail=f"Drive format failed: {exc}",
-        )
+        return drive
 
     detected_filesystem_type: Optional[str] = None
     try:
@@ -1185,10 +1342,13 @@ def format_drive(
 
     drive.filesystem_type = filesystem_type
     drive.available_bytes = None
+    drive.format_status = None
+    drive.format_failure_message = None
     # Formatting wipes all previous data, so the project binding is cleared.
     # The drive is now clean and can be initialized for any project.
     prior_project_id = drive.current_project_id
     drive.current_project_id = None
+    drive.format_finished_at = datetime.now(timezone.utc)
     try:
         drive_repo.save(drive)
     except Exception:

@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_serializer
-from app.models.hardware import DriveState
+from app.models.hardware import DriveFormatStatus, DriveState
 from app.utils.sanitize import ProjectIdStr, SafeStr
 
 
@@ -93,10 +93,30 @@ class UsbDriveSchema(BaseModel):
     mount_path: Optional[str] = Field(default=None, description="Active mount path for this drive (e.g. /mnt/ecube/7); null when not mounted")
     throughput_write_mbps: Optional[float] = Field(default=None, description="Most recent measured manual drive write speed in MB/s when available")
     throughput_tested_at: Optional[datetime] = Field(default=None, description="Timestamp of the most recent manual throughput test for this drive")
+    format_status: Optional[DriveFormatStatus] = Field(
+        default=None,
+        description="Current asynchronous drive-format state; null when no format request is pending and no retained format failure is present",
+    )
+    format_failure_message: Optional[str] = Field(
+        default=None,
+        description="Sanitized operator-safe reason for the most recent failed drive-format request when available",
+    )
+    format_started_at: Optional[datetime] = Field(
+        default=None,
+        description="Timestamp when the current or most recent asynchronous drive-format request started",
+    )
+    format_finished_at: Optional[datetime] = Field(
+        default=None,
+        description="Timestamp when the most recent asynchronous drive-format request completed or failed",
+    )
     related_job: Optional[DriveRelatedJobSchema] = Field(
         default=None,
         description="Trusted related job context for this drive lifecycle when requested",
     )
+
+    @field_serializer("format_started_at", "format_finished_at")
+    def _serialize_format_datetimes(self, dt: Optional[datetime]) -> Optional[str]:
+        return _serialize_utc_datetime(dt)
 
     model_config = {"from_attributes": True}
 

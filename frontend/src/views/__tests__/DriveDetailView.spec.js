@@ -80,6 +80,10 @@ function buildDrive(overrides = {}) {
     port_id: 1,
     throughput_write_mbps: null,
     throughput_tested_at: null,
+    format_status: null,
+    format_failure_message: null,
+    format_started_at: null,
+    format_finished_at: null,
     related_job: {
       job_id: null,
       evidence_number: null,
@@ -449,44 +453,69 @@ describe('DriveDetailView mount workflow', () => {
     expect(wrapper.text()).toContain(i18n.global.t('drives.custodyStatusNone'))
   })
 
-  it('clears stale evidence immediately after formatting without leaving the page', async () => {
-    mocks.getDrives.mockResolvedValue([
-      buildDrive({
-        current_project_id: 'PROJ-007',
-        mount_path: null,
-        related_job: {
-          job_id: 44,
-          evidence_number: 'EV-STALE',
-          custody_status: 'PENDING_HANDOFF',
-          delivery_time: null,
-        },
-      }),
-    ])
-    mocks.formatDrive.mockResolvedValue(buildDrive({ current_project_id: null, mount_path: null }))
+  it('clears stale evidence after async formatting completes without leaving the page', async () => {
+    vi.useFakeTimers()
+    mocks.getDrives
+      .mockResolvedValueOnce([
+        buildDrive({
+          current_project_id: 'PROJ-007',
+          mount_path: null,
+          related_job: {
+            job_id: 44,
+            evidence_number: 'EV-STALE',
+            custody_status: 'PENDING_HANDOFF',
+            delivery_time: null,
+          },
+        }),
+      ])
+      .mockResolvedValueOnce([buildDrive({ current_project_id: null, mount_path: null })])
+    mocks.formatDrive.mockResolvedValue(buildDrive({
+      current_project_id: 'PROJ-007',
+      mount_path: null,
+      format_status: 'PENDING',
+      related_job: {
+        job_id: 44,
+        evidence_number: 'EV-STALE',
+        custody_status: 'PENDING_HANDOFF',
+        delivery_time: null,
+      },
+    }))
 
-    const wrapper = mountView()
-    await flushPromises()
+    try {
+      const wrapper = mountView()
+      await flushPromises()
 
-    expect(wrapper.text()).toContain('EV-STALE')
-    expect(wrapper.text()).toContain('44')
-    expect(wrapper.find('.cell-link').exists()).toBe(true)
+      expect(wrapper.text()).toContain('EV-STALE')
+      expect(wrapper.text()).toContain('44')
+      expect(wrapper.find('.cell-link').exists()).toBe(true)
 
-    const formatButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.format'))
-    expect(formatButton).toBeTruthy()
+      const formatButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.format'))
+      expect(formatButton).toBeTruthy()
 
-    await formatButton.trigger('click')
-    await flushPromises()
+      await formatButton.trigger('click')
+      await flushPromises()
 
-    await wrapper.find('.confirm-dialog-confirm').trigger('click')
-    await flushPromises()
+      await wrapper.find('.confirm-dialog-confirm').trigger('click')
+      await flushPromises()
 
-    expect(mocks.formatDrive).toHaveBeenCalledWith(7, { filesystem_type: 'ext4' }, { timeout: 0 })
-    expect(wrapper.text()).not.toContain('EV-STALE')
-    expect(wrapper.text()).toContain(`${i18n.global.t('jobs.evidence')}-`)
-    expect(wrapper.text()).not.toContain('44')
-    expect(wrapper.text()).toContain(`${i18n.global.t('jobs.jobId')}-`)
-    expect(wrapper.text()).toContain(i18n.global.t('drives.custodyStatusNone'))
-    expect(wrapper.find('.cell-link').exists()).toBe(false)
+      expect(mocks.formatDrive).toHaveBeenCalledWith(7, { filesystem_type: 'ext4' })
+      expect(wrapper.find('.confirm-dialog-stub').exists()).toBe(false)
+      expect(wrapper.text()).toContain(i18n.global.t('drives.formatSubmitted'))
+      expect(wrapper.text()).toContain(i18n.global.t('drives.formatPending'))
+
+      await vi.advanceTimersByTimeAsync(3000)
+      await flushPromises()
+
+      expect(wrapper.text()).not.toContain('EV-STALE')
+      expect(wrapper.text()).toContain(`${i18n.global.t('jobs.evidence')}-`)
+      expect(wrapper.text()).not.toContain('44')
+      expect(wrapper.text()).toContain(`${i18n.global.t('jobs.jobId')}-`)
+      expect(wrapper.text()).toContain(i18n.global.t('drives.custodyStatusNone'))
+      expect(wrapper.find('.cell-link').exists()).toBe(false)
+      expect(wrapper.text()).toContain(i18n.global.t('drives.formatSuccess'))
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('shows pending handoff when trusted backend data reports incomplete custody', async () => {
@@ -547,31 +576,44 @@ describe('DriveDetailView mount workflow', () => {
     expect(wrapper.text()).toContain(i18n.global.t('drives.custodyStatusUnavailable'))
   })
 
-  it('shows sanitized backend detail when drive formatting fails', async () => {
-    mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-007', mount_path: null })])
-    mocks.formatDrive.mockRejectedValue({
-      response: {
-        status: 500,
-        data: {
-          detail: 'Format timed out after 900s',
-        },
-      },
-    })
+  it('shows sanitized backend detail when async drive formatting fails', async () => {
+    vi.useFakeTimers()
+    mocks.getDrives
+      .mockResolvedValueOnce([buildDrive({ current_project_id: 'PROJ-007', mount_path: null })])
+      .mockResolvedValueOnce([buildDrive({
+        current_project_id: 'PROJ-007',
+        mount_path: null,
+        format_status: 'FAILED',
+        format_failure_message: 'Format timed out after 900s',
+      })])
+    mocks.formatDrive.mockResolvedValue(buildDrive({
+      current_project_id: 'PROJ-007',
+      mount_path: null,
+      format_status: 'PENDING',
+    }))
 
-    const wrapper = mountView()
-    await flushPromises()
+    try {
+      const wrapper = mountView()
+      await flushPromises()
 
-    const formatButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.format'))
-    expect(formatButton).toBeTruthy()
+      const formatButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.format'))
+      expect(formatButton).toBeTruthy()
 
-    await formatButton.trigger('click')
-    await flushPromises()
+      await formatButton.trigger('click')
+      await flushPromises()
 
-    await wrapper.find('.confirm-dialog-confirm').trigger('click')
-    await flushPromises()
+      await wrapper.find('.confirm-dialog-confirm').trigger('click')
+      await flushPromises()
 
-    expect(wrapper.text()).toContain('Format timed out after 900s')
-    expect(wrapper.text()).not.toContain(i18n.global.t('common.errors.requestConflict'))
+      await vi.advanceTimersByTimeAsync(3000)
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('Format timed out after 900s')
+      expect(wrapper.text()).not.toContain(i18n.global.t('common.errors.requestConflict'))
+      expect(wrapper.text()).not.toContain(i18n.global.t('drives.formatSubmitted'))
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('hides Enable Drive when the drive is disconnected and not physically detected', async () => {

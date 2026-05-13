@@ -1,7 +1,7 @@
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.auth import CurrentUser, require_roles
@@ -164,10 +164,16 @@ def refresh_drives(
     )
 
 
-@router.post("/{drive_id}/format", response_model=UsbDriveSchema, responses={**R_401, **R_403, **R_400, **R_404, **R_409, **R_422, **R_500})
+@router.post(
+    "/{drive_id}/format",
+    response_model=UsbDriveSchema,
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={**R_401, **R_403, **R_400, **R_404, **R_409, **R_422, **R_500},
+)
 def format_drive(
     drive_id: int,
     body: DriveFormatRequest,
+    background_tasks: BackgroundTasks,
     *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ADMIN_MANAGER),
@@ -181,8 +187,13 @@ def format_drive(
     **Roles:** ``admin``, ``manager``
     """
     formatter = get_drive_formatter()
-    return drive_service.format_drive(
-        drive_id, body.filesystem_type, db, formatter=formatter, actor=current_user.username,
+    return drive_service.request_drive_format(
+        drive_id,
+        body.filesystem_type,
+        background_tasks,
+        db,
+        formatter=formatter,
+        actor=current_user.username,
         filesystem_detector=get_filesystem_detector(),
         client_ip=get_client_ip(request),
     )

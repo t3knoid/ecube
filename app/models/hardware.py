@@ -14,6 +14,11 @@ class DriveState(str, enum.Enum):
     IN_USE = "IN_USE"
 
 
+class DriveFormatStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    FAILED = "FAILED"
+
+
 class UsbHub(Base):
     __tablename__ = "usb_hubs"
     id = Column(Integer, primary_key=True)
@@ -64,6 +69,14 @@ class UsbDrive(Base):
     mount_path = Column(String, nullable=True, index=True)
     throughput_write_mbps = Column(Float, nullable=True)
     throughput_tested_at = Column(DateTime(timezone=True), nullable=True)
+    format_status = Column(
+        Enum(DriveFormatStatus, native_enum=False),
+        nullable=True,
+        index=True,
+    )
+    format_failure_message = Column(String, nullable=True)
+    format_started_at = Column(DateTime(timezone=True), nullable=True)
+    format_finished_at = Column(DateTime(timezone=True), nullable=True)
     last_seen_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

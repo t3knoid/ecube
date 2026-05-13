@@ -10,6 +10,7 @@ import { getMounts } from '@/api/mounts.js'
 import { enablePort } from '@/api/admin.js'
 import { normalizeErrorMessage } from '@/api/client.js'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import { usePolling } from '@/composables/usePolling.js'
 import { useStatusLabels } from '@/composables/useStatusLabels.js'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
@@ -30,6 +31,7 @@ const throughputTesting = ref(false)
 const error = ref('')
 const infoMessage = ref('')
 const warnMessage = ref('')
+const awaitingFormatCompletion = ref(false)
 
 function clearBanners() {
   error.value = ''
@@ -107,15 +109,28 @@ const canEnable = computed(
     && !!drive.value?.filesystem_path
     && canManage.value,
 )
+const formatInProgress = computed(() => drive.value?.format_status === 'PENDING')
+const formatFailureMessage = computed(() => (
+  drive.value?.format_status === 'FAILED'
+    ? (drive.value?.format_failure_message || t('drives.formatFailed'))
+    : ''
+))
 const canFormat = computed(
-  () => drive.value?.current_state === 'AVAILABLE' && !drive.value?.mount_path && canManage.value,
+  () => !formatInProgress.value
+    && drive.value?.current_state === 'AVAILABLE'
+    && !drive.value?.mount_path
+    && canManage.value,
 )
 const hasMountedDestination = computed(() => !!drive.value?.mount_path)
 const canInitialize = computed(
-  () => drive.value?.current_state === 'AVAILABLE' && hasMountedDestination.value && canManage.value,
+  () => !formatInProgress.value
+    && drive.value?.current_state === 'AVAILABLE'
+    && hasMountedDestination.value
+    && canManage.value,
 )
 const canMount = computed(
-  () => canManage.value
+  () => !formatInProgress.value
+    && canManage.value
     && ['AVAILABLE', 'IN_USE'].includes(drive.value?.current_state)
     && !drive.value?.mount_path
     && !!drive.value?.filesystem_path,
@@ -126,7 +141,8 @@ const initializeMountedDestinationText = computed(() => (
     : t('drives.initializeMountRequired')
 ))
 const canEject = computed(
-  () => canManage.value
+  () => !formatInProgress.value
+    && canManage.value
     && (
       drive.value?.current_state === 'IN_USE'
       || (drive.value?.current_state === 'AVAILABLE' && !!drive.value?.mount_path)
@@ -134,7 +150,8 @@ const canEject = computed(
 )
 const canBrowse = computed(() => !!drive.value?.mount_path && canBrowseContents.value)
 const canTestThroughput = computed(
-  () => canManage.value
+  () => !formatInProgress.value
+    && canManage.value
     && !!drive.value?.mount_path
     && ['AVAILABLE', 'IN_USE'].includes(drive.value?.current_state),
 )
@@ -232,9 +249,13 @@ function openRelatedJob() {
   })
 }
 
-async function loadDrive() {
-  loading.value = true
-  clearBanners()
+async function loadDrive({ silent = false, preserveBanners = false } = {}) {
+  if (!silent) {
+    loading.value = true
+  }
+  if (!preserveBanners) {
+    clearBanners()
+  }
   try {
     const drives = await getDrives({
       include_disconnected: true,
@@ -248,9 +269,23 @@ async function loadDrive() {
   } catch {
     error.value = t('common.errors.networkError')
   } finally {
-    loading.value = false
+    if (!silent) {
+      loading.value = false
+    }
   }
 }
+
+const formatPoller = usePolling(
+  async () => {
+    await loadDrive({ silent: true, preserveBanners: true })
+    return drive.value
+  },
+  {
+    intervalMs: 3000,
+    immediate: false,
+    isTerminal: (nextDrive) => nextDrive?.format_status !== 'PENDING',
+  },
+)
 
 async function shouldShowCocPromptForJob(jobId) {
   const normalizedJobId = Number(jobId)
@@ -272,11 +307,20 @@ async function runFormat() {
   clearBanners()
   try {
     drive.value = normalizeProjectRecord(
-      await formatDrive(drive.value.id, { filesystem_type: filesystemType.value }, { timeout: 0 }),
+      await formatDrive(drive.value.id, { filesystem_type: filesystemType.value }),
       ['current_project_id'],
     )
-    infoMessage.value = t('drives.formatSuccess')
     showFormatDialog.value = false
+
+    if (drive.value?.format_status === 'PENDING') {
+      awaitingFormatCompletion.value = true
+      infoMessage.value = t('drives.formatSubmitted')
+      formatPoller.start()
+    } else if (drive.value?.format_status === 'FAILED') {
+      infoMessage.value = ''
+    } else {
+      infoMessage.value = t('drives.formatSuccess')
+    }
   } catch (err) {
     const status = err?.response?.status
     const detail = normalizeErrorMessage(err?.response?.data, null)
@@ -612,11 +656,40 @@ function openChainOfCustody() {
   })
 }
 
-onMounted(loadDrive)
+onMounted(() => {
+  void loadDrive()
+})
+
+watch(
+  () => drive.value?.format_status,
+  (status, previousStatus) => {
+    if (status === 'PENDING') {
+      formatPoller.start()
+      return
+    }
+
+    formatPoller.stop()
+
+    if (status === 'FAILED') {
+      infoMessage.value = ''
+      awaitingFormatCompletion.value = false
+      return
+    }
+
+    if ((previousStatus === 'PENDING' || awaitingFormatCompletion.value) && drive.value) {
+      infoMessage.value = t('drives.formatSuccess')
+      error.value = ''
+      awaitingFormatCompletion.value = false
+    }
+  },
+  { immediate: true },
+)
 
 watch(driveId, () => {
   browseExpanded.value = false
-  loadDrive()
+  awaitingFormatCompletion.value = false
+  formatPoller.stop()
+  void loadDrive()
 })
 
 watch(showInitializeDialog, async (open) => {
@@ -652,8 +725,10 @@ onBeforeUnmount(() => {
 
     <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
     <p v-if="error" class="error-banner" role="alert" aria-live="assertive">{{ error }}</p>
+    <p v-else-if="formatFailureMessage" class="error-banner" role="alert" aria-live="assertive">{{ formatFailureMessage }}</p>
     <p v-if="infoMessage" class="ok-banner" role="status" aria-live="polite">{{ infoMessage }}</p>
     <p v-if="warnMessage" class="warn-banner" role="status" aria-live="polite">{{ warnMessage }}</p>
+    <p v-else-if="formatInProgress" class="warn-banner" role="status" aria-live="polite">{{ t('drives.formatPending') }}</p>
     <div v-if="showCocPrompt" class="coc-banner" role="status" aria-live="polite">
       <p>{{ t('drives.cocPrompt') }}</p>
       <div class="actions">

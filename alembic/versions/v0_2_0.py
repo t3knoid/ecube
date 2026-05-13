@@ -139,6 +139,16 @@ def _usb_drives_has_throughput_columns(inspector: sa.Inspector) -> bool:
     return {"throughput_write_mbps", "throughput_tested_at"}.issubset(columns)
 
 
+def _usb_drives_has_format_tracking_columns(inspector: sa.Inspector) -> bool:
+    columns = {column.get("name") for column in inspector.get_columns("usb_drives")}
+    return {
+        "format_status",
+        "format_failure_message",
+        "format_started_at",
+        "format_finished_at",
+    }.issubset(columns)
+
+
 def _drive_assignments_has_manifest_counters(inspector: sa.Inspector) -> bool:
     columns = {column.get("name") for column in inspector.get_columns("drive_assignments")}
     return {"file_count", "copied_bytes"}.issubset(columns)
@@ -502,6 +512,19 @@ def upgrade() -> None:
             with op.batch_alter_table("usb_drives") as batch_op:
                 batch_op.add_column(sa.Column("throughput_write_mbps", sa.Float(), nullable=True))
                 batch_op.add_column(sa.Column("throughput_tested_at", sa.DateTime(timezone=True), nullable=True))
+        if "usb_drives" in existing_tables and not _usb_drives_has_format_tracking_columns(inspector):
+            with op.batch_alter_table("usb_drives") as batch_op:
+                batch_op.add_column(
+                    sa.Column(
+                        "format_status",
+                        sa.Enum("PENDING", "FAILED", name="driveformatstatus", native_enum=False),
+                        nullable=True,
+                    )
+                )
+                batch_op.add_column(sa.Column("format_failure_message", sa.String(), nullable=True))
+                batch_op.add_column(sa.Column("format_started_at", sa.DateTime(timezone=True), nullable=True))
+                batch_op.add_column(sa.Column("format_finished_at", sa.DateTime(timezone=True), nullable=True))
+                batch_op.create_index("ix_usb_drives_format_status", ["format_status"], unique=False)
         if "drive_assignments" in existing_tables:
             _upgrade_drive_assignment_manifest_counters(inspector)
             _upgrade_drive_assignment_activation_schema(inspector)
@@ -568,6 +591,14 @@ def upgrade() -> None:
         sa.Column("throughput_write_mbps", sa.Float(), nullable=True),
         sa.Column("throughput_tested_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
+            "format_status",
+            sa.Enum("PENDING", "FAILED", name="driveformatstatus", native_enum=False),
+            nullable=True,
+        ),
+        sa.Column("format_failure_message", sa.String(), nullable=True),
+        sa.Column("format_started_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("format_finished_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column(
             "last_seen_at",
             sa.DateTime(timezone=True),
             server_default=sa.func.now(),
@@ -577,6 +608,7 @@ def upgrade() -> None:
     op.create_index("ix_usb_drives_current_state", "usb_drives", ["current_state"])
     op.create_index("ix_usb_drives_current_project_id", "usb_drives", ["current_project_id"])
     op.create_index("ix_usb_drives_state_project", "usb_drives", ["current_state", "current_project_id"])
+    op.create_index("ix_usb_drives_format_status", "usb_drives", ["format_status"])
 
     op.create_table(
         "network_mounts",
@@ -818,6 +850,7 @@ def downgrade() -> None:
     op.drop_index("ix_usb_drives_state_project", table_name="usb_drives")
     op.drop_index("ix_usb_drives_current_project_id", table_name="usb_drives")
     op.drop_index("ix_usb_drives_current_state", table_name="usb_drives")
+    op.drop_index("ix_usb_drives_format_status", table_name="usb_drives")
     op.drop_index("ix_usb_drives_mount_path", table_name="usb_drives")
     op.drop_table("reconciliation_lock")
     op.drop_table("system_initialization")

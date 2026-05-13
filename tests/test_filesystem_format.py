@@ -22,7 +22,7 @@ from app.infrastructure.usb_discovery import (
     DiscoveredTopology,
 )
 from app.models.audit import AuditLog
-from app.models.hardware import DriveState, UsbDrive
+from app.models.hardware import DriveFormatStatus, DriveState, UsbDrive
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.services import discovery_service, drive_service
 from app.utils.sanitize import sanitize_error_message
@@ -434,6 +434,33 @@ class TestFilesystemTypeInResponse:
 
 class TestFormatDriveEndpoint:
 
+    def test_format_request_marks_drive_pending_before_background_worker_runs(self, admin_client, db):
+        drive = _make_drive(db, filesystem_type="unformatted")
+        fake = FakeFormatter()
+        detector = FakeFilesystemDetector("ext4")
+
+        with (
+            patch("app.routers.drives.get_drive_formatter", return_value=fake),
+            patch("app.routers.drives.get_filesystem_detector", return_value=detector),
+            patch("starlette.background.BackgroundTasks.add_task", autospec=True) as add_task,
+        ):
+            resp = admin_client.post(
+                f"/drives/{drive.id}/format",
+                json={"filesystem_type": "ext4"},
+            )
+
+        assert resp.status_code == 202
+        data = resp.json()
+        assert data["filesystem_type"] == "unformatted"
+        assert data["format_status"] == "PENDING"
+        assert data["format_failure_message"] is None
+        add_task.assert_called_once()
+        assert fake.format_calls == []
+
+        db.refresh(drive)
+        assert drive.format_status == DriveFormatStatus.PENDING
+        assert drive.format_failure_message is None
+
     def test_format_success_ext4(self, admin_client, db):
         drive = _make_drive(db, filesystem_type="unformatted")
         fake = FakeFormatter(free_bytes_result=31_000_000_000)
@@ -446,9 +473,10 @@ class TestFormatDriveEndpoint:
                 f"/drives/{drive.id}/format",
                 json={"filesystem_type": "ext4"},
             )
-        assert resp.status_code == 200
+        assert resp.status_code == 202
         data = resp.json()
-        assert data["filesystem_type"] == "ext4"
+        assert data["filesystem_type"] == "unformatted"
+        assert data["format_status"] == "PENDING"
         assert fake.format_calls == [("/dev/sdb", "ext4")]
 
         log = db.query(AuditLog).filter(AuditLog.action == "DRIVE_FORMATTED").first()
@@ -463,6 +491,10 @@ class TestFormatDriveEndpoint:
         assert log.details["filesystem_path"] == "[redacted]"
         assert fake.free_bytes_calls == [("/dev/sdb", "ext4")]
         assert detector.calls == ["/dev/sdb"]
+
+        db.refresh(drive)
+        assert drive.filesystem_type == "ext4"
+        assert drive.format_status is None
 
     def test_format_success_emits_application_log_event(self, admin_client, db, caplog):
         drive = _make_drive(db, filesystem_type="unformatted")
@@ -479,7 +511,7 @@ class TestFormatDriveEndpoint:
                 json={"filesystem_type": "ext4"},
             )
 
-        assert resp.status_code == 200
+        assert resp.status_code == 202
         log_record = next(
             record
             for record in caplog.records
@@ -520,7 +552,7 @@ class TestFormatDriveEndpoint:
             audit_logger.propagate = previous_propagate
             audit_logger.setLevel(previous_level)
 
-        assert resp.status_code == 200
+        assert resp.status_code == 202
         output = stream.getvalue()
         assert "DRIVE_FORMATTED" in output
         assert '"drive_id": ' in output
@@ -539,8 +571,13 @@ class TestFormatDriveEndpoint:
                 f"/drives/{drive.id}/format",
                 json={"filesystem_type": "exfat"},
             )
-        assert resp.status_code == 200
-        assert resp.json()["filesystem_type"] == "exfat"
+        assert resp.status_code == 202
+        assert resp.json()["filesystem_type"] == "unformatted"
+        assert resp.json()["format_status"] == "PENDING"
+
+        db.refresh(drive)
+        assert drive.filesystem_type == "exfat"
+        assert drive.format_status is None
 
     def test_format_audit_enrichment_is_null_safe_when_probes_fail(self, admin_client, db):
         drive = _make_drive(db, filesystem_type="unformatted", capacity_bytes=64_000_000_000)
@@ -559,7 +596,7 @@ class TestFormatDriveEndpoint:
                 json={"filesystem_type": "ext4"},
             )
 
-        assert resp.status_code == 200
+        assert resp.status_code == 202
         log = db.query(AuditLog).filter(AuditLog.action == "DRIVE_FORMATTED").first()
         assert log is not None
         assert log.details["detected_filesystem_type"] is None
@@ -652,7 +689,7 @@ class TestFormatDriveEndpoint:
                 f"/drives/{drive.id}/format",
                 json={"filesystem_type": "ext4"},
             )
-        assert resp.status_code == 500
+        assert resp.status_code == 202
 
         log = db.query(AuditLog).filter(AuditLog.action == "DRIVE_FORMAT_FAILED").first()
         assert log is not None
@@ -664,24 +701,35 @@ class TestFormatDriveEndpoint:
         # Filesystem type should NOT be updated on failure
         db.refresh(drive)
         assert drive.filesystem_type is None
+        assert drive.format_status == DriveFormatStatus.FAILED
+        assert drive.format_failure_message == sanitize_error_message("mkfs failed: simulated error")
 
     def test_format_db_save_failure_audit_log(self, admin_client, db):
         """Format succeeds at OS level but DB save fails — audit entry records divergence."""
         drive = _make_drive(db)
         fake = FakeFormatter()
+        real_save = drive_service.DriveRepository.save
+
+        def fail_on_second_save(repo, drive_record):
+            if fail_on_second_save.call_count == 0:
+                fail_on_second_save.call_count += 1
+                return real_save(repo, drive_record)
+            raise RuntimeError("DB commit failed")
+
+        fail_on_second_save.call_count = 0
+
         with (
             patch("app.routers.drives.get_drive_formatter", return_value=fake),
             patch(
                 "app.services.drive_service.DriveRepository.save",
-                side_effect=RuntimeError("DB commit failed"),
+                side_effect=fail_on_second_save,
             ),
         ):
             resp = admin_client.post(
                 f"/drives/{drive.id}/format",
                 json={"filesystem_type": "ext4"},
             )
-        assert resp.status_code == 500
-        assert "database update failed" in resp.json()["message"].lower()
+        assert resp.status_code == 202
 
         # Formatter was called — OS-level format happened
         assert fake.format_calls == [("/dev/sdb", "ext4")]
@@ -696,6 +744,10 @@ class TestFormatDriveEndpoint:
         assert log.project_id is None
         assert log.details["drive_id"] == drive.id
         assert log.details["filesystem_type"] == "ext4"
+
+        db.refresh(drive)
+        assert drive.format_status == DriveFormatStatus.FAILED
+        assert drive.format_failure_message == "Drive format failed; verify the device is available and retry"
 
 
 # ===========================================================================

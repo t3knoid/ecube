@@ -404,6 +404,8 @@ If a related job exists through an explicit drive assignment, the `Job ID` value
 
 When the drive is mounted and in a managed state, `admin` and `manager` users can run `Test Throughput` from Drive Detail. The action measures write throughput against the mounted destination, stores the latest result on the drive record, and refreshes the `Latest Write Speed` plus `Last Throughput Test` fields on the page. `processor` and `auditor` users can still review those stored values when present, but they do not see the action button.
 
+When `admin` or `manager` submits a drive format from Drive Detail, the confirmation dialog closes promptly after the request is accepted. Drive Detail shows a formatting-in-progress banner, disables drive actions that would conflict with the active format, and refreshes automatically until the format either completes or reports a sanitized failure on the same page.
+
 When you open browse from Drive Detail, the panel title also uses the visible device identifier and the breadcrumb stays root-relative instead of showing the host mount path.
 
 Reference screen:
@@ -1157,7 +1159,7 @@ Important operational notes:
 - `Copy Chunk Size`, `Progress Flush Threshold`, and `Default Copy Worker Count` let managers tune copy throughput for different workloads. Larger values reduce loop or transaction overhead but use more memory per active worker. `Default Copy Worker Count` is the fallback ECUBE uses when a job request omits its per-job `Thread count` value.
 - `Force per-file disk sync` controls whether ECUBE calls `fsync()` after every copied file. Leave it disabled for maximum throughput when restart recovery from the last committed `DONE` file is acceptable.
 - The `Copy and Job Workflow` section also includes workload profile shortcuts for `Small-file heavy`, `Mixed workload`, `Large-file heavy`, and `Greedy throughput` so operators can apply a tested tuning bundle before making fine-grained adjustments.
-- Drive formatting keeps the browser request open without the prior UI-side 30-second timeout. If a format still fails, operators should review the server log for `Drive format timed out` or `Drive format command failed` and adjust the Configuration values rather than treating the failure as a browser connectivity problem.
+- Drive formatting runs asynchronously after the request is accepted. If a format still fails, Drive Detail shows the sanitized backend failure on the drive record, and operators can review the server log for `Drive format timed out` or `Drive format command failed` before adjusting the Configuration values.
 
 ### 13.2 Admin
 
