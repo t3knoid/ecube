@@ -2301,6 +2301,48 @@ $$
 aggregate\_MBps = \sum_{jobs=1}^{n} throughput\_MBps(job)
 $$
 
+#### Copy Path Diagnostic Script
+
+Use the repository helper `scripts/copy_path_diagnostic.py` when a mounted-share throughput test, mounted-drive throughput test, or completed job result needs deeper drill-down before repeating a full manual run. The script does not create an ECUBE job or persist database state. It measures isolated share-read throughput, isolated drive-write throughput, and a sampled end-to-end copy through the same `copy_file()` path used by the copy engine.
+
+Run the balanced sample mode when you want a quick byte-budget sample that matches the startup-analysis benchmark shape:
+
+```bash
+/home/frank/ecube/.venv/bin/python ./scripts/copy_path_diagnostic.py \
+  /mnt/ecube-network/demo-case-002 \
+  /mnt/ecube/1 \
+  --json
+```
+
+Run the small-file stress mode when the source tree is dominated by many small files and you need a result that emphasizes files-per-second and metadata churn on the target:
+
+```bash
+/home/frank/ecube/.venv/bin/python ./scripts/copy_path_diagnostic.py \
+  /mnt/ecube-network/demo-case-002 \
+  /mnt/ecube/1 \
+  --sample-mode small-file-stress \
+  --sample-file-count 2000 \
+  --json
+```
+
+Capture and attach these fields from the diagnostic output whenever the script is used during QA:
+
+- `sample_mode`
+- `source_file_count`
+- `source_total_bytes`
+- `sample_file_count`
+- `sample_small_file_count`
+- `share_read_mbps`
+- `drive_write_mbps`
+- `benchmark_effective_copy_mbps`
+- `end_to_end_copy_mbps`
+- `sample_copy_files_per_second`
+- `copy_chunk_size_bytes`
+- `copy_file_fsync_enabled`
+- `notes`
+
+Interpret the script output alongside the UI throughput tests and completed job metrics. When `share_read_mbps` is healthy but `drive_write_mbps` is much lower, the target drive or USB enclosure path is the likely bottleneck. When `end_to_end_copy_mbps` and `sample_copy_files_per_second` collapse in small-file stress mode, treat the workload as file-count and metadata bound rather than raw sequential-throughput bound.
+
 #### Hashing and Integrity Validation
 
 - ECUBE verification step must return success for all files (`POST /jobs/{job_id}/verify`).
@@ -2321,6 +2363,7 @@ $$
 #### Evidence to Attach to QA Report
 
 - Dataset source and exact download scope (paths/filters/date).
+- Any `copy_path_diagnostic.py` command lines and JSON output captured during throughput triage.
 - `source.sha256` file and destination hash-check outputs.
 - ECUBE job JSON snapshots (`/jobs/{id}`), verify responses, and manifest outputs.
 - Audit excerpts for `JOB_CREATED`, `JOB_STARTED`, `JOB_COMPLETED`, verification and manifest events, and `DRIVE_EJECT_PREPARED`.
