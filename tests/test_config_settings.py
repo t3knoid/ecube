@@ -9,6 +9,7 @@ Covers:
 - TLS settings are present with None defaults.
 """
 
+import os
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
@@ -31,6 +32,11 @@ from app.services.audit_service import purge_expired_audit_logs
 
 class TestSettingsDefaults:
     """All new settings have documented defaults."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_environment_overrides(self):
+        with patch.dict(os.environ, {}, clear=True):
+            yield
 
     def test_tls_certfile_default(self):
         s = Settings(database_url="sqlite://")
