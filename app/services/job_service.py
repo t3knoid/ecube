@@ -2545,9 +2545,10 @@ def download_manifest(job_id: int, db: Session, actor: Optional[str] = None, cli
 
     manifest_name = os.path.basename(manifest_path) or "manifest.json"
     manifest_assignment_id = cast(Optional[int], getattr(manifest, "drive_assignment_id", None))
+    job_assignments = assignment_repo.list_for_job(job_id)
     assignment = None
     if manifest_assignment_id is not None:
-        for manifest_assignment in assignment_repo.list_for_job(job_id):
+        for manifest_assignment in job_assignments:
             if int(getattr(manifest_assignment, "id", 0) or 0) == int(manifest_assignment_id):
                 assignment = manifest_assignment
                 break
@@ -2563,22 +2564,58 @@ def download_manifest(job_id: int, db: Session, actor: Optional[str] = None, cli
         else None
     )
 
+    allowed_roots: set[str] = set()
+    if cast(Optional[str], job_row.target_mount_path):
+        allowed_roots.add(os.path.abspath(cast(str, job_row.target_mount_path)))
+    for job_assignment in job_assignments:
+        job_assignment_drive = getattr(job_assignment, "drive", None)
+        root = cast(Optional[str], getattr(job_assignment_drive, "mount_path", None)) if job_assignment_drive is not None else None
+        if root:
+            allowed_roots.add(os.path.abspath(root))
+
+    def _is_within_allowed_roots(path: str) -> bool:
+        if not allowed_roots:
+            return False
+        normalized_path = os.path.abspath(path)
+        for root in allowed_roots:
+            try:
+                if os.path.commonpath([normalized_path, root]) == root:
+                    return True
+            except ValueError:
+                continue
+        return False
+
     candidate_path = os.path.join(drive_mount_path, manifest_name) if drive_mount_path else None
     fallback_stored_path = os.path.abspath(manifest_path)
     if candidate_path is None and os.path.exists(fallback_stored_path):
-        logger.info(
-            "Manifest download using stored manifest path fallback",
-            extra={
-                "job_id": job_id,
-                "project_id": job_project_id,
-                "reason": "drive_mount_unavailable",
-            },
-        )
-        logger.debug(
-            "Manifest download fallback path",
-            extra={"job_id": job_id, "raw_manifest_path": fallback_stored_path},
-        )
-        candidate_path = fallback_stored_path
+        if _is_within_allowed_roots(fallback_stored_path):
+            logger.info(
+                "Manifest download using stored manifest path fallback",
+                extra={
+                    "job_id": job_id,
+                    "project_id": job_project_id,
+                    "reason": "drive_mount_unavailable",
+                },
+            )
+            logger.debug(
+                "Manifest download fallback path",
+                extra={"job_id": job_id, "raw_manifest_path": fallback_stored_path},
+            )
+            candidate_path = fallback_stored_path
+        else:
+            logger.info(
+                "Manifest download failed",
+                extra={"job_id": job_id, "project_id": job_project_id, "reason": "manifest_path_out_of_scope"},
+            )
+            logger.debug(
+                "Manifest download fallback rejected",
+                extra={
+                    "job_id": job_id,
+                    "raw_manifest_path": fallback_stored_path,
+                    "raw_allowed_roots": sorted(allowed_roots),
+                },
+            )
+            raise service_exception(status_code=500, detail="Manifest file is unavailable")
 
     if candidate_path is None:
         logger.warning(

@@ -12,7 +12,7 @@
 1. [Interactive API Documentation](#interactive-api-documentation)
 2. [Authentication](#authentication)
 3. [Drives (`/drives`)](#drivesdrives)
-4. [Mounts (`/mounts`)](#mountsmounts)
+4. [Shares (`/shares`)](#sharesshares)
 5. [Project Source Bindings (`/projects/{project_id}/source-bindings`)](#project-source-bindings-projectsproject_idsource-bindings)
 6. [Jobs (`/jobs`)](#jobsjobs)
 7. [Audit (`/audit`)](#auditaudit)
@@ -114,37 +114,37 @@ Drive responses include both the stable `device_identifier` and the port-based `
 
 ---
 
-## Mounts (`/mounts`)
+## Shares (`/shares`)
 
 | Method | Endpoint | Role | Description |
 | ------ | -------- | ---- | ----------- |
-| GET | `/mounts` | admin/manager/processor/auditor | List network mounts |
-| POST | `/mounts` | admin/manager | Add new mount with required project assignment |
-| POST | `/mounts/test` | admin/manager | Validate candidate mount connectivity from the Add Share dialog before persisting the mount |
-| PATCH | `/mounts/{mount_id}` | admin/manager | Update an existing mount in place while preserving the generated local mount point and reapplying the live mount when possible |
-| POST | `/mounts/discover` | admin/manager | Discover SMB shares or NFS exports from the Add Mount dialog using the submitted server seed and optional credentials |
-| POST | `/mounts/{mount_id}/throughput-test` | admin/manager | Measure mounted-share read throughput from Mount Detail and persist the latest `throughput_read_mbps` and `throughput_tested_at` values on the mount record |
-| POST | `/mounts/{mount_id}/validate` | admin/manager | Validate mount connectivity |
-| POST | `/mounts/validate` | admin/manager | Validate all mounts |
-| DELETE | `/mounts/{mount_id}` | admin/manager | Remove mount |
+| GET | `/shares` | admin/manager/processor/auditor | List network shares |
+| POST | `/shares` | admin/manager | Add new share with required project assignment |
+| POST | `/shares/test` | admin/manager | Validate candidate share connectivity from the Add Share dialog before persisting the share |
+| PATCH | `/shares/{share_id}` | admin/manager | Update an existing share in place while preserving the generated local mount point and reapplying the live mount when possible |
+| POST | `/shares/discover` | admin/manager | Discover SMB shares or NFS exports from the Add Share dialog using the submitted server seed and optional credentials |
+| POST | `/shares/{share_id}/throughput-test` | admin/manager | Measure mounted-share read throughput from Share Detail and persist the latest `throughput_read_mbps` and `throughput_tested_at` values on the share record |
+| POST | `/shares/{share_id}/validate` | admin/manager | Validate share connectivity |
+| POST | `/shares/validate` | admin/manager | Validate all shares |
+| DELETE | `/shares/{share_id}` | admin/manager | Remove share |
 
-Project identifiers are canonicalized by trimming surrounding whitespace and converting the value to uppercase before storage and comparison. The mount-create endpoint also rejects exact duplicate remote sources and cross-project parent or child overlaps with `409 Conflict`; same-project nested sources remain allowed. A temporary `409 Conflict` can also be returned when another mount update is already in progress and holds the serialization lock.
+Project identifiers are canonicalized by trimming surrounding whitespace and converting the value to uppercase before storage and comparison. The share-create endpoint also rejects exact duplicate remote sources and cross-project parent or child overlaps with `409 Conflict`; same-project nested sources remain allowed. A temporary `409 Conflict` can also be returned when another share update is already in progress and holds the serialization lock.
 
-`POST /mounts/test` is the validation helper behind the Add Share dialog `Test` action. A successful response can include `validation_warning` when the candidate validation succeeds but also detects an operator-relevant condition, such as an effective `NFS 4.1` validation path that is much slower than a validation-only `NFS 3` probe against the same server. The same advisory can also be returned as `409 Conflict` with `code="MOUNT_VALIDATION_ADVISORY"` when validation cannot complete successfully but ECUBE still has operator guidance to surface. This applies both when the request explicitly submits `"nfs_client_version": "4.1"` and when the request relies on the current default `4.1` setting.
+`POST /shares/test` is the validation helper behind the Add Share dialog `Test` action. A successful response can include `validation_warning` when the candidate validation succeeds but also detects an operator-relevant condition, such as an effective `NFS 4.1` validation path that is much slower than a validation-only `NFS 3` probe against the same server. The same advisory can also be returned as `409 Conflict` with `code="MOUNT_VALIDATION_ADVISORY"` when validation cannot complete successfully but ECUBE still has operator guidance to surface. This applies both when the request explicitly submits `"nfs_client_version": "4.1"` and when the request relies on the current default `4.1` setting.
 
-`POST /mounts/discover` is a trusted helper for the Add Mount dialog. It accepts the selected mount type plus the entered server seed and optional credentials, returns sanitized remote paths suitable for populating the dialog even in demo mode, and can return actionable `500` guidance when the ECUBE host is missing required discovery tools such as `smbclient` or `showmount`.
+`POST /shares/discover` is a trusted helper for the Add Share dialog. It accepts the selected share type plus the entered server seed and optional credentials, returns sanitized remote paths suitable for populating the dialog even in demo mode, and can return actionable `500` guidance when the ECUBE host is missing required discovery tools such as `smbclient` or `showmount`.
 
-`POST /mounts/{mount_id}/throughput-test` requires the selected share to be currently `MOUNTED` with readable content. On success it stores the latest measured read speed and test timestamp so Mount Detail can keep showing the last known result to all roles. Connectivity testing inside the Add/Edit dialogs remains separate from this persisted throughput measurement workflow.
+`POST /shares/{share_id}/throughput-test` requires the selected share to be currently `MOUNTED` with readable content. On success it stores the latest measured read speed and test timestamp so Share Detail can keep showing the last known result to all roles. Connectivity testing inside the Add/Edit dialogs remains separate from this persisted throughput measurement workflow.
 
-`GET /mounts` now returns `related_job.status` together with `related_job.custody_status` when trusted related-job context is available. The custody field uses `HANDOFF_RECORDED`, `PENDING_HANDOFF`, `STATUS_UNAVAILABLE`, or `NO_RELATED_JOB` so operator-facing surfaces can distinguish copy completion from final custody handoff completion.
+`GET /shares` now returns `related_job.status` together with `related_job.custody_status` when trusted related-job context is available. The custody field uses `HANDOFF_RECORDED`, `PENDING_HANDOFF`, `STATUS_UNAVAILABLE`, or `NO_RELATED_JOB` so operator-facing surfaces can distinguish copy completion from final custody handoff completion.
 
-`PATCH /mounts/{mount_id}` attempts to apply the edited configuration immediately. When the target share is currently mounted, ECUBE unmounts it first and remounts it with the updated options, including any explicit per-share `nfs_client_version` override.
+`PATCH /shares/{share_id}` attempts to apply the edited configuration immediately. When the target share is currently mounted, ECUBE unmounts it first and remounts it with the updated options, including any explicit per-share `nfs_client_version` override.
 
 ---
 
 ## Project Source Bindings (`/projects/{project_id}/source-bindings`)
 
-Compatibility note: To support project-to-source-path policy, use project source bindings alongside mounts and jobs. Mounts still define connectivity, while bindings define which mount root and optional subfolder are valid for each project.
+Compatibility note: To support project-to-source-path policy, use project source bindings alongside shares and jobs. Shares still define connectivity, while bindings define which share root and optional subfolder are valid for each project.
 
 | Method | Endpoint | Role | Description |
 | ------ | -------- | ---- | ----------- |
@@ -210,7 +210,7 @@ Compatibility note: To support project-to-source-path policy, use project source
 
 **Start Preflight Capacity Check:** When a job is still in its initial `PENDING` start path and ECUBE already has both a `READY` startup-analysis total and a last known `drive.available_bytes` reading for the assigned destination, `POST /jobs/{job_id}/start` compares those values before copy begins. If the destination cannot hold the source estimate, ECUBE returns **409 Conflict** with the `DRIVE_CAPACITY_SHORTFALL` code and an operator-safe shortfall message so the UI can direct the operator to another drive or a follow-on overflow workflow.
 
-**Manifest and Compare Semantics:** Verify and Download Manifest remain disabled in the UI until the job is truly complete at 100% and has no failed or timed-out files. A partial-success `COMPLETED` job can use `POST /jobs/{job_id}/retry-failed` to re-queue failed files before those clean-completion actions become eligible again. Clean completion now auto-generates or refreshes a `manifest.json` file on each drive assignment that contains successfully copied files for that job, and each manifest lists only the files that actually landed on that specific drive. `GET /jobs/{job_id}/manifest/download` still returns the latest generated manifest artifact so Job Detail can offer a browser download while showing the related destination path. When the same exported record is selected for file comparison, ECUBE compares the original source file against the copied destination version and returns a sanitized **409 Conflict** if either side is unavailable.
+**Manifest and Compare Semantics:** Verify and Download Manifest remain disabled in the UI until the job is truly complete at 100% and has no failed or timed-out files. A partial-success `COMPLETED` job can use `POST /jobs/{job_id}/retry-failed` to re-queue failed files before those clean-completion actions become eligible again. Clean completion now auto-generates or refreshes a `manifest.json` file on each drive assignment that contains successfully copied files for that job, and each manifest lists only the files that actually landed on that specific drive. `GET /jobs/{job_id}/manifest/download` returns the latest generated manifest artifact from the currently mounted destination when available and can use the stored manifest artifact path when the assigned drive mount path is unavailable but the stored path remains inside trusted destination roots. When the same exported record is selected for file comparison, ECUBE compares the original source file against the copied destination version and returns a sanitized **409 Conflict** if either side is unavailable.
 
 **Automatic Drive Assignment:** When `drive_id` is omitted from `POST /jobs`, the system auto-selects a drive: picks the single project-bound `AVAILABLE` drive, or falls back to an unbound drive. Returns **409** if the drive is temporarily unavailable (retry), if multiple project-bound drives exist (caller must specify `drive_id`), or if no usable drive can be acquired for the requested project. In both auto-assign and explicit `drive_id` paths, unbound drives are automatically bound to the requested project.
 

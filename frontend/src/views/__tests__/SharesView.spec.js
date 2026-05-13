@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import i18n from '@/i18n/index.js'
-import MountsView from '@/views/MountsView.vue'
+import SharesView from '@/views/SharesView.vue'
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
@@ -9,10 +9,9 @@ const mocks = vi.hoisted(() => ({
   createShare: vi.fn(),
   updateShare: vi.fn(),
   deleteShare: vi.fn(),
-  validateAllMounts: vi.fn(),
   validateShareCandidate: vi.fn(),
   validateShare: vi.fn(),
-  discoverMountShares: vi.fn(),
+  discoverShares: vi.fn(),
   getPublicAuthConfig: vi.fn(),
 }))
 
@@ -35,15 +34,14 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: mocks.push }),
 }))
 
-vi.mock('@/api/mounts.js', () => ({
+vi.mock('@/api/shares.js', () => ({
   getShares: (...args) => mocks.getShares(...args),
   createShare: (...args) => mocks.createShare(...args),
   updateShare: (...args) => mocks.updateShare(...args),
   deleteShare: (...args) => mocks.deleteShare(...args),
-  validateAllMounts: (...args) => mocks.validateAllMounts(...args),
   validateShareCandidate: (...args) => mocks.validateShareCandidate(...args),
   validateShare: (...args) => mocks.validateShare(...args),
-  discoverMountShares: (...args) => mocks.discoverMountShares(...args),
+  discoverShares: (...args) => mocks.discoverShares(...args),
 }))
 
 vi.mock('@/api/auth.js', () => ({
@@ -72,7 +70,7 @@ function buildMount(overrides = {}) {
 }
 
 function mountView() {
-  return mount(MountsView, {
+  return mount(SharesView, {
     attachTo: document.body,
     global: {
       plugins: [i18n],
@@ -149,7 +147,7 @@ function findDialogWarningBanner(wrapper) {
   return wrapper.find('.dialog-panel .warning-banner')
 }
 
-describe('MountsView removal flow', () => {
+describe('SharesView removal flow', () => {
   beforeEach(() => {
     authState.roles = ['admin', 'manager']
     viewportState.mobile = false
@@ -161,19 +159,17 @@ describe('MountsView removal flow', () => {
     mocks.createShare.mockReset()
     mocks.updateShare.mockReset()
     mocks.deleteShare.mockReset()
-    mocks.validateAllMounts.mockReset()
     mocks.validateShareCandidate.mockReset()
     mocks.validateShare.mockReset()
-    mocks.discoverMountShares.mockReset()
+    mocks.discoverShares.mockReset()
     mocks.getPublicAuthConfig.mockReset()
 
     mocks.createShare.mockResolvedValue({})
     mocks.updateShare.mockResolvedValue({})
     mocks.deleteShare.mockResolvedValue({})
-    mocks.validateAllMounts.mockResolvedValue([])
     mocks.validateShareCandidate.mockResolvedValue(buildMount({ id: 999, status: 'MOUNTED' }))
     mocks.validateShare.mockResolvedValue(buildMount())
-    mocks.discoverMountShares.mockResolvedValue({
+    mocks.discoverShares.mockResolvedValue({
       shares: [
         { remote_path: '//server/CaseDrop', display_name: 'CaseDrop' },
         { remote_path: '//server/Review', display_name: 'Review' },
@@ -201,7 +197,7 @@ describe('MountsView removal flow', () => {
     await detailButton[0].trigger('click')
     await flushPromises()
 
-    expect(mocks.push).toHaveBeenCalledWith({ name: 'mount-detail', params: { id: 11 } })
+    expect(mocks.push).toHaveBeenCalledWith({ name: 'share-detail', params: { id: 11 } })
   })
 
   it('preselects the workflow bucket from the route query and shows only matching mounts', async () => {
@@ -278,10 +274,10 @@ describe('MountsView removal flow', () => {
     const labels = wrapper.findAll('button').map((node) => node.text())
     expect(labels).toContain('11')
     expect(labels).toContain('PROJ-011')
-    expect(labels).not.toContain(i18n.global.t('mounts.browse'))
-    expect(labels).not.toContain(i18n.global.t('mounts.details'))
+    expect(labels).not.toContain(i18n.global.t('shares.browse'))
+    expect(labels).not.toContain(i18n.global.t('shares.details'))
     expect(labels).not.toContain(i18n.global.t('common.actions.edit'))
-    expect(labels).not.toContain(i18n.global.t('mounts.remove'))
+    expect(labels).not.toContain(i18n.global.t('shares.remove'))
   })
 
   it('hides the add mount action from processor-only roles', async () => {
@@ -293,7 +289,7 @@ describe('MountsView removal flow', () => {
 
     const labels = wrapper.findAll('button').map((node) => node.text())
     expect(labels).toContain(i18n.global.t('common.actions.refresh'))
-    expect(labels).not.toContain(i18n.global.t('mounts.add'))
+    expect(labels).not.toContain(i18n.global.t('shares.add'))
   })
 
   it('does not render a separate browse action control when the mount ID is clickable', async () => {
@@ -304,7 +300,7 @@ describe('MountsView removal flow', () => {
 
     expect(wrapper.find('.mount-id-link').exists()).toBe(true)
     expect(wrapper.find('.mount-project-link').exists()).toBe(true)
-    expect(wrapper.text()).not.toContain(i18n.global.t('mounts.browse'))
+    expect(wrapper.text()).not.toContain(i18n.global.t('shares.browse'))
   })
 
   it('omits wide metadata columns in mobile view while keeping compact status and mount-id browsing', async () => {
@@ -317,7 +313,7 @@ describe('MountsView removal flow', () => {
 
     const labels = wrapper.find('.column-labels').text()
     expect(labels).not.toContain(i18n.global.t('common.labels.type'))
-    expect(labels).not.toContain(i18n.global.t('mounts.lastChecked'))
+    expect(labels).not.toContain(i18n.global.t('shares.lastChecked'))
     expect(wrapper.find('.mount-status-icon').attributes('aria-label')).toBe('MOUNTED')
     expect(wrapper.find('.mount-id-link').exists()).toBe(true)
     expect(wrapper.find('.mount-project-link').exists()).toBe(true)
@@ -361,7 +357,7 @@ describe('MountsView removal flow', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('shares.add'))
     expect(addButton).toBeTruthy()
 
     await addButton.trigger('click')
@@ -372,7 +368,7 @@ describe('MountsView removal flow', () => {
 
     expect(wrapper.find('#mount-project-id').element.value).toBe('PROJ-NEW')
 
-    await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
+    await findDialogButton(wrapper, i18n.global.t('shares.test')).trigger('click')
     await flushPromises()
 
     await findDialogButton(wrapper, i18n.global.t('common.actions.create')).trigger('click')
@@ -402,7 +398,7 @@ describe('MountsView removal flow', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('shares.add'))
     expect(addButton).toBeTruthy()
 
     await addButton.trigger('click')
@@ -417,7 +413,7 @@ describe('MountsView removal flow', () => {
     expect(versionSelect.element.value).toBe('')
 
     await versionSelect.setValue('4.2')
-    await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
+    await findDialogButton(wrapper, i18n.global.t('shares.test')).trigger('click')
     await flushPromises()
 
     await findDialogButton(wrapper, i18n.global.t('common.actions.create')).trigger('click')
@@ -449,7 +445,7 @@ describe('MountsView removal flow', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('shares.add'))
     expect(addButton).toBeTruthy()
 
     await addButton.trigger('click')
@@ -462,7 +458,7 @@ describe('MountsView removal flow', () => {
     const versionSelect = wrapper.find('#mount-nfs-client-version')
     expect(versionSelect.element.value).toBe('')
 
-    await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
+    await findDialogButton(wrapper, i18n.global.t('shares.test')).trigger('click')
     await flushPromises()
 
     await findDialogButton(wrapper, i18n.global.t('common.actions.create')).trigger('click')
@@ -492,7 +488,7 @@ describe('MountsView removal flow', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('shares.add'))
     expect(addButton).toBeTruthy()
 
     await addButton.trigger('click')
@@ -514,7 +510,7 @@ describe('MountsView removal flow', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('shares.add'))
     expect(addButton).toBeTruthy()
 
     await addButton.trigger('click')
@@ -532,7 +528,7 @@ describe('MountsView removal flow', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('shares.add'))
     expect(addButton).toBeTruthy()
 
     await addButton.trigger('click')
@@ -593,8 +589,8 @@ describe('MountsView removal flow', () => {
     await flushPromises()
 
     const labels = wrapper.find('.column-labels').text()
-    expect(labels).not.toContain(i18n.global.t('mounts.remotePath'))
-    expect(labels).not.toContain(i18n.global.t('mounts.localPath'))
+    expect(labels).not.toContain(i18n.global.t('shares.remotePath'))
+    expect(labels).not.toContain(i18n.global.t('shares.localPath'))
   })
 
   it('clears password and credentials fields when the dialog closes', async () => {
@@ -603,7 +599,7 @@ describe('MountsView removal flow', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('shares.add'))
     expect(addButton).toBeTruthy()
 
     await addButton.trigger('click')
@@ -628,7 +624,7 @@ describe('MountsView removal flow', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('shares.add'))
     expect(addButton).toBeTruthy()
 
     await addButton.trigger('click')
@@ -639,30 +635,30 @@ describe('MountsView removal flow', () => {
     await wrapper.find('#mount-password').setValue('top-secret')
 
     const dialogButtons = wrapper.find('.dialog-actions').findAll('button').map((node) => node.text())
-    expect(dialogButtons.indexOf(i18n.global.t('common.actions.cancel'))).toBeLessThan(dialogButtons.indexOf(i18n.global.t('mounts.browseShares')))
-    expect(dialogButtons.indexOf(i18n.global.t('mounts.browseShares'))).toBeLessThan(dialogButtons.indexOf(i18n.global.t('common.actions.create')))
+    expect(dialogButtons.indexOf(i18n.global.t('common.actions.cancel'))).toBeLessThan(dialogButtons.indexOf(i18n.global.t('shares.browseShares')))
+    expect(dialogButtons.indexOf(i18n.global.t('shares.browseShares'))).toBeLessThan(dialogButtons.indexOf(i18n.global.t('common.actions.create')))
 
-    await findDialogButton(wrapper, i18n.global.t('mounts.browseShares')).trigger('click')
+    await findDialogButton(wrapper, i18n.global.t('shares.browseShares')).trigger('click')
     await flushPromises()
 
-    expect(mocks.discoverMountShares).toHaveBeenCalledWith({
+    expect(mocks.discoverShares).toHaveBeenCalledWith({
       type: 'SMB',
       remote_path: '//server',
       username: 'svc-reader',
       password: 'top-secret',
       credentials_file: null,
     }, { timeout: 75000 })
-    expect(wrapper.text()).toContain(i18n.global.t('mounts.browseSharesTitle'))
+    expect(wrapper.text()).toContain(i18n.global.t('shares.browseSharesTitle'))
     expect(wrapper.find('.share-browser-panel').exists()).toBe(true)
     expect(wrapper.find('.share-discovery-scroll').exists()).toBe(true)
 
-    const selectButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.selectShare'))
+    const selectButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('shares.selectShare'))
     expect(selectButton).toBeTruthy()
     await selectButton.trigger('click')
     await flushPromises()
 
     expect(wrapper.find('#mount-remote-path').element.value).toBe('//server/CaseDrop')
-    expect(wrapper.text()).not.toContain(i18n.global.t('mounts.browseSharesTitle'))
+    expect(wrapper.text()).not.toContain(i18n.global.t('shares.browseSharesTitle'))
   })
 
   it('keeps share discovery controls available in demo mode', async () => {
@@ -672,18 +668,18 @@ describe('MountsView removal flow', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('shares.add'))
     expect(addButton).toBeTruthy()
 
     await addButton.trigger('click')
     await flushPromises()
 
-    expect(wrapper.find('.dialog-actions').text()).toContain(i18n.global.t('mounts.browseShares'))
+    expect(wrapper.find('.dialog-actions').text()).toContain(i18n.global.t('shares.browseShares'))
   })
 
   it('shows actionable guidance when share browsing is unavailable on the host', async () => {
     mocks.getShares.mockResolvedValue([])
-    mocks.discoverMountShares.mockRejectedValue({
+    mocks.discoverShares.mockRejectedValue({
       response: {
         data: {
           detail: 'Share browsing requires the host smbclient tool. Install smbclient on the ECUBE host, then try again.',
@@ -694,14 +690,14 @@ describe('MountsView removal flow', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('shares.add'))
     expect(addButton).toBeTruthy()
 
     await addButton.trigger('click')
     await flushPromises()
 
     await wrapper.find('#mount-remote-path').setValue('//server')
-    await findDialogButton(wrapper, i18n.global.t('mounts.browseShares')).trigger('click')
+    await findDialogButton(wrapper, i18n.global.t('shares.browseShares')).trigger('click')
     await flushPromises()
 
     expect(wrapper.text()).toContain('Install smbclient on the ECUBE host, then try again.')
@@ -713,7 +709,7 @@ describe('MountsView removal flow', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('shares.add'))
     expect(addButton).toBeTruthy()
 
     await addButton.trigger('click')
@@ -723,7 +719,7 @@ describe('MountsView removal flow', () => {
     await wrapper.find('#mount-project-id').setValue('proj-new')
 
     const createButton = () => findDialogButton(wrapper, i18n.global.t('common.actions.create'))
-    const testButton = () => findDialogButton(wrapper, i18n.global.t('mounts.test'))
+    const testButton = () => findDialogButton(wrapper, i18n.global.t('shares.test'))
 
     expect(createButton().attributes('disabled')).toBeDefined()
 
@@ -731,7 +727,7 @@ describe('MountsView removal flow', () => {
     await flushPromises()
 
     expect(createButton().attributes('disabled')).toBeUndefined()
-    expect(findDialogSuccessBanner(wrapper).text()).toContain(i18n.global.t('mounts.testSuccess'))
+    expect(findDialogSuccessBanner(wrapper).text()).toContain(i18n.global.t('shares.testSuccess'))
 
     await wrapper.find('#mount-remote-path').setValue('//server/new-share-2')
     await flushPromises()
@@ -752,7 +748,7 @@ describe('MountsView removal flow', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('shares.add'))
     expect(addButton).toBeTruthy()
 
     await addButton.trigger('click')
@@ -763,10 +759,10 @@ describe('MountsView removal flow', () => {
     await wrapper.find('#mount-project-id').setValue('proj-new')
     await wrapper.find('#mount-nfs-client-version').setValue('4.1')
 
-    await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
+    await findDialogButton(wrapper, i18n.global.t('shares.test')).trigger('click')
     await flushPromises()
 
-    expect(findDialogSuccessBanner(wrapper).text()).toContain(i18n.global.t('mounts.testSuccess'))
+    expect(findDialogSuccessBanner(wrapper).text()).toContain(i18n.global.t('shares.testSuccess'))
     expect(findDialogWarningBanner(wrapper).text()).toContain('Selected NFS 4.1 validation was slow')
     expect(findDialogWarningBanner(wrapper).text()).toContain('NFS 3 validated much faster on this server')
   })
@@ -786,7 +782,7 @@ describe('MountsView removal flow', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('shares.add'))
     expect(addButton).toBeTruthy()
 
     await addButton.trigger('click')
@@ -797,7 +793,7 @@ describe('MountsView removal flow', () => {
     await wrapper.find('#mount-project-id').setValue('proj-new')
     await wrapper.find('#mount-nfs-client-version').setValue('4.1')
 
-    await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
+    await findDialogButton(wrapper, i18n.global.t('shares.test')).trigger('click')
     await flushPromises()
 
     expect(findDialogWarningBanner(wrapper).text()).toContain('NFS 4.1 validation timed out or was too slow')
@@ -813,7 +809,7 @@ describe('MountsView removal flow', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('shares.add'))
     expect(addButton).toBeTruthy()
 
     await addButton.trigger('click')
@@ -821,7 +817,7 @@ describe('MountsView removal flow', () => {
 
     await wrapper.find('#mount-remote-path').setValue('//server/new-share')
     await wrapper.find('#mount-project-id').setValue('proj-new')
-    await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
+    await findDialogButton(wrapper, i18n.global.t('shares.test')).trigger('click')
     await flushPromises()
 
     expect(wrapper.find('#mount-type').exists()).toBe(true)
@@ -839,13 +835,13 @@ describe('MountsView removal flow', () => {
 
     const buttonTexts = wrapper.findAll('button').map((node) => node.text())
 
-    expect(buttonTexts).not.toContain(i18n.global.t('mounts.test'))
+    expect(buttonTexts).not.toContain(i18n.global.t('shares.test'))
     expect(buttonTexts).not.toContain(i18n.global.t('common.actions.edit'))
-    expect(buttonTexts).not.toContain(i18n.global.t('mounts.remove'))
-    expect(buttonTexts).not.toContain(i18n.global.t('mounts.details'))
+    expect(buttonTexts).not.toContain(i18n.global.t('shares.remove'))
+    expect(buttonTexts).not.toContain(i18n.global.t('shares.details'))
     expect(buttonTexts).toContain('11')
     expect(wrapper.text()).toContain('PROJ-011')
-    expect(buttonTexts).not.toContain(i18n.global.t('mounts.browse'))
+    expect(buttonTexts).not.toContain(i18n.global.t('shares.browse'))
   })
 
   it('clears the test success banner when the add dialog is cancelled', async () => {
@@ -854,7 +850,7 @@ describe('MountsView removal flow', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.add'))
+    const addButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('shares.add'))
     expect(addButton).toBeTruthy()
 
     await addButton.trigger('click')
@@ -862,14 +858,14 @@ describe('MountsView removal flow', () => {
 
     await wrapper.find('#mount-remote-path').setValue('//server/new-share')
     await wrapper.find('#mount-project-id').setValue('proj-new')
-    await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
+    await findDialogButton(wrapper, i18n.global.t('shares.test')).trigger('click')
     await flushPromises()
 
-    expect(findDialogSuccessBanner(wrapper).text()).toContain(i18n.global.t('mounts.testSuccess'))
+    expect(findDialogSuccessBanner(wrapper).text()).toContain(i18n.global.t('shares.testSuccess'))
 
     await findDialogButton(wrapper, i18n.global.t('common.actions.cancel')).trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).not.toContain(i18n.global.t('mounts.testSuccess'))
+    expect(wrapper.text()).not.toContain(i18n.global.t('shares.testSuccess'))
   })
 })

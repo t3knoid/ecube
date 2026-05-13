@@ -243,7 +243,7 @@ function isValidJobId(value) {
 function openMountDetails(mountId) {
   const normalizedMountId = Number(mountId)
   if (!Number.isInteger(normalizedMountId) || normalizedMountId < 1) return
-  router.push({ name: 'mount-detail', params: { id: normalizedMountId } })
+  router.push({ name: 'share-detail', params: { id: normalizedMountId } })
 }
 
 function openRelatedJob(jobId) {

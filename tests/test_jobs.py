@@ -3212,7 +3212,7 @@ def test_download_manifest_uses_stored_path_when_drive_mount_unavailable(client,
         project_id="PROJ-MANIFEST-DOWNLOAD-FALLBACK-001",
         evidence_number="EV-MANIFEST-DOWNLOAD-FALLBACK-001",
         source_path="/data/evidence",
-        target_mount_path="/stale/mount/path",
+        target_mount_path=str(tmp_path),
         status=JobStatus.COMPLETED,
     )
     db.add(job)
@@ -3236,6 +3236,53 @@ def test_download_manifest_uses_stored_path_when_drive_mount_unavailable(client,
     assert response.status_code == 200
     assert response.content == manifest_path.read_bytes()
     assert 'attachment; filename="manifest.json"' in response.headers["content-disposition"]
+
+
+def test_download_manifest_rejects_stored_path_outside_allowed_roots(client, db, tmp_path):
+    disallowed_manifest_dir = tmp_path / "outside-root"
+    disallowed_manifest_dir.mkdir()
+    disallowed_manifest_path = disallowed_manifest_dir / "manifest.json"
+    disallowed_manifest_path.write_text('{"job": "out-of-scope"}', encoding="utf-8")
+
+    drive = UsbDrive(
+        device_identifier="USB-MANIFEST-DOWNLOAD-FALLBACK-OUTSIDE-001",
+        capacity_bytes=1024,
+        current_state=DriveState.IN_USE,
+        mount_path=None,
+        current_project_id="PROJ-MANIFEST-DOWNLOAD-FALLBACK-OUTSIDE-001",
+    )
+    db.add(drive)
+    db.flush()
+
+    allowed_mount_root = tmp_path / "allowed-root"
+    allowed_mount_root.mkdir()
+    job = ExportJob(
+        project_id="PROJ-MANIFEST-DOWNLOAD-FALLBACK-OUTSIDE-001",
+        evidence_number="EV-MANIFEST-DOWNLOAD-FALLBACK-OUTSIDE-001",
+        source_path="/data/evidence",
+        target_mount_path=str(allowed_mount_root),
+        status=JobStatus.COMPLETED,
+    )
+    db.add(job)
+    db.flush()
+
+    assignment = DriveAssignment(drive_id=drive.id, job_id=job.id)
+    db.add(assignment)
+    db.flush()
+    db.add(
+        Manifest(
+            job_id=job.id,
+            drive_assignment_id=assignment.id,
+            manifest_path=str(disallowed_manifest_path),
+            format="JSON",
+        )
+    )
+    db.commit()
+
+    response = client.get(f"/jobs/{job.id}/manifest/download")
+
+    assert response.status_code == 500
+    assert "Manifest file is unavailable" in response.text
 
 
 def test_create_manifest_conflict_when_drive_not_mounted(client, db):

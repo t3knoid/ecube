@@ -1365,27 +1365,27 @@ A complete evidence export follows this sequence:
 
 ## Share Management
 
-Network mounts provide access to evidence data stored on NFS or SMB shares.
-Mounts must be registered before they can be used as source paths in export
+Network shares provide access to evidence data stored on NFS or SMB servers.
+Shares must be registered before they can be used as source paths in export
 jobs.
 
-### Mount States
+### Share States
 
 | State | Meaning |
 |-------|----------|
-| `MOUNTED` | Mount is active and accessible |
-| `UNMOUNTED` | Mount is registered but not currently active |
-| `ERROR` | Mount failed to connect — check credentials or network |
+| `MOUNTED` | Share is active and accessible |
+| `UNMOUNTED` | Share is registered but not currently active |
+| `ERROR` | Share failed to connect — check credentials or network |
 
-### List Mounts
+### List Shares
 
-Returns all registered network mounts and their current connectivity status.
+Returns all registered network shares and their current connectivity status.
 Credentials are not included in the response.
 
 ```bash
 # Requires any authenticated role
 curl -k -H "Authorization: Bearer $JWT_TOKEN" \
-  https://localhost:8443/mounts
+  https://localhost:8443/shares
 ```
 
 Example response:
@@ -1411,16 +1411,16 @@ Example response:
 ]
 ```
 
-### Add Mount
+### Add Share
 
-Registers a new network mount, assigns it to a project, and attempts to connect immediately. The resulting status reflects whether the mount succeeded.
+Registers a new network share, assigns it to a project, and attempts to connect immediately. The resulting status reflects whether the share succeeded.
 
-ECUBE rejects exact duplicate remote sources for all projects and rejects overlapping parent or child remote paths when the project assignment differs. Nested paths for the same project remain allowed. If another operator is updating mount configuration at the same time, ECUBE may return a transient `409 Conflict` instead of creating a duplicate entry.
+ECUBE rejects exact duplicate remote sources for all projects and rejects overlapping parent or child remote paths when the project assignment differs. Nested paths for the same project remain allowed. If another operator is updating share configuration at the same time, ECUBE may return a transient `409 Conflict` instead of creating a duplicate entry.
 
 ```bash
 # Requires admin or manager role
 # NFS mount (no credentials needed)
-curl -k -X POST https://localhost:8443/mounts \
+curl -k -X POST https://localhost:8443/shares \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -1430,7 +1430,7 @@ curl -k -X POST https://localhost:8443/mounts \
   }'
 
 # SMB mount with credentials
-curl -k -X POST https://localhost:8443/mounts \
+curl -k -X POST https://localhost:8443/shares \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -1442,17 +1442,17 @@ curl -k -X POST https://localhost:8443/mounts \
   }'
 ```
 
-Response: returns the mount object with `status` reflecting the connection result (`MOUNTED` or `ERROR`). Conflicting remote-path requests return `409 Conflict` with a validation message.
+Response: returns the share object with `status` reflecting the connection result (`MOUNTED` or `ERROR`). Conflicting remote-path requests return `409 Conflict` with a validation message.
 
 > **Note:** As an alternative to inline credentials, use `credentials_file` to reference a file on the host containing credentials.
 
-### Test Candidate Mount Connectivity
+### Test Candidate Share Connectivity
 
-Validates an Add Share or Edit Share configuration without persisting a mount row. This endpoint powers the dialog-level `Test` action and returns the candidate mount payload used to enable `Create` or `Save` after a successful validation.
+Validates an Add Share or Edit Share configuration without persisting a share row. This endpoint powers the dialog-level `Test` action and returns the candidate share payload used to enable `Create` or `Save` after a successful validation.
 
 ```bash
 # Requires admin or manager role
-curl -k -X POST https://localhost:8443/mounts/test \
+curl -k -X POST https://localhost:8443/shares/test \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -1463,15 +1463,15 @@ curl -k -X POST https://localhost:8443/mounts/test \
   }'
 ```
 
-Response: returns the candidate mount object with `status` reflecting the validation result and can include `validation_warning` when the validation succeeds but the server exposes an operator-relevant advisory. For example, ECUBE can report that the effective `NFS 4.1` validation path validated slowly while a validation-only `NFS 3` probe against the same server completed much faster. When validation cannot complete successfully but ECUBE still has that advisory to surface, the endpoint can instead return `409 Conflict` with `code="MOUNT_VALIDATION_ADVISORY"` plus the same operator-safe guidance in the response message. The same warning behavior applies when the request relies on the default `4.1` setting instead of explicitly sending `"nfs_client_version": "4.1"`.
+Response: returns the candidate share object with `status` reflecting the validation result and can include `validation_warning` when the validation succeeds but the server exposes an operator-relevant advisory. For example, ECUBE can report that the effective `NFS 4.1` validation path validated slowly while a validation-only `NFS 3` probe against the same server completed much faster. When validation cannot complete successfully but ECUBE still has that advisory to surface, the endpoint can instead return `409 Conflict` with `code="MOUNT_VALIDATION_ADVISORY"` plus the same operator-safe guidance in the response message. The same warning behavior applies when the request relies on the default `4.1` setting instead of explicitly sending `"nfs_client_version": "4.1"`.
 
 ### Discover Available Shares
 
-Discovers SMB shares or NFS exports before creating a mount. This endpoint is intended for the Add Mount browse dialog and reuses the server seed plus optional credentials entered by the operator.
+Discovers SMB shares or NFS exports before creating a share. This endpoint is intended for the Add Share browse dialog and reuses the server seed plus optional credentials entered by the operator.
 
 ```bash
 # Requires admin or manager role
-curl -k -X POST https://localhost:8443/mounts/discover \
+curl -k -X POST https://localhost:8443/shares/discover \
   -H "Authorization: Bearer $JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -1482,46 +1482,46 @@ curl -k -X POST https://localhost:8443/mounts/discover \
   }'
 ```
 
-Response: returns a `shares` array of sanitized remote paths and display names suitable for the Add Mount dialog, including when demo mode is enabled. If required host discovery tooling is missing it returns a `500` detail telling the operator which package to install before retrying.
+Response: returns a `shares` array of sanitized remote paths and display names suitable for the Add Share dialog, including when demo mode is enabled. If required host discovery tooling is missing it returns a `500` detail telling the operator which package to install before retrying.
 
-### Remove Mount
+### Remove Share
 
-Deletes a mount configuration. Any in-progress jobs using this mount as a
+Deletes a share configuration. Any in-progress jobs using this share as a
 source path may fail.
 
 ```bash
 # Requires admin or manager role
-curl -k -X DELETE https://localhost:8443/mounts/1 \
+curl -k -X DELETE https://localhost:8443/shares/1 \
   -H "Authorization: Bearer $JWT_TOKEN"
 ```
 
 Returns `204 No Content` on success.
 
-### Validate Mount
+### Validate Share
 
-Tests connectivity for a specific mount by attempting to reconnect with
-stored credentials. Updates the mount's `status` and `last_checked_at`.
+Tests connectivity for a specific share by attempting to reconnect with
+stored credentials. Updates the share's `status` and `last_checked_at`.
 
 ```bash
 # Requires admin or manager role
-curl -k -X POST https://localhost:8443/mounts/1/validate \
+curl -k -X POST https://localhost:8443/shares/1/validate \
   -H "Authorization: Bearer $JWT_TOKEN"
 ```
 
-Response: returns the updated mount object.
+Response: returns the updated share object.
 
-### Validate All Mounts
+### Validate All Shares
 
-Tests connectivity for every registered mount in one call. Useful as a
+Tests connectivity for every registered share in one call. Useful as a
 pre-flight check before starting a batch of export jobs.
 
 ```bash
 # Requires admin or manager role
-curl -k -X POST https://localhost:8443/mounts/validate \
+curl -k -X POST https://localhost:8443/shares/validate \
   -H "Authorization: Bearer $JWT_TOKEN"
 ```
 
-Response: returns an array of all mount objects with updated statuses.
+Response: returns an array of all share objects with updated statuses.
 
 ### Manual Managed-Mount Reconciliation
 
@@ -1969,7 +1969,7 @@ curl -k -H "Authorization: Bearer $JWT_TOKEN" \
   "https://localhost:8443/audit?action=MOUNT_RECONCILED"
 ```
 
-Verify current status with `POST /mounts/{mount_id}/validate`, then re-create the mount via `POST /mounts` if it needs to be re-established.
+Verify current status with `POST /shares/{share_id}/validate`, then re-create the share via `POST /shares` if it needs to be re-established.
 
 ### Service Won't Start
 

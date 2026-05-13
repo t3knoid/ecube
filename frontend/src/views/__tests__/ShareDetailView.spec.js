@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import i18n from '@/i18n/index.js'
-import MountDetailView from '@/views/MountDetailView.vue'
+import ShareDetailView from '@/views/ShareDetailView.vue'
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
@@ -26,7 +26,7 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: mocks.push }),
 }))
 
-vi.mock('@/api/mounts.js', () => ({
+vi.mock('@/api/shares.js', () => ({
   getShares: (...args) => mocks.getShares(...args),
   updateShare: (...args) => mocks.updateShare(...args),
   deleteShare: (...args) => mocks.deleteShare(...args),
@@ -62,7 +62,7 @@ function buildMount(overrides = {}) {
 }
 
 function mountView() {
-  return mount(MountDetailView, {
+  return mount(ShareDetailView, {
     attachTo: document.body,
     global: {
       plugins: [i18n],
@@ -97,7 +97,7 @@ function findDialogButton(wrapper, label) {
   return wrapper.find('.dialog-actions').findAll('button').find((node) => node.text() === label)
 }
 
-describe('MountDetailView', () => {
+describe('ShareDetailView', () => {
   beforeEach(() => {
     authState.roles = ['admin', 'manager']
     routeState.id = '11'
@@ -126,7 +126,7 @@ describe('MountDetailView', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.text()).toContain(i18n.global.t('mounts.detail'))
+    expect(wrapper.text()).toContain(i18n.global.t('shares.detail'))
     expect(wrapper.text()).toContain('//server/share')
     expect(wrapper.text()).toContain('/smb/project2')
     expect(wrapper.text()).toContain('PROJ-011')
@@ -135,13 +135,13 @@ describe('MountDetailView', () => {
     const jobLink = wrapper.find('.cell-link')
     expect(jobLink.exists()).toBe(true)
     expect(jobLink.text()).toBe('27')
-    expect(wrapper.text()).toContain(i18n.global.t('mounts.jobStatus'))
+    expect(wrapper.text()).toContain(i18n.global.t('shares.jobStatus'))
     expect(wrapper.text()).toContain('RUNNING')
 
     await jobLink.trigger('click')
     expect(mocks.push).toHaveBeenCalledWith({ name: 'job-detail', params: { id: 27 } })
 
-    const browseButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.browse'))
+    const browseButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('shares.browse'))
     await browseButton.trigger('click')
     await flushPromises()
 
@@ -155,7 +155,7 @@ describe('MountDetailView', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.text()).toContain(i18n.global.t('mounts.noRelatedJob'))
+    expect(wrapper.text()).toContain(i18n.global.t('shares.noRelatedJob'))
     expect(wrapper.find('.cell-link').exists()).toBe(false)
   })
 
@@ -165,7 +165,7 @@ describe('MountDetailView', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.text()).toContain(i18n.global.t('mounts.jobStatusUnavailable'))
+    expect(wrapper.text()).toContain(i18n.global.t('shares.jobStatusUnavailable'))
     expect(wrapper.find('.cell-link').text()).toBe('27')
   })
 
@@ -175,17 +175,17 @@ describe('MountDetailView', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.text()).toContain(i18n.global.t('mounts.latestReadSpeed'))
+    expect(wrapper.text()).toContain(i18n.global.t('shares.latestReadSpeed'))
     expect(wrapper.text()).toContain('64.2 MB/s')
 
-    const testButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.testThroughput'))
+    const testButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('shares.testThroughput'))
     expect(testButton).toBeTruthy()
 
     await testButton.trigger('click')
     await flushPromises()
 
     expect(mocks.testShareThroughput).toHaveBeenCalledWith(11, { timeout: 0 })
-    expect(wrapper.text()).toContain(i18n.global.t('mounts.throughputTestSuccess'))
+    expect(wrapper.text()).toContain(i18n.global.t('shares.throughputTestSuccess'))
     expect(wrapper.text()).toContain('87.4 MB/s')
   })
 
@@ -202,16 +202,16 @@ describe('MountDetailView', () => {
     await editButton.trigger('click')
     await flushPromises()
 
-    expect(wrapper.find('#edit-mount-dialog-title').text()).toBe(i18n.global.t('mounts.editDialogTitle'))
+    expect(wrapper.find('#edit-mount-dialog-title').text()).toBe(i18n.global.t('shares.editDialogTitle'))
     expect(wrapper.find('#mount-local-path').element.value).toBe('/smb/original-share')
     expect(wrapper.find('#mount-local-path').attributes('readonly')).toBeDefined()
 
     await wrapper.find('#mount-remote-path').setValue('//server/updated-share')
     await wrapper.find('#mount-project-id').setValue('proj-updated')
-    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.clearStoredCredentials')).trigger('click')
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('shares.clearStoredCredentials')).trigger('click')
     await flushPromises()
 
-    await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
+    await findDialogButton(wrapper, i18n.global.t('shares.test')).trigger('click')
     await flushPromises()
 
     await findDialogButton(wrapper, i18n.global.t('common.actions.save')).trigger('click')
@@ -233,7 +233,7 @@ describe('MountDetailView', () => {
       password: null,
       credentials_file: null,
     }, { timeout: 180000 })
-    expect(wrapper.text()).toContain(i18n.global.t('mounts.updateSuccess'))
+    expect(wrapper.text()).toContain(i18n.global.t('shares.updateSuccess'))
   })
 
   it('keeps the edit dialog open and shows actionable backend text when update fails', async () => {
@@ -248,7 +248,7 @@ describe('MountDetailView', () => {
     await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit')).trigger('click')
     await flushPromises()
 
-    await findDialogButton(wrapper, i18n.global.t('mounts.test')).trigger('click')
+    await findDialogButton(wrapper, i18n.global.t('shares.test')).trigger('click')
     await flushPromises()
 
     await findDialogButton(wrapper, i18n.global.t('common.actions.save')).trigger('click')
@@ -262,11 +262,11 @@ describe('MountDetailView', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const removeButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('mounts.remove'))
+    const removeButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('shares.remove'))
     await removeButton.trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain(i18n.global.t('mounts.removeConfirmTitle'))
+    expect(wrapper.text()).toContain(i18n.global.t('shares.removeConfirmTitle'))
 
     await wrapper.find('.confirm-btn').trigger('click')
     await flushPromises()
@@ -282,13 +282,13 @@ describe('MountDetailView', () => {
     await flushPromises()
 
     const buttonTexts = wrapper.findAll('button').map((node) => node.text())
-    expect(buttonTexts).not.toContain(i18n.global.t('mounts.browse'))
-    expect(buttonTexts).not.toContain(i18n.global.t('mounts.testThroughput'))
+    expect(buttonTexts).not.toContain(i18n.global.t('shares.browse'))
+    expect(buttonTexts).not.toContain(i18n.global.t('shares.testThroughput'))
     expect(buttonTexts).not.toContain(i18n.global.t('common.actions.edit'))
-    expect(buttonTexts).not.toContain(i18n.global.t('mounts.remove'))
+    expect(buttonTexts).not.toContain(i18n.global.t('shares.remove'))
     expect(wrapper.text()).not.toContain('//server/share')
     expect(wrapper.text()).not.toContain('/smb/project2')
-    expect(wrapper.text()).toContain(i18n.global.t('mounts.redactedValue'))
+    expect(wrapper.text()).toContain(i18n.global.t('shares.redactedValue'))
     expect(wrapper.find('.directory-browser-stub').exists()).toBe(false)
   })
 })
