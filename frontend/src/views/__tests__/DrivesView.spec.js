@@ -6,7 +6,6 @@ import DrivesView from '@/views/DrivesView.vue'
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   getDrives: vi.fn(),
-  listAllJobs: vi.fn(),
   refreshDrives: vi.fn(),
 }))
 
@@ -38,10 +37,6 @@ vi.mock('vue-router', async () => {
 vi.mock('@/api/drives.js', () => ({
   getDrives: (...args) => mocks.getDrives(...args),
   refreshDrives: (...args) => mocks.refreshDrives(...args),
-}))
-
-vi.mock('@/api/jobs.js', () => ({
-  listAllJobs: (...args) => mocks.listAllJobs(...args),
 }))
 
 vi.mock('@/stores/auth.js', () => ({
@@ -126,11 +121,9 @@ describe('DrivesView rescan and filter loading', () => {
     installMatchMediaMock()
     mocks.push.mockReset()
     mocks.getDrives.mockReset()
-    mocks.listAllJobs.mockReset()
     mocks.refreshDrives.mockReset()
 
     mocks.getDrives.mockResolvedValue([buildDrive()])
-    mocks.listAllJobs.mockResolvedValue([])
     mocks.refreshDrives.mockResolvedValue({ ok: true })
   })
 
@@ -138,7 +131,7 @@ describe('DrivesView rescan and filter loading', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(mocks.getDrives).toHaveBeenCalledWith({})
+    expect(mocks.getDrives).toHaveBeenCalledWith({ include_related_job_custody: true })
     expect(wrapper.findAll('select')[0].text()).not.toContain('Archived')
     expect(wrapper.findAll('select')[0].text()).toContain(i18n.global.t('drives.states.disabled'))
     expect(wrapper.findAll('select')[0].text()).not.toContain('UNMOUNTED')
@@ -152,7 +145,10 @@ describe('DrivesView rescan and filter loading', () => {
     await checkbox.setValue(true)
     await flushPromises()
 
-    expect(mocks.getDrives).toHaveBeenLastCalledWith({ include_disconnected: true })
+    expect(mocks.getDrives).toHaveBeenLastCalledWith({
+      include_disconnected: true,
+      include_related_job_custody: true,
+    })
   })
 
   it('preselects the disconnected filter from the route query and loads disconnected rows', async () => {
@@ -168,7 +164,10 @@ describe('DrivesView rescan and filter loading', () => {
     const checkbox = wrapper.find('input[type="checkbox"]')
     const stateSelect = wrapper.findAll('select')[0]
 
-    expect(mocks.getDrives).toHaveBeenCalledWith({ include_disconnected: true })
+    expect(mocks.getDrives).toHaveBeenCalledWith({
+      include_disconnected: true,
+      include_related_job_custody: true,
+    })
     expect(stateSelect.element.value).toBe('DISCONNECTED')
     expect(checkbox.element.checked).toBe(true)
     expect(wrapper.find('.rows-count').text()).toBe('1')
@@ -196,7 +195,7 @@ describe('DrivesView rescan and filter loading', () => {
 
     expect(stateSelect.element.value).toBe('AVAILABLE')
     expect(checkbox.element.checked).toBe(false)
-    expect(mocks.getDrives).toHaveBeenLastCalledWith({})
+    expect(mocks.getDrives).toHaveBeenLastCalledWith({ include_related_job_custody: true })
     expect(wrapper.find('.rows-count').text()).toBe('1')
   })
 
@@ -211,7 +210,7 @@ describe('DrivesView rescan and filter loading', () => {
     await flushPromises()
 
     expect(mocks.refreshDrives).toHaveBeenCalledTimes(1)
-    expect(mocks.getDrives).toHaveBeenLastCalledWith({})
+    expect(mocks.getDrives).toHaveBeenLastCalledWith({ include_related_job_custody: true })
     expect(wrapper.find('select').element.value).toBe('ALL')
   })
 
@@ -230,7 +229,7 @@ describe('DrivesView rescan and filter loading', () => {
     await flushPromises()
 
     expect(wrapper.find('select').element.value).toBe('ALL')
-    expect(mocks.getDrives).toHaveBeenLastCalledWith({})
+    expect(mocks.getDrives).toHaveBeenLastCalledWith({ include_related_job_custody: true })
   })
 
   it('hides the rescan action from processor-only roles', async () => {
@@ -272,9 +271,6 @@ describe('DrivesView rescan and filter loading', () => {
   })
 
   it('does not infer a job ID from another drive on the same project', async () => {
-    mocks.listAllJobs.mockResolvedValue([
-      { id: 19, project_id: 'PROJ-LEAK-001', evidence_number: 'EV-LEAK-001', drive: { id: 99 } },
-    ])
     mocks.getDrives.mockResolvedValue([
       buildDrive({
         id: 1,
@@ -385,10 +381,11 @@ describe('DrivesView rescan and filter loading', () => {
   })
 
   it('shows project and job ID columns while keeping filesystem and evidence absent from the list', async () => {
-    mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-123' })])
-    mocks.listAllJobs.mockResolvedValue([
-      { id: 12, project_id: 'PROJ-123', evidence_number: 'EV-123', drive: { id: 1 } },
-      { id: 11, project_id: 'PROJ-123', evidence_number: 'EV-OLDER', drive: { id: 2 } },
+    mocks.getDrives.mockResolvedValue([
+      buildDrive({
+        current_project_id: 'PROJ-123',
+        related_job: { job_id: 12 },
+      }),
     ])
 
     const wrapper = mountView()
@@ -405,7 +402,6 @@ describe('DrivesView rescan and filter loading', () => {
 
   it('shows the bound project even when no related job is available', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-777' })])
-    mocks.listAllJobs.mockResolvedValue([])
 
     const wrapper = mountView()
     await flushPromises()
@@ -415,9 +411,11 @@ describe('DrivesView rescan and filter loading', () => {
   })
 
   it('links the job ID value to the related job detail', async () => {
-    mocks.getDrives.mockResolvedValue([buildDrive({ current_project_id: 'PROJ-123' })])
-    mocks.listAllJobs.mockResolvedValue([
-      { id: 44, project_id: 'PROJ-123', evidence_number: 'EV-123', drive: { id: 1 } },
+    mocks.getDrives.mockResolvedValue([
+      buildDrive({
+        current_project_id: 'PROJ-123',
+        related_job: { job_id: 44 },
+      }),
     ])
 
     const wrapper = mountView()
@@ -433,14 +431,20 @@ describe('DrivesView rescan and filter loading', () => {
     expect(mocks.push).toHaveBeenLastCalledWith({ name: 'job-detail', params: { id: 44 } })
   })
 
-  it('uses the assigned drive job instead of the latest project job when multiple drives share a project', async () => {
+  it('uses the per-drive related job payload when multiple drives share a project', async () => {
     mocks.getDrives.mockResolvedValue([
-      buildDrive({ id: 1, current_project_id: 'PROJ-123', display_device_label: 'Drive 1 - Port 1' }),
-      buildDrive({ id: 2, current_project_id: 'PROJ-123', display_device_label: 'Drive 2 - Port 2' }),
-    ])
-    mocks.listAllJobs.mockResolvedValue([
-      { id: 7, project_id: 'PROJ-123', evidence_number: 'EV-007', drive: { id: 1 } },
-      { id: 4, project_id: 'PROJ-123', evidence_number: 'EV-004', drive: { id: 2 } },
+      buildDrive({
+        id: 1,
+        current_project_id: 'PROJ-123',
+        display_device_label: 'Drive 1 - Port 1',
+        related_job: { job_id: 7 },
+      }),
+      buildDrive({
+        id: 2,
+        current_project_id: 'PROJ-123',
+        display_device_label: 'Drive 2 - Port 2',
+        related_job: { job_id: 4 },
+      }),
     ])
 
     const wrapper = mountView()
@@ -459,11 +463,14 @@ describe('DrivesView rescan and filter loading', () => {
     expect(mocks.push).toHaveBeenLastCalledWith({ name: 'job-detail', params: { id: 4 } })
   })
 
-  it('uses jobs beyond the first backend page when deriving related job links', async () => {
-    mocks.getDrives.mockResolvedValue([buildDrive({ id: 2, current_project_id: 'PROJ-123', display_device_label: 'Drive 2 - Port 2' })])
-    mocks.listAllJobs.mockResolvedValue([
-      { id: 7, project_id: 'PROJ-123', evidence_number: 'EV-007', drive: { id: 1 } },
-      { id: 4, project_id: 'PROJ-123', evidence_number: 'EV-004', drive: { id: 2 } },
+  it('uses the related job payload directly without a separate jobs lookup', async () => {
+    mocks.getDrives.mockResolvedValue([
+      buildDrive({
+        id: 2,
+        current_project_id: 'PROJ-123',
+        display_device_label: 'Drive 2 - Port 2',
+        related_job: { job_id: 4 },
+      }),
     ])
 
     const wrapper = mountView()
@@ -473,33 +480,27 @@ describe('DrivesView rescan and filter loading', () => {
     expect(linkedCells.map((node) => node.text())).toEqual(['4'])
   })
 
-  it('uses the same project-level job fallback as Drive Detail when no drive-specific job exists', async () => {
+  it('keeps the job column empty when the backend reports no related job', async () => {
     mocks.getDrives.mockResolvedValue([
-      buildDrive({ id: 7, current_project_id: 'PROJ-007', display_device_label: 'Drive 7 - Port 7' }),
-    ])
-    mocks.listAllJobs.mockResolvedValue([
-      { id: 44, project_id: 'PROJ-007', evidence_number: 'EV-044', drive: { id: 8 } },
+      buildDrive({
+        id: 7,
+        current_project_id: 'PROJ-007',
+        display_device_label: 'Drive 7 - Port 7',
+        related_job: { job_id: null },
+      }),
     ])
 
     const wrapper = mountView()
     await flushPromises()
 
     const linkedCells = wrapper.findAll('.row-job-id .cell-link')
-    expect(linkedCells).toHaveLength(1)
+    expect(linkedCells).toHaveLength(0)
     expect(wrapper.find('.row-project').text()).toBe('PROJ-007')
-    expect(linkedCells[0].text()).toBe('44')
-
-    await linkedCells[0].trigger('click')
-    await flushPromises()
-
-    expect(mocks.push).toHaveBeenLastCalledWith({ name: 'job-detail', params: { id: 44 } })
+    expect(wrapper.find('.row-job-id').text()).toBe('-')
   })
 
   it('does not show a stale job link for a formatted drive', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ id: 7, current_project_id: null })])
-    mocks.listAllJobs.mockResolvedValue([
-      { id: 44, project_id: 'PROJ-OLD', evidence_number: 'EV-OLD', drive: { id: 7 } },
-    ])
 
     const wrapper = mountView()
     await flushPromises()
@@ -512,25 +513,14 @@ describe('DrivesView rescan and filter loading', () => {
   it('sorts by related job ID in ascending and descending order and keeps that sort after refresh', async () => {
     mocks.getDrives
       .mockResolvedValueOnce([
-        buildDrive({ id: 1, current_project_id: 'proj-200', display_device_label: 'Drive C - Port 1', port_system_path: '2-1' }),
-        buildDrive({ id: 2, current_project_id: 'PROJ-050', display_device_label: 'Drive A - Port 2', port_system_path: '2-2' }),
-        buildDrive({ id: 3, current_project_id: 'PROJ-100', display_device_label: 'Drive B - Port 3', port_system_path: '2-3' }),
+        buildDrive({ id: 1, current_project_id: 'proj-200', display_device_label: 'Drive C - Port 1', port_system_path: '2-1', related_job: { job_id: 200 } }),
+        buildDrive({ id: 2, current_project_id: 'PROJ-050', display_device_label: 'Drive A - Port 2', port_system_path: '2-2', related_job: { job_id: 50 } }),
+        buildDrive({ id: 3, current_project_id: 'PROJ-100', display_device_label: 'Drive B - Port 3', port_system_path: '2-3', related_job: { job_id: 100 } }),
       ])
       .mockResolvedValueOnce([
-        buildDrive({ id: 4, current_project_id: 'proj-300', display_device_label: 'Drive C - Port 4', port_system_path: '2-4' }),
-        buildDrive({ id: 5, current_project_id: 'PROJ-150', display_device_label: 'Drive A - Port 5', port_system_path: '2-5' }),
-        buildDrive({ id: 6, current_project_id: 'PROJ-250', display_device_label: 'Drive B - Port 6', port_system_path: '2-6' }),
-      ])
-    mocks.listAllJobs
-      .mockResolvedValueOnce([
-        { id: 200, project_id: 'PROJ-200', drive: { id: 1 } },
-        { id: 50, project_id: 'PROJ-050', drive: { id: 2 } },
-        { id: 100, project_id: 'PROJ-100', drive: { id: 3 } },
-      ])
-      .mockResolvedValueOnce([
-        { id: 300, project_id: 'PROJ-300', drive: { id: 4 } },
-        { id: 150, project_id: 'PROJ-150', drive: { id: 5 } },
-        { id: 250, project_id: 'PROJ-250', drive: { id: 6 } },
+        buildDrive({ id: 4, current_project_id: 'proj-300', display_device_label: 'Drive C - Port 4', port_system_path: '2-4', related_job: { job_id: 300 } }),
+        buildDrive({ id: 5, current_project_id: 'PROJ-150', display_device_label: 'Drive A - Port 5', port_system_path: '2-5', related_job: { job_id: 150 } }),
+        buildDrive({ id: 6, current_project_id: 'PROJ-250', display_device_label: 'Drive B - Port 6', port_system_path: '2-6', related_job: { job_id: 250 } }),
       ])
 
     const wrapper = mountView()
