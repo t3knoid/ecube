@@ -616,6 +616,51 @@ describe('DriveDetailView mount workflow', () => {
     }
   })
 
+  it('replaces a transient polling network error with the backend format failure once it arrives', async () => {
+    vi.useFakeTimers()
+    mocks.getDrives
+      .mockResolvedValueOnce([buildDrive({ current_project_id: 'PROJ-007', mount_path: null })])
+      .mockRejectedValueOnce(new Error('temporary disconnect'))
+      .mockResolvedValueOnce([buildDrive({
+        current_project_id: 'PROJ-007',
+        mount_path: null,
+        format_status: 'FAILED',
+        format_failure_message: 'Format timed out after 900s',
+      })])
+    mocks.formatDrive.mockResolvedValue(buildDrive({
+      current_project_id: 'PROJ-007',
+      mount_path: null,
+      format_status: 'PENDING',
+    }))
+
+    try {
+      const wrapper = mountView()
+      await flushPromises()
+
+      const formatButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.format'))
+      expect(formatButton).toBeTruthy()
+
+      await formatButton.trigger('click')
+      await flushPromises()
+
+      await wrapper.find('.confirm-dialog-confirm').trigger('click')
+      await flushPromises()
+
+      await vi.advanceTimersByTimeAsync(3000)
+      await flushPromises()
+
+      expect(wrapper.text()).toContain(i18n.global.t('common.errors.networkError'))
+
+      await vi.advanceTimersByTimeAsync(3000)
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('Format timed out after 900s')
+      expect(wrapper.text()).not.toContain(i18n.global.t('common.errors.networkError'))
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('hides Enable Drive when the drive is disconnected and not physically detected', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ current_state: 'DISCONNECTED', filesystem_path: null })])
 

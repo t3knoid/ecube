@@ -1158,21 +1158,52 @@ def request_drive_format(
             detail="Drive is currently mounted; unmount before formatting",
         )
 
+    previous_format_status = drive.format_status
+    previous_format_failure_message = drive.format_failure_message
+    previous_format_started_at = drive.format_started_at
+    previous_format_finished_at = drive.format_finished_at
+
     drive.format_status = DriveFormatStatus.PENDING
     drive.format_failure_message = None
     drive.format_started_at = datetime.now(timezone.utc)
     drive.format_finished_at = None
     drive_repo.save(drive)
 
-    background_tasks.add_task(
-        _run_drive_format_task,
-        drive_id,
-        filesystem_type,
-        formatter,
-        filesystem_detector,
-        actor,
-        client_ip,
-    )
+    try:
+        background_tasks.add_task(
+            _run_drive_format_task,
+            drive_id,
+            filesystem_type,
+            formatter,
+            filesystem_detector,
+            actor,
+            client_ip,
+        )
+    except Exception as exc:
+        logger.info(
+            "Drive format task could not be scheduled",
+            extra={
+                "drive_id": drive_id,
+                "failure_class": "drive_format_schedule_failed",
+            },
+        )
+        logger.debug(
+            "Drive format scheduling diagnostics",
+            extra={
+                "drive_id": drive_id,
+                "filesystem_type": filesystem_type,
+                "raw_error": str(exc),
+            },
+        )
+        drive.format_status = previous_format_status
+        drive.format_failure_message = previous_format_failure_message
+        drive.format_started_at = previous_format_started_at
+        drive.format_finished_at = previous_format_finished_at
+        drive_repo.save(drive)
+        raise service_exception(
+            status_code=500,
+            detail="Drive format could not be scheduled; retry the request",
+        ) from exc
 
     _attach_related_job_contexts(db, [drive], include_related_job_custody=True)
     return drive

@@ -461,6 +461,35 @@ class TestFormatDriveEndpoint:
         assert drive.format_status == DriveFormatStatus.PENDING
         assert drive.format_failure_message is None
 
+    def test_format_request_rolls_back_pending_state_when_task_scheduling_fails(self, admin_client, db):
+        drive = _make_drive(db, filesystem_type="unformatted")
+        fake = FakeFormatter()
+        detector = FakeFilesystemDetector("ext4")
+
+        with (
+            patch("app.routers.drives.get_drive_formatter", return_value=fake),
+            patch("app.routers.drives.get_filesystem_detector", return_value=detector),
+            patch(
+                "starlette.background.BackgroundTasks.add_task",
+                autospec=True,
+                side_effect=RuntimeError("scheduler unavailable"),
+            ),
+        ):
+            resp = admin_client.post(
+                f"/drives/{drive.id}/format",
+                json={"filesystem_type": "ext4"},
+            )
+
+        assert resp.status_code == 500
+        assert resp.json()["message"] == "Drive format could not be scheduled; retry the request"
+
+        db.refresh(drive)
+        assert drive.format_status is None
+        assert drive.format_failure_message is None
+        assert drive.format_started_at is None
+        assert drive.format_finished_at is None
+        assert fake.format_calls == []
+
     def test_format_success_ext4(self, admin_client, db):
         drive = _make_drive(db, filesystem_type="unformatted")
         fake = FakeFormatter(free_bytes_result=31_000_000_000)

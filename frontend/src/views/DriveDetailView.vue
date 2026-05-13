@@ -671,6 +671,7 @@ watch(
     formatPoller.stop()
 
     if (status === 'FAILED') {
+      error.value = ''
       infoMessage.value = ''
       awaitingFormatCompletion.value = false
       return
