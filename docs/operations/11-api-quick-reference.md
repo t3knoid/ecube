@@ -149,7 +149,7 @@ Compatibility note: To support project-to-source-path policy, use project source
 | Method | Endpoint | Role | Description |
 | ------ | -------- | ---- | ----------- |
 | GET | `/projects/{project_id}/source-bindings` | manager+ | List source bindings for a project |
-| POST | `/projects/{project_id}/source-bindings` | admin/manager | Add a project source binding (mount + optional subfolder) |
+| POST | `/projects/{project_id}/source-bindings` | admin/manager | Add a project source binding (share + optional subfolder) |
 | PATCH | `/projects/{project_id}/source-bindings/{binding_id}` | admin/manager | Update an existing binding |
 | DELETE | `/projects/{project_id}/source-bindings/{binding_id}` | admin/manager | Remove a binding |
 

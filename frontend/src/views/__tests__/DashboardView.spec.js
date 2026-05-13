@@ -33,7 +33,7 @@ vi.mock('@/api/drives.js', () => ({
   getDrives: (...args) => mocks.getDrives(...args),
 }))
 
-vi.mock('@/api/mounts.js', () => ({
+vi.mock('@/api/shares.js', () => ({
   getShares: (...args) => mocks.getShares(...args),
 }))
 
@@ -334,7 +334,7 @@ describe('DashboardView active jobs', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain(i18n.global.t('dashboard.sourceMount'))
-    expect(wrapper.text()).toContain(i18n.global.t('mounts.redactedValue'))
+    expect(wrapper.text()).toContain(i18n.global.t('shares.redactedValue'))
     expect(wrapper.text()).not.toContain('//server/case-062')
     expect(wrapper.text()).toContain('/case/subfolder')
     expect(wrapper.text()).toContain(i18n.global.t('jobs.destinationDrive'))
@@ -491,7 +491,7 @@ describe('DashboardView active jobs', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('//server/case-064')
-    expect(wrapper.text()).not.toContain(i18n.global.t('mounts.redactedValue'))
+    expect(wrapper.text()).not.toContain(i18n.global.t('shares.redactedValue'))
   })
 
   it('shows an empty needs-attention state when no follow-up items are present', async () => {
@@ -673,7 +673,7 @@ describe('DashboardView active jobs', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.text()).toContain(i18n.global.t('dashboard.shareSummary'))
+    expect(wrapper.text()).toContain(i18n.global.t('dashboard.sharesSummary'))
 
     const summaryRows = wrapper
       .findAll('.summary-link')

@@ -14,7 +14,7 @@
 3. [User Management](#user-management)
 4. [Drive Management](#drive-management)
 5. [Job Management](#job-management)
-6. [Share Management](#mount-management)
+6. [Share Management](#share-management)
 7. [Auditing](#auditing)
 8. [Monitoring and Logs](#monitoring-and-logs)
 9. [Troubleshooting](#troubleshooting)
@@ -1149,8 +1149,8 @@ Response:
 ```
 
 > **Note:** The `source_path` must be accessible from the ECUBE service
-> (e.g., a mounted NFS/SMB share). Use the [Add Network Share](#task-1-add-network-mount)
-> task to configure mounts before creating jobs.
+> (e.g., a mounted NFS/SMB share). Use the [Add Share](#add-share)
+> task to configure shares before creating jobs.
 
 ### View Job Status
 
