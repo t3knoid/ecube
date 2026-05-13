@@ -441,7 +441,8 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).toContain('3')
     expect(wrapper.text()).toContain('Estimated total bytes')
     expect(wrapper.text()).toContain('24 MB')
-    expect(wrapper.text()).not.toContain('Ready to start')
+    expect(wrapper.text()).toContain('Ready to start')
+    expect(wrapper.text()).toContain('Yes')
 
     const analyzeButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.analyze'))
     expect(analyzeButton).toBeTruthy()
