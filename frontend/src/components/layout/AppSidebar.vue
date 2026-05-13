@@ -21,7 +21,7 @@ let mobileMediaQuery = null
 const navItems = computed(() => [
   { label: t('nav.dashboard'), to: '/', roles: null },
   { label: t('nav.drives'), to: '/drives', roles: null },
-  { label: t('nav.mounts'), to: '/mounts', roles: null },
+  { label: t('nav.shares'), to: '/shares', roles: null },
   { label: t('nav.jobs'), to: '/jobs', roles: null },
   { label: t('nav.audit'), to: '/audit', roles: AUDIT_ROLES },
   { label: t('nav.system'), to: '/system', roles: null },

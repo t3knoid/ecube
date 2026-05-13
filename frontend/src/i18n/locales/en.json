@@ -510,7 +510,7 @@
       "health": "System Health",
       "usb": "USB Topology",
       "block": "Block Devices",
-      "shares": "Shares",
+      "mounts": "Mounts",
       "logs": "Logs"
     },
     "device": "Device",
@@ -583,7 +583,7 @@
     "systemHealth": "System Health",
     "passwordExpiryWarning": "Your password will expire in {days} day | Your password will expire in {days} days",
     "driveSummary": "Drive Summary",
-    "mountsSummary": "Mounts Summary",
+    "sharesSummary": "Shares Summary",
     "needsAttention": "Needs Attention",
     "attentionType": "Follow-up",
     "nextStep": "Next Step",

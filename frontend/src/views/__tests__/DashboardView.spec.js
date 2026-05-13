@@ -673,7 +673,7 @@ describe('DashboardView active jobs', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.text()).toContain(i18n.global.t('dashboard.mountsSummary'))
+    expect(wrapper.text()).toContain(i18n.global.t('dashboard.shareSummary'))
 
     const summaryRows = wrapper
       .findAll('.summary-link')
@@ -773,7 +773,7 @@ describe('DashboardView active jobs', () => {
     await flushPromises()
 
     expect(wrapper.text()).not.toContain(i18n.global.t('dashboard.driveSummary'))
-    expect(wrapper.text()).not.toContain(i18n.global.t('dashboard.mountsSummary'))
+    expect(wrapper.text()).not.toContain(i18n.global.t('dashboard.sharesSummary'))
     expect(wrapper.text()).not.toContain(i18n.global.t('dashboard.needsAttention'))
     expect(wrapper.text()).not.toContain(i18n.global.t('jobs.activeJobs'))
     expect(wrapper.text()).toContain(i18n.global.t('dashboard.systemHealth'))

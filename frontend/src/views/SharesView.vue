@@ -98,7 +98,7 @@ const activeEditMount = computed(() => (
     ? mounts.value.find((mount) => mount.id === editingMountId.value) || null
     : null
 ))
-const dialogTitle = computed(() => (isEditMode.value ? t('mounts.editDialogTitle') : t('mounts.addDialogTitle')))
+const dialogTitle = computed(() => (isEditMode.value ? t('shares.editDialogTitle') : t('shares.addDialogTitle')))
 const dialogSubmitLabel = computed(() => (isEditMode.value ? t('common.actions.save') : t('common.actions.create')))
 const dialogLocalMountPoint = computed(() => activeEditMount.value?.local_mount_point || '')
 const shareDiscoveryAvailable = computed(() => !isEditMode.value)
@@ -111,7 +111,7 @@ const nfsClientVersionOptions = computed(() => {
 const nfsClientVersionSelectOptions = computed(() => [
   {
     value: '',
-    label: t('mounts.nfsClientVersionDefaultOption', {
+    label: t('shares.nfsClientVersionDefaultOption', {
       version: publicAuthConfig.value.default_nfs_client_version || '4.1',
     }),
   },
@@ -144,7 +144,7 @@ const columns = computed(() => {
     { key: 'project_id', label: t('dashboard.project') },
     { key: 'status', label: t('common.labels.status') },
     { key: 'current_project_job_id', label: t('jobs.jobId'), align: 'right' },
-    { key: 'last_checked_at', label: t('mounts.lastChecked') },
+    { key: 'last_checked_at', label: t('shares.lastChecked') },
   ]
 
   if (isMobileViewport.value) {
@@ -303,7 +303,7 @@ function resetForm() {
 }
 
 function invalidateDialogValidation() {
-  if (dialogValidationPassed.value && dialogSuccessMessage.value === t('mounts.testSuccess')) {
+  if (dialogValidationPassed.value && dialogSuccessMessage.value === t('shares.testSuccess')) {
     dialogSuccessMessage.value = ''
   }
   dialogValidationPassed.value = false
@@ -368,8 +368,8 @@ function syncViewportState() {
 
 function browseLabel(mount) {
   return mount?.project_id
-    ? `${t('mounts.browse')} ${formatProjectId(mount.project_id)}`
-    : t('mounts.browse')
+    ? `${t('shares.browse')} ${formatProjectId(mount.project_id)}`
+    : t('shares.browse')
 }
 
 function mountBrowseTitle(mount) {
@@ -434,13 +434,13 @@ async function submitMountDialog() {
       const updatedMount = await updateShare(editingMountId.value, payload, { timeout: networkMountTimeoutMs() })
       replaceMount(updatedMount)
       if (updatedMount?.status === 'ERROR') {
-        dialogError.value = t('mounts.updateFailed')
+        dialogError.value = t('shares.updateFailed')
         return
       }
-      successMessage.value = t('mounts.updateSuccess')
+      successMessage.value = t('shares.updateSuccess')
     } else {
       await createShare(payload, { timeout: networkMountTimeoutMs() })
-      successMessage.value = t('mounts.createSuccess')
+      successMessage.value = t('shares.createSuccess')
     }
     showAddDialog.value = false
     resetForm()
@@ -466,18 +466,18 @@ async function runDialogValidate() {
       : await validateShareCandidate(payload, { timeout: networkMountTimeoutMs() })
     if (result?.status === 'MOUNTED') {
       dialogValidationPassed.value = true
-      dialogSuccessMessage.value = t('mounts.testSuccess')
+      dialogSuccessMessage.value = t('shares.testSuccess')
       dialogWarningMessage.value = String(result?.validation_warning || '').trim()
       return
     }
-    dialogError.value = t('mounts.testFailed')
+    dialogError.value = t('shares.testFailed')
   } catch (requestError) {
     const advisory = extractMountValidationAdvisory(requestError)
     if (advisory) {
       dialogWarningMessage.value = advisory
       dialogError.value = ''
     } else {
-      dialogError.value = normalizeErrorMessage(requestError?.response?.data, t('mounts.testFailed'))
+      dialogError.value = normalizeErrorMessage(requestError?.response?.data, t('shares.testFailed'))
     }
   } finally {
     dialogTesting.value = false
@@ -497,7 +497,7 @@ async function openShareBrowser(event) {
     const result = await discoverShares(buildShareDiscoveryPayload(), { timeout: mountShareDiscoveryTimeoutMs() })
     discoveredShares.value = Array.isArray(result?.shares) ? result.shares : []
   } catch (requestError) {
-    shareBrowserError.value = normalizeErrorMessage(requestError?.response?.data, t('mounts.browseSharesFailed'))
+    shareBrowserError.value = normalizeErrorMessage(requestError?.response?.data, t('shares.browseSharesFailed'))
   } finally {
     dialogBrowsing.value = false
   }
@@ -728,10 +728,10 @@ onBeforeUnmount(() => {
 <template>
   <section class="view-root">
     <header class="header-row">
-      <h1>{{ t('mounts.title') }}</h1>
+      <h1>{{ t('shares.title') }}</h1>
       <div class="actions">
         <button class="btn" @click="loadMounts">{{ t('common.actions.refresh') }}</button>
-        <button v-if="canManageMounts" class="btn btn-primary" @click="openAddDialog">{{ t('mounts.add') }}</button>
+        <button v-if="canManageMounts" class="btn btn-primary" @click="openAddDialog">{{ t('shares.add') }}</button>
       </div>
     </header>
 
@@ -740,9 +740,9 @@ onBeforeUnmount(() => {
     <p v-if="successMessage" class="success-banner" role="status" aria-live="polite">{{ successMessage }}</p>
 
     <div class="filters">
-      <input v-model="search" type="text" :placeholder="t('mounts.searchPlaceholder')" :aria-label="t('mounts.searchPlaceholder')" />
-      <select v-model="workflowFilter" :aria-label="t('mounts.workflowBucket')">
-        <option value="ALL">{{ t('mounts.allWorkflowBuckets') }}</option>
+      <input v-model="search" type="text" :placeholder="t('shares.searchPlaceholder')" :aria-label="t('shares.searchPlaceholder')" />
+      <select v-model="workflowFilter" :aria-label="t('shares.workflowBucket')">
+        <option value="ALL">{{ t('shares.allWorkflowBuckets') }}</option>
         <option :value="MOUNT_WORKFLOW_BUCKETS.UNASSIGNED">{{ t('dashboard.mountUnassigned') }}</option>
         <option :value="MOUNT_WORKFLOW_BUCKETS.ASSIGNED">{{ t('dashboard.mountAssigned') }}</option>
         <option :value="MOUNT_WORKFLOW_BUCKETS.ACTIVE">{{ t('dashboard.mountActive') }}</option>
@@ -753,7 +753,7 @@ onBeforeUnmount(() => {
       </select>
     </div>
 
-    <DataTable :columns="columns" :rows="paged" :empty-text="t('mounts.empty')">
+    <DataTable :columns="columns" :rows="paged" :empty-text="t('shares.empty')">
       <template #cell-id="{ row }">
         <button class="cell-link mount-id-link" type="button" @click="openMountDetails(row.id)">
           {{ row.id }}
@@ -842,7 +842,7 @@ onBeforeUnmount(() => {
               <option value="NFS">NFS</option>
             </select>
             <label for="mount-remote-path" class="field-label">
-              {{ t('mounts.remotePath') }}
+              {{ t('shares.remotePath') }}
               <span class="required-indicator" aria-hidden="true">*</span>
               <span class="sr-only">required</span>
             </label>
@@ -854,27 +854,27 @@ onBeforeUnmount(() => {
             </label>
             <input id="mount-project-id" v-model="form.project_id" type="text" required aria-required="true" />
             <template v-if="form.type === 'NFS'">
-              <label for="mount-nfs-client-version">{{ t('mounts.nfsClientVersion') }}</label>
+              <label for="mount-nfs-client-version">{{ t('shares.nfsClientVersion') }}</label>
               <select id="mount-nfs-client-version" v-model="form.nfs_client_version">
                 <option v-for="option in nfsClientVersionSelectOptions" :key="option.value || 'default'" :value="option.value">{{ option.label }}</option>
               </select>
-              <p class="field-help">{{ t('mounts.nfsClientVersionHelp') }}</p>
+              <p class="field-help">{{ t('shares.nfsClientVersionHelp') }}</p>
             </template>
             <template v-if="isEditMode && dialogLocalMountPoint">
-              <label for="mount-local-path">{{ t('mounts.localMountPointInfo') }}</label>
+              <label for="mount-local-path">{{ t('shares.localMountPointInfo') }}</label>
               <input id="mount-local-path" :value="dialogLocalMountPoint" type="text" readonly />
             </template>
             <div v-if="isEditMode" class="credential-header-row">
-              <span class="field-label">{{ t('mounts.storedCredentials') }}</span>
+              <span class="field-label">{{ t('shares.storedCredentials') }}</span>
               <button class="btn btn-secondary btn-inline" type="button" @click="clearStoredCredentials">
-                {{ t('mounts.clearStoredCredentials') }}
+                {{ t('shares.clearStoredCredentials') }}
               </button>
             </div>
             <label for="mount-username">{{ t('auth.username') }}</label>
             <input id="mount-username" v-model="form.username" type="text" autocomplete="off" @input="markCredentialFieldChanged('username')" />
             <label for="mount-password">{{ t('auth.password') }}</label>
             <input id="mount-password" v-model="form.password" type="password" autocomplete="new-password" @input="markCredentialFieldChanged('password')" />
-            <label for="mount-creds-file">{{ t('mounts.credentialsFile') }}</label>
+            <label for="mount-creds-file">{{ t('shares.credentialsFile') }}</label>
             <input id="mount-creds-file" v-model="form.credentials_file" type="text" @input="markCredentialFieldChanged('credentials_file')" />
           </div>
 
@@ -886,14 +886,14 @@ onBeforeUnmount(() => {
               :disabled="saving || dialogTesting || dialogBrowsing || !form.type || !form.remote_path.trim()"
               @click="openShareBrowser($event)"
             >
-              {{ dialogBrowsing ? t('common.labels.loading') : t('mounts.browseShares') }}
+              {{ dialogBrowsing ? t('common.labels.loading') : t('shares.browseShares') }}
             </button>
             <button
               class="btn"
               :disabled="saving || dialogTesting || !formValid()"
               @click="runDialogValidate"
             >
-              {{ dialogTesting ? t('common.labels.loading') : t('mounts.test') }}
+              {{ dialogTesting ? t('common.labels.loading') : t('shares.test') }}
             </button>
             <button
               class="btn btn-primary"
@@ -908,11 +908,11 @@ onBeforeUnmount(() => {
 
       <div v-if="showShareBrowserDialog" class="dialog-overlay">
         <div ref="shareBrowserDialogRef" class="dialog-panel share-browser-panel" role="dialog" aria-modal="true" :aria-labelledby="shareBrowserTitleId">
-          <h2 :id="shareBrowserTitleId">{{ t('mounts.browseSharesTitle') }}</h2>
-          <p class="muted">{{ t('mounts.browseSharesHelp') }}</p>
+          <h2 :id="shareBrowserTitleId">{{ t('shares.browseSharesTitle') }}</h2>
+          <p class="muted">{{ t('shares.browseSharesHelp') }}</p>
           <p v-if="shareBrowserError" class="error-banner" role="alert" aria-live="assertive">{{ shareBrowserError }}</p>
           <p v-else-if="dialogBrowsing" class="muted">{{ t('common.labels.loading') }}</p>
-          <p v-else-if="!discoveredShares.length" class="muted">{{ t('mounts.browseSharesEmpty') }}</p>
+          <p v-else-if="!discoveredShares.length" class="muted">{{ t('shares.browseSharesEmpty') }}</p>
           <div v-else class="share-discovery-scroll" aria-live="polite">
             <ul class="share-discovery-list">
               <li v-for="share in discoveredShares" :key="share.remote_path" class="share-discovery-item">
@@ -921,7 +921,7 @@ onBeforeUnmount(() => {
                   <span class="muted">{{ share.remote_path }}</span>
                 </div>
                 <button class="btn share-select-btn" @click="selectDiscoveredShare(share.remote_path)">
-                  {{ t('mounts.selectShare') }}
+                  {{ t('shares.selectShare') }}
                 </button>
               </li>
             </ul>
@@ -935,9 +935,9 @@ onBeforeUnmount(() => {
 
     <ConfirmDialog
       v-model="showRemoveDialog"
-      :title="t('mounts.removeConfirmTitle')"
-      :message="t('mounts.removeConfirmBody')"
-      :confirm-label="t('mounts.remove')"
+      :title="t('shares.removeConfirmTitle')"
+      :message="t('shares.removeConfirmBody')"
+      :confirm-label="t('shares.remove')"
       :cancel-label="t('common.actions.cancel')"
       :busy="saving"
       dangerous

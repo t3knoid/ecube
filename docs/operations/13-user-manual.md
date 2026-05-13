@@ -22,7 +22,7 @@
    - [Formatting a Drive](#74-formatting-a-drive)
    - [Initializing a Drive](#75-initializing-a-drive)
    - [Prepare Eject](#76-prepare-eject)
-10. [Mounts](#8-mounts)
+10. [Shares](#8-shares)
 11. [Jobs](#9-jobs)
    - [Job Detail, Verification, and File Review](#94-job-detail-verification-and-file-review)
 12. [Audit Logs](#10-audit-logs)
@@ -312,7 +312,7 @@ Typical information shown:
 
 The `Needs Attention` section highlights trusted workflow items that require follow-up from processors or managers. `Blocked` covers failed or paused jobs, `Waiting to Start` highlights pending assignments, and `Waiting on Custody Closeout` highlights completed or archived jobs whose trusted custody state is still `Pending handoff`. The `Needs Attention` and active-jobs tables both include a read-only `Next Step` column derived from trusted lifecycle, startup-analysis, failed-file, and custody state so operators can triage work before opening Job Detail. Each row uses the `Job ID` value as the direct navigation path into Job Detail. On wider screens, the `Project` column also carries trusted source-mount, source-path, destination-drive, and follow-up context when those fields are available. On smaller screens, the dashboard stacks the summary cards vertically, hides the `Project` column in the `Needs Attention` and active-jobs tables to avoid horizontal overflow, replaces full status badges with compact labeled icons, and reduces active-job progress to the percentage label while preserving `Next Step` guidance. The dashboard source-mount label follows the same role boundary as Mount Detail: `admin` and `manager` users see the raw mount path, while lower-privilege operational roles see a redacted value.
 
-Auditor users see the dashboard with only the system-health summary card; drive summary, mounts summary, needs-attention items, and active-job counts/tables are hidden.
+Auditor users see the dashboard with only the system-health summary card; drive summary, Shares summary, needs-attention items, and active-job counts/tables are hidden.
 
 If your password is nearing expiration, the dashboard shows a dismissible warning banner with the remaining days. Dismissing the banner hides it only for the current browser session.
 
@@ -322,7 +322,7 @@ Use the dashboard when you need a quick answer to questions such as:
 - Are any jobs currently preparing, running, or verifying?
 - Which jobs are blocked, waiting to start, or still waiting on custody closeout?
 - How many drives are ready for use?
-- How many source mounts are unassigned, assigned but not started, actively processing, blocked, waiting on custody closeout, fully complete including custody handoff, or currently unavailable for trusted workflow classification?
+- How many source shares are unassigned, assigned but not started, actively processing, blocked, waiting on custody closeout, fully complete including custody handoff, or currently unavailable for trusted workflow classification?
 
 The dashboard is intended for situational awareness, not full task execution. Use the dedicated pages for detailed operations.
 
@@ -471,7 +471,7 @@ If ECUBE detects timed-out or failed files in active drive assignments, the firs
 
 ---
 
-## 8. Mounts
+## 8. Shares
 
 > **Access Summary**
 > **Page visibility:** `admin`, `manager`, `processor`, `auditor`
@@ -623,7 +623,7 @@ The dialog is organized into four sections:
 3. `Destination` — the eligible mounted USB device for the selected project
 4. `Execution` — the optional `Run job immediately` checkbox
 
-Only the `Project` field is active when the dialog opens. After you select a project, ECUBE unlocks the remaining fields and filters the available mounts and destination drives to project-matching, currently eligible resources. Required fields use the shared required-marker icon in their labels, and the footer repeats that marker with a `Required field` legend.
+Only the `Project` field is active when the dialog opens. After you select a project, ECUBE unlocks the remaining fields and filters the available shares and destination drives to project-matching, currently eligible resources. Required fields use the shared required-marker icon in their labels, and the footer repeats that marker with a `Required field` legend.
 
 The destination selector is labeled `Select device` and shows the same port-based `Device` value used elsewhere in the UI, rather than a serial number or `#id` prefix.
 

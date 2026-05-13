@@ -292,7 +292,7 @@ function resolveSourceMount(job) {
 function sourceMountLabel(job) {
   const sourceMount = resolveSourceMount(job)
   if (!sourceMount?.remote_path) return t('common.labels.notAvailable')
-  return canViewRawMountPaths.value ? sourceMount.remote_path : t('mounts.redactedValue')
+  return canViewRawMountPaths.value ? sourceMount.remote_path : t('shares.redactedValue')
 }
 
 function sourcePathLabel(job) {
@@ -517,7 +517,7 @@ onUnmounted(() => {
       </article>
 
       <article v-if="canViewOperationalSummary" class="summary-card">
-        <h2>{{ t('dashboard.mountsSummary') }}</h2>
+        <h2>{{ t('dashboard.sharesSummary') }}</h2>
         <button
           v-for="entry in mountSummaryEntries"
           :key="entry.key"

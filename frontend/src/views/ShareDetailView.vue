@@ -65,7 +65,7 @@ const canBrowse = computed(() => (
   canBrowseContents.value && mountRecord.value?.status === 'MOUNTED' && Number.isInteger(mountRecord.value?.id)
 ))
 const canTestThroughput = computed(() => canManageMounts.value && mountRecord.value?.status === 'MOUNTED')
-const redactedMountValue = computed(() => t('mounts.redactedValue'))
+const redactedMountValue = computed(() => t('shares.redactedValue'))
 const visibleRemotePath = computed(() => {
   if (!mountRecord.value?.remote_path) return '-'
   return canManageMounts.value ? mountRecord.value.remote_path : redactedMountValue.value
@@ -83,7 +83,7 @@ const nfsClientVersionOptions = computed(() => {
 const nfsClientVersionSelectOptions = computed(() => [
   {
     value: '',
-    label: t('mounts.nfsClientVersionDefaultOption', {
+    label: t('shares.nfsClientVersionDefaultOption', {
       version: publicAuthConfig.value.default_nfs_client_version || '4.1',
     }),
   },
@@ -95,9 +95,9 @@ const relatedJobStatus = computed(() => relatedJob.value?.status || 'STATUS_UNAV
 const relatedJobStatusLabel = computed(() => {
   switch (String(relatedJobStatus.value || '').toUpperCase()) {
     case 'NO_RELATED_JOB':
-      return t('mounts.noRelatedJob')
+      return t('shares.noRelatedJob')
     case 'STATUS_UNAVAILABLE':
-      return t('mounts.jobStatusUnavailable')
+      return t('shares.jobStatusUnavailable')
     default:
       return String(relatedJobStatus.value || '-')
   }
@@ -167,7 +167,7 @@ async function loadMount() {
     mountRecord.value = nextMount
 
     if (!nextMount) {
-      error.value = t('mounts.notFound')
+      error.value = t('shares.notFound')
     }
   } catch (requestError) {
     error.value = normalizeErrorMessage(requestError?.response?.data, t('common.errors.networkError'))
@@ -198,7 +198,7 @@ function resetEditForm() {
 }
 
 function invalidateDialogValidation() {
-  if (dialogValidationPassed.value && dialogSuccessMessage.value === t('mounts.testSuccess')) {
+  if (dialogValidationPassed.value && dialogSuccessMessage.value === t('shares.testSuccess')) {
     dialogSuccessMessage.value = ''
   }
   dialogValidationPassed.value = false
@@ -298,12 +298,12 @@ async function runDialogValidate() {
     const result = await validateShare(mountRecord.value.id, buildMountPayload(), { timeout: networkMountTimeoutMs() })
     if (result?.status === 'MOUNTED') {
       dialogValidationPassed.value = true
-      dialogSuccessMessage.value = t('mounts.testSuccess')
+      dialogSuccessMessage.value = t('shares.testSuccess')
       return
     }
-    dialogError.value = t('mounts.testFailed')
+    dialogError.value = t('shares.testFailed')
   } catch (requestError) {
-    dialogError.value = normalizeErrorMessage(requestError?.response?.data, t('mounts.testFailed'))
+    dialogError.value = normalizeErrorMessage(requestError?.response?.data, t('shares.testFailed'))
   } finally {
     dialogTesting.value = false
   }
@@ -317,12 +317,12 @@ async function submitMountDialog() {
   try {
     const updatedMount = await updateShare(mountRecord.value.id, buildMountPayload(), { timeout: networkMountTimeoutMs() })
     if (updatedMount?.status === 'ERROR') {
-      dialogError.value = t('mounts.updateFailed')
+      dialogError.value = t('shares.updateFailed')
       return
     }
     closeEditDialog()
     await loadMount()
-    infoMessage.value = t('mounts.updateSuccess')
+    infoMessage.value = t('shares.updateSuccess')
   } catch (requestError) {
     dialogError.value = normalizeErrorMessage(requestError?.response?.data, t('common.errors.validationFailed'))
   } finally {
@@ -336,7 +336,7 @@ async function runThroughputTest() {
   clearBanners()
   try {
     mountRecord.value = normalizeProjectRecord(await testShareThroughput(mountRecord.value.id, { timeout: 0 }), ['project_id'])
-    infoMessage.value = t('mounts.throughputTestSuccess')
+    infoMessage.value = t('shares.throughputTestSuccess')
   } catch (requestError) {
     const status = requestError?.response?.status
     const detail = normalizeErrorMessage(requestError?.response?.data, null)
@@ -347,11 +347,11 @@ async function runThroughputTest() {
     } else if (status === 404) {
       error.value = detail || t('common.errors.notFound')
     } else if (status === 409) {
-      error.value = detail || t('mounts.throughputTestFailed')
+      error.value = detail || t('shares.throughputTestFailed')
     } else if (status === 422) {
       error.value = detail || t('common.errors.validationFailed')
     } else if (status >= 500) {
-      error.value = detail || t('mounts.throughputTestFailed')
+      error.value = detail || t('shares.throughputTestFailed')
     } else {
       error.value = t('common.errors.serverErrorGeneric')
     }
@@ -454,7 +454,7 @@ onBeforeUnmount(() => {
 <template>
   <section class="view-root">
     <header class="header-row">
-      <h1>{{ t('mounts.detail') }} #{{ mountId }}</h1>
+      <h1>{{ t('shares.detail') }} #{{ mountId }}</h1>
       <div class="actions">
         <button class="btn" @click="router.push({ name: 'mounts' })">{{ t('common.actions.back') }}</button>
         <button class="btn" @click="loadMount">{{ t('common.actions.refresh') }}</button>
@@ -468,13 +468,13 @@ onBeforeUnmount(() => {
     <article v-if="mountRecord" class="detail-card">
       <div class="detail-grid">
         <div><strong>{{ t('common.labels.type') }}</strong><span>{{ mountRecord.type || '-' }}</span></div>
-        <div><strong>{{ t('mounts.remotePath') }}</strong><span>{{ visibleRemotePath }}</span></div>
+        <div><strong>{{ t('shares.remotePath') }}</strong><span>{{ visibleRemotePath }}</span></div>
         <div><strong>{{ t('dashboard.project') }}</strong><span>{{ mountRecord.project_id || '-' }}</span></div>
-        <div><strong>{{ t('mounts.nfsClientVersion') }}</strong><span>{{ mountRecord.nfs_client_version || '-' }}</span></div>
-        <div><strong>{{ t('mounts.localMountPointInfo') }}</strong><span>{{ visibleLocalMountPoint }}</span></div>
-        <div><strong>{{ t('mounts.lastChecked') }}</strong><span>{{ toIso(mountRecord.last_checked_at) }}</span></div>
-        <div><strong>{{ t('mounts.latestReadSpeed') }}</strong><span>{{ formatTransferRate(mountRecord.throughput_read_mbps) }}</span></div>
-        <div><strong>{{ t('mounts.lastThroughputTest') }}</strong><span>{{ toIso(mountRecord.throughput_tested_at) }}</span></div>
+        <div><strong>{{ t('shares.nfsClientVersion') }}</strong><span>{{ mountRecord.nfs_client_version || '-' }}</span></div>
+        <div><strong>{{ t('shares.localMountPointInfo') }}</strong><span>{{ visibleLocalMountPoint }}</span></div>
+        <div><strong>{{ t('shares.lastChecked') }}</strong><span>{{ toIso(mountRecord.last_checked_at) }}</span></div>
+        <div><strong>{{ t('shares.latestReadSpeed') }}</strong><span>{{ formatTransferRate(mountRecord.throughput_read_mbps) }}</span></div>
+        <div><strong>{{ t('shares.lastThroughputTest') }}</strong><span>{{ toIso(mountRecord.throughput_tested_at) }}</span></div>
         <div>
           <strong>{{ t('jobs.jobId') }}</strong>
           <span>
@@ -490,17 +490,17 @@ onBeforeUnmount(() => {
           </span>
         </div>
         <div>
-          <strong>{{ t('mounts.jobStatus') }}</strong>
+          <strong>{{ t('shares.jobStatus') }}</strong>
           <span><StatusBadge :status="relatedJobStatus" :label="relatedJobStatusLabel" /></span>
         </div>
         <div><strong>{{ t('common.labels.status') }}</strong><StatusBadge :status="mountRecord.status" /></div>
       </div>
 
       <div class="action-row">
-        <button v-if="canBrowseContents" class="btn" :disabled="!canBrowse" @click="browseExpanded = !browseExpanded">{{ t('mounts.browse') }}</button>
-        <button v-if="canManageMounts" class="btn" :disabled="saving || throughputTesting || !canTestThroughput" @click="runThroughputTest">{{ throughputTesting ? t('common.labels.loading') : t('mounts.testThroughput') }}</button>
+        <button v-if="canBrowseContents" class="btn" :disabled="!canBrowse" @click="browseExpanded = !browseExpanded">{{ t('shares.browse') }}</button>
+        <button v-if="canManageMounts" class="btn" :disabled="saving || throughputTesting || !canTestThroughput" @click="runThroughputTest">{{ throughputTesting ? t('common.labels.loading') : t('shares.testThroughput') }}</button>
         <button v-if="canManageMounts" class="btn" :disabled="saving" @click="openEditDialog($event)">{{ t('common.actions.edit') }}</button>
-        <button v-if="canManageMounts" class="btn btn-danger" :disabled="saving" @click="requestRemove">{{ t('mounts.remove') }}</button>
+        <button v-if="canManageMounts" class="btn btn-danger" :disabled="saving" @click="requestRemove">{{ t('shares.remove') }}</button>
       </div>
 
       <p v-if="!canManageMounts" class="muted">{{ t('auth.insufficientPermissions') }}</p>
@@ -516,9 +516,9 @@ onBeforeUnmount(() => {
 
     <ConfirmDialog
       v-model="showRemoveDialog"
-      :title="t('mounts.removeConfirmTitle')"
-      :message="t('mounts.removeConfirmBody')"
-      :confirm-label="t('mounts.remove')"
+      :title="t('shares.removeConfirmTitle')"
+      :message="t('shares.removeConfirmBody')"
+      :confirm-label="t('shares.remove')"
       :cancel-label="t('common.actions.cancel')"
       :busy="saving"
       dangerous
@@ -529,7 +529,7 @@ onBeforeUnmount(() => {
       <div v-if="showEditDialog" class="dialog-overlay">
         <div ref="editDialogRef" class="dialog-panel mount-dialog-panel" role="dialog" aria-modal="true" :aria-labelledby="editDialogTitleId">
           <div class="dialog-header mount-dialog-header">
-            <h2 :id="editDialogTitleId">{{ t('mounts.editDialogTitle') }}</h2>
+            <h2 :id="editDialogTitleId">{{ t('shares.editDialogTitle') }}</h2>
             <p v-if="dialogError" class="error-banner" role="alert" aria-live="assertive">{{ dialogError }}</p>
             <p v-if="dialogSuccessMessage" class="success-banner" role="status" aria-live="polite">{{ dialogSuccessMessage }}</p>
           </div>
@@ -545,7 +545,7 @@ onBeforeUnmount(() => {
               <option value="NFS">NFS</option>
             </select>
             <label for="mount-remote-path" class="field-label">
-              {{ t('mounts.remotePath') }}
+              {{ t('shares.remotePath') }}
               <span class="required-indicator" aria-hidden="true">*</span>
               <span class="sr-only">required</span>
             </label>
@@ -557,34 +557,34 @@ onBeforeUnmount(() => {
             </label>
             <input id="mount-project-id" v-model="form.project_id" type="text" required aria-required="true" />
             <template v-if="form.type === 'NFS'">
-              <label for="mount-nfs-client-version">{{ t('mounts.nfsClientVersion') }}</label>
+              <label for="mount-nfs-client-version">{{ t('shares.nfsClientVersion') }}</label>
               <select id="mount-nfs-client-version" v-model="form.nfs_client_version">
                 <option v-for="option in nfsClientVersionSelectOptions" :key="option.value || 'default'" :value="option.value">{{ option.label }}</option>
               </select>
-              <p class="field-help">{{ t('mounts.nfsClientVersionHelp') }}</p>
+              <p class="field-help">{{ t('shares.nfsClientVersionHelp') }}</p>
             </template>
             <template v-if="mountRecord?.local_mount_point">
-              <label for="mount-local-path">{{ t('mounts.localMountPointInfo') }}</label>
+              <label for="mount-local-path">{{ t('shares.localMountPointInfo') }}</label>
               <input id="mount-local-path" :value="mountRecord.local_mount_point" type="text" readonly />
             </template>
             <div class="credential-header-row">
-              <span class="field-label">{{ t('mounts.storedCredentials') }}</span>
+              <span class="field-label">{{ t('shares.storedCredentials') }}</span>
               <button class="btn btn-secondary btn-inline" type="button" @click="clearStoredCredentials">
-                {{ t('mounts.clearStoredCredentials') }}
+                {{ t('shares.clearStoredCredentials') }}
               </button>
             </div>
             <label for="mount-username">{{ t('auth.username') }}</label>
             <input id="mount-username" v-model="form.username" type="text" autocomplete="off" @input="markCredentialFieldChanged('username')" />
             <label for="mount-password">{{ t('auth.password') }}</label>
             <input id="mount-password" v-model="form.password" type="password" autocomplete="new-password" @input="markCredentialFieldChanged('password')" />
-            <label for="mount-creds-file">{{ t('mounts.credentialsFile') }}</label>
+            <label for="mount-creds-file">{{ t('shares.credentialsFile') }}</label>
             <input id="mount-creds-file" v-model="form.credentials_file" type="text" @input="markCredentialFieldChanged('credentials_file')" />
           </div>
 
           <div class="dialog-actions dialog-footer">
             <button class="btn" @click="closeEditDialog">{{ t('common.actions.cancel') }}</button>
             <button class="btn" :disabled="saving || dialogTesting || !formValid()" @click="runDialogValidate">
-              {{ dialogTesting ? t('common.labels.loading') : t('mounts.test') }}
+              {{ dialogTesting ? t('common.labels.loading') : t('shares.test') }}
             </button>
             <button class="btn btn-primary" :disabled="saving || dialogTesting || !formValid() || !dialogValidationPassed" @click="submitMountDialog">
               {{ saving ? t('common.labels.loading') : t('common.actions.save') }}
