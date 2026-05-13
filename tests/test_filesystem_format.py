@@ -893,15 +893,22 @@ class TestFormatClearsProjectBinding:
             filesystem_type="exfat",
         )
         fake = FakeFormatter()
-        with patch("app.routers.drives.get_drive_formatter", return_value=fake):
+        detector = FakeFilesystemDetector("ext4")
+        with (
+            patch("app.routers.drives.get_drive_formatter", return_value=fake),
+            patch("app.routers.drives.get_filesystem_detector", return_value=detector),
+        ):
             resp = admin_client.post(
                 f"/drives/{drive.id}/format",
                 json={"filesystem_type": "ext4"},
             )
-        assert resp.status_code == 200
-        assert resp.json()["current_project_id"] is None
+        assert resp.status_code == 202
+        assert resp.json()["current_project_id"] == "PROJ-OLD"
+        assert resp.json()["format_status"] == "PENDING"
         db.refresh(drive)
         assert drive.current_project_id is None
+        assert drive.filesystem_type == "ext4"
+        assert drive.format_status is None
 
     def test_format_then_initialize_for_new_project(self, admin_client, db):
         """After format, a drive previously used by PROJ-OLD can be initialized for PROJ-NEW."""
@@ -922,10 +929,13 @@ class TestFormatClearsProjectBinding:
                 f"/drives/{drive.id}/format",
                 json={"filesystem_type": "ext4"},
             )
-        assert format_resp.status_code == 200
+        assert format_resp.status_code == 202
+        assert format_resp.json()["current_project_id"] == "PROJ-OLD"
+        assert format_resp.json()["format_status"] == "PENDING"
         db.refresh(drive)
         assert drive.current_project_id is None
         assert drive.filesystem_type == "ext4"
+        assert drive.format_status is None
 
         drive.mount_path = f"/mnt/ecube/{drive.id}"
         db.commit()
