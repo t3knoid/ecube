@@ -726,12 +726,16 @@ class TestFormatDriveEndpoint:
         assert log.project_id is None
         assert log.details["drive_id"] == drive.id
         assert log.details["error"] == sanitize_error_message("mkfs failed: simulated error")
+        assert log.details["filesystem_path"] == "[redacted]"
 
         # Filesystem type should NOT be updated on failure
         db.refresh(drive)
         assert drive.filesystem_type is None
         assert drive.format_status == DriveFormatStatus.FAILED
-        assert drive.format_failure_message == sanitize_error_message("mkfs failed: simulated error")
+        assert drive.format_failure_message == sanitize_error_message(
+            RuntimeError("mkfs failed: simulated error"),
+            "Drive format failed",
+        )
 
     def test_format_db_save_failure_audit_log(self, admin_client, db):
         """Format succeeds at OS level but DB save fails — audit entry records divergence."""
@@ -743,7 +747,10 @@ class TestFormatDriveEndpoint:
             if fail_on_second_save.call_count == 0:
                 fail_on_second_save.call_count += 1
                 return real_save(repo, drive_record)
-            raise RuntimeError("DB commit failed")
+            if fail_on_second_save.call_count == 1:
+                fail_on_second_save.call_count += 1
+                raise RuntimeError("DB commit failed")
+            return real_save(repo, drive_record)
 
         fail_on_second_save.call_count = 0
 
@@ -751,6 +758,7 @@ class TestFormatDriveEndpoint:
             patch("app.routers.drives.get_drive_formatter", return_value=fake),
             patch(
                 "app.services.drive_service.DriveRepository.save",
+                autospec=True,
                 side_effect=fail_on_second_save,
             ),
         ):
@@ -772,6 +780,7 @@ class TestFormatDriveEndpoint:
         assert log.drive_id == drive.id
         assert log.project_id is None
         assert log.details["drive_id"] == drive.id
+        assert log.details["filesystem_path"] == "[redacted]"
         assert log.details["filesystem_type"] == "ext4"
 
         db.refresh(drive)

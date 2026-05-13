@@ -101,6 +101,12 @@ def _redacted_device_name(path: Optional[str]) -> Optional[str]:
     return os.path.basename(path.rstrip("/")) or None
 
 
+def _redacted_audit_path(path: Optional[str]) -> Optional[str]:
+    if not path:
+        return None
+    return "[redacted]"
+
+
 def _reject_pending_drive_format(drive: Optional[UsbDrive], *, action: str) -> None:
     if getattr(drive, "format_status", None) != DriveFormatStatus.PENDING:
         return
@@ -1356,7 +1362,7 @@ def _complete_drive_format(
                 drive_id=drive_id,
                 details={
                     "drive_id": drive_id,
-                    "filesystem_path": drive.filesystem_path,
+                    "filesystem_path": _redacted_audit_path(drive.filesystem_path),
                     "filesystem_type": filesystem_type,
                     "error": safe_error,
                     "actor": actor,
@@ -1408,6 +1414,9 @@ def _complete_drive_format(
         drive_repo.save(drive)
     except Exception:
         logger.exception("DB commit failed after formatting drive %s", drive_id)
+        # Restore the persisted pending state before writing the divergence audit
+        # entry so the audit commit does not flush the in-memory formatted state.
+        db.refresh(drive)
         try:
             audit_repo.add(
                 action="DRIVE_FORMAT_DB_UPDATE_FAILED",
@@ -1416,7 +1425,7 @@ def _complete_drive_format(
                 drive_id=drive_id,
                 details={
                     "drive_id": drive_id,
-                    "filesystem_path": drive.filesystem_path,
+                    "filesystem_path": _redacted_audit_path(drive.filesystem_path),
                     "filesystem_type": filesystem_type,
                     "actor": actor,
                 },
@@ -1437,7 +1446,7 @@ def _complete_drive_format(
             project_id=prior_project_id,
             drive_id=drive_id,
             metadata={
-                "filesystem_path": drive.filesystem_path,
+                "filesystem_path": _redacted_audit_path(drive.filesystem_path),
                 "filesystem_type": filesystem_type,
                 "detected_filesystem_type": detected_filesystem_type,
                 "free_bytes": free_bytes,
