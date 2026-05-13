@@ -190,11 +190,11 @@ class TestDriveInitDBFailures:
 
     def test_initialize_audit_failure_does_not_abort(self, manager_client, db):
         """Audit failure during initialization must not abort the operation."""
-        from app.models.network import MountStatus, MountType, NetworkMount
+        from app.models.network import MountStatus, MountType, NetworkShare
 
         drive = _make_drive(db)
         db.add(
-            NetworkMount(
+            NetworkShare(
                 type=MountType.NFS,
                 remote_path="server:/proj-001",
                 project_id="PROJ-001",
@@ -218,11 +218,11 @@ class TestDriveInitDBFailures:
 
     def test_initialize_db_failure_returns_500(self, manager_client, db):
         """If DB commit fails during drive state change, return 500."""
-        from app.models.network import MountStatus, MountType, NetworkMount
+        from app.models.network import MountStatus, MountType, NetworkShare
 
         drive = _make_drive(db)
         db.add(
-            NetworkMount(
+            NetworkShare(
                 type=MountType.NFS,
                 remote_path="server:/proj-001",
                 project_id="PROJ-001",
@@ -269,11 +269,11 @@ class TestMountDBFailures:
     def test_add_mount_db_failure_on_initial_record(self, manager_client, db):
         """If initial mount record insert fails, return 500."""
         with patch(
-            "app.repositories.mount_repository.MountRepository.add",
+            "app.repositories.share_repository.ShareRepository.add",
             side_effect=Exception("simulated DB failure"),
         ):
             response = manager_client.post(
-                "/mounts",
+                "/shares",
                 json={
                     "type": "NFS",
                     "remote_path": "server:/share",
@@ -285,11 +285,11 @@ class TestMountDBFailures:
     def test_add_mount_encoding_error_returns_422(self, manager_client, db):
         """Encoding-like DB exception during mount creation returns 422 ENCODING_ERROR."""
         with patch(
-            "app.repositories.mount_repository.MountRepository.add",
+            "app.repositories.share_repository.ShareRepository.add",
             side_effect=Exception("null character not allowed"),
         ):
             response = manager_client.post(
-                "/mounts",
+                "/shares",
                 json={
                     "type": "NFS",
                     "remote_path": "server:/share",
@@ -311,7 +311,7 @@ class TestMountDBFailures:
             side_effect=Exception("simulated audit DB failure"),
         ):
             response = manager_client.post(
-                "/mounts",
+                "/shares",
                 json={
                     "type": "NFS",
                     "remote_path": "server:/share",
@@ -323,9 +323,9 @@ class TestMountDBFailures:
 
     def test_remove_mount_audit_failure_does_not_abort(self, manager_client, db):
         """Audit failure on mount removal must not abort the delete."""
-        from app.models.network import MountStatus, NetworkMount
+        from app.models.network import MountStatus, NetworkShare
 
-        mount = NetworkMount(
+        mount = NetworkShare(
             type="NFS",
             remote_path="server:/share",
             local_mount_point="/mnt/test",
@@ -342,7 +342,7 @@ class TestMountDBFailures:
                  "app.repositories.audit_repository.AuditRepository.add",
                  side_effect=Exception("simulated audit DB failure"),
              ):
-            response = manager_client.delete(f"/mounts/{mount.id}")
+            response = manager_client.delete(f"/shares/{mount.id}")
         assert response.status_code == 204
 
     def test_add_mount_save_failure_after_os_mount_returns_500(self, manager_client, db):
@@ -351,11 +351,11 @@ class TestMountDBFailures:
             "subprocess.run",
             return_value=MagicMock(returncode=0, stderr="", stdout=""),
         ), patch(
-            "app.repositories.mount_repository.MountRepository.save",
+            "app.repositories.share_repository.ShareRepository.save",
             side_effect=Exception("simulated save DB failure"),
         ):
             response = manager_client.post(
-                "/mounts",
+                "/shares",
                 json={
                     "type": "NFS",
                     "remote_path": "server:/share",

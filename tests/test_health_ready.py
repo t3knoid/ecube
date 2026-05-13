@@ -6,7 +6,7 @@ import app.main as main_module
 import app.services.database_service as database_service
 from fastapi.testclient import TestClient
 from app.models.audit import AuditLog
-from app.models.network import MountType, NetworkMount
+from app.models.network import MountType, NetworkShare
 from sqlalchemy.exc import ProgrammingError
 
 
@@ -376,7 +376,7 @@ def test_health_ready_returns_503_when_database_misconfigured(unauthenticated_cl
 
 def test_health_ready_returns_503_when_mount_check_fails(unauthenticated_client, db, monkeypatch):
     db.add(
-        NetworkMount(
+        NetworkShare(
             type=MountType.NFS,
             remote_path="10.0.0.1:/evidence",
             local_mount_point="/mnt/evidence",
@@ -420,7 +420,7 @@ def test_health_ready_returns_503_when_mount_metadata_table_missing(unauthentica
 def test_health_ready_returns_503_when_mount_provider_unavailable(unauthenticated_client, db, monkeypatch):
     # Add a mount so provider resolution is attempted
     db.add(
-        NetworkMount(
+        NetworkShare(
             type=MountType.NFS,
             remote_path="10.0.0.1:/evidence",
             local_mount_point="/mnt/evidence",
@@ -447,7 +447,7 @@ def test_health_ready_returns_503_when_mount_provider_unavailable(unauthenticate
 
 def test_health_ready_returns_503_when_mount_check_is_unknown(unauthenticated_client, db, monkeypatch):
     db.add(
-        NetworkMount(
+        NetworkShare(
             type=MountType.NFS,
             remote_path="10.0.0.1:/evidence",
             local_mount_point="/mnt/evidence",
@@ -470,7 +470,7 @@ def test_health_ready_returns_503_when_mount_check_is_unknown(unauthenticated_cl
 
 def test_health_ready_returns_503_when_mount_check_raises(unauthenticated_client, db, monkeypatch):
     db.add(
-        NetworkMount(
+        NetworkShare(
             type=MountType.NFS,
             remote_path="10.0.0.1:/evidence",
             local_mount_point="/mnt/evidence",
@@ -494,7 +494,7 @@ def test_health_ready_returns_503_when_mount_check_raises(unauthenticated_client
 
 def test_health_ready_passes_configured_mount_check_timeout(unauthenticated_client, db, monkeypatch):
     db.add(
-        NetworkMount(
+        NetworkShare(
             type=MountType.NFS,
             remote_path="10.0.0.1:/evidence",
             local_mount_point="/mnt/evidence",
@@ -516,7 +516,7 @@ def test_health_ready_passes_configured_mount_check_timeout(unauthenticated_clie
 
 def test_health_ready_non_positive_mount_timeout_uses_default_when_no_budget(unauthenticated_client, db, monkeypatch):
     db.add(
-        NetworkMount(
+        NetworkShare(
             type=MountType.NFS,
             remote_path="10.0.0.1:/evidence",
             local_mount_point="/mnt/evidence",
@@ -539,7 +539,7 @@ def test_health_ready_non_positive_mount_timeout_uses_default_when_no_budget(una
 
 def test_health_ready_non_positive_mount_timeout_uses_remaining_budget(unauthenticated_client, db, monkeypatch):
     db.add(
-        NetworkMount(
+        NetworkShare(
             type=MountType.NFS,
             remote_path="10.0.0.1:/evidence",
             local_mount_point="/mnt/evidence",

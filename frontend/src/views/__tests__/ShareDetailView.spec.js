@@ -272,7 +272,7 @@ describe('MountDetailView', () => {
     await flushPromises()
 
     expect(mocks.deleteShare).toHaveBeenCalledWith(11)
-    expect(mocks.push).toHaveBeenCalledWith({ name: 'mounts' })
+    expect(mocks.push).toHaveBeenCalledWith({ name: 'shares' })
   })
 
   it('hides edit and remove actions for read-only roles', async () => {

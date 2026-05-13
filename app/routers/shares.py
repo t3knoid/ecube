@@ -188,7 +188,7 @@ def validate_share(
     return share_service.validate_share(
         share_id,
         db,
-        share_data=body,
+        mount_data=body,
         actor=current_user.username,
         client_ip=get_client_ip(request),
     )
@@ -206,7 +206,7 @@ def test_share_throughput(
 
     **Roles:** ``admin``, ``manager``
     """
-    return throughput_service.test_share_read_throughput(
+    return throughput_service.test_mount_read_throughput(
         share_id,
         db,
         benchmark_provider=get_throughput_benchmark(),

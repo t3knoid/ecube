@@ -19,7 +19,7 @@ import pytest
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus
-from app.models.network import MountStatus, MountType, NetworkMount
+from app.models.network import MountStatus, MountType, NetworkShare
 from app.repositories.audit_repository import AuditRepository
 from app.utils.sanitize import sanitize_error_message
 
@@ -99,7 +99,7 @@ class TestDriveAuditLogging:
             filesystem_type="ext4",
             mount_path="/mnt/ecube/audit-init",
         )
-        mount = NetworkMount(
+        mount = NetworkShare(
             type=MountType.NFS,
             remote_path="server:/audit-init",
             project_id="PROJ-AUDIT",
@@ -209,7 +209,7 @@ class TestMountAuditLogging:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
             response = manager_client.post(
-                "/mounts",
+                "/shares",
                 json={
                     "type": "NFS",
                     "remote_path": "1.2.3.4:/audit-data",
@@ -226,7 +226,7 @@ class TestMountAuditLogging:
         assert entry.details["status"] in {"MOUNTED", "ERROR"}
 
     def test_update_mount_logs_actor_and_changed_fields(self, manager_client, db):
-        mount = NetworkMount(
+        mount = NetworkShare(
             type=MountType.NFS,
             remote_path="1.2.3.4:/original-data",
             project_id="PROJ-AUDIT-MOUNT",
@@ -239,7 +239,7 @@ class TestMountAuditLogging:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
             response = manager_client.patch(
-                f"/mounts/{mount.id}",
+                f"/shares/{mount.id}",
                 json={
                     "type": "SMB",
                     "remote_path": "//server/updated-data",
@@ -261,7 +261,7 @@ class TestMountAuditLogging:
         assert "local_mount_point" not in entry.details
 
     def test_remove_mount_logs_actor(self, manager_client, db):
-        mount = NetworkMount(
+        mount = NetworkShare(
             type=MountType.NFS,
             remote_path="1.2.3.4:/remove-data",
             local_mount_point="/mnt/remove",
@@ -273,7 +273,7 @@ class TestMountAuditLogging:
 
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
-            response = manager_client.delete(f"/mounts/{mount_id}")
+            response = manager_client.delete(f"/shares/{mount_id}")
         assert response.status_code == 204
 
         entry = _audit_by_action(db, "MOUNT_REMOVED")
@@ -284,7 +284,7 @@ class TestMountAuditLogging:
         assert "local_mount_point" not in entry.details
 
     def test_validate_mount_logs_actor(self, manager_client, db):
-        mount = NetworkMount(
+        mount = NetworkShare(
             type=MountType.NFS,
             remote_path="1.2.3.4:/validate-data",
             local_mount_point="/mnt/validate",
@@ -296,7 +296,7 @@ class TestMountAuditLogging:
 
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
-            response = manager_client.post(f"/mounts/{mount_id}/validate")
+            response = manager_client.post(f"/shares/{mount_id}/validate")
         assert response.status_code == 200
 
         entry = _audit_by_action(db, "MOUNT_VALIDATED")
@@ -308,11 +308,11 @@ class TestMountAuditLogging:
         assert entry.details["status"] == "MOUNTED"
 
     def test_validate_mount_not_found(self, manager_client, db):
-        response = manager_client.post("/mounts/9999/validate")
+        response = manager_client.post("/shares/9999/validate")
         assert response.status_code == 404
 
     def test_validate_mount_logs_unmounted_status(self, manager_client, db):
-        mount = NetworkMount(
+        mount = NetworkShare(
             type=MountType.NFS,
             remote_path="1.2.3.4:/unmounted",
             local_mount_point="/mnt/unmounted",
@@ -323,7 +323,7 @@ class TestMountAuditLogging:
 
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=1)
-            response = manager_client.post(f"/mounts/{mount.id}/validate")
+            response = manager_client.post(f"/shares/{mount.id}/validate")
         assert response.status_code == 200
         assert response.json()["status"] == "ERROR"
 
@@ -337,7 +337,7 @@ class TestMountAuditLogging:
         mount_root = tmp_path / "audit-share"
         mount_root.mkdir()
         (mount_root / "sample.bin").write_bytes(b"a" * 4096)
-        mount = NetworkMount(
+        mount = NetworkShare(
             type=MountType.NFS,
             remote_path="1.2.3.4:/throughput-audit",
             project_id="PROJ-MOUNT-AUDIT",
@@ -350,8 +350,8 @@ class TestMountAuditLogging:
         provider = MagicMock()
         provider.measure_share_read_mbps.return_value = (88.8, 4096, 0.5, 0.4)
 
-        with patch("app.routers.mounts.get_throughput_benchmark", return_value=provider):
-            response = manager_client.post(f"/mounts/{mount.id}/throughput-test")
+        with patch("app.routers.shares.get_throughput_benchmark", return_value=provider):
+            response = manager_client.post(f"/shares/{mount.id}/throughput-test")
         assert response.status_code == 200
 
         entry = _audit_by_action(db, "MOUNT_THROUGHPUT_TESTED")
@@ -611,7 +611,7 @@ class TestAuthorizationDeniedAuditLogging:
     def test_role_denial_on_add_mount_logs_authorization_denied(self, auditor_client, db):
         """auditor role cannot add a mount; denial must be logged."""
         response = auditor_client.post(
-            "/mounts",
+            "/shares",
             json={
                 "type": "NFS",
                 "remote_path": "1.2.3.4:/data",
@@ -622,7 +622,7 @@ class TestAuthorizationDeniedAuditLogging:
         entry = _audit_by_action(db, "AUTHORIZATION_DENIED")
         assert entry is not None
         assert entry.user == "auditor-user"
-        assert entry.details["path"] == "/mounts"
+        assert entry.details["path"] == "/shares"
 
     def test_authorization_denied_details_schema(self, auditor_client, db):
         """AUTHORIZATION_DENIED entries must include all required context fields."""

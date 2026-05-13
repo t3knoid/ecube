@@ -193,7 +193,7 @@ function openDriveSummary(state) {
 }
 
 function openMountSummary(workflow) {
-  router.push({ name: 'mounts', query: { workflow } })
+  router.push({ name: 'shares', query: { workflow } })
 }
 
 function progressPercent(job) {

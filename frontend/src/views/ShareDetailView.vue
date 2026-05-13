@@ -377,7 +377,7 @@ async function runRemove() {
   try {
     await deleteShare(mountRecord.value.id)
     showRemoveDialog.value = false
-    router.push({ name: 'mounts' })
+    router.push({ name: 'shares' })
   } catch {
     error.value = t('common.errors.requestConflict')
   } finally {
@@ -456,7 +456,7 @@ onBeforeUnmount(() => {
     <header class="header-row">
       <h1>{{ t('shares.detail') }} #{{ mountId }}</h1>
       <div class="actions">
-        <button class="btn" @click="router.push({ name: 'mounts' })">{{ t('common.actions.back') }}</button>
+        <button class="btn" @click="router.push({ name: 'shares' })">{{ t('common.actions.back') }}</button>
         <button class="btn" @click="loadMount">{{ t('common.actions.refresh') }}</button>
       </div>
     </header>

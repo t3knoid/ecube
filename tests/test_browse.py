@@ -5,7 +5,7 @@ import os
 from unittest.mock import patch
 
 from app.models.hardware import UsbDrive
-from app.models.network import NetworkMount, MountStatus, MountType
+from app.models.network import NetworkShare, MountStatus, MountType
 from app.utils.sanitize import sanitize_audit_details
 
 
@@ -26,9 +26,9 @@ def _make_drive_with_mount(db, mount_path: str) -> UsbDrive:
     return drive
 
 
-def _make_network_mount(db, local_mount_point: str, mount_type: MountType = MountType.NFS) -> NetworkMount:
-    """Insert a NetworkMount row with *local_mount_point* set."""
-    mount = NetworkMount(
+def _make_network_mount(db, local_mount_point: str, mount_type: MountType = MountType.NFS) -> NetworkShare:
+    """Insert a NetworkShare row with *local_mount_point* set."""
+    mount = NetworkShare(
         type=mount_type,
         remote_path="192.168.1.1:/exports/evidence",
         local_mount_point=local_mount_point,

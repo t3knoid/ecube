@@ -84,7 +84,7 @@ class TestFindDeviceMountpoints:
         assert result == ["/media/usb"]
 
     def test_proc_mounts_read_error(self):
-        """Return error if /proc/mounts cannot be read."""
+        """Return error if /proc/shares cannot be read."""
         with patch("builtins.open", side_effect=OSError("Permission denied")):
             result, error = _find_device_mountpoints("sdb")
 
@@ -108,7 +108,7 @@ class TestFindDeviceMountpoints:
         assert result == ["/media/usb"]
 
     def test_mixed_naming_schemes(self):
-        """Handle multiple naming schemes in same /proc/mounts."""
+        """Handle multiple naming schemes in same /proc/shares."""
         proc_mounts_content = """/dev/sdb /media/usb ext4 rw 0 0
 /dev/sdb1 /media/usb1 ext4 rw 0 0
 /dev/nvme0n1 /media/nvme ext4 rw 0 0
@@ -135,19 +135,19 @@ class TestFindDeviceMountpoints:
         assert set(result) == {"/media/mmc", "/media/mmc1"}
 
     def test_unescape_mountpoint_with_spaces(self):
-        """Correctly unescape mountpoints with escaped spaces from /proc/mounts."""
+        """Correctly unescape mountpoints with escaped spaces from /proc/shares."""
         from app.infrastructure.mount_info import unescape_mountpoint
         
-        # /proc/mounts encodes spaces as \040
+        # /proc/shares encodes spaces as \040
         escaped_path = "/media/my\\040files"
         result = unescape_mountpoint(escaped_path)
         assert result == "/media/my files"
 
     def test_unescape_mountpoint_with_tabs(self):
-        """Correctly unescape mountpoints with escaped tabs from /proc/mounts."""
+        """Correctly unescape mountpoints with escaped tabs from /proc/shares."""
         from app.infrastructure.mount_info import unescape_mountpoint
         
-        # /proc/mounts encodes tabs as \011
+        # /proc/shares encodes tabs as \011
         escaped_path = "/media/usb\\011backup"
         result = unescape_mountpoint(escaped_path)
         assert result == "/media/usb\tbackup"
@@ -172,9 +172,9 @@ class TestFindDeviceMountpoints:
     def test_unescape_mountpoint_utf8_non_ascii(self):
         """Correctly decode multi-byte UTF-8 sequences encoded as octal escapes.
 
-        /proc/mounts encodes raw filesystem bytes as POSIX octal escapes.
+        /proc/shares encodes raw filesystem bytes as POSIX octal escapes.
         A UTF-8 path like ``/mnt/café`` (where ``é`` is the two-byte sequence
-        0xC3 0xA9) appears in /proc/mounts as ``/mnt/caf\\303\\251``.
+        0xC3 0xA9) appears in /proc/shares as ``/mnt/caf\\303\\251``.
         The bytes-first decoding must reconstruct the original UTF-8 string;
         the old ``unicode_escape`` codec would produce mojibake (``cafÃ©``).
         """
@@ -186,8 +186,8 @@ class TestFindDeviceMountpoints:
         assert result == "/mnt/café"
 
     def test_find_device_with_escaped_mountpoint(self):
-        """Parse /proc/mounts correctly when mountpoints have escapes."""
-        # Simulate /proc/mounts with path containing space
+        """Parse /proc/shares correctly when mountpoints have escapes."""
+        # Simulate /proc/shares with path containing space
         proc_mounts_content = """/dev/sdb /media/my\\040usb ext4 rw 0 0
 /dev/sdb1 /media/usb\\011sub ext4 rw 0 0
 """
@@ -648,7 +648,7 @@ class TestUnmountDevice:
         mock_run.assert_not_called()
 
     def test_unmount_proc_mounts_read_failure(self):
-        """Return failure when /proc/mounts cannot be read (error propagation)."""
+        """Return failure when /proc/shares cannot be read (error propagation)."""
         with patch("builtins.open", side_effect=OSError("Permission denied")):
             with patch("subprocess.run") as mock_run:
                 success, error = unmount_device("/dev/sdb")
@@ -782,7 +782,7 @@ class TestUnmountDevice:
     def test_unmount_not_mounted_race_is_success(self):
         """CalledProcessError with 'not mounted' stderr is treated as success.
 
-        If a mount disappears between the /proc/mounts read and the actual
+        If a mount disappears between the /proc/shares read and the actual
         umount call (transient race), umount exits non-zero with a 'not
         mounted' message.  That condition already represents the desired
         end-state, so it should be treated as a no-op rather than a failure.
@@ -860,5 +860,5 @@ class TestHostAwareMountDiscovery:
 
         assert error is None
         assert result == ["/media/usb"]
-        mocked_open.assert_called_with("/proc/1/mounts", encoding="utf-8", errors="replace")
+        mocked_open.assert_called_with("/proc/1/shares", encoding="utf-8", errors="replace")
 

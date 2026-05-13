@@ -7,7 +7,7 @@ import pytest
 
 from app.models.hardware import DriveState, UsbDrive, UsbPort
 from app.models.jobs import DriveAssignment, ExportJob, JobStatus
-from app.models.network import MountStatus, MountType, NetworkMount
+from app.models.network import MountStatus, MountType, NetworkShare
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.user_role_repository import UserRoleRepository
 from app.utils.drive_identity import build_persistent_device_identifier

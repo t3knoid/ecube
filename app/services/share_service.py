@@ -2150,7 +2150,7 @@ def validate_all_shares(db: Session, actor: Optional[str] = None,
                         client_ip: Optional[str] = None) -> list[NetworkShare]:
     mount_repo = ShareRepository(db)
     mounts = mount_repo.list_all()
-    return [validate_mount(mount.id, db, actor=actor, client_ip=client_ip) for mount in mounts]
+    return [validate_share(mount.id, db, actor=actor, client_ip=client_ip) for mount in mounts]
 
 
 def validate_share(mount_id: int, db: Session, actor: Optional[str] = None,

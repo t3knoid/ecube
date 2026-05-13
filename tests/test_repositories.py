@@ -12,7 +12,7 @@ from sqlalchemy.pool import StaticPool
 from app.database import Base
 from app.models.hardware import DriveState, UsbDrive, UsbHub, UsbPort
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, Manifest, StartupAnalysisEntry
-from app.models.network import MountStatus, MountType, NetworkMount
+from app.models.network import MountStatus, MountType, NetworkShare
 from app.models.projects import Project
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
@@ -24,7 +24,7 @@ from app.repositories.job_repository import (
     ManifestRepository,
     StartupAnalysisEntryRepository,
 )
-from app.repositories.mount_repository import MountRepository
+from app.repositories.share_repository import ShareRepository
 
 
 # ---------------------------------------------------------------------------
@@ -459,18 +459,18 @@ def test_manifest_repo_add(db):
 
 
 # ---------------------------------------------------------------------------
-# MountRepository
+# ShareRepository
 # ---------------------------------------------------------------------------
 
 
 def test_mount_repo_list_all_empty(db):
-    repo = MountRepository(db)
+    repo = ShareRepository(db)
     assert repo.list_all() == []
 
 
 def test_mount_repo_add_and_get(db):
-    repo = MountRepository(db)
-    mount = NetworkMount(
+    repo = ShareRepository(db)
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="192.168.1.1:/exports",
         local_mount_point="/mnt/nfs",
@@ -485,23 +485,23 @@ def test_mount_repo_add_and_get(db):
 
 
 def test_mount_repo_get_missing(db):
-    repo = MountRepository(db)
+    repo = ShareRepository(db)
     assert repo.get(9999) is None
 
 
 def test_mount_repo_list_all(db):
-    repo = MountRepository(db)
-    repo.add(NetworkMount(type=MountType.NFS, remote_path="1:/a", local_mount_point="/mnt/a"))
-    repo.add(NetworkMount(type=MountType.SMB, remote_path="//2/b", local_mount_point="/mnt/b"))
+    repo = ShareRepository(db)
+    repo.add(NetworkShare(type=MountType.NFS, remote_path="1:/a", local_mount_point="/mnt/a"))
+    repo.add(NetworkShare(type=MountType.SMB, remote_path="//2/b", local_mount_point="/mnt/b"))
 
     all_mounts = repo.list_all()
     assert len(all_mounts) == 2
 
 
 def test_mount_repo_save_updates_status(db):
-    repo = MountRepository(db)
+    repo = ShareRepository(db)
     mount = repo.add(
-        NetworkMount(type=MountType.NFS, remote_path="1:/c", local_mount_point="/mnt/c")
+        NetworkShare(type=MountType.NFS, remote_path="1:/c", local_mount_point="/mnt/c")
     )
 
     mount.status = MountStatus.MOUNTED
@@ -512,9 +512,9 @@ def test_mount_repo_save_updates_status(db):
 
 
 def test_mount_repo_delete(db):
-    repo = MountRepository(db)
+    repo = ShareRepository(db)
     mount = repo.add(
-        NetworkMount(type=MountType.NFS, remote_path="1:/d", local_mount_point="/mnt/d")
+        NetworkShare(type=MountType.NFS, remote_path="1:/d", local_mount_point="/mnt/d")
     )
     mount_id = mount.id
 

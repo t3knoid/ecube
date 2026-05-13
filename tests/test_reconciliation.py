@@ -20,7 +20,7 @@ from app.config import settings
 from app.models.audit import AuditLog
 from app.models.hardware import DriveFormatStatus, DriveState, UsbDrive, UsbHub, UsbPort
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, StartupAnalysisEntry, StartupAnalysisStatus
-from app.models.network import MountStatus, MountType, NetworkMount
+from app.models.network import MountStatus, MountType, NetworkShare
 from app.models.system import ReconciliationLock
 from app.models.users import UserRole
 from app.models.audit import AuditLog
@@ -53,8 +53,8 @@ from app.services.reconciliation_service import (
 # -----------------------------------------------------------------------
 
 def _make_mount(db: Session, status: MountStatus = MountStatus.MOUNTED,
-                local_mount_point: str = "/mnt/evidence") -> NetworkMount:
-    mount = NetworkMount(
+                local_mount_point: str = "/mnt/evidence") -> NetworkShare:
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="server:/export",
         local_mount_point=local_mount_point,
@@ -167,8 +167,8 @@ def _isolate_live_mount_table():
 @pytest.fixture(autouse=True)
 def _allow_mount_validation_directory_checks():
     with (
-        patch("app.services.mount_service._ensure_mount_directory", return_value=None),
-        patch("app.services.mount_service._validate_mount_directory_owner", return_value=None),
+        patch("app.services.share_service._ensure_mount_directory", return_value=None),
+        patch("app.services.share_service._validate_mount_directory_owner", return_value=None),
     ):
         yield
 

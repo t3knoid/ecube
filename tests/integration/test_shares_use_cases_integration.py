@@ -3,13 +3,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.models.audit import AuditLog
-from app.models.network import MountStatus, MountType, NetworkMount
+from app.models.network import MountStatus, MountType, NetworkShare
 from app.utils.sanitize import sanitize_error_message
 
 
 @pytest.mark.integration
 def test_list_mounts_empty(integration_client):
-    response = integration_client.get("/mounts")
+    response = integration_client.get("/shares")
     assert response.status_code == 200
     assert response.json() == []
 
@@ -18,12 +18,12 @@ def test_list_mounts_empty(integration_client):
 def test_add_mount_success_persists_and_audits(integration_client, integration_db):
     with (
         patch("subprocess.run") as mock_run,
-        patch("app.services.mount_service._ensure_mount_directory", return_value=None),
-        patch("app.services.mount_service._validate_mount_directory_owner", return_value=None),
+        patch("app.services.share_service._ensure_mount_directory", return_value=None),
+        patch("app.services.share_service._validate_mount_directory_owner", return_value=None),
     ):
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
         response = integration_client.post(
-            "/mounts",
+            "/shares",
             json={
                 "type": "NFS",
                 "remote_path": "10.0.0.5:/evidence",
@@ -35,7 +35,7 @@ def test_add_mount_success_persists_and_audits(integration_client, integration_d
     data = response.json()
     assert data["status"] == "MOUNTED"
 
-    mount = integration_db.query(NetworkMount).filter_by(id=data["id"]).first()
+    mount = integration_db.query(NetworkShare).filter_by(id=data["id"]).first()
     assert mount is not None
     assert mount.status == MountStatus.MOUNTED
 
@@ -58,7 +58,7 @@ def test_add_mount_failure_sets_error_and_audits(integration_client, integration
             stderr="Permission denied",
         )
         response = integration_client.post(
-            "/mounts",
+            "/shares",
             json={
                 "type": "NFS",
                 "remote_path": "10.0.0.6:/restricted",
@@ -87,7 +87,7 @@ def test_add_mount_failure_sets_error_and_audits(integration_client, integration
 
 @pytest.mark.integration
 def test_remove_mount_deletes_record_and_audits(integration_client, integration_db):
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=MountType.SMB,
         remote_path="//fileserver/share",
         local_mount_point="/mnt/it-share",
@@ -98,10 +98,10 @@ def test_remove_mount_deletes_record_and_audits(integration_client, integration_
 
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-        response = integration_client.delete(f"/mounts/{mount.id}")
+        response = integration_client.delete(f"/shares/{mount.id}")
 
     assert response.status_code == 204
-    assert integration_db.get(NetworkMount, mount.id) is None
+    assert integration_db.get(NetworkShare, mount.id) is None
 
     audit = (
         integration_db.query(AuditLog)
@@ -115,6 +115,6 @@ def test_remove_mount_deletes_record_and_audits(integration_client, integration_
 
 @pytest.mark.integration
 def test_remove_mount_not_found(integration_client):
-    response = integration_client.delete("/mounts/999999")
+    response = integration_client.delete("/shares/999999")
     assert response.status_code == 404
     assert response.json()["code"] == "NOT_FOUND"

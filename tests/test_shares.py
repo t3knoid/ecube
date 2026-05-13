@@ -20,8 +20,8 @@ from app.services.share_service import (
     _cleanup_generated_mount_directory,
     _ensure_mount_directory,
     sanitize_error_message,
-    validate_mount_candidate,
-    validate_mount,
+    validate_share_candidate,
+    validate_share,
 )
 
 
@@ -289,7 +289,7 @@ def test_add_share_uses_nfs_v4_1_to_avoid_slow_negotiation(manager_client, db):
         ]
     assert "vers=4.1" in first_call.args[0]
 
-    mount = db.query(NetworkMount).filter(NetworkMount.project_id == "PROJ-NFS41").one()
+    mount = db.query(NetworkShare).filter(NetworkShare.project_id == "PROJ-NFS41").one()
     assert mount.nfs_client_version is None
 
 
@@ -339,7 +339,7 @@ def test_add_share_persists_credentials_encrypted(manager_client, db):
     assert "credentials_file" not in data
 
     db.expire_all()
-    mount = db.query(NetworkMount).filter(NetworkMount.id == data["id"]).one()
+    mount = db.query(NetworkShare).filter(NetworkShare.id == data["id"]).one()
     assert mount.encrypted_username
     assert mount.encrypted_password
     assert mount.encrypted_credentials_file
@@ -482,7 +482,7 @@ def test_update_share_preserves_existing_credentials_when_not_resubmitted(manage
     assert updated.status_code == 200
 
     db.expire_all()
-    saved = db.query(NetworkMount).filter(NetworkMount.id == share_id).one()
+    saved = db.query(NetworkShare).filter(NetworkShare.id == share_id).one()
     assert saved.encrypted_username == original_encrypted_username
     assert saved.encrypted_password == original_encrypted_password
 
@@ -547,7 +547,7 @@ def test_update_share_api_remounts_live_nfs_share_with_new_client_version(manage
     assert data["status"] == "MOUNTED"
 
     db.expire_all()
-    saved = db.query(NetworkMount).filter(NetworkMount.id == mount.id).one()
+    saved = db.query(NetworkShare).filter(NetworkShare.id == mount.id).one()
     assert saved.remote_path == "192.168.1.10:/exports/updated"
     assert saved.project_id == "PROJ-NEW"
     assert saved.nfs_client_version == "4.2"
@@ -608,7 +608,7 @@ def test_update_share_uses_stored_credentials_when_not_resubmitted(db):
          patch("app.services.share_service._validate_mount_directory_owner", return_value=None):
         result = share_service.update_share(
             mount.id,
-            MountUpdate(
+            ShareUpdate(
                 type=MountType.SMB,
                 remote_path="//server/updated-share",
                 project_id="PROJ-UPDATED",
@@ -675,7 +675,7 @@ def test_update_share_remounts_live_nfs_share_with_new_client_version(db):
          patch("app.services.share_service._validate_mount_directory_owner", return_value=None):
         result = share_service.update_share(
             mount.id,
-            MountUpdate(
+            ShareUpdate(
                 type=MountType.NFS,
                 remote_path="192.168.1.10:/exports/updated",
                 project_id="PROJ-UPDATED",
@@ -873,7 +873,7 @@ def test_add_share_uses_unique_generated_local_mount_point(manager_client, db):
 def test_add_share_acquires_create_lock(manager_client, db):
     with patch("app.services.share_service._ensure_mount_directory", return_value=None), \
          patch("app.services.share_service._validate_mount_directory_owner", return_value=None), \
-         patch("app.services.share_service.MountRepository.acquire_create_lock") as mock_lock, \
+         patch("app.services.share_service.ShareRepository.acquire_create_lock") as mock_lock, \
          patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0)
         response = manager_client.post(
@@ -1120,7 +1120,7 @@ def test_add_share_logs_useful_info_on_nfs_failure(manager_client, db, caplog):
     assert any(
         "Mount attempt failed" in message
         and "type=NFS" in message
-        and "share_label=info" in message
+            and "mount_label=info" in message
         and "failure_category=mount_add" in message
         and "reason=Permission or authentication failure" in message
         and "/exports/info" not in message
@@ -1307,7 +1307,7 @@ def test_delete_share_returns_conflict_when_unmount_fails(manager_client, db, ca
             response = manager_client.delete(f"/shares/{mount.id}")
 
     assert response.status_code == 409
-    assert db.get(NetworkMount, mount.id) is not None
+    assert db.get(NetworkShare, mount.id) is not None
     messages = [r.getMessage() for r in caplog.records]
     assert not any("/mnt/share" in m for m in messages if "Unmount command failed" in m)
     assert any(
@@ -1335,7 +1335,7 @@ def test_delete_unmounted_mount_skips_os_unmount_and_removes_record(manager_clie
 
     assert response.status_code == 204
     provider.os_unmount.assert_not_called()
-    assert db.get(NetworkMount, mount.id) is None
+    assert db.get(NetworkShare, mount.id) is None
 
 
 def test_delete_share_treats_not_mounted_error_as_success(manager_client, db):
@@ -1357,7 +1357,7 @@ def test_delete_share_treats_not_mounted_error_as_success(manager_client, db):
 
     assert response.status_code == 204
     provider.os_unmount.assert_called_once_with("/mnt/share")
-    assert db.get(NetworkMount, mount.id) is None
+    assert db.get(NetworkShare, mount.id) is None
 
 
 def test_validate_share_success(manager_client, db):
@@ -1481,7 +1481,7 @@ def test_validate_share_candidate_returns_candidate_without_persisting(manager_c
     assert data["local_mount_point"] == f"{settings.network_mount_base_path}/evidence"
     assert data["status"] == "MOUNTED"
     assert data["last_checked_at"] is not None
-    assert db.query(NetworkMount).count() == 0
+    assert db.query(NetworkShare).count() == 0
     assert provider.mount_calls == [
         {
             "share_type": MountType.NFS,
@@ -1625,7 +1625,7 @@ def test_validate_share_candidate_timeout_returns_conflict(manager_client, db, c
     assert any(
         "Mount candidate validation failed" in message
         and "type=NFS" in message
-        and "share_label=demo-case-001" in message
+            and "mount_label=demo-case-001" in message
         and "failure_category=mount_validate_candidate" in message
         and "reason=Operation timed out" in message
         for message in info_messages
@@ -1633,7 +1633,7 @@ def test_validate_share_candidate_timeout_returns_conflict(manager_client, db, c
     assert any(
         "Mount command timed out" in message
         and "type=NFS" in message
-        and "share_label=demo-case-001" in message
+        and "mount_label=demo-case-001" in message
         and "reason=Operation timed out" in message
         for message in warning_messages
     )
@@ -1877,11 +1877,11 @@ def test_validate_share_with_candidate_payload_uses_unsaved_values_without_persi
 
     with patch("app.services.share_service._ensure_mount_directory", return_value=None), \
          patch("app.services.share_service._validate_mount_directory_owner", return_value=None):
-        result = validate_mount(
+        result = validate_share(
             mount.id,
             db,
             provider=provider,
-            mount_data=MountUpdate(
+            mount_data=ShareUpdate(
                 type=MountType.SMB,
                 remote_path="//server/edited-share",
                 project_id="proj-new",
@@ -1892,7 +1892,7 @@ def test_validate_share_with_candidate_payload_uses_unsaved_values_without_persi
         )
 
     db.expire_all()
-    persisted = db.query(NetworkMount).filter(NetworkMount.id == mount.id).one()
+    persisted = db.query(NetworkShare).filter(NetworkShare.id == mount.id).one()
 
     assert result.remote_path == "//server/edited-share"
     assert result.project_id == "PROJ-NEW"
@@ -1961,11 +1961,11 @@ def test_validate_share_with_candidate_payload_returns_sanitized_failure_and_pre
     with patch("app.services.share_service._ensure_mount_directory", return_value=None), \
          patch("app.services.share_service._validate_mount_directory_owner", return_value=None):
         with pytest.raises(ConflictError) as exc_info:
-            validate_mount(
+            validate_share(
                 mount.id,
                 db,
                 provider=provider,
-                mount_data=MountUpdate(
+                mount_data=ShareUpdate(
                     type=MountType.SMB,
                     remote_path="//server/edited-share",
                     project_id="proj-new",
@@ -1976,7 +1976,7 @@ def test_validate_share_with_candidate_payload_returns_sanitized_failure_and_pre
             )
 
     db.expire_all()
-    persisted = db.query(NetworkMount).filter(NetworkMount.id == mount.id).one()
+    persisted = db.query(NetworkShare).filter(NetworkShare.id == mount.id).one()
 
     assert exc_info.value.status_code == 409
     assert exc_info.value.detail == sanitize_error_message(
@@ -2461,7 +2461,7 @@ def test_validate_share_passes_configured_timeout_to_provider(db):
             return True
 
     provider = TimeoutCapturingProvider()
-    updated = validate_mount(mount.id, db, provider=provider)
+    updated = validate_share(mount.id, db, provider=provider)
 
     assert updated.status == MountStatus.MOUNTED
     assert provider.timeout_seconds == settings.network_mount_timeout_seconds
@@ -2480,7 +2480,7 @@ def test_check_mounted_with_configured_timeout_does_not_mask_provider_type_error
 
 def test_check_mounted_with_configured_timeout_caches_capability(monkeypatch):
     """Verify capability check is only done once per provider instance."""
-    import app.services.mount_check_utils as utils_module
+    import app.services.share_check_utils as utils_module
 
     call_count = [0]
     original_check = utils_module._check_accepts_timeout_seconds
@@ -2509,7 +2509,7 @@ def test_check_mounted_with_configured_timeout_caches_capability(monkeypatch):
 
 def test_check_mounted_with_configured_timeout_gracefully_handles_signature_inspection_failure(monkeypatch):
     """If inspect.signature fails, provider is treated as not supporting timeout_seconds."""
-    import app.services.mount_check_utils as utils_module
+    import app.services.share_check_utils as utils_module
 
     class InspectFailureProvider:
         def check_mounted(self, local_mount_point: str, *, timeout_seconds=None):

@@ -2544,7 +2544,16 @@ def download_manifest(job_id: int, db: Session, actor: Optional[str] = None, cli
         raise service_exception(status_code=404, detail="Manifest not found")
 
     manifest_name = os.path.basename(manifest_path) or "manifest.json"
-    assignment = assignment_repo.get_active_for_job(job_id)
+    manifest_assignment_id = cast(Optional[int], getattr(manifest, "drive_assignment_id", None))
+    assignment = None
+    if manifest_assignment_id is not None:
+        for manifest_assignment in assignment_repo.list_for_job(job_id):
+            if int(getattr(manifest_assignment, "id", 0) or 0) == int(manifest_assignment_id):
+                assignment = manifest_assignment
+                break
+    if assignment is None:
+        assignment = assignment_repo.get_active_for_job(job_id)
+
     assignment_row = _row(assignment) if assignment is not None else None
     active_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
     job_project_id = cast(Optional[str], job_row.project_id)
@@ -2554,14 +2563,29 @@ def download_manifest(job_id: int, db: Session, actor: Optional[str] = None, cli
         else None
     )
 
-    if not drive_mount_path:
+    candidate_path = os.path.join(drive_mount_path, manifest_name) if drive_mount_path else None
+    fallback_stored_path = os.path.abspath(manifest_path)
+    if candidate_path is None and os.path.exists(fallback_stored_path):
+        logger.info(
+            "Manifest download using stored manifest path fallback",
+            extra={
+                "job_id": job_id,
+                "project_id": job_project_id,
+                "reason": "drive_mount_unavailable",
+            },
+        )
+        logger.debug(
+            "Manifest download fallback path",
+            extra={"job_id": job_id, "raw_manifest_path": fallback_stored_path},
+        )
+        candidate_path = fallback_stored_path
+
+    if candidate_path is None:
         logger.warning(
             "Manifest download rejected",
             extra={"job_id": job_id, "project_id": job_project_id, "reason": "drive_not_mounted"},
         )
         raise service_exception(status_code=409, detail="Assigned drive is not mounted")
-
-    candidate_path = os.path.join(drive_mount_path, manifest_name)
 
     try:
         with open(candidate_path, "rb") as manifest_file:

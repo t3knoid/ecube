@@ -12,7 +12,7 @@ from app.infrastructure.throughput_benchmark import LinuxThroughputBenchmarkProv
 from app.models.audit import AuditLog
 from app.models.hardware import DriveFormatStatus, UsbDrive, DriveState, UsbHub, UsbPort
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobChainOfCustodySnapshot, JobStatus
-from app.models.network import MountStatus, MountType, NetworkMount
+from app.models.network import MountStatus, MountType, NetworkShare
 from app.services import drive_service
 from app.utils.drive_identity import build_persistent_device_identifier
 
@@ -32,8 +32,8 @@ def _fake_eject(flush_ok=True, unmount_ok=True,
     return provider
 
 
-def _make_project_mount(db, project_id: str, local_mount_point: str) -> NetworkMount:
-    mount = NetworkMount(
+def _make_project_mount(db, project_id: str, local_mount_point: str) -> NetworkShare:
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path=f"10.0.0.1:/exports/{project_id.lower()}",
         project_id=project_id,
@@ -574,7 +574,7 @@ def test_list_drives_include_related_job_custody_no_related_job_after_binding_cl
 
 
 def test_initialize_drive(manager_client, db):
-    from app.models.network import MountStatus, MountType, NetworkMount
+    from app.models.network import MountStatus, MountType, NetworkShare
 
     drive = UsbDrive(
         device_identifier="USB002",
@@ -582,7 +582,7 @@ def test_initialize_drive(manager_client, db):
         filesystem_type="ext4",
         mount_path="/mnt/ecube/usb002",
     )
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="10.0.0.1:/exports/proj-001",
         project_id="PROJ-001",
@@ -601,7 +601,7 @@ def test_initialize_drive(manager_client, db):
 
 def test_initialize_drive_rejects_unmounted_destination_drive(manager_client, db):
     from app.models.audit import AuditLog
-    from app.models.network import MountStatus, MountType, NetworkMount
+    from app.models.network import MountStatus, MountType, NetworkShare
 
     drive = UsbDrive(
         device_identifier="USB-NOT-MOUNTED",
@@ -609,7 +609,7 @@ def test_initialize_drive_rejects_unmounted_destination_drive(manager_client, db
         filesystem_type="ext4",
         mount_path=None,
     )
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="10.0.0.10:/exports/proj-ready",
         project_id="PROJ-READY",
@@ -661,7 +661,7 @@ def test_initialize_drive_rejects_project_without_mounted_source(manager_client,
 
 
 def test_initialize_drive_allows_project_with_mounted_source(manager_client, db):
-    from app.models.network import MountStatus, MountType, NetworkMount
+    from app.models.network import MountStatus, MountType, NetworkShare
 
     drive = UsbDrive(
         device_identifier="USB-WITH-MOUNT",
@@ -669,7 +669,7 @@ def test_initialize_drive_allows_project_with_mounted_source(manager_client, db)
         filesystem_type="ext4",
         mount_path="/mnt/ecube/usb-with-mount",
     )
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="10.0.0.5:/exports/proj-205",
         local_mount_point="/nfs/proj-205",
@@ -688,7 +688,7 @@ def test_initialize_drive_allows_project_with_mounted_source(manager_client, db)
 
 def test_initialize_drive_rejects_busy_project_source(manager_client, db):
     from app.models.audit import AuditLog
-    from app.models.network import MountStatus, MountType, NetworkMount
+    from app.models.network import MountStatus, MountType, NetworkShare
 
     drive = UsbDrive(
         device_identifier="USB-BUSY-MOUNT",
@@ -696,7 +696,7 @@ def test_initialize_drive_rejects_busy_project_source(manager_client, db):
         filesystem_type="ext4",
         mount_path="/mnt/ecube/usb-busy-mount",
     )
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="10.0.0.8:/exports/proj-busy",
         local_mount_point="/nfs/proj-busy",
@@ -707,7 +707,7 @@ def test_initialize_drive_rejects_busy_project_source(manager_client, db):
     db.commit()
 
     with patch(
-        "app.services.drive_service.MountRepository.get_mounted_project_for_update",
+        "app.services.drive_service.ShareRepository.get_mounted_project_for_update",
         side_effect=ConflictError("Project source is currently being updated by another operation."),
     ):
         response = manager_client.post(f"/drives/{drive.id}/initialize", json={"project_id": "PROJ-BUSY"})
@@ -723,7 +723,7 @@ def test_initialize_drive_rejects_busy_project_source(manager_client, db):
 
 
 def test_initialize_drive_normalizes_project_id_case_and_whitespace(manager_client, db):
-    from app.models.network import MountStatus, MountType, NetworkMount
+    from app.models.network import MountStatus, MountType, NetworkShare
 
     drive = UsbDrive(
         device_identifier="USB-WITH-NORMALIZED-MOUNT",
@@ -731,7 +731,7 @@ def test_initialize_drive_normalizes_project_id_case_and_whitespace(manager_clie
         filesystem_type="ext4",
         mount_path="/mnt/ecube/usb-with-normalized-mount",
     )
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="10.0.0.7:/exports/proj-777",
         local_mount_point="/nfs/proj-777",
@@ -1260,7 +1260,7 @@ def test_project_isolation_violation(manager_client, db):
 
 
 def test_reinitialize_same_project(manager_client, db):
-    from app.models.network import MountStatus, MountType, NetworkMount
+    from app.models.network import MountStatus, MountType, NetworkShare
 
     drive = UsbDrive(
         device_identifier="USB004",
@@ -1269,7 +1269,7 @@ def test_reinitialize_same_project(manager_client, db):
         filesystem_type="ext4",
         mount_path="/mnt/ecube/usb004",
     )
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="10.0.0.1:/exports/proj-001",
         project_id="PROJ-001",
@@ -1726,7 +1726,7 @@ def test_prepare_eject_stale_restart_mount_failure_returns_conflict(manager_clie
 
     with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject(
         unmount_ok=False,
-        unmount_error="could not read /proc/mounts: stale restart state",
+        unmount_error="could not read /proc/shares: stale restart state",
     )):
         response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
 
@@ -1734,7 +1734,7 @@ def test_prepare_eject_stale_restart_mount_failure_returns_conflict(manager_clie
     assert response.json()["message"] == (
         "Drive mount state is stale or changed; refresh drive status and retry prepare-eject"
     )
-    assert "/proc/mounts" not in response.json()["message"]
+    assert "/proc/shares" not in response.json()["message"]
 
 
 def test_prepare_eject_busy_mount_failure_returns_conflict(manager_client, db):

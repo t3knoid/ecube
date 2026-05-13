@@ -29,7 +29,7 @@ def _mount(mount_point: str) -> tuple[bool, str | None]:
         mock_settings.use_sudo = False
         mock_settings.subprocess_timeout_seconds = 10
         mock_settings.drive_mount_timeout_seconds = 45
-        mock_settings.procfs_mounts_path = "/proc/mounts"
+        mock_settings.procfs_mounts_path = "/proc/shares"
         # realpath of _BASE is itself (no symlinks in test)
         with patch("os.path.realpath", side_effect=lambda p: p):
             with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
@@ -107,7 +107,7 @@ def test_mount_drive_uses_service_uid_gid_options_for_exfat_media():
         mock_settings.use_sudo = False
         mock_settings.subprocess_timeout_seconds = 10
         mock_settings.drive_mount_timeout_seconds = 45
-        mock_settings.procfs_mounts_path = "/proc/mounts"
+        mock_settings.procfs_mounts_path = "/proc/shares"
         with patch("os.path.realpath", side_effect=lambda p: p):
             with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
                 with patch("app.infrastructure.drive_mount.LinuxFilesystemDetector.detect", return_value="exfat"):
@@ -137,7 +137,7 @@ def test_mount_drive_uses_mount_namespace_flag_when_mount_namespace_differs():
         mock_settings.use_sudo = True
         mock_settings.subprocess_timeout_seconds = 10
         mock_settings.drive_mount_timeout_seconds = 45
-        mock_settings.procfs_mounts_path = "/proc/mounts"
+        mock_settings.procfs_mounts_path = "/proc/shares"
         with patch("os.path.realpath", side_effect=lambda p: p):
             with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
                 with patch("app.infrastructure.drive_mount.LinuxFilesystemDetector.detect", return_value="ext4"):
@@ -190,7 +190,7 @@ def test_mount_drive_repairs_mount_point_access_for_service_user():
         mock_settings.use_sudo = True
         mock_settings.subprocess_timeout_seconds = 10
         mock_settings.drive_mount_timeout_seconds = 45
-        mock_settings.procfs_mounts_path = "/proc/mounts"
+        mock_settings.procfs_mounts_path = "/proc/shares"
         with patch("os.path.realpath", side_effect=lambda p: p):
             with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
                 with patch("app.infrastructure.drive_mount.LinuxFilesystemDetector.detect", return_value="ext4"):
@@ -219,7 +219,7 @@ def test_mount_drive_fails_when_mount_point_remains_unwritable():
         mock_settings.use_sudo = True
         mock_settings.subprocess_timeout_seconds = 10
         mock_settings.drive_mount_timeout_seconds = 45
-        mock_settings.procfs_mounts_path = "/proc/mounts"
+        mock_settings.procfs_mounts_path = "/proc/shares"
         with patch("os.path.realpath", side_effect=lambda p: p):
             with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
                 with patch("os.makedirs"):
@@ -243,7 +243,7 @@ def test_mount_drive_logs_raw_debug_error(caplog):
         mock_settings.use_sudo = False
         mock_settings.subprocess_timeout_seconds = 10
         mock_settings.drive_mount_timeout_seconds = 45
-        mock_settings.procfs_mounts_path = "/proc/mounts"
+        mock_settings.procfs_mounts_path = "/proc/shares"
         with patch("os.path.realpath", side_effect=lambda p: p):
             with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
                 with patch("app.infrastructure.drive_mount.LinuxFilesystemDetector.detect", return_value="ext4"):
@@ -288,7 +288,7 @@ def test_mount_drive_logs_managed_mount_root_failure_with_safe_warning(caplog):
         mock_settings.use_sudo = False
         mock_settings.subprocess_timeout_seconds = 10
         mock_settings.drive_mount_timeout_seconds = 45
-        mock_settings.procfs_mounts_path = "/proc/mounts"
+        mock_settings.procfs_mounts_path = "/proc/shares"
         with patch("os.path.realpath", side_effect=lambda p: p):
             with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
                 with patch("os.makedirs", side_effect=PermissionError("[Errno 13] Permission denied: '/mnt/ecube/7'")):
@@ -316,7 +316,7 @@ def test_mount_drive_uses_sudo_to_create_managed_mount_point_when_base_is_root_o
         mock_settings.use_sudo = True
         mock_settings.subprocess_timeout_seconds = 10
         mock_settings.drive_mount_timeout_seconds = 45
-        mock_settings.procfs_mounts_path = "/proc/mounts"
+        mock_settings.procfs_mounts_path = "/proc/shares"
         with patch("os.path.realpath", side_effect=lambda p: p):
             with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
                 with patch("app.infrastructure.drive_mount.LinuxFilesystemDetector.detect", return_value="ext4"):
@@ -342,7 +342,7 @@ def test_mount_drive_logs_access_repair_failure_with_safe_warning(caplog):
         mock_settings.use_sudo = True
         mock_settings.subprocess_timeout_seconds = 10
         mock_settings.drive_mount_timeout_seconds = 45
-        mock_settings.procfs_mounts_path = "/proc/mounts"
+        mock_settings.procfs_mounts_path = "/proc/shares"
         with patch("os.path.realpath", side_effect=lambda p: p):
             with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
                 with patch("os.makedirs"):
@@ -372,7 +372,7 @@ def test_mount_drive_uses_dedicated_mount_timeout():
         mock_settings.use_sudo = False
         mock_settings.subprocess_timeout_seconds = 10
         mock_settings.drive_mount_timeout_seconds = 45
-        mock_settings.procfs_mounts_path = "/proc/mounts"
+        mock_settings.procfs_mounts_path = "/proc/shares"
         with patch("os.path.realpath", side_effect=lambda p: p):
             with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
                 with patch("app.infrastructure.drive_mount.LinuxFilesystemDetector.detect", return_value="exfat"):

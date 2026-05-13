@@ -23,7 +23,7 @@ from app.infrastructure.usb_discovery import (
 )
 from app.models.audit import AuditLog
 from app.models.hardware import DriveFormatStatus, DriveState, UsbDrive
-from app.models.network import MountStatus, MountType, NetworkMount
+from app.models.network import MountStatus, MountType, NetworkShare
 from app.services import discovery_service, drive_service
 from app.utils.sanitize import sanitize_error_message
 
@@ -174,8 +174,8 @@ def _make_drive(db, **kwargs) -> UsbDrive:
     return drive
 
 
-def _make_project_mount(db, project_id: str, local_mount_point: str) -> NetworkMount:
-    mount = NetworkMount(
+def _make_project_mount(db, project_id: str, local_mount_point: str) -> NetworkShare:
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path=f"10.0.0.1:/exports/{project_id.lower()}",
         project_id=project_id,

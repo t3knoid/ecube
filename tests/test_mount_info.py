@@ -31,7 +31,7 @@ def test_read_mount_table_returns_empty_dict_on_oserror(monkeypatch):
 
 
 def test_read_mount_table_prefers_host_mounts_when_namespace_differs(monkeypatch):
-    monkeypatch.setattr(mount_info.settings, "procfs_mounts_path", "/proc/mounts")
+    monkeypatch.setattr(mount_info.settings, "procfs_mounts_path", "/proc/shares")
 
     def fake_readlink(path: str) -> str:
         mapping = {
@@ -52,11 +52,11 @@ def test_read_mount_table_prefers_host_mounts_when_namespace_differs(monkeypatch
         result = mount_info.read_mount_table()
 
     assert result == {"/mnt/ecube/7": "/dev/sdb1"}
-    assert opened_paths == ["/proc/1/mounts"]
+    assert opened_paths == ["/proc/1/shares"]
 
 
 def test_read_mount_table_prefers_host_mounts_when_host_namespace_probe_fails(monkeypatch, caplog):
-    monkeypatch.setattr(mount_info.settings, "procfs_mounts_path", "/proc/mounts")
+    monkeypatch.setattr(mount_info.settings, "procfs_mounts_path", "/proc/shares")
     monkeypatch.setattr(mount_info, "_host_namespace_probe_warning_emitted", False)
 
     def fake_readlink(path: str) -> str:
@@ -79,7 +79,7 @@ def test_read_mount_table_prefers_host_mounts_when_host_namespace_probe_fails(mo
             result = mount_info.read_mount_table()
 
     assert result == {"/mnt/ecube/8": "/dev/sdc"}
-    assert opened_paths == ["/proc/1/mounts"]
+    assert opened_paths == ["/proc/1/shares"]
     assert any(
         record.getMessage() == "Unable to read host mount namespace; assuming namespace differs"
         for record in caplog.records
@@ -87,7 +87,7 @@ def test_read_mount_table_prefers_host_mounts_when_host_namespace_probe_fails(mo
 
 
 def test_read_mount_table_logs_host_namespace_probe_failure_only_once(monkeypatch, caplog):
-    monkeypatch.setattr(mount_info.settings, "procfs_mounts_path", "/proc/mounts")
+    monkeypatch.setattr(mount_info.settings, "procfs_mounts_path", "/proc/shares")
     monkeypatch.setattr(mount_info, "_host_namespace_probe_warning_emitted", False)
 
     def fake_readlink(path: str) -> str:

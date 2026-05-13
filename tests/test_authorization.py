@@ -161,7 +161,7 @@ class TestDriveAuthorization:
     # POST /drives/{id}/initialize — admin, manager only
     def test_initialize_drive_admin_allowed(self, db):
         from app.models.hardware import DriveState, UsbDrive
-        from app.models.network import MountStatus, MountType, NetworkMount
+        from app.models.network import MountStatus, MountType, NetworkShare
 
         drive = UsbDrive(
             device_identifier="AUTHZ-INIT-ADMIN",
@@ -169,7 +169,7 @@ class TestDriveAuthorization:
             filesystem_type="ext4",
             mount_path="/mnt/ecube/authz-init-admin",
         )
-        mount = NetworkMount(
+        mount = NetworkShare(
             type=MountType.NFS,
             remote_path="server:/authz-admin",
             project_id="P-1",
@@ -183,7 +183,7 @@ class TestDriveAuthorization:
 
     def test_initialize_drive_manager_allowed(self, db):
         from app.models.hardware import DriveState, UsbDrive
-        from app.models.network import MountStatus, MountType, NetworkMount
+        from app.models.network import MountStatus, MountType, NetworkShare
 
         drive = UsbDrive(
             device_identifier="AUTHZ-INIT-MGR",
@@ -191,7 +191,7 @@ class TestDriveAuthorization:
             filesystem_type="ext4",
             mount_path="/mnt/ecube/authz-init-mgr",
         )
-        mount = NetworkMount(
+        mount = NetworkShare(
             type=MountType.NFS,
             remote_path="server:/authz-manager",
             project_id="P-1",
@@ -299,8 +299,8 @@ class TestDriveAuthorization:
 
 
 class TestMountAuthorization:
-    """POST /mounts and DELETE /mounts/{id} — admin, manager only.
-       GET  /mounts — all four roles."""
+    """POST /shares and DELETE /shares/{id} — admin, manager only.
+       GET  /shares — all four roles."""
 
     def test_add_mount_admin_allowed(self, db):
         from unittest.mock import MagicMock, patch
@@ -309,7 +309,7 @@ class TestMountAuthorization:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
             r = c.post(
-                "/mounts",
+                "/shares",
                 json={"type": "NFS", "remote_path": "1.2.3.4:/data", "project_id": "PROJ-AUTH-1"},
             )
         assert r.status_code == 200
@@ -321,7 +321,7 @@ class TestMountAuthorization:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
             r = c.post(
-                "/mounts",
+                "/shares",
                 json={"type": "NFS", "remote_path": "1.2.3.4:/data2", "project_id": "PROJ-AUTH-2"},
             )
         assert r.status_code == 200
@@ -330,7 +330,7 @@ class TestMountAuthorization:
         c = _client_for_role(db, ["processor"])
         _assert_forbidden(
             c.post(
-                "/mounts",
+                "/shares",
                 json={"type": "NFS", "remote_path": "1.2.3.4:/data3", "project_id": "PROJ-AUTH-3"},
             )
         )
@@ -339,36 +339,36 @@ class TestMountAuthorization:
         c = _client_for_role(db, ["auditor"])
         _assert_forbidden(
             c.post(
-                "/mounts",
+                "/shares",
                 json={"type": "NFS", "remote_path": "1.2.3.4:/data4", "project_id": "PROJ-AUTH-4"},
             )
         )
 
     def test_delete_mount_processor_denied(self, db):
         c = _client_for_role(db, ["processor"])
-        _assert_forbidden(c.delete("/mounts/1"))
+        _assert_forbidden(c.delete("/shares/1"))
 
     def test_delete_mount_auditor_denied(self, db):
         c = _client_for_role(db, ["auditor"])
-        _assert_forbidden(c.delete("/mounts/1"))
+        _assert_forbidden(c.delete("/shares/1"))
 
     def test_list_mounts_all_roles_allowed(self, db):
         for role in ["admin", "manager", "processor", "auditor"]:
             c = _client_for_role(db, [role])
-            assert c.get("/mounts").status_code == 200, f"role={role} should be allowed"
+            assert c.get("/shares").status_code == 200, f"role={role} should be allowed"
 
     def test_list_mounts_no_role_denied(self, db):
         c = _client_for_role(db, [])
-        _assert_forbidden(c.get("/mounts"))
+        _assert_forbidden(c.get("/shares"))
 
     def test_mount_throughput_admin_allowed(self, db, tmp_path):
-        from app.models.network import MountStatus, MountType, NetworkMount
+        from app.models.network import MountStatus, MountType, NetworkShare
         from unittest.mock import MagicMock, patch
 
         mount_root = tmp_path / "share"
         mount_root.mkdir()
         (mount_root / "sample.bin").write_bytes(b"a" * 4096)
-        mount = NetworkMount(
+        mount = NetworkShare(
             type=MountType.NFS,
             remote_path="server:/authz-throughput-admin",
             project_id="PROJ-AUTHZ-MOUNT-ADMIN",
@@ -380,17 +380,17 @@ class TestMountAuthorization:
         provider = MagicMock()
         provider.measure_share_read_mbps.return_value = (88.2, 4096, 0.5, 0.4)
         c = _client_for_role(db, ["admin"])
-        with patch("app.routers.mounts.get_throughput_benchmark", return_value=provider):
-            assert c.post(f"/mounts/{mount.id}/throughput-test").status_code == 200
+        with patch("app.routers.shares.get_throughput_benchmark", return_value=provider):
+            assert c.post(f"/shares/{mount.id}/throughput-test").status_code == 200
 
     def test_mount_throughput_manager_allowed(self, db, tmp_path):
-        from app.models.network import MountStatus, MountType, NetworkMount
+        from app.models.network import MountStatus, MountType, NetworkShare
         from unittest.mock import MagicMock, patch
 
         mount_root = tmp_path / "share"
         mount_root.mkdir()
         (mount_root / "sample.bin").write_bytes(b"a" * 4096)
-        mount = NetworkMount(
+        mount = NetworkShare(
             type=MountType.NFS,
             remote_path="server:/authz-throughput-manager",
             project_id="PROJ-AUTHZ-MOUNT-MANAGER",
@@ -402,16 +402,16 @@ class TestMountAuthorization:
         provider = MagicMock()
         provider.measure_share_read_mbps.return_value = (88.2, 4096, 0.5, 0.4)
         c = _client_for_role(db, ["manager"])
-        with patch("app.routers.mounts.get_throughput_benchmark", return_value=provider):
-            assert c.post(f"/mounts/{mount.id}/throughput-test").status_code == 200
+        with patch("app.routers.shares.get_throughput_benchmark", return_value=provider):
+            assert c.post(f"/shares/{mount.id}/throughput-test").status_code == 200
 
     def test_mount_throughput_processor_denied(self, db):
         c = _client_for_role(db, ["processor"])
-        _assert_forbidden(c.post("/mounts/1/throughput-test"))
+        _assert_forbidden(c.post("/shares/1/throughput-test"))
 
     def test_mount_throughput_auditor_denied(self, db):
         c = _client_for_role(db, ["auditor"])
-        _assert_forbidden(c.post("/mounts/1/throughput-test"))
+        _assert_forbidden(c.post("/shares/1/throughput-test"))
 
 
 # ---------------------------------------------------------------------------
@@ -558,9 +558,9 @@ class TestUnauthenticatedAccess:
             ("GET", "/drives"),
             ("POST", "/drives/1/initialize"),
             ("POST", "/drives/1/prepare-eject"),
-            ("GET", "/mounts"),
-            ("POST", "/mounts"),
-            ("DELETE", "/mounts/1"),
+            ("GET", "/shares"),
+            ("POST", "/shares"),
+            ("DELETE", "/shares/1"),
             ("POST", "/jobs"),
             ("GET", "/jobs/1"),
             ("POST", "/jobs/1/start"),

@@ -184,7 +184,7 @@ describe('DashboardView active jobs', () => {
     await mountButton.trigger('click')
     await flushPromises()
 
-    expect(mocks.push).toHaveBeenCalledWith({ name: 'mounts', query: { workflow: 'UNASSIGNED' } })
+    expect(mocks.push).toHaveBeenCalledWith({ name: 'shares', query: { workflow: 'UNASSIGNED' } })
   })
 
   it('shows blocked, waiting-to-start, and custody-closeout work in Needs Attention', async () => {

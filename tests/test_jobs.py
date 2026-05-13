@@ -9,7 +9,7 @@ from app.routers import jobs as jobs_router
 from app.models.audit import AuditLog
 from app.models.hardware import UsbDrive, DriveState, UsbHub, UsbPort
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobChainOfCustodySnapshot, JobStatus, Manifest, StartupAnalysisStatus
-from app.models.network import MountStatus, MountType, NetworkMount
+from app.models.network import MountStatus, MountType, NetworkShare
 from app.services import audit_service
 from app.services.reconciliation_service import reconcile_jobs
 from app.utils.drive_identity import build_persistent_device_identifier
@@ -208,7 +208,7 @@ def test_create_job_ignores_client_supplied_created_by(client, db):
 
 
 def test_update_job_rejects_notes_field(client, db):
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="server:/exports/project-update-001",
         project_id="PROJ-UPDATE-001",
@@ -336,7 +336,7 @@ def test_create_job_rejects_root_source_path(client, db):
 
 
 def test_create_job_resolves_source_path_from_selected_mount(client, db):
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="server:/exports/project-001",
         project_id="PROJ-001",
@@ -368,7 +368,7 @@ def test_create_job_resolves_source_path_from_selected_mount(client, db):
 
 
 def test_create_job_rejects_traversal_outside_selected_mount(client, db):
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="server:/exports/project-001",
         project_id="PROJ-001",
@@ -3194,6 +3194,50 @@ def test_download_manifest_conflict_when_drive_not_mounted(client, db, tmp_path)
     assert db.query(AuditLog).filter(AuditLog.action == "MANIFEST_DOWNLOADED", AuditLog.job_id == job.id).count() == 0
 
 
+def test_download_manifest_uses_stored_path_when_drive_mount_unavailable(client, db, tmp_path):
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text('{"job": "fallback"}', encoding="utf-8")
+
+    drive = UsbDrive(
+        device_identifier="USB-MANIFEST-DOWNLOAD-FALLBACK-001",
+        capacity_bytes=1024,
+        current_state=DriveState.IN_USE,
+        mount_path=None,
+        current_project_id="PROJ-MANIFEST-DOWNLOAD-FALLBACK-001",
+    )
+    db.add(drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-MANIFEST-DOWNLOAD-FALLBACK-001",
+        evidence_number="EV-MANIFEST-DOWNLOAD-FALLBACK-001",
+        source_path="/data/evidence",
+        target_mount_path="/stale/mount/path",
+        status=JobStatus.COMPLETED,
+    )
+    db.add(job)
+    db.flush()
+
+    assignment = DriveAssignment(drive_id=drive.id, job_id=job.id)
+    db.add(assignment)
+    db.flush()
+    db.add(
+        Manifest(
+            job_id=job.id,
+            drive_assignment_id=assignment.id,
+            manifest_path=str(manifest_path),
+            format="JSON",
+        )
+    )
+    db.commit()
+
+    response = client.get(f"/jobs/{job.id}/manifest/download")
+
+    assert response.status_code == 200
+    assert response.content == manifest_path.read_bytes()
+    assert 'attachment; filename="manifest.json"' in response.headers["content-disposition"]
+
+
 def test_create_manifest_conflict_when_drive_not_mounted(client, db):
     drive = UsbDrive(
         device_identifier="USB-MANIFEST-MISSING-001",
@@ -3567,7 +3611,7 @@ def test_get_job_reports_drive_mount_state_for_archive_gating(client, db):
 
 
 def test_update_pending_job_reassigns_drive_and_updates_fields(client, db):
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="server:/exports/project-001",
         project_id="PROJ-EDIT-001",
@@ -3637,7 +3681,7 @@ def test_update_pending_job_reassigns_drive_and_updates_fields(client, db):
 
 
 def test_update_job_rejects_exact_duplicate_source_path_on_same_drive(client, db):
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="server:/exports/project-overlap",
         project_id="PROJ-EDIT-OVERLAP",
@@ -3698,7 +3742,7 @@ def test_update_job_rejects_exact_duplicate_source_path_on_same_drive(client, db
 
 
 def test_update_job_rejects_overlap_when_reassigning_drive(client, db):
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="server:/exports/project-overlap-two",
         project_id="PROJ-EDIT-OVERLAP-2",
@@ -3820,7 +3864,7 @@ def test_clear_job_startup_analysis_cache_requires_confirmation(admin_client, db
 
 
 def test_update_job_source_change_invalidates_startup_analysis_and_file_rows(client, db):
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="server:/exports/project-001",
         project_id="PROJ-001",
@@ -3889,7 +3933,7 @@ def test_update_job_source_change_invalidates_startup_analysis_and_file_rows(cli
 
 
 def test_update_job_source_change_invalidates_summary_only_startup_analysis_state(client, db):
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="server:/exports/project-001",
         project_id="PROJ-001",
@@ -3962,7 +4006,7 @@ def test_update_job_source_change_invalidates_summary_only_startup_analysis_stat
 
 
 def test_update_job_conflict_while_startup_analysis_running(client, db):
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="server:/exports/project-001",
         project_id="PROJ-UPDATE-ANALYZING-001",
@@ -4012,7 +4056,7 @@ def test_update_job_conflict_while_startup_analysis_running(client, db):
 
 
 def test_update_job_rejects_started_job_states(client, db):
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="server:/exports/project-001",
         project_id="PROJ-EDIT-STATE-001",
@@ -4070,7 +4114,7 @@ def test_update_job_rejects_started_job_states(client, db):
 
 
 def test_update_started_job_allows_thread_count_and_overflow_drive_changes(client, db):
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="server:/exports/project-started-edit",
         project_id="PROJ-STARTED-EDIT-001",
@@ -4141,7 +4185,7 @@ def test_update_started_job_allows_thread_count_and_overflow_drive_changes(clien
 
 
 def test_update_started_job_releases_removed_reserved_overflow_drive(client, db):
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="server:/exports/project-started-edit-release",
         project_id="PROJ-STARTED-EDIT-002",

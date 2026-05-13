@@ -22,12 +22,12 @@ _SPA_ROUTE_COLLISION_EXACT_PATHS = frozenset({
     "/configuration",
     "/drives",
     "/jobs",
-    "/mounts",
+    "/shares",
     "/users",
 })
 _SPA_ROUTE_COLLISION_DETAIL_PATTERNS = (
     re.compile(r"^/jobs/[^/]+$"),
-    re.compile(r"^/mounts/\d+$"),
+    re.compile(r"^/shares/\d+$"),
 )
 _INTERNAL_SPA_ROUTE_PREFIX = "/__spa__"
 
@@ -47,7 +47,7 @@ def add_spa_route_collision_middleware(app: FastAPI) -> None:
     """Rewrite direct browser navigations for known SPA/API path collisions.
 
     When FastAPI serves both the ECUBE SPA and same-origin backend routes,
-    some browser reloads such as ``/audit`` or ``/mounts/123`` would
+    some browser reloads such as ``/audit`` or ``/shares/d+`` would
     otherwise match backend routes before the SPA fallback can serve
     ``index.html``. Only HTML navigation requests for known colliding SPA
     routes are rewritten; API traffic and non-colliding paths are unchanged.

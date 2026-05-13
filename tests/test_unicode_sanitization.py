@@ -233,7 +233,7 @@ class TestStrictSafeStrPydantic:
 
 
 # ---------------------------------------------------------------------------
-# Integration tests: POST /mounts with malformed Unicode
+# Integration tests: POST /shares with malformed Unicode
 # ---------------------------------------------------------------------------
 
 
@@ -242,7 +242,7 @@ class TestMountsUnicodeSanitization:
     def test_post_mount_null_bytes_in_path_rejected(self, manager_client, db):
         """Null bytes in mount path fields are rejected with 422."""
         response = manager_client.post(
-            "/mounts",
+            "/shares",
             json={
                 "type": "NFS",
                 "remote_path": "192.168.1.1:/export\x00s",
@@ -259,7 +259,7 @@ class TestMountsUnicodeSanitization:
             "project_id": "PROJ-UNICODE-2",
         }).encode("utf-8", "surrogatepass")
         response = manager_client.post(
-            "/mounts",
+            "/shares",
             content=payload,
             headers={"Content-Type": "application/json"},
         )
@@ -268,7 +268,7 @@ class TestMountsUnicodeSanitization:
     def test_post_mount_all_nulls_in_required_field_returns_422(self, manager_client, db):
         """Required mount field that sanitizes to empty is rejected with 422."""
         response = manager_client.post(
-            "/mounts",
+            "/shares",
             json={
                 "type": "NFS",
                 "remote_path": "\x00\x00",

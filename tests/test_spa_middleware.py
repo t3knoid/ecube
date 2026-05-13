@@ -173,7 +173,7 @@ def _make_spa_app_with_route_collisions(frontend_dir: pathlib.Path, *, with_stri
     def jobs_index():
         return {"route": "jobs"}
 
-    @app.get("/mounts")
+    @app.get("/shares")
     def mounts_index():
         return {"route": "mounts"}
 
@@ -193,7 +193,7 @@ def _make_spa_app_with_route_collisions(frontend_dir: pathlib.Path, *, with_stri
     def job_detail(job_id: int):
         return {"route": "job-detail", "job_id": job_id}
 
-    @app.patch("/mounts/{mount_id}")
+    @app.patch("/shares/{share_id}")
     def mount_detail(mount_id: int):
         return {"route": "mount-detail", "mount_id": mount_id}
 
@@ -331,7 +331,7 @@ class TestSpaFrontendServing:
 
     @pytest.mark.parametrize(
         "path",
-        ["/audit", "/jobs", "/mounts", "/drives", "/configuration", "/users"],
+        ["/audit", "/jobs", "/shares", "/drives", "/configuration", "/users"],
     )
     def test_browser_navigation_to_exact_colliding_route_serves_spa(self, tmp_path, path):
         dist = self._build_dist(tmp_path)
@@ -347,7 +347,7 @@ class TestSpaFrontendServing:
         [
             ("/audit", 200, {"route": "audit"}),
             ("/jobs", 200, {"route": "jobs"}),
-            ("/mounts", 200, {"route": "mounts"}),
+            ("/shares", 200, {"route": "mounts"}),
             ("/drives", 200, {"route": "drives"}),
             ("/configuration", 200, {"route": "configuration"}),
             ("/users", 200, {"route": "users"}),
@@ -393,7 +393,7 @@ class TestSpaFrontendServing:
         dist = self._build_dist(tmp_path)
         client = TestClient(_make_spa_app_with_route_collisions(dist))
 
-        resp = client.get("/mounts/123", headers={"accept": "text/html,application/xhtml+xml"})
+        resp = client.get("/shares/d+", headers={"accept": "text/html,application/xhtml+xml"})
 
         assert resp.status_code == 200
         assert "SPA" in resp.text
@@ -402,7 +402,7 @@ class TestSpaFrontendServing:
         dist = self._build_dist(tmp_path)
         client = TestClient(_make_spa_app_with_route_collisions(dist, with_strip=True))
 
-        resp = client.get("/api/mounts/123", headers={"accept": "application/json"})
+        resp = client.get("/api/shares/d+", headers={"accept": "application/json"})
 
         assert resp.status_code == 404
 
