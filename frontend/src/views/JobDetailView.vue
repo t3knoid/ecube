@@ -2014,7 +2014,7 @@ onUnmounted(() => {
 
           <section class="detail-subpanel" aria-labelledby="job-detail-source-information-title">
             <h3 id="job-detail-source-information-title">{{ t('jobs.sourceInformation') }}</h3>
-            <div class="detail-grid">
+            <div class="detail-grid analysis-summary">
               <div class="detail-grid-item">
                 <span>{{ t('jobs.sourcePath') }}</span><strong class="mono wrap-anywhere">{{ displaySourcePath(job) || '-' }}</strong>
               </div>
@@ -2029,6 +2029,10 @@ onUnmounted(() => {
               </div>
               <div v-if="startupAnalysisSummary" class="detail-grid-item">
                 <span>{{ t('jobs.analysisLastAnalyzedAt') }}</span><strong>{{ startupAnalysisSummary.lastAnalyzedAt }}</strong>
+              </div>
+              <div v-if="startupAnalysisSummary" class="detail-grid-item">
+                <span>{{ t('jobs.analysisReadyToStart') }}</span>
+                <strong>{{ startupAnalysisSummary.readyToStart ? t('jobs.analysisReadyYes') : t('jobs.analysisReadyNo') }}</strong>
               </div>
             </div>
             <p v-if="startupAnalysisSummary?.failureReason" class="error-text">{{ t('jobs.analysisFailureReason') }}: {{ startupAnalysisSummary.failureReason }}</p>
@@ -2999,6 +3003,14 @@ select {
 .current-task-panel {
   background: color-mix(in srgb, var(--color-info, #2563eb) 6%, var(--color-bg-secondary));
   border-color: color-mix(in srgb, var(--color-info, #2563eb) 28%, var(--color-border));
+}
+
+.current-task-panel .muted {
+  color: var(--color-text-primary);
+}
+
+.current-task-panel :deep(.progress-label) {
+  color: var(--color-text-primary);
 }
 
 .job-information-panel {
