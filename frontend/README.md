@@ -48,7 +48,7 @@ npm run test:unit
 
 ```sh
 # Install browsers for the first run
-npx playwright install
+npm run playwright:install
 
 # When testing on CI, must build the project first
 npm run build

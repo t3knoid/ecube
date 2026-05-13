@@ -27,7 +27,7 @@ From repository root:
 pip install -e ".[dev]"
 cd frontend
 npm ci
-npx playwright install --with-deps chromium webkit
+npm run playwright:install
 ```
 
 On Linux hosts that exercise SMB-related mount behavior locally, install the host SMB tools before running backend tests that touch mount flows:
@@ -50,7 +50,7 @@ npm run test:unit
 
 # frontend e2e
 npm run build
-npx playwright test
+npm run test:e2e
 ```
 
 ---
@@ -75,7 +75,7 @@ sudo apt-get install -y cifs-utils smbclient
 ```bash
 cd frontend
 npm ci
-npx playwright install --with-deps chromium webkit
+npm run playwright:install
 ```
 
 ---
@@ -145,13 +145,13 @@ npm run test:unit
 ```bash
 cd frontend
 npm run build
-npx playwright test
+npm run test:e2e
 ```
 
 Interactive mode:
 
 ```bash
-npx playwright test --ui
+npm run test:e2e:ui
 ```
 
 ### 3.6 Quick smoke check
@@ -223,7 +223,7 @@ bash scripts/build-help.sh
 
 cd frontend
 npm run build
-npx playwright test frontend/e2e/help.spec.js
+npm run test:e2e -- frontend/e2e/help.spec.js
 ```
 
 If the repository uses a JavaScript variant of the generator, replace the script call with the project-standard equivalent (for example, `node scripts/build-help.mjs`).
@@ -243,9 +243,9 @@ From repo root:
 Script behavior:
 
 1. `npm ci`
-2. `npx playwright install --with-deps chromium webkit`
+2. `npm run playwright:install`
 3. `npm run build`
-4. `npx playwright test --update-snapshots --reporter=line`
+4. `npm run test:e2e:update-snapshots`
 5. stage snapshot changes under `frontend/e2e/*.spec.js-snapshots/`
 6. commit and push if changed
 
@@ -270,8 +270,8 @@ For installer-oriented package artifact generation details, see:
 | `run-tests.yml` — backend unit tests | manual (`workflow_dispatch`) and push to `main` when `app/**`, `frontend/**`, or `tests/**` changes | `python -m pytest tests/ --ignore=tests/integration --ignore=tests/hardware -v` on ubuntu-latest |
 | `run-tests.yml` — backend integration tests | manual (`workflow_dispatch`) and push to `main` with same path filter | fresh postgres service + `alembic upgrade head` + `python -m pytest tests/integration/ -v --run-integration` |
 | `run-tests.yml` — frontend unit tests | manual (`workflow_dispatch`) and push to `main` with same path filter | `npm run test:unit` |
-| `run-tests.yml` — frontend E2E tests | manual (`workflow_dispatch`) and push to `main` with same path filter | `npm run build` + `npx playwright test` (Chromium + WebKit), upload `frontend/playwright-report/` artifact |
-| `update-e2e-snapshots.yml` | manual (`workflow_dispatch`) | `npx playwright test --update-snapshots --reporter=line`, then commit and push snapshots |
+| `run-tests.yml` — frontend E2E tests | manual (`workflow_dispatch`) and push to `main` with same path filter | `npm run build` + `npm run test:e2e` (Chromium + WebKit), upload `frontend/playwright-report/` artifact |
+| `update-e2e-snapshots.yml` | manual (`workflow_dispatch`) | `npm run test:e2e:update-snapshots`, then commit and push snapshots |
 | `docker-build.yml` — build and smoke | manual (`workflow_dispatch`), push to `main`, tag push (`v*`) | build images, bring stack up, smoke-check `/health` |
 | `docker-build.yml` — publish | release published | push images to GHCR, attach generated `docker-compose.yml` release asset |
 

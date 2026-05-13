@@ -560,7 +560,7 @@ For first-time Playwright setup, install browser dependencies:
 
 ```bash
 cd frontend
-npx playwright install --with-deps chromium webkit
+npm run playwright:install
 ```
 
 ### API Fuzz Testing (Schemathesis)

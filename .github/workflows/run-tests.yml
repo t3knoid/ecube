@@ -183,13 +183,13 @@ jobs:
         run: npm ci
 
       - name: Install Playwright browsers (Chromium + WebKit)
-        run: npx playwright install --with-deps chromium webkit
+        run: npm run playwright:install
 
       - name: Build frontend
         run: npm run build
 
       - name: Run E2E tests
-        run: npx playwright test
+        run: npm run test:e2e
 
       - name: Upload Playwright report
         if: always()

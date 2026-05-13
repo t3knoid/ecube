@@ -23,7 +23,7 @@ if [[ ! -f "${FRONTEND_DIR}/package.json" ]]; then
   exit 1
 fi
 
-for cmd in npm npx; do
+for cmd in npm; do
   if ! command -v "${cmd}" >/dev/null 2>&1; then
     echo "[ERROR] ${cmd} is not available in PATH." >&2
     exit 1
@@ -34,11 +34,11 @@ echo "[INFO] Running frontend install/build/snapshot update..."
 pushd "${FRONTEND_DIR}" >/dev/null
 
 npm ci
-npx playwright install --with-deps chromium webkit
+npm run playwright:install
 npm run build
 
 set +e
-npx playwright test --update-snapshots --reporter=line
+npm run test:e2e:update-snapshots
 PLAYWRIGHT_EXIT=$?
 set -e
 
