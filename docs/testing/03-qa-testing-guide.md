@@ -41,6 +41,16 @@ Add the following manual checks when a release includes Audit page pagination, d
 | Pagination window shortcuts adapt to screen size | Open `Audit` on a wider screen and verify the numbered page window, then repeat on a smaller screen width | Wider screens expose shortcuts for the current 10-page window with jump controls for the next or previous 10 pages; smaller screens reduce the shortcut window to 5 pages |
 | CSV export includes the full filtered result set | Apply a filter that spans multiple pages and click `Export Audit CSV` | The downloaded CSV includes rows from all matching pages, not only the rows visible on the current page |
 
+## Manual Verification Additions for Shares Navigation and Mount Table Fallback
+
+Add the following manual checks when a release includes routing, role-visibility, or host mount-table updates.
+
+| Scenario | Steps | Expected |
+|---|---|---|
+| Auditor and processor can open Shares from direct navigation | Sign in as `auditor`, then browse directly to `/shares`; repeat as `processor` | The Shares page loads successfully for both roles without redirecting to Dashboard or showing a forbidden state |
+| Shares navigation remains consistent after refresh | Sign in as `auditor` or `processor`, open `/shares`, then refresh the browser tab | The SPA route resolves back to Shares and the page remains functional after reload |
+| Host mount table fallback still reads Linux proc mounts paths | Run the backend mount-info test file and inspect the namespace fallback assertions | Tests verify the default path `/proc/mounts` and host fallback path `/proc/1/mounts` so mount-table parsing stays aligned with Linux procfs semantics |
+
 ## Manual Verification Additions for Archived Jobs
 
 Add the following manual checks when a release includes the archived-job workflow on the Jobs page and Job Detail page.

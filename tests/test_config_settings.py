@@ -179,7 +179,7 @@ class TestSettingsDefaults:
 
     def test_procfs_mounts_path_default(self):
         s = Settings(database_url="sqlite://")
-        assert s.procfs_mounts_path == "/proc/shares"
+        assert s.procfs_mounts_path == "/proc/mounts"
 
     def test_procfs_filesystems_path_default(self):
         s = Settings(database_url="sqlite://")
