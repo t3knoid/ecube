@@ -297,6 +297,7 @@ describe('DashboardView active jobs', () => {
         source_path: '/case/subfolder',
         created_at: '2026-05-10T10:00:00Z',
         started_at: '2026-05-10T10:05:00Z',
+        copy_started_at: '2026-05-10T10:05:05Z',
         copied_bytes: 10 * 1024 * 1024,
         total_bytes: 20 * 1024 * 1024,
         file_count: 10,
@@ -365,6 +366,7 @@ describe('DashboardView active jobs', () => {
         project_id: 'PROJ-065',
         status: 'RUNNING',
         source_path: '/evidence',
+        copy_started_at: '2026-05-10T10:05:05Z',
         copied_bytes: 10 * 1024 * 1024,
         total_bytes: 20 * 1024 * 1024,
         file_count: 10,
@@ -388,6 +390,39 @@ describe('DashboardView active jobs', () => {
     expect(row.find('.active-jobs-progress-meta').text()).toContain(i18n.global.t('jobs.copyRate'))
     expect(row.find('.active-jobs-progress-meta').text()).toContain(i18n.global.t('jobs.timeRemaining'))
     expect(row.find('.dashboard-progress-mobile-label').text()).toBe('50%')
+  })
+
+  it('hides copy-phase metrics while a job is still preparing', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-05-10T10:06:00Z'))
+
+    mocks.listJobs.mockResolvedValue([
+      {
+        id: 64,
+        project_id: 'PROJ-064',
+        status: 'PREPARING',
+        source_path: '/case/preparing',
+        started_at: '2026-05-10T10:05:00Z',
+        copied_bytes: 0,
+        total_bytes: 20 * 1024 * 1024,
+        file_count: 10,
+        files_succeeded: 0,
+        files_failed: 0,
+        files_timed_out: 0,
+        active_duration_seconds: 0,
+      },
+    ])
+    mocks.getMounts.mockResolvedValue([])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain(i18n.global.t('jobs.copyRate'))
+    expect(wrapper.text()).not.toContain(i18n.global.t('jobs.timeRemaining'))
+    expect(wrapper.text()).not.toContain(i18n.global.t('jobs.estimatedCompletion'))
+
+    wrapper.unmount()
+    vi.useRealTimers()
   })
 
   it('renders dashboard tables with the real column order used by mobile selectors', async () => {

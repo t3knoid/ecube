@@ -339,7 +339,7 @@ function liveTransferEntries(job) {
     : null
   const entries = []
 
-  if (durationSeconds != null) {
+  if (['RUNNING', 'PAUSING'].includes(status) && durationSeconds != null && copyDurationSeconds > 0) {
     entries.push({ label: t('jobs.copyRate'), value: formatCopyRate(copiedBytes, copyDurationSeconds) })
   }
   if (remainingSeconds != null) {

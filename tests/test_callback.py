@@ -348,6 +348,7 @@ class TestBuildPayload:
         job.file_count = 10
         job.active_duration_seconds = 75
         job.started_at = datetime(2025, 12, 31, 23, 58, 45, tzinfo=timezone.utc)
+        job.copy_started_at = datetime(2025, 12, 31, 23, 59, 0, tzinfo=timezone.utc)
         job.completed_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
         job.files = [
             ExportFile(status=FileStatus.DONE),
@@ -360,6 +361,7 @@ class TestBuildPayload:
         assert payload["started_by"] == "operator1"
         assert payload["status"] == "COMPLETED"
         assert payload["started_at"] == "2025-12-31T23:58:45+00:00"
+        assert payload["copy_started_at"] == "2025-12-31T23:59:00+00:00"
         assert payload["completed_at"] == "2026-01-01T00:00:00+00:00"
         assert payload["active_duration_seconds"] == 75
         assert payload["files_succeeded"] == 2
@@ -470,6 +472,7 @@ class TestBuildPayload:
             file_count=2,
             active_duration_seconds=9,
             started_at=datetime(2025, 12, 31, 23, 59, 51, tzinfo=timezone.utc),
+            copy_started_at=datetime(2025, 12, 31, 23, 59, 55, tzinfo=timezone.utc),
             completed_at=None,
             files=[
                 ExportFile(status=FileStatus.DONE),
@@ -484,6 +487,7 @@ class TestBuildPayload:
         assert payload["files_timed_out"] == 0
         assert payload["started_by"] == "operator-local"
         assert payload["started_at"] == "2025-12-31T23:59:51+00:00"
+        assert payload["copy_started_at"] == "2025-12-31T23:59:55+00:00"
         assert payload["active_duration_seconds"] == 9
         assert payload["completion_result"] == "partial_success"
 

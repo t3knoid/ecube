@@ -325,6 +325,10 @@ def build_payload(
     if started_at is not None:
         payload["started_at"] = started_at
 
+    copy_started_at = _serialize_timestamp(getattr(job, "copy_started_at", None))
+    if copy_started_at is not None:
+        payload["copy_started_at"] = copy_started_at
+
     completed_at = _serialize_timestamp(getattr(job, "completed_at", None))
     if completed_at is not None:
         payload["completed_at"] = completed_at

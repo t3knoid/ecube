@@ -2060,6 +2060,7 @@ describe('JobDetailView start action', () => {
       file_count: 4,
       files_succeeded: 4,
       files_failed: 0,
+      active_duration_seconds: 2,
       started_at: '2026-04-18T10:00:00Z',
       completed_at: '2026-04-18T10:00:02Z',
     })
@@ -2081,6 +2082,37 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).toContain('Copy rate')
     expect(wrapper.text()).toContain('5.0 MB/s')
     expect(wrapper.find('.completion-summary').classes()).not.toContain('completion-summary--danger')
+  })
+
+  it('keeps full lifecycle duration separate from copy rate in the completion summary', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 60 * 1024 * 1024,
+      total_bytes: 60 * 1024 * 1024,
+      file_count: 4,
+      files_succeeded: 4,
+      files_failed: 0,
+      files_timed_out: 0,
+      started_at: '2026-04-18T10:00:00Z',
+      completed_at: '2026-04-18T10:01:00Z',
+      active_duration_seconds: 20,
+      copy_started_at: null,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Completion summary')
+    expect(wrapper.text()).toContain('Duration')
+    expect(wrapper.text()).toContain('1m 0s')
+    expect(wrapper.text()).toContain('Copy rate')
+    expect(wrapper.text()).toContain('3.0 MB/s')
   })
 
   it('uses a danger background for the completion summary when file copy failures are present', async () => {

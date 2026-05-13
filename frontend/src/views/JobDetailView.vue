@@ -588,8 +588,6 @@ function calculateDurationSeconds(currentJob) {
     }
   }
 
-  if (storedSeconds > 0) return storedSeconds
-
   if (currentJob.started_at && currentJob.completed_at) {
     const started = new Date(currentJob.started_at)
     const completed = new Date(currentJob.completed_at)
@@ -597,6 +595,8 @@ function calculateDurationSeconds(currentJob) {
       return Math.max(0, Math.round((completed.getTime() - started.getTime()) / 1000))
     }
   }
+
+  if (storedSeconds > 0) return storedSeconds
 
   return null
 }
