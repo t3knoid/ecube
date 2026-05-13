@@ -394,13 +394,13 @@ Selecting a drive opens a detail view showing:
 
 - The drive ID, the port-based `Device` value, trusted USB identity details such as serial number, manufacturer, vendor ID, product ID, negotiated speed when available, filesystem type, total capacity, last known available space, and current status
 - The latest measured write speed and last throughput-test time when a prior throughput test has completed for that mounted drive
-- Current project assignment together with the related evidence number, job ID, and `Custody Status` when a job is associated with the drive
+- Current project binding, plus related evidence number, job ID, and `Custody Status` only when the drive has an explicit primary or overflow assignment for that job
 - Current status badge
 - Available actions such as format, initialize, throughput testing, and prepare eject
 
 If ECUBE does not yet have a current mounted-drive free-space reading for that drive, the available-space field shows `-` instead of blocking the page.
 
-If a related job exists, the `Job ID` value on Drive Detail uses the same direct Job Detail navigation pattern as the clickable job context on the Drives page. `Custody Status` is sourced from trusted backend chain-of-custody data for that drive's related job lifecycle and can show `Handoff recorded`, `Pending handoff`, `Status unavailable`, or `No related job`. When a recorded handoff timestamp is available, Drive Detail shows it as secondary read-only detail. This field is informational only; use `Chain of Custody` from Job Detail to review the full report or record handoff.
+If a related job exists through an explicit drive assignment, the `Job ID` value on Drive Detail uses the same direct Job Detail navigation pattern as the clickable job context on the Drives page. A drive that is only project-bound keeps the project value but shows `-` for `Evidence` and `Job ID`, with `Custody Status` set to `No related job` until it is explicitly assigned. `Custody Status` is sourced from trusted backend chain-of-custody data for that drive's related job lifecycle and can show `Handoff recorded`, `Pending handoff`, `Status unavailable`, or `No related job`. When a recorded handoff timestamp is available, Drive Detail shows it as secondary read-only detail. This field is informational only; use `Chain of Custody` from Job Detail to review the full report or record handoff.
 
 When the drive is mounted and in a managed state, `admin` and `manager` users can run `Test Throughput` from Drive Detail. The action measures write throughput against the mounted destination, stores the latest result on the drive record, and refreshes the `Latest Write Speed` plus `Last Throughput Test` fields on the page. `processor` and `auditor` users can still review those stored values when present, but they do not see the action button.
 

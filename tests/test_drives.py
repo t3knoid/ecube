@@ -374,6 +374,87 @@ def test_list_drives_include_related_job_custody_pending(client, db):
     }
 
 
+def test_list_drives_include_related_job_custody_does_not_leak_same_project_assignment(client, db):
+    assigned_drive = UsbDrive(device_identifier="USB-CUSTODY-LEAK-A", current_state=DriveState.IN_USE, current_project_id="PROJ-LEAK-001")
+    unassigned_drive = UsbDrive(device_identifier="USB-CUSTODY-LEAK-B", current_state=DriveState.IN_USE, current_project_id="PROJ-LEAK-001")
+    job = ExportJob(
+        project_id="PROJ-LEAK-001",
+        evidence_number="EV-LEAK-001",
+        source_path="/nfs/proj-leak-001",
+        status=JobStatus.RUNNING,
+    )
+    db.add_all([assigned_drive, unassigned_drive, job])
+    db.flush()
+    db.add(DriveAssignment(drive_id=assigned_drive.id, job_id=job.id, activated_at=datetime.now(timezone.utc)))
+    db.commit()
+
+    response = client.get("/drives", params={"include_related_job_custody": "true"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assigned_match = next(item for item in payload if item["id"] == assigned_drive.id)
+    unassigned_match = next(item for item in payload if item["id"] == unassigned_drive.id)
+
+    assert assigned_match["related_job"] == {
+        "job_id": job.id,
+        "evidence_number": "EV-LEAK-001",
+        "custody_status": "PENDING_HANDOFF",
+        "delivery_time": None,
+    }
+    assert unassigned_match["related_job"] == {
+        "job_id": None,
+        "evidence_number": None,
+        "custody_status": "NO_RELATED_JOB",
+        "delivery_time": None,
+    }
+
+
+def test_list_drives_include_related_job_custody_for_explicit_overflow_assignment(client, db):
+    primary_drive = UsbDrive(device_identifier="USB-CUSTODY-OVERFLOW-A", current_state=DriveState.IN_USE, current_project_id="PROJ-OVERFLOW-CUSTODY-001")
+    overflow_drive = UsbDrive(device_identifier="USB-CUSTODY-OVERFLOW-B", current_state=DriveState.IN_USE, current_project_id="PROJ-OVERFLOW-CUSTODY-001")
+    spare_drive = UsbDrive(device_identifier="USB-CUSTODY-OVERFLOW-C", current_state=DriveState.IN_USE, current_project_id="PROJ-OVERFLOW-CUSTODY-001")
+    job = ExportJob(
+        project_id="PROJ-OVERFLOW-CUSTODY-001",
+        evidence_number="EV-OVERFLOW-001",
+        source_path="/nfs/proj-overflow-custody-001",
+        status=JobStatus.RUNNING,
+    )
+    db.add_all([primary_drive, overflow_drive, spare_drive, job])
+    db.flush()
+    db.add_all([
+        DriveAssignment(drive_id=primary_drive.id, job_id=job.id, activated_at=datetime.now(timezone.utc)),
+        DriveAssignment(drive_id=overflow_drive.id, job_id=job.id),
+    ])
+    db.commit()
+
+    response = client.get("/drives", params={"include_related_job_custody": "true"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    primary_match = next(item for item in payload if item["id"] == primary_drive.id)
+    overflow_match = next(item for item in payload if item["id"] == overflow_drive.id)
+    spare_match = next(item for item in payload if item["id"] == spare_drive.id)
+
+    assert primary_match["related_job"] == {
+        "job_id": job.id,
+        "evidence_number": "EV-OVERFLOW-001",
+        "custody_status": "PENDING_HANDOFF",
+        "delivery_time": None,
+    }
+    assert overflow_match["related_job"] == {
+        "job_id": job.id,
+        "evidence_number": "EV-OVERFLOW-001",
+        "custody_status": "PENDING_HANDOFF",
+        "delivery_time": None,
+    }
+    assert spare_match["related_job"] == {
+        "job_id": None,
+        "evidence_number": None,
+        "custody_status": "NO_RELATED_JOB",
+        "delivery_time": None,
+    }
+
+
 def test_list_drives_include_related_job_custody_unavailable_without_snapshot(client, db):
     drive = UsbDrive(device_identifier="USB-CUSTODY-3", current_state=DriveState.IN_USE, current_project_id="PROJ-003")
     job = ExportJob(

@@ -3,7 +3,6 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getDrives, refreshDrives } from '@/api/drives.js'
-import { listAllJobs } from '@/api/jobs.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
@@ -12,7 +11,6 @@ import { useStatusLabels } from '@/composables/useStatusLabels.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { formatDriveIdentity } from '@/utils/driveIdentity.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
-import { buildDriveJobMap, buildProjectEvidenceMap, getDriveJob, getProjectEvidenceJobId } from '@/utils/projectEvidence.js'
 
 const { t } = useI18n()
 const { driveStateLabel } = useStatusLabels()
@@ -34,7 +32,6 @@ const sortDir = ref('asc')
 const page = ref(1)
 const pageSize = ref(10)
 const isMobileViewport = ref(false)
-const driveJobById = ref(new Map())
 let mobileViewportQuery = null
 
 /** Drive ID currently being browsed (null = none open). */
@@ -122,32 +119,24 @@ async function loadDrives() {
   loading.value = true
   error.value = ''
   try {
-    const params = {}
+    const params = {
+      include_related_job_custody: true,
+    }
     if (showDisconnected.value) {
       params.include_disconnected = true
     }
-    const [driveResult, jobResult] = await Promise.allSettled([
-      getDrives(params),
-      listAllJobs({ include_archived: true }),
-    ])
+    const driveResult = await getDrives(params)
 
-    if (driveResult.status !== 'fulfilled') {
-      throw driveResult.reason
+    if (!Array.isArray(driveResult)) {
+      throw new Error('Unexpected drives response')
     }
 
-    const jobs = jobResult.status === 'fulfilled' ? (jobResult.value || []) : []
-
-    driveJobById.value = buildDriveJobMap(jobs)
-    const evidenceByProject = buildProjectEvidenceMap(jobs)
-
-    drives.value = (driveResult.value || []).map((item) => {
+    drives.value = driveResult.map((item) => {
       const drive = normalizeProjectRecord(item, ['current_project_id'])
-      const hasActiveProjectBinding = Boolean(normalizeProjectId(drive.current_project_id))
-      const assignedJob = hasActiveProjectBinding ? getDriveJob(drive.id, driveJobById.value) : null
       return {
         ...drive,
-        current_project_job_id: hasActiveProjectBinding
-          ? assignedJob?.jobId ?? getProjectEvidenceJobId(drive.current_project_id, evidenceByProject)
+        current_project_job_id: Number.isInteger(Number(drive.related_job?.job_id))
+          ? Number(drive.related_job.job_id)
           : null,
       }
     })

@@ -245,7 +245,6 @@ describe('DrivesView rescan and filter loading', () => {
   })
 
   it('shows the readable device label, project, and related job ID in the list', async () => {
-    mocks.listAllJobs.mockResolvedValue([{ id: 9, project_id: 'PROJ-001', evidence_number: 'EV-009', drive: { id: 1 } }])
     mocks.getDrives.mockResolvedValue([
       buildDrive({
         device_identifier: 'SER-ONLY',
@@ -256,6 +255,7 @@ describe('DrivesView rescan and filter loading', () => {
         port_system_path: '2-4',
         serial_number: 'SER-ONLY',
         current_project_id: 'PROJ-001',
+        related_job: { job_id: 9 },
       }),
     ])
 
@@ -269,6 +269,36 @@ describe('DrivesView rescan and filter loading', () => {
     expect(wrapper.text()).toContain('PROJ-001')
     expect(wrapper.text()).toContain('9')
     expect(wrapper.find('.column-labels').text()).not.toContain(i18n.global.t('common.labels.size'))
+  })
+
+  it('does not infer a job ID from another drive on the same project', async () => {
+    mocks.listAllJobs.mockResolvedValue([
+      { id: 19, project_id: 'PROJ-LEAK-001', evidence_number: 'EV-LEAK-001', drive: { id: 99 } },
+    ])
+    mocks.getDrives.mockResolvedValue([
+      buildDrive({
+        id: 1,
+        display_device_label: 'Assigned Drive - Port 1',
+        current_project_id: 'PROJ-LEAK-001',
+        related_job: { job_id: 19 },
+      }),
+      buildDrive({
+        id: 2,
+        display_device_label: 'Spare Drive - Port 2',
+        port_system_path: '2-2',
+        current_project_id: 'PROJ-LEAK-001',
+        related_job: { job_id: null },
+      }),
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const rows = wrapper.findAll('.row-stub')
+    expect(rows).toHaveLength(2)
+    expect(rows[0].text()).toContain('19')
+    expect(rows[1].text()).not.toContain('19')
+    expect(rows[1].text()).toContain('-')
   })
 
   it('does not match drives by serial number once the serial control is removed', async () => {
