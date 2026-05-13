@@ -786,6 +786,25 @@ class TestFormatDriveEndpoint:
 
 class TestInitializeFilesystemGuard:
 
+    def test_initialize_rejects_pending_format(self, manager_client, db):
+        _make_project_mount(db, "PROJ-001", "/nfs/proj-001-pending-format")
+        drive = _make_drive(
+            db,
+            filesystem_type="ext4",
+            mount_path="/mnt/ecube/init-pending-format",
+            format_status=DriveFormatStatus.PENDING,
+        )
+
+        resp = manager_client.post(
+            f"/drives/{drive.id}/initialize",
+            json={"project_id": "PROJ-001"},
+        )
+
+        assert resp.status_code == 409
+        assert resp.json()["message"] == (
+            "Drive format is already in progress; wait for formatting to complete before attempting to initialize this drive"
+        )
+
     def test_initialize_rejects_null_filesystem(self, manager_client, db):
         drive = _make_drive(db, filesystem_type=None)
         resp = manager_client.post(
@@ -917,4 +936,25 @@ class TestFormatClearsProjectBinding:
         )
         assert resp.status_code == 200
         assert resp.json()["current_project_id"] == "PROJ-NEW"
+
+
+class TestMountPendingFormatGuard:
+
+    def test_mount_rejects_pending_format(self, manager_client, db):
+        drive = _make_drive(
+            db,
+            filesystem_type="ext4",
+            current_state=DriveState.AVAILABLE,
+            format_status=DriveFormatStatus.PENDING,
+        )
+        mount_provider = MagicMock()
+
+        with patch("app.routers.drives.get_drive_mount", return_value=mount_provider):
+            resp = manager_client.post(f"/drives/{drive.id}/mount")
+
+        assert resp.status_code == 409
+        assert resp.json()["message"] == (
+            "Drive format is already in progress; wait for formatting to complete before attempting to mount this drive"
+        )
+        mount_provider.mount_drive.assert_not_called()
 

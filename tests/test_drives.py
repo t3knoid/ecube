@@ -10,7 +10,7 @@ from app.exceptions import ConflictError
 from app.infrastructure.drive_eject import EjectResult
 from app.infrastructure.throughput_benchmark import LinuxThroughputBenchmarkProvider
 from app.models.audit import AuditLog
-from app.models.hardware import UsbDrive, DriveState, UsbHub, UsbPort
+from app.models.hardware import DriveFormatStatus, UsbDrive, DriveState, UsbHub, UsbPort
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobChainOfCustodySnapshot, JobStatus
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.services import drive_service
@@ -167,6 +167,24 @@ def test_drive_throughput_test_requires_mounted_drive(manager_client, db):
 
     assert response.status_code == 409
     assert "Drive throughput test requires a mounted managed drive" in str(response.json())
+
+
+def test_drive_throughput_test_rejects_pending_format(manager_client, db, tmp_path):
+    drive = UsbDrive(
+        device_identifier="USB-THROUGHPUT-PENDING-FORMAT",
+        current_state=DriveState.AVAILABLE,
+        mount_path=str(tmp_path),
+        format_status=DriveFormatStatus.PENDING,
+    )
+    db.add(drive)
+    db.commit()
+
+    response = manager_client.post(f"/drives/{drive.id}/throughput-test")
+
+    assert response.status_code == 409
+    assert response.json()["message"] == (
+        "Drive format is in progress; wait for formatting to complete before running throughput testing"
+    )
 
 
 def test_drive_write_benchmark_uses_one_contiguous_file(tmp_path):
@@ -790,6 +808,28 @@ def test_normalize_unreleased_drive_states_promotes_unmounted_to_disabled(db):
     assert drive.current_state == DriveState.DISABLED
 
 
+def test_normalize_unreleased_drive_states_marks_orphaned_pending_formats_failed(db):
+    from app.services.drive_service import normalize_unreleased_drive_states
+
+    drive = UsbDrive(
+        device_identifier="USB-FORMAT-PENDING-RECOVERY",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+        filesystem_path="/dev/sdz",
+        format_status=DriveFormatStatus.PENDING,
+        format_started_at=datetime.now(timezone.utc),
+    )
+    db.add(drive)
+    db.commit()
+
+    assert normalize_unreleased_drive_states(db) == 1
+
+    db.refresh(drive)
+    assert drive.format_status == DriveFormatStatus.FAILED
+    assert drive.format_failure_message == "Drive format was interrupted during restart; retry the request"
+    assert drive.format_finished_at is not None
+
+
 def test_mount_drive_requires_recognized_filesystem(manager_client, db):
     drive = UsbDrive(
         device_identifier="USB-MOUNT-001B",
@@ -804,6 +844,28 @@ def test_mount_drive_requires_recognized_filesystem(manager_client, db):
 
     assert response.status_code == 409
     assert "recognized filesystem" in response.json()["message"].lower()
+
+
+def test_mount_drive_rejects_pending_format(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB-MOUNT-PENDING-FORMAT",
+        current_state=DriveState.AVAILABLE,
+        filesystem_type="ext4",
+        filesystem_path="/dev/sdb",
+        format_status=DriveFormatStatus.PENDING,
+    )
+    db.add(drive)
+    db.commit()
+
+    provider = MagicMock()
+    with patch("app.routers.drives.get_drive_mount", return_value=provider):
+        response = manager_client.post(f"/drives/{drive.id}/mount")
+
+    assert response.status_code == 409
+    assert response.json()["message"] == (
+        "Drive format is already in progress; wait for formatting to complete before attempting to mount this drive"
+    )
+    provider.mount_drive.assert_not_called()
 
 
 def test_mount_drive_conflict_when_already_mounted(manager_client, db):
@@ -1238,6 +1300,27 @@ def test_prepare_eject(manager_client, db):
     # Project binding is preserved through eject so re-insert for the same
     # project is allowed without a format, and cross-project reuse is blocked.
     assert data["current_project_id"] == "PROJ-001"
+
+
+def test_prepare_eject_rejects_pending_format(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB005-PENDING-FORMAT",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        format_status=DriveFormatStatus.PENDING,
+    )
+    db.add(drive)
+    db.commit()
+
+    provider = _fake_eject()
+    with patch("app.routers.drives.get_drive_eject", return_value=provider):
+        response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+
+    assert response.status_code == 409
+    assert response.json()["message"] == (
+        "Drive format is already in progress; wait for formatting to complete before attempting to prepare-eject this drive"
+    )
+    provider.prepare_eject.assert_not_called()
 
 
 def test_prepare_eject_mounted_available_drive(manager_client, db):

@@ -404,7 +404,7 @@ If a related job exists through an explicit drive assignment, the `Job ID` value
 
 When the drive is mounted and in a managed state, `admin` and `manager` users can run `Test Throughput` from Drive Detail. The action measures write throughput against the mounted destination, stores the latest result on the drive record, and refreshes the `Latest Write Speed` plus `Last Throughput Test` fields on the page. `processor` and `auditor` users can still review those stored values when present, but they do not see the action button.
 
-When `admin` or `manager` submits a drive format from Drive Detail, the confirmation dialog closes promptly after the request is accepted. Drive Detail shows a formatting-in-progress banner, disables drive actions that would conflict with the active format, and refreshes automatically until the format either completes or reports a sanitized failure on the same page.
+When `admin` or `manager` submits a drive format from Drive Detail, the confirmation dialog closes promptly after the request is accepted. Drive Detail shows a formatting-in-progress banner, disables drive actions that would conflict with the active format, and refreshes automatically until the format either completes or reports a sanitized failure on the same page. If ECUBE restarts before the background format task finishes, startup reconciliation converts the stale in-progress state into a retryable failed format result so the drive does not remain stuck in `PENDING`.
 
 When you open browse from Drive Detail, the panel title also uses the visible device identifier and the breadcrumb stays root-relative instead of showing the host mount path.
 

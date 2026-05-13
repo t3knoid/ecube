@@ -18,7 +18,7 @@ This document is a synthesis layer for the design set. It consolidates the cross
 - System layer acts as the sole trusted enforcement point.
 - Hardware introspection endpoints provide safe, read-only diagnostics.
 - Every critical operation generates immutable audit records.
-- After a restart, startup reconciliation automatically corrects stale mount states, fails interrupted jobs, and re-syncs USB drive presence — no manual recovery needed.
+- After a restart, startup reconciliation automatically corrects stale mount states, fails interrupted jobs, reconciles orphaned pending drive formats into a retryable failed state, and re-syncs USB drive presence without requiring manual database cleanup.
 - In multi-worker deployments, a cross-process lock ensures only one worker runs startup reconciliation, preventing duplicate audit rows and race conditions.
 
 ## References

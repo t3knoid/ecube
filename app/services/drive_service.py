@@ -38,7 +38,7 @@ PREPARE_EJECT_BLOCKING_JOB_STATUSES = (
 
 
 def normalize_unreleased_drive_states(db: Session) -> int:
-    result = db.execute(
+    legacy_state_rows = db.execute(
         text(
             "UPDATE usb_drives "
             "SET current_state = :disabled "
@@ -49,8 +49,32 @@ def normalize_unreleased_drive_states(db: Session) -> int:
             "unmounted": "UNMOUNTED",
         },
     )
+    orphaned_format_rows = db.execute(
+        text(
+            "UPDATE usb_drives "
+            "SET format_status = :failed, "
+            "    format_failure_message = :detail, "
+            "    format_finished_at = :finished_at "
+            "WHERE format_status = :pending"
+        ),
+        {
+            "failed": DriveFormatStatus.FAILED.value,
+            "pending": DriveFormatStatus.PENDING.value,
+            "detail": "Drive format was interrupted during restart; retry the request",
+            "finished_at": datetime.now(timezone.utc),
+        },
+    )
     db.commit()
-    return int(result.rowcount or 0)
+    normalized_rows = int(legacy_state_rows.rowcount or 0) + int(orphaned_format_rows.rowcount or 0)
+    if normalized_rows:
+        logger.info(
+            "Startup drive-state normalization applied",
+            extra={
+                "legacy_state_rows": int(legacy_state_rows.rowcount or 0),
+                "orphaned_format_rows": int(orphaned_format_rows.rowcount or 0),
+            },
+        )
+    return normalized_rows
 
 
 def _safe_drive_log_context(drive: UsbDrive, *, reason: Optional[str] = None) -> dict:
