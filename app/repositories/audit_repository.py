@@ -1,6 +1,6 @@
 from datetime import datetime
 import logging
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, cast as typing_cast
 
 from sqlalchemy import String, cast, or_
 from sqlalchemy.orm import Query, Session
@@ -61,7 +61,7 @@ class AuditRepository:
         This is intended for callers that need to include audit writes in a
         wider atomic transaction before issuing a single commit.
         """
-        sanitized_details = sanitize_audit_details(details or {})
+        sanitized_details = typing_cast(Dict[str, Any], sanitize_audit_details(details or {}))
         normalized_project_id = _normalize_project_id(project_id)
         normalized_drive_id = _normalize_drive_id(drive_id)
         resolved_project_id = normalized_project_id if normalized_project_id is not None else _extract_project_id(sanitized_details)
@@ -77,7 +77,6 @@ class AuditRepository:
         )
         self.db.add(entry)
         self.db.flush()
-        self.db.refresh(entry)
         return entry
 
     def add_many(
@@ -92,7 +91,7 @@ class AuditRepository:
         """
         rows = []
         for kwargs in entries:
-            details = sanitize_audit_details(kwargs.get("details") or {})
+            details = typing_cast(Dict[str, Any], sanitize_audit_details(kwargs.get("details") or {}))
             project_id = _normalize_project_id(kwargs.get("project_id"))
             drive_id = _normalize_drive_id(kwargs.get("drive_id"))
             row = AuditLog(
