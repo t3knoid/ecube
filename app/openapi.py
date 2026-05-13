@@ -19,7 +19,7 @@ from app.routers import (
     files,
     introspection,
     jobs,
-    mounts,
+    shares,
     setup,
     telemetry,
     users,
@@ -47,8 +47,8 @@ tags_metadata = [
         "description": "Export job creation, execution, and monitoring — file copying, verification, and manifest generation.",
     },
     {
-        "name": "mounts",
-        "description": "Network mount management — NFS/SMB mount lifecycle and validation.",
+        "name": "shares",
+        "description": "Network share management — NFS/SMB share lifecycle and validation.",
     },
     {
         "name": "audit",
@@ -195,7 +195,7 @@ def create_openapi_app() -> FastAPI:
     app.include_router(setup.router)
     app.include_router(database_setup.router)
     app.include_router(drives.router, dependencies=[Depends(get_current_user)])
-    app.include_router(mounts.router, dependencies=[Depends(get_current_user)])
+    app.include_router(shares.router, dependencies=[Depends(get_current_user)])
     app.include_router(browse.router, dependencies=[Depends(get_current_user)])
     app.include_router(jobs.router, dependencies=[Depends(get_current_user)])
     app.include_router(files.router, dependencies=[Depends(get_current_user)])

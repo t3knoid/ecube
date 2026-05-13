@@ -5,11 +5,11 @@ import MountDetailView from '@/views/MountDetailView.vue'
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
-  getMounts: vi.fn(),
-  updateMount: vi.fn(),
-  deleteMount: vi.fn(),
-  testMountThroughput: vi.fn(),
-  validateMount: vi.fn(),
+  getShares: vi.fn(),
+  updateShare: vi.fn(),
+  deleteShare: vi.fn(),
+  testShareThroughput: vi.fn(),
+  validateShare: vi.fn(),
   getPublicAuthConfig: vi.fn(),
 }))
 
@@ -27,11 +27,11 @@ vi.mock('vue-router', () => ({
 }))
 
 vi.mock('@/api/mounts.js', () => ({
-  getMounts: (...args) => mocks.getMounts(...args),
-  updateMount: (...args) => mocks.updateMount(...args),
-  deleteMount: (...args) => mocks.deleteMount(...args),
-  testMountThroughput: (...args) => mocks.testMountThroughput(...args),
-  validateMount: (...args) => mocks.validateMount(...args),
+  getShares: (...args) => mocks.getShares(...args),
+  updateShare: (...args) => mocks.updateShare(...args),
+  deleteShare: (...args) => mocks.deleteShare(...args),
+  testShareThroughput: (...args) => mocks.testShareThroughput(...args),
+  validateShare: (...args) => mocks.validateShare(...args),
 }))
 
 vi.mock('@/api/auth.js', () => ({
@@ -102,18 +102,18 @@ describe('MountDetailView', () => {
     authState.roles = ['admin', 'manager']
     routeState.id = '11'
     mocks.push.mockReset()
-    mocks.getMounts.mockReset()
-    mocks.updateMount.mockReset()
-    mocks.deleteMount.mockReset()
-    mocks.testMountThroughput.mockReset()
-    mocks.validateMount.mockReset()
+    mocks.getShares.mockReset()
+    mocks.updateShare.mockReset()
+    mocks.deleteShare.mockReset()
+    mocks.testShareThroughput.mockReset()
+    mocks.validateShare.mockReset()
     mocks.getPublicAuthConfig.mockReset()
 
-    mocks.getMounts.mockResolvedValue([buildMount()])
-    mocks.updateMount.mockResolvedValue(buildMount())
-    mocks.deleteMount.mockResolvedValue({})
-    mocks.testMountThroughput.mockResolvedValue(buildMount({ throughput_read_mbps: 87.4, throughput_tested_at: '2026-05-11T18:20:00Z' }))
-    mocks.validateMount.mockResolvedValue(buildMount({ status: 'MOUNTED' }))
+    mocks.getShares.mockResolvedValue([buildMount()])
+    mocks.updateShare.mockResolvedValue(buildMount())
+    mocks.deleteShare.mockResolvedValue({})
+    mocks.testShareThroughput.mockResolvedValue(buildMount({ throughput_read_mbps: 87.4, throughput_tested_at: '2026-05-11T18:20:00Z' }))
+    mocks.validateShare.mockResolvedValue(buildMount({ status: 'MOUNTED' }))
     mocks.getPublicAuthConfig.mockResolvedValue({
       demo_mode_enabled: false,
       default_nfs_client_version: '4.1',
@@ -150,7 +150,7 @@ describe('MountDetailView', () => {
   })
 
   it('shows safe fallback text when no related job exists', async () => {
-    mocks.getMounts.mockResolvedValue([buildMount({ related_job: { job_id: null, status: 'NO_RELATED_JOB' } })])
+    mocks.getShares.mockResolvedValue([buildMount({ related_job: { job_id: null, status: 'NO_RELATED_JOB' } })])
 
     const wrapper = mountView()
     await flushPromises()
@@ -160,7 +160,7 @@ describe('MountDetailView', () => {
   })
 
   it('shows safe fallback text when related job status is unavailable', async () => {
-    mocks.getMounts.mockResolvedValue([buildMount({ related_job: { job_id: 27, status: 'STATUS_UNAVAILABLE' } })])
+    mocks.getShares.mockResolvedValue([buildMount({ related_job: { job_id: 27, status: 'STATUS_UNAVAILABLE' } })])
 
     const wrapper = mountView()
     await flushPromises()
@@ -170,7 +170,7 @@ describe('MountDetailView', () => {
   })
 
   it('shows the latest measured read speed and runs the throughput test for managers', async () => {
-    mocks.getMounts.mockResolvedValue([buildMount({ throughput_read_mbps: 64.2, throughput_tested_at: '2026-05-11T17:45:00Z' })])
+    mocks.getShares.mockResolvedValue([buildMount({ throughput_read_mbps: 64.2, throughput_tested_at: '2026-05-11T17:45:00Z' })])
 
     const wrapper = mountView()
     await flushPromises()
@@ -184,13 +184,13 @@ describe('MountDetailView', () => {
     await testButton.trigger('click')
     await flushPromises()
 
-    expect(mocks.testMountThroughput).toHaveBeenCalledWith(11, { timeout: 0 })
+    expect(mocks.testShareThroughput).toHaveBeenCalledWith(11, { timeout: 0 })
     expect(wrapper.text()).toContain(i18n.global.t('mounts.throughputTestSuccess'))
     expect(wrapper.text()).toContain('87.4 MB/s')
   })
 
-  it('opens the edit dialog prefilled and submits updates through validateMount and updateMount', async () => {
-    mocks.getMounts
+  it('opens the edit dialog prefilled and submits updates through validateShare and updateShare', async () => {
+    mocks.getShares
       .mockResolvedValueOnce([buildMount({ id: 42, remote_path: '//server/original-share', project_id: 'PROJ-OLD', local_mount_point: '/smb/original-share' })])
       .mockResolvedValueOnce([buildMount({ id: 42, remote_path: '//server/updated-share', project_id: 'PROJ-UPDATED', local_mount_point: '/smb/original-share' })])
     routeState.id = '42'
@@ -217,7 +217,7 @@ describe('MountDetailView', () => {
     await findDialogButton(wrapper, i18n.global.t('common.actions.save')).trigger('click')
     await flushPromises()
 
-    expect(mocks.validateMount).toHaveBeenCalledWith(42, {
+    expect(mocks.validateShare).toHaveBeenCalledWith(42, {
       type: 'SMB',
       remote_path: '//server/updated-share',
       project_id: 'PROJ-UPDATED',
@@ -225,7 +225,7 @@ describe('MountDetailView', () => {
       password: null,
       credentials_file: null,
     }, { timeout: 180000 })
-    expect(mocks.updateMount).toHaveBeenCalledWith(42, {
+    expect(mocks.updateShare).toHaveBeenCalledWith(42, {
       type: 'SMB',
       remote_path: '//server/updated-share',
       project_id: 'PROJ-UPDATED',
@@ -237,9 +237,9 @@ describe('MountDetailView', () => {
   })
 
   it('keeps the edit dialog open and shows actionable backend text when update fails', async () => {
-    mocks.getMounts.mockResolvedValue([buildMount({ id: 42, remote_path: '//server/original-share', project_id: 'PROJ-OLD' })])
-    mocks.validateMount.mockResolvedValue(buildMount({ id: 42, status: 'MOUNTED' }))
-    mocks.updateMount.mockRejectedValue({ response: { data: { detail: 'A mount for this remote source is already configured.' } } })
+    mocks.getShares.mockResolvedValue([buildMount({ id: 42, remote_path: '//server/original-share', project_id: 'PROJ-OLD' })])
+    mocks.validateShare.mockResolvedValue(buildMount({ id: 42, status: 'MOUNTED' }))
+    mocks.updateShare.mockRejectedValue({ response: { data: { detail: 'A mount for this remote source is already configured.' } } })
     routeState.id = '42'
 
     const wrapper = mountView()
@@ -271,7 +271,7 @@ describe('MountDetailView', () => {
     await wrapper.find('.confirm-btn').trigger('click')
     await flushPromises()
 
-    expect(mocks.deleteMount).toHaveBeenCalledWith(11)
+    expect(mocks.deleteShare).toHaveBeenCalledWith(11)
     expect(mocks.push).toHaveBeenCalledWith({ name: 'mounts' })
   })
 

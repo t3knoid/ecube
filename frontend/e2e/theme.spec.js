@@ -325,7 +325,7 @@ test('visual regression snapshots for key screens in default and dark themes', a
     { path: '/login', name: 'login' },
     { path: '/', name: 'dashboard' },
     { path: '/drives', name: 'drives' },
-    { path: '/mounts', name: 'mounts' },
+    { path: '/shares', name: 'mounts' },
     { path: '/users', name: 'users' },
     { path: '/system', name: 'system' },
     { path: '/configuration', name: 'configuration' },

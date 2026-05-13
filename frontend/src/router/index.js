@@ -42,14 +42,14 @@ const routes = [
         component: () => import('@/views/DriveDetailView.vue'),
       },
       {
-        path: 'mounts',
-        name: 'mounts',
-        component: () => import('@/views/MountsView.vue'),
+        path: 'shares',
+        name: 'shares',
+        component: () => import('@/views/SharesView.vue'),
       },
       {
-        path: 'mounts/:id',
-        name: 'mount-detail',
-        component: () => import('@/views/MountDetailView.vue'),
+        path: 'shares/:id',
+        name: 'share-detail',
+        component: () => import('@/views/ShareDetailView.vue'),
       },
       {
         path: 'jobs',

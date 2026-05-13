@@ -6,7 +6,7 @@ import DashboardView from '@/views/DashboardView.vue'
 const mocks = vi.hoisted(() => ({
   getSystemHealth: vi.fn(),
   getDrives: vi.fn(),
-  getMounts: vi.fn(),
+  getShares: vi.fn(),
   listJobs: vi.fn(),
   push: vi.fn(),
   authStore: { passwordWarningDays: null, hasRole: vi.fn() },
@@ -31,7 +31,7 @@ vi.mock('@/api/drives.js', () => ({
 }))
 
 vi.mock('@/api/mounts.js', () => ({
-  getMounts: (...args) => mocks.getMounts(...args),
+  getShares: (...args) => mocks.getShares(...args),
 }))
 
 vi.mock('@/api/jobs.js', () => ({
@@ -83,7 +83,7 @@ describe('DashboardView polling integration', () => {
 
     mocks.getSystemHealth.mockReset()
     mocks.getDrives.mockReset()
-    mocks.getMounts.mockReset()
+    mocks.getShares.mockReset()
     mocks.listJobs.mockReset()
     mocks.push.mockReset()
     mocks.authStore.passwordWarningDays = null
@@ -104,7 +104,7 @@ describe('DashboardView polling integration', () => {
     mocks.getDrives
       .mockResolvedValueOnce([{ id: 1, current_state: 'AVAILABLE' }])
       .mockResolvedValueOnce([{ id: 2, current_state: 'DISABLED' }])
-    mocks.getMounts
+    mocks.getShares
       .mockResolvedValueOnce([
         { id: 10, status: 'UNMOUNTED', project_id: 'PROJ-000', related_job: { job_id: null, status: 'NO_RELATED_JOB', custody_status: 'NO_RELATED_JOB' } },
       ])
@@ -143,7 +143,7 @@ describe('DashboardView polling integration', () => {
     expect(wrapper.find('.cell-link').exists()).toBe(false)
     expect(mocks.getSystemHealth).toHaveBeenCalledTimes(2)
     expect(mocks.getDrives).toHaveBeenCalledTimes(2)
-    expect(mocks.getMounts).toHaveBeenCalledTimes(2)
+    expect(mocks.getShares).toHaveBeenCalledTimes(2)
     expect(mocks.listJobs).toHaveBeenCalledTimes(2)
 
     wrapper.unmount()
@@ -152,7 +152,7 @@ describe('DashboardView polling integration', () => {
   it('uses the guarded poller path for manual refreshes and stops timers after unmount', async () => {
     mocks.getSystemHealth.mockResolvedValueOnce({ status: 'ok', database: 'connected', active_jobs: 1 })
     mocks.getDrives.mockResolvedValueOnce([{ id: 1, current_state: 'AVAILABLE' }])
-    mocks.getMounts.mockResolvedValueOnce([
+    mocks.getShares.mockResolvedValueOnce([
       { id: 10, status: 'UNMOUNTED', project_id: 'PROJ-000', related_job: { job_id: null, status: 'NO_RELATED_JOB', custody_status: 'NO_RELATED_JOB' } },
     ])
     mocks.listJobs.mockResolvedValueOnce([])
@@ -164,7 +164,7 @@ describe('DashboardView polling integration', () => {
 
     mocks.getSystemHealth.mockReturnValueOnce(healthRefresh.promise)
     mocks.getDrives.mockReturnValueOnce(drivesRefresh.promise)
-    mocks.getMounts.mockReturnValueOnce(mountsRefresh.promise)
+    mocks.getShares.mockReturnValueOnce(mountsRefresh.promise)
     mocks.listJobs.mockReturnValueOnce(jobsRefresh.promise)
 
     const wrapper = mountView()
@@ -177,7 +177,7 @@ describe('DashboardView polling integration', () => {
 
     expect(mocks.getSystemHealth).toHaveBeenCalledTimes(2)
     expect(mocks.getDrives).toHaveBeenCalledTimes(2)
-    expect(mocks.getMounts).toHaveBeenCalledTimes(2)
+    expect(mocks.getShares).toHaveBeenCalledTimes(2)
     expect(mocks.listJobs).toHaveBeenCalledTimes(2)
 
     healthRefresh.resolve({ status: 'ok', database: 'connected', active_jobs: 1 })
@@ -195,7 +195,7 @@ describe('DashboardView polling integration', () => {
 
     expect(mocks.getSystemHealth).toHaveBeenCalledTimes(2)
     expect(mocks.getDrives).toHaveBeenCalledTimes(2)
-    expect(mocks.getMounts).toHaveBeenCalledTimes(2)
+    expect(mocks.getShares).toHaveBeenCalledTimes(2)
     expect(mocks.listJobs).toHaveBeenCalledTimes(2)
   })
 })

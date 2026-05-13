@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
 import { hasArchivedJobs, listJobs, createJob, startJob, pauseJob } from '@/api/jobs.js'
 import { getDrives } from '@/api/drives.js'
-import { getMounts } from '@/api/mounts.js'
+import { getShares } from '@/api/shares.js'
 import JobEditorDialogContent from '@/components/jobs/JobEditorDialogContent.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
@@ -371,7 +371,7 @@ function formReady() {
 }
 
 async function loadSupportingData() {
-  const [driveResult, mountResult] = await Promise.allSettled([getDrives(), getMounts()])
+  const [driveResult, mountResult] = await Promise.allSettled([getDrives(), getShares()])
   drives.value = driveResult.status === 'fulfilled'
     ? (driveResult.value || []).map((item) => normalizeProjectRecord(item, ['current_project_id']))
     : []

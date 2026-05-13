@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   startJob: vi.fn(),
   pauseJob: vi.fn(),
   getDrives: vi.fn(),
-  getMounts: vi.fn(),
+  getShares: vi.fn(),
   hasAnyRole: vi.fn(),
 }))
 
@@ -45,7 +45,7 @@ vi.mock('@/api/drives.js', () => ({
 }))
 
 vi.mock('@/api/mounts.js', () => ({
-  getMounts: (...args) => mocks.getMounts(...args),
+  getShares: (...args) => mocks.getShares(...args),
 }))
 
 function buildDrive(overrides = {}) {
@@ -146,7 +146,7 @@ describe('JobsView grouped create dialog', () => {
     mocks.startJob.mockReset()
     mocks.pauseJob.mockReset()
     mocks.getDrives.mockReset()
-    mocks.getMounts.mockReset()
+    mocks.getShares.mockReset()
     mocks.hasAnyRole.mockReset()
 
     mocks.hasAnyRole.mockReturnValue(true)
@@ -162,7 +162,7 @@ describe('JobsView grouped create dialog', () => {
       buildDrive({ id: 4, device_identifier: 'USB-004', port_system_path: '2-4', current_state: 'IN_USE', current_project_id: 'PROJ-001' }),
       buildDrive({ id: 5, current_project_id: 'PROJ-001', mount_path: null }),
     ])
-    mocks.getMounts.mockResolvedValue([
+    mocks.getShares.mockResolvedValue([
       buildMount({ id: 11, project_id: 'PROJ-001', status: 'MOUNTED' }),
       buildMount({ id: 12, project_id: 'PROJ-002', status: 'MOUNTED' }),
       buildMount({ id: 13, project_id: 'PROJ-001', status: 'UNMOUNTED' }),

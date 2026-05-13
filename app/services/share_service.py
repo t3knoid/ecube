@@ -15,16 +15,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.jobs import ExportJob, JobStatus
-from app.models.network import MountStatus, MountType, NetworkMount
+from app.models.network import MountStatus, MountType, NetworkShare
 from app.infrastructure.mount_namespace import shares_host_mount_namespace
 from app.infrastructure.subprocess_runner import resolve_binary, run_subprocess
 from app.repositories.audit_repository import AuditRepository
-from app.repositories.mount_repository import MountRepository
-from app.schemas.network import CandidateNetworkMountSchema, MountCreate, MountRelatedJobSchema, MountShareDiscoveryItem, MountShareDiscoveryRequest, MountShareDiscoveryResponse, MountUpdate, NetworkMountSchema
+from app.repositories.share_repository import ShareRepository
+from app.schemas.network import CandidateNetworkShareSchema, ShareCreate, ShareRelatedJobSchema, MountShareDiscoveryItem, MountShareDiscoveryRequest, MountShareDiscoveryResponse, ShareUpdate, NetworkShareSchema
 from app.config import settings
 from app.exceptions import ConflictError, ECUBEException, EncodingError, service_exception
-from app.services.mount_credentials_service import decrypt_mount_secret, encrypt_mount_secret
-from app.services.mount_check_utils import check_mounted_with_configured_timeout
+from app.services.share_credentials_service import decrypt_mount_secret, encrypt_mount_secret
+from app.services.share_check_utils import check_mounted_with_configured_timeout
 from app.services.audit_service import get_job_custody_summaries
 from app.utils.network_mount_paths import (
     cleanup_target_for_generated_network_mount_point,
@@ -60,7 +60,7 @@ _MOUNT_PATH_VIEWER_ROLES = frozenset({"admin", "manager"})
 _REDACTED_MOUNT_PATH_VALUE = "[REDACTED]"
 
 
-def _attach_related_job_contexts(db: Session, mounts: list[NetworkMount]) -> list[NetworkMount]:
+def _attach_related_job_contexts(db: Session, mounts: list[NetworkShare]) -> list[NetworkShare]:
     if not mounts:
         return mounts
 
@@ -71,7 +71,7 @@ def _attach_related_job_contexts(db: Session, mounts: list[NetworkMount]) -> lis
     }
     if not project_ids:
         for mount in mounts:
-            setattr(mount, "related_job", MountRelatedJobSchema(status="NO_RELATED_JOB", custody_status="NO_RELATED_JOB"))
+            setattr(mount, "related_job", ShareRelatedJobSchema(status="NO_RELATED_JOB", custody_status="NO_RELATED_JOB"))
         return mounts
 
     try:
@@ -99,7 +99,7 @@ def _attach_related_job_contexts(db: Session, mounts: list[NetworkMount]) -> lis
             },
         )
         for mount in mounts:
-            setattr(mount, "related_job", MountRelatedJobSchema(status="STATUS_UNAVAILABLE", custody_status="STATUS_UNAVAILABLE"))
+            setattr(mount, "related_job", ShareRelatedJobSchema(status="STATUS_UNAVAILABLE", custody_status="STATUS_UNAVAILABLE"))
         return mounts
 
     completed_job_ids = [
@@ -129,7 +129,7 @@ def _attach_related_job_contexts(db: Session, mounts: list[NetworkMount]) -> lis
                 },
             )
 
-    selected_jobs: dict[str, MountRelatedJobSchema] = {}
+    selected_jobs: dict[str, ShareRelatedJobSchema] = {}
     for job_id, project_id, status in job_rows:
         normalized_project_id = normalize_project_id(project_id)
         if not isinstance(normalized_project_id, str) or not normalized_project_id or normalized_project_id in selected_jobs:
@@ -145,7 +145,7 @@ def _attach_related_job_contexts(db: Session, mounts: list[NetworkMount]) -> lis
                 else "STATUS_UNAVAILABLE"
             )
 
-        selected_jobs[normalized_project_id] = MountRelatedJobSchema(
+        selected_jobs[normalized_project_id] = ShareRelatedJobSchema(
             job_id=job_id,
             status=status,
             custody_status=custody_status,
@@ -157,7 +157,7 @@ def _attach_related_job_contexts(db: Session, mounts: list[NetworkMount]) -> lis
         setattr(
             mount,
             "related_job",
-            related_job or MountRelatedJobSchema(status="NO_RELATED_JOB", custody_status="NO_RELATED_JOB"),
+            related_job or ShareRelatedJobSchema(status="NO_RELATED_JOB", custody_status="NO_RELATED_JOB"),
         )
 
     return mounts
@@ -224,7 +224,7 @@ def _timed_mount_attempt(
 
 
 def _cleanup_candidate_probe_mount(
-    mount: NetworkMount,
+    mount: NetworkShare,
     *,
     provider: "MountProvider",
     mount_type: MountType,
@@ -267,8 +267,8 @@ def _should_probe_nfs_v3_fallback(
 
 
 def _probe_nfs_v3_validation_warning(
-    mount: NetworkMount,
-    mount_data: MountCreate,
+    mount: NetworkShare,
+    mount_data: ShareCreate,
     *,
     provider: "MountProvider",
     selected_version: Optional[str],
@@ -338,7 +338,7 @@ def _mount_command_path(cmd: list[str]) -> str:
     return "direct"
 
 
-class LinuxMountProvider:
+class LinuxShareProvider:
     """Linux implementation using ``mount(8)``, ``umount(8)``, and ``mountpoint(1)``."""
 
     def discover_shares(
@@ -1112,7 +1112,7 @@ def _validate_remote_path_conflicts(
     mount_type: MountType,
     remote_path: str,
     project_id: str,
-    existing_mounts: list[NetworkMount],
+    existing_mounts: list[NetworkShare],
     *,
     ignore_mount_id: int | None = None,
 ) -> None:
@@ -1142,15 +1142,15 @@ def _validate_remote_path_conflicts(
                 )
 
 
-def _credentials_supplied(mount_data: MountCreate | MountUpdate) -> bool:
+def _credentials_supplied(mount_data: ShareCreate | ShareUpdate) -> bool:
     return bool(mount_data.username or mount_data.password or mount_data.credentials_file)
 
 
-def _credential_fields_provided(mount_data: MountCreate | MountUpdate) -> bool:
+def _credential_fields_provided(mount_data: ShareCreate | ShareUpdate) -> bool:
     return any(field_name in mount_data.model_fields_set for field_name in _CREDENTIAL_FIELD_NAMES)
 
 
-def _stored_credentials_present(mount: NetworkMount) -> bool:
+def _stored_credentials_present(mount: NetworkShare) -> bool:
     return bool(
         mount.encrypted_username
         or mount.encrypted_password
@@ -1159,8 +1159,8 @@ def _stored_credentials_present(mount: NetworkMount) -> bool:
 
 
 def _apply_encrypted_mount_credentials(
-    mount: NetworkMount,
-    mount_data: MountCreate | MountUpdate,
+    mount: NetworkShare,
+    mount_data: ShareCreate | ShareUpdate,
     *,
     preserve_existing: bool,
 ) -> None:
@@ -1170,7 +1170,7 @@ def _apply_encrypted_mount_credentials(
         setattr(mount, encrypted_attr, encrypt_mount_secret(getattr(mount_data, field_name)))
 
 
-def _load_stored_mount_credentials(mount: NetworkMount) -> dict[str, str | None]:
+def _load_stored_mount_credentials(mount: NetworkShare) -> dict[str, str | None]:
     try:
         return {
             "username": decrypt_mount_secret(mount.encrypted_username),
@@ -1196,8 +1196,8 @@ def _load_stored_mount_credentials(mount: NetworkMount) -> dict[str, str | None]
 
 
 def _resolve_mount_operation_credentials(
-    mount: NetworkMount,
-    mount_data: MountCreate | MountUpdate,
+    mount: NetworkShare,
+    mount_data: ShareCreate | ShareUpdate,
 ) -> dict[str, str | None]:
     credentials = (
         _load_stored_mount_credentials(mount)
@@ -1213,8 +1213,8 @@ def _resolve_mount_operation_credentials(
 
 
 def _changed_mount_fields(
-    mount: NetworkMount,
-    mount_data: MountUpdate,
+    mount: NetworkShare,
+    mount_data: ShareUpdate,
     *,
     normalized_project_id: str,
 ) -> list[str]:
@@ -1236,7 +1236,7 @@ def _changed_mount_fields(
 
 
 def _prepare_mount_for_update(
-    mount: NetworkMount,
+    mount: NetworkShare,
     *,
     provider: "MountProvider",
 ) -> None:
@@ -1291,7 +1291,7 @@ def _prepare_mount_for_update(
 
 
 def _restore_mount_after_candidate_validation(
-    mount: NetworkMount,
+    mount: NetworkShare,
     *,
     provider: "MountProvider",
     original_mount_type: MountType,
@@ -1338,14 +1338,14 @@ def _restore_mount_after_candidate_validation(
     return restore_error or "Failed to restore original mount state"
 
 
-def validate_mount_candidate(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
+def validate_share_candidate(mount_data: ShareCreate, db: Session, actor: Optional[str] = None,
                              provider: Optional["MountProvider"] = None,
-                             client_ip: Optional[str] = None) -> CandidateNetworkMountSchema:
+                             client_ip: Optional[str] = None) -> CandidateNetworkShareSchema:
     normalized_project_id = normalize_project_id(mount_data.project_id)
     if not isinstance(normalized_project_id, str) or not normalized_project_id:
         raise service_exception(status_code=422, detail="project_id must not be empty")
 
-    mount_repo = MountRepository(db)
+    mount_repo = ShareRepository(db)
     audit_repo = AuditRepository(db)
     provider = provider or _default_provider()
 
@@ -1365,7 +1365,7 @@ def validate_mount_candidate(mount_data: MountCreate, db: Session, actor: Option
         existing_mount_points,
     )
     checked_at = datetime.now(timezone.utc)
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=mount_data.type,
         remote_path=mount_data.remote_path,
         project_id=normalized_project_id,
@@ -1532,7 +1532,7 @@ def validate_mount_candidate(mount_data: MountCreate, db: Session, actor: Option
             detail=sanitize_error_message(validation_error, "Mount validation failed"),
         )
 
-    return CandidateNetworkMountSchema(
+    return CandidateNetworkShareSchema(
         type=mount_data.type,
         remote_path=mount_data.remote_path,
         project_id=normalized_project_id,
@@ -1544,7 +1544,7 @@ def validate_mount_candidate(mount_data: MountCreate, db: Session, actor: Option
     )
 
 
-def discover_mount_shares(
+def discover_shares(
     discovery_data: MountShareDiscoveryRequest,
     db: Session,
     actor: Optional[str] = None,
@@ -1644,14 +1644,14 @@ def discover_mount_shares(
     return MountShareDiscoveryResponse(shares=shares)
 
 
-def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
+def add_share(mount_data: ShareCreate, db: Session, actor: Optional[str] = None,
               provider: Optional["MountProvider"] = None,
-              client_ip: Optional[str] = None) -> NetworkMount:
+              client_ip: Optional[str] = None) -> NetworkShare:
     normalized_project_id = normalize_project_id(mount_data.project_id)
     if not isinstance(normalized_project_id, str) or not normalized_project_id:
         raise service_exception(status_code=422, detail="project_id must not be empty")
 
-    mount_repo = MountRepository(db)
+    mount_repo = ShareRepository(db)
     audit_repo = AuditRepository(db)
     provider = provider or _default_provider()
 
@@ -1689,7 +1689,7 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
         existing_mount_points,
     )
 
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=mount_data.type,
         remote_path=mount_data.remote_path,
         project_id=normalized_project_id,
@@ -1849,14 +1849,14 @@ def add_mount(mount_data: MountCreate, db: Session, actor: Optional[str] = None,
     return mount
 
 
-def update_mount(mount_id: int, mount_data: MountUpdate, db: Session, actor: Optional[str] = None,
+def update_share(mount_id: int, mount_data: ShareUpdate, db: Session, actor: Optional[str] = None,
                  provider: Optional["MountProvider"] = None,
-                 client_ip: Optional[str] = None) -> NetworkMount:
+                 client_ip: Optional[str] = None) -> NetworkShare:
     normalized_project_id = normalize_project_id(mount_data.project_id)
     if not isinstance(normalized_project_id, str) or not normalized_project_id:
         raise service_exception(status_code=422, detail="project_id must not be empty")
 
-    mount_repo = MountRepository(db)
+    mount_repo = ShareRepository(db)
     audit_repo = AuditRepository(db)
     provider = provider or _default_provider()
 
@@ -2051,10 +2051,10 @@ def update_mount(mount_id: int, mount_data: MountUpdate, db: Session, actor: Opt
     return mount
 
 
-def remove_mount(mount_id: int, db: Session, actor: Optional[str] = None,
+def remove_share(mount_id: int, db: Session, actor: Optional[str] = None,
                  provider: Optional["MountProvider"] = None,
                  client_ip: Optional[str] = None) -> None:
-    mount_repo = MountRepository(db)
+    mount_repo = ShareRepository(db)
     audit_repo = AuditRepository(db)
 
     mount = mount_repo.get(mount_id)
@@ -2129,8 +2129,8 @@ def _can_view_mount_paths(user_roles: Optional[list[str]]) -> bool:
     return any(role in _MOUNT_PATH_VIEWER_ROLES for role in (user_roles or []))
 
 
-def _redact_mount_paths(mount: NetworkMount) -> NetworkMountSchema:
-    return NetworkMountSchema.model_validate(mount).model_copy(
+def _redact_mount_paths(mount: NetworkShare) -> NetworkShareSchema:
+    return NetworkShareSchema.model_validate(mount).model_copy(
         update={
             "remote_path": _REDACTED_MOUNT_PATH_VALUE,
             "local_mount_point": _REDACTED_MOUNT_PATH_VALUE,
@@ -2138,26 +2138,26 @@ def _redact_mount_paths(mount: NetworkMount) -> NetworkMountSchema:
     )
 
 
-def list_mounts(db: Session, user_roles: Optional[list[str]] = None):
-    mounts = MountRepository(db).list_all()
+def list_shares(db: Session, user_roles: Optional[list[str]] = None):
+    mounts = ShareRepository(db).list_all()
     _attach_related_job_contexts(db, mounts)
     if _can_view_mount_paths(user_roles):
         return mounts
     return [_redact_mount_paths(mount) for mount in mounts]
 
 
-def validate_all_mounts(db: Session, actor: Optional[str] = None,
-                        client_ip: Optional[str] = None) -> list[NetworkMount]:
-    mount_repo = MountRepository(db)
+def validate_all_shares(db: Session, actor: Optional[str] = None,
+                        client_ip: Optional[str] = None) -> list[NetworkShare]:
+    mount_repo = ShareRepository(db)
     mounts = mount_repo.list_all()
     return [validate_mount(mount.id, db, actor=actor, client_ip=client_ip) for mount in mounts]
 
 
-def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None,
+def validate_share(mount_id: int, db: Session, actor: Optional[str] = None,
                    provider: Optional["MountProvider"] = None,
                    client_ip: Optional[str] = None,
-                   mount_data: Optional[MountUpdate] = None) -> NetworkMount:
-    mount_repo = MountRepository(db)
+                   mount_data: Optional[ShareUpdate] = None) -> NetworkShare:
+    mount_repo = ShareRepository(db)
     audit_repo = AuditRepository(db)
 
     mount = mount_repo.get(mount_id)
@@ -2288,7 +2288,7 @@ def validate_mount(mount_id: int, db: Session, actor: Optional[str] = None,
                 detail=sanitize_error_message(validation_error, "Mount validation failed"),
             )
 
-        return NetworkMount(
+        return NetworkShare(
             id=mount.id,
             type=mount_data.type,
             remote_path=mount_data.remote_path,

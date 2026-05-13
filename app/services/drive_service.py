@@ -18,7 +18,7 @@ from app.models.hardware import DriveFormatStatus, DriveState, UsbDrive
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
-from app.repositories.mount_repository import MountRepository
+from app.repositories.share_repository import ShareRepository
 from app.schemas.hardware import DriveRelatedJobSchema
 from app.services.audit_service import get_job_drive_custody_summary, log_and_audit
 from app.services.drive_space_service import request_available_space_refresh_for_drive
@@ -350,7 +350,7 @@ def initialize_drive(
 
     drive_repo = DriveRepository(db)
     audit_repo = AuditRepository(db)
-    mount_repo = MountRepository(db)
+    mount_repo = ShareRepository(db)
 
     drive = drive_repo.get_for_update(drive_id)
     if not drive:

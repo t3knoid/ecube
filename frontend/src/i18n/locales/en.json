@@ -11,7 +11,7 @@
   "nav": {
     "dashboard": "Dashboard",
     "drives": "Drives",
-    "mounts": "Mounts",
+    "shares": "Shares",
     "jobs": "Jobs",
     "audit": "Audit",
     "system": "System",
@@ -306,11 +306,11 @@
       "archived": "Archived"
     }
   },
-  "mounts": {
-    "title": "Mounts",
-    "detail": "Mount Detail",
+  "shares": {
+    "title": "Shares",
+    "detail": "Share Detail",
     "details": "Details",
-    "notFound": "Mount not found",
+    "notFound": "Share not found",
     "placeholder": "Mounts view will be implemented in a future phase.",
     "addDialogTitle": "Add Share",
     "editDialogTitle": "Edit Share",
@@ -510,7 +510,7 @@
       "health": "System Health",
       "usb": "USB Topology",
       "block": "Block Devices",
-      "mounts": "Mounts",
+      "shares": "Shares",
       "logs": "Logs"
     },
     "device": "Device",

@@ -30,9 +30,9 @@ from app.infrastructure import get_drive_discovery, get_drive_mount, get_mount_p
 from app.exceptions import AuthenticationError, AuthorizationError, ConflictError, ECUBEException
 from app.utils.sanitize import is_encoding_error, sanitize_error_message
 from app.logging_config import configure_logging
-from app.models.network import NetworkMount
+from app.models.network import NetworkShare
 from app.openapi import build_ecube_openapi_schema, tags_metadata
-from app.routers import admin, audit, auth, browse, configuration, database_setup, drives, files, introspection, jobs, mounts, password_policy, setup, telemetry, users
+from app.routers import admin, audit, auth, browse, configuration, database_setup, drives, files, introspection, jobs, shares, password_policy, setup, telemetry, users
 from app.schemas.errors import ErrorResponse
 from app.schemas.introspection import HealthLiveResponse, HealthNotReadyResponse, HealthReadyResponse, HealthResponse, VersionResponse
 from app.session import close_session_backend, init_session_backend, mount_session_middleware
@@ -725,9 +725,9 @@ def health_ready(db: Session | None = Depends(_get_db_or_none)):
         )
 
     # 2) Filesystem mount availability (using current mount provider checks)
-    # Query mounts first; only resolve provider if there are mounts to check
+    # Query shares first; only resolve provider if there are shares to check
     try:
-        configured_mounts = db.query(NetworkMount).all()
+        configured_mounts = db.query(NetworkShare).all()
     except (ProgrammingError, OperationalError) as exc:
         db.rollback()
         if _is_missing_table_error(exc):
@@ -924,7 +924,7 @@ app.include_router(setup.router)
 app.include_router(database_setup.router)
 
 app.include_router(drives.router, dependencies=[Depends(get_current_user)])
-app.include_router(mounts.router, dependencies=[Depends(get_current_user)])
+app.include_router(shares.router, dependencies=[Depends(get_current_user)])
 app.include_router(browse.router, dependencies=[Depends(get_current_user)])
 app.include_router(jobs.router, dependencies=[Depends(get_current_user)])
 app.include_router(files.router, dependencies=[Depends(get_current_user)])

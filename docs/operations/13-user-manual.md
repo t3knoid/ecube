@@ -485,7 +485,7 @@ You can typically:
 - Open Mount Detail for an existing mount definition from the clickable mount ID
 - Filter the list by workflow bucket (`Unassigned`, `Assigned`, `Active`, `Blocked`, `Custody Pending`, `Completed`, or `Unavailable`) or search by mount details
 
-`admin` and `manager` users can also add a new mount definition and edit or remove a mount from Mount Detail. `processor` users can browse mounted shares from the clickable project value on the Mounts page and from Mount Detail. `auditor` users can open the Mounts page and Mount Detail, but they do not see browse, `Test Throughput`, `Edit`, or `Remove` actions and sensitive path fields remain redacted.
+`admin` and `manager` users can also add a new mount definition and edit or remove a mount from Mount Detail. `processor` users can browse mounted shares from the clickable project value on the Shares page and from Mount Detail. `auditor` users can open the Shares page and Mount Detail, but they do not see browse, `Test Throughput`, `Edit`, or `Remove` actions and sensitive path fields remain redacted.
 
 When you arrive from a Dashboard `Mounts Summary` entry, the matching workflow bucket is preselected so the destination list stays aligned with the dashboard context.
 
@@ -544,7 +544,7 @@ From Mount Detail, `admin` and `manager` users can remove the mount definition w
 
 Remove a mount only if it is no longer needed. If existing workflows depend on it, removing the definition can interrupt job creation or repeatability.
 
-![Mounts page with ID link and Browse action (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/mounts-default-chromium-linux.png)
+![Shares page with ID link and Browse action (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/mounts-default-chromium-linux.png)
 
 ---
 
@@ -1042,11 +1042,11 @@ The results page shows:
 
 - A summary panel with `Status`, checked/corrected counts for network mounts and USB mounts, and `Corrective operations failed`.
 - A `Current USB Drives` table with drive fields similar to the Drives page.
-- A `Current Shared Mounts` table with mount fields similar to the Mounts page.
+- A `Current Shared Mounts` table with mount fields similar to the Shares page.
 
 These tables are post-run snapshots of current drive and mount state to help operators investigate reconciliation outcomes; they are not limited to only rows that were corrected during the run.
 
-On smaller screens, these tables follow the same compact treatment as the main Drives and Mounts pages by keeping the most important columns visible and reducing lower-priority metadata.
+On smaller screens, these tables follow the same compact treatment as the main Drives and Shares pages by keeping the most important columns visible and reducing lower-priority metadata.
 
 Status meanings:
 

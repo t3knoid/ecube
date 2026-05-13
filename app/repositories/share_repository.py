@@ -7,22 +7,22 @@ from sqlalchemy.orm import Session
 from app.exceptions import ConflictError
 from app.utils.sanitize import normalize_project_id
 
-from app.models.network import MountStatus, NetworkMount
+from app.models.network import MountStatus, NetworkShare
 
 
-class MountRepository:
-    """Data-access layer for :class:`~app.models.network.NetworkMount`."""
+class ShareRepository:
+    """Data-access layer for :class:`~app.models.network.NetworkShare`."""
 
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def list_all(self) -> List[NetworkMount]:
+    def list_all(self) -> List[NetworkShare]:
         """Return all network mounts."""
-        return self.db.query(NetworkMount).all()
+        return self.db.query(NetworkShare).all()
 
-    def get(self, mount_id: int) -> Optional[NetworkMount]:
+    def get(self, mount_id: int) -> Optional[NetworkShare]:
         """Return a single mount by primary key, or ``None``."""
-        return self.db.get(NetworkMount, mount_id)
+        return self.db.get(NetworkShare, mount_id)
 
     def acquire_create_lock(self) -> None:
         """Serialize mount-creation validation and insert operations.
@@ -41,7 +41,7 @@ class MountRepository:
             return
 
         try:
-            self.db.query(NetworkMount.id).order_by(NetworkMount.id).with_for_update(nowait=True).all()
+            self.db.query(NetworkShare.id).order_by(NetworkShare.id).with_for_update(nowait=True).all()
         except OperationalError as exc:
             self.db.rollback()
             orig = getattr(exc, "orig", None)
@@ -52,7 +52,7 @@ class MountRepository:
                 ) from exc
             raise
 
-    def add(self, mount: NetworkMount) -> NetworkMount:
+    def add(self, mount: NetworkShare) -> NetworkShare:
         """Persist a new mount and flush it to obtain its ID."""
         self.db.add(mount)
         try:
@@ -69,16 +69,16 @@ class MountRepository:
         if not isinstance(normalized_project_id, str) or not normalized_project_id:
             return False
         return (
-            self.db.query(NetworkMount.id)
+            self.db.query(NetworkShare.id)
             .filter(
-                NetworkMount.status == MountStatus.MOUNTED,
-                NetworkMount.project_id == normalized_project_id,
+                NetworkShare.status == MountStatus.MOUNTED,
+                NetworkShare.project_id == normalized_project_id,
             )
             .first()
             is not None
         )
 
-    def get_mounted_project_for_update(self, project_id: str) -> Optional[NetworkMount]:
+    def get_mounted_project_for_update(self, project_id: str) -> Optional[NetworkShare]:
         """Return one mounted share for ``project_id`` and request an update lock.
 
         On backends that support row-level locking, this uses ``FOR UPDATE NOWAIT``
@@ -90,12 +90,12 @@ class MountRepository:
             return None
         try:
             return (
-                self.db.query(NetworkMount)
+                self.db.query(NetworkShare)
                 .filter(
-                    NetworkMount.status == MountStatus.MOUNTED,
-                    NetworkMount.project_id == normalized_project_id,
+                    NetworkShare.status == MountStatus.MOUNTED,
+                    NetworkShare.project_id == normalized_project_id,
                 )
-                .order_by(NetworkMount.id)
+                .order_by(NetworkShare.id)
                 .with_for_update(nowait=True)
                 .first()
             )
@@ -109,7 +109,7 @@ class MountRepository:
                 ) from exc
             raise
 
-    def save(self, mount: NetworkMount) -> NetworkMount:
+    def save(self, mount: NetworkShare) -> NetworkShare:
         """Commit pending changes to an existing mount and refresh it."""
         try:
             self.db.commit()
@@ -119,7 +119,7 @@ class MountRepository:
         self.db.refresh(mount)
         return mount
 
-    def delete(self, mount: NetworkMount) -> None:
+    def delete(self, mount: NetworkShare) -> None:
         """Delete a mount and commit."""
         self.db.delete(mount)
         try:

@@ -17,7 +17,7 @@ const mockRouter = createRouter({
 
 const mocks = vi.hoisted(() => ({
   getDrives: vi.fn(),
-  getMounts: vi.fn(),
+  getShares: vi.fn(),
   mobileViewportMatches: false,
 }))
 
@@ -40,7 +40,7 @@ vi.mock('@/api/drives.js', () => ({
 }))
 
 vi.mock('@/api/mounts.js', () => ({
-  getMounts: mocks.getMounts,
+  getShares: mocks.getShares,
 }))
 
 async function flushPromises() {
@@ -85,7 +85,7 @@ function mountView(options = {}) {
 describe('ReconciliationResultsView', () => {
   beforeEach(() => {
     mocks.getDrives.mockReset()
-    mocks.getMounts.mockReset()
+    mocks.getShares.mockReset()
     setMobileViewport(false)
     mocks.getDrives.mockResolvedValue([
       {
@@ -98,7 +98,7 @@ describe('ReconciliationResultsView', () => {
         current_project_id: 'PROJ-001',
       },
     ])
-    mocks.getMounts.mockResolvedValue([
+    mocks.getShares.mockResolvedValue([
       {
         id: 1,
         type: 'NFS',
@@ -180,7 +180,7 @@ describe('ReconciliationResultsView', () => {
     await wrapper.vm.$nextTick()
 
     expect(wrapper.text()).toContain(i18n.global.t('system.reconciledSharedMounts'))
-    expect(mocks.getMounts).toHaveBeenCalled()
+    expect(mocks.getShares).toHaveBeenCalled()
   })
 
   it('uses the Drives and Mounts mobile table treatment in reconciliation panels', async () => {
@@ -269,7 +269,7 @@ describe('ReconciliationResultsView', () => {
 
   it('shows message when no data is available', async () => {
     mocks.getDrives.mockResolvedValue([])
-    mocks.getMounts.mockResolvedValue([])
+    mocks.getShares.mockResolvedValue([])
 
     const reconciliationResult = {
       status: 'ok',

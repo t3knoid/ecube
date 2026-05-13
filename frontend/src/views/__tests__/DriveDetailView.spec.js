@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   getDrives: vi.fn(),
   getJobChainOfCustody: vi.fn(),
   listJobs: vi.fn(),
-  getMounts: vi.fn(),
+  getShares: vi.fn(),
   formatDrive: vi.fn(),
   initializeDrive: vi.fn(),
   mountDrive: vi.fn(),
@@ -51,7 +51,7 @@ vi.mock('@/api/jobs.js', () => ({
 }))
 
 vi.mock('@/api/mounts.js', () => ({
-  getMounts: (...args) => mocks.getMounts(...args),
+  getShares: (...args) => mocks.getShares(...args),
 }))
 
 vi.mock('@/api/admin.js', () => ({
@@ -133,7 +133,7 @@ describe('DriveDetailView mount workflow', () => {
     mocks.getDrives.mockReset()
     mocks.getJobChainOfCustody.mockReset()
     mocks.listJobs.mockReset()
-    mocks.getMounts.mockReset()
+    mocks.getShares.mockReset()
     mocks.formatDrive.mockReset()
     mocks.initializeDrive.mockReset()
     mocks.mountDrive.mockReset()
@@ -149,7 +149,7 @@ describe('DriveDetailView mount workflow', () => {
     mocks.getDrives.mockResolvedValue([buildDrive()])
     mocks.getJobChainOfCustody.mockResolvedValue({ selector_mode: 'JOB', reports: [] })
     mocks.listJobs.mockResolvedValue([])
-    mocks.getMounts.mockResolvedValue([
+    mocks.getShares.mockResolvedValue([
       { id: 1, status: 'MOUNTED', project_id: 'PROJ-007' },
       { id: 2, status: 'MOUNTED', project_id: 'PROJ-999' },
       { id: 3, status: 'MOUNTED', project_id: 'PROJ-007' },
@@ -720,7 +720,7 @@ describe('DriveDetailView mount workflow', () => {
   })
 
   it('shows the empty helper and disables initialize submission when no mounted project exists', async () => {
-    mocks.getMounts.mockResolvedValue([])
+    mocks.getShares.mockResolvedValue([])
     mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/7' })])
 
     const wrapper = mountView()

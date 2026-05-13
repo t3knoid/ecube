@@ -14,7 +14,7 @@
 3. [User Management](#user-management)
 4. [Drive Management](#drive-management)
 5. [Job Management](#job-management)
-6. [Mount Management](#mount-management)
+6. [Share Management](#mount-management)
 7. [Auditing](#auditing)
 8. [Monitoring and Logs](#monitoring-and-logs)
 9. [Troubleshooting](#troubleshooting)
@@ -1149,7 +1149,7 @@ Response:
 ```
 
 > **Note:** The `source_path` must be accessible from the ECUBE service
-> (e.g., a mounted NFS/SMB share). Use the [Add Network Mount](#task-1-add-network-mount)
+> (e.g., a mounted NFS/SMB share). Use the [Add Network Share](#task-1-add-network-mount)
 > task to configure mounts before creating jobs.
 
 ### View Job Status
@@ -1363,7 +1363,7 @@ A complete evidence export follows this sequence:
 
 ---
 
-## Mount Management
+## Share Management
 
 Network mounts provide access to evidence data stored on NFS or SMB shares.
 Mounts must be registered before they can be used as source paths in export
@@ -1637,7 +1637,7 @@ Every audit entry contains:
 | `FILE_HASHES_RETRIEVED` | File hash lookup performed |
 | `FILE_COMPARE` | Two files compared by hash |
 
-#### Mount Management
+#### Share Management
 
 | Action | Trigger |
 |--------|---------|

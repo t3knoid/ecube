@@ -110,8 +110,8 @@ def _linux_drive_mount() -> type[DriveMountProvider]:
     return LinuxDriveMount
 
 def _linux_mount_provider() -> type[MountProvider]:
-    from app.services.mount_service import LinuxMountProvider
-    return LinuxMountProvider
+    from app.services.share_service import LinuxShareProvider
+    return LinuxShareProvider
 
 def _linux_os_user_provider() -> type[OsUserProvider]:
     from app.services.os_user_service import LinuxOsUserProvider

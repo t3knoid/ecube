@@ -6,7 +6,7 @@ import DashboardView from '@/views/DashboardView.vue'
 const mocks = vi.hoisted(() => ({
   getSystemHealth: vi.fn(),
   getDrives: vi.fn(),
-  getMounts: vi.fn(),
+  getShares: vi.fn(),
   listJobs: vi.fn(),
   push: vi.fn(),
   authStore: { passwordWarningDays: null, hasRole: vi.fn() },
@@ -34,7 +34,7 @@ vi.mock('@/api/drives.js', () => ({
 }))
 
 vi.mock('@/api/mounts.js', () => ({
-  getMounts: (...args) => mocks.getMounts(...args),
+  getShares: (...args) => mocks.getShares(...args),
 }))
 
 vi.mock('@/api/jobs.js', () => ({
@@ -105,7 +105,7 @@ describe('DashboardView active jobs', () => {
   beforeEach(() => {
     mocks.getSystemHealth.mockReset()
     mocks.getDrives.mockReset()
-    mocks.getMounts.mockReset()
+    mocks.getShares.mockReset()
     mocks.listJobs.mockReset()
     mocks.push.mockReset()
     mocks.pollerStart.mockReset()
@@ -118,7 +118,7 @@ describe('DashboardView active jobs', () => {
 
     mocks.getSystemHealth.mockResolvedValue({ status: 'ok', database: 'connected', active_jobs: 1 })
     mocks.getDrives.mockResolvedValue([])
-    mocks.getMounts.mockResolvedValue([])
+    mocks.getShares.mockResolvedValue([])
   })
 
   it('shows a dismissible password expiry warning banner', async () => {
@@ -139,7 +139,7 @@ describe('DashboardView active jobs', () => {
   it('renders drive and mount summary entries as keyboard-operable buttons', async () => {
     mocks.listJobs.mockResolvedValue([])
     mocks.getDrives.mockResolvedValue([{ id: 1, current_state: 'AVAILABLE' }])
-    mocks.getMounts.mockResolvedValue([
+    mocks.getShares.mockResolvedValue([
       { id: 10, status: 'UNMOUNTED', project_id: 'PROJ-000', related_job: { job_id: null, status: 'NO_RELATED_JOB', custody_status: 'NO_RELATED_JOB' } },
     ])
 
@@ -172,7 +172,7 @@ describe('DashboardView active jobs', () => {
 
   it('routes mount summary entries to Mounts with the matching workflow filter', async () => {
     mocks.listJobs.mockResolvedValue([])
-    mocks.getMounts.mockResolvedValue([
+    mocks.getShares.mockResolvedValue([
       { id: 10, status: 'UNMOUNTED', project_id: 'PROJ-000', related_job: { job_id: null, status: 'NO_RELATED_JOB', custody_status: 'NO_RELATED_JOB' } },
     ])
 
@@ -193,7 +193,7 @@ describe('DashboardView active jobs', () => {
       { id: 41, project_id: 'PROJ-041', status: 'PAUSED', copied_bytes: 0, total_bytes: 0, file_count: 1, files_succeeded: 0, files_failed: 0 },
       { id: 42, project_id: 'PROJ-042', status: 'PENDING', copied_bytes: 0, total_bytes: 0, file_count: 1, files_succeeded: 0, files_failed: 0 },
     ])
-    mocks.getMounts.mockResolvedValue([
+    mocks.getShares.mockResolvedValue([
       { id: 12, status: 'MOUNTED', project_id: 'PROJ-043', related_job: { job_id: 43, status: 'COMPLETED', custody_status: 'PENDING_HANDOFF' } },
     ])
 
@@ -230,7 +230,7 @@ describe('DashboardView active jobs', () => {
         files_timed_out: 0,
       },
     ])
-    mocks.getMounts.mockResolvedValue([
+    mocks.getShares.mockResolvedValue([
       { id: 13, status: 'MOUNTED', project_id: 'PROJ-070', related_job: { job_id: 70, status: 'ARCHIVED', custody_status: 'PENDING_HANDOFF' } },
     ])
 
@@ -256,7 +256,7 @@ describe('DashboardView active jobs', () => {
         files_failed: 0,
       },
     ])
-    mocks.getMounts.mockResolvedValue([])
+    mocks.getShares.mockResolvedValue([])
 
     const wrapper = mountView()
     await flushPromises()
@@ -280,7 +280,7 @@ describe('DashboardView active jobs', () => {
         files_failed: 0,
       },
     ])
-    mocks.getMounts.mockResolvedValue([])
+    mocks.getShares.mockResolvedValue([])
 
     const wrapper = mountView()
     await flushPromises()
@@ -326,7 +326,7 @@ describe('DashboardView active jobs', () => {
         files_timed_out: 1,
       },
     ])
-    mocks.getMounts.mockResolvedValue([
+    mocks.getShares.mockResolvedValue([
       { id: 16, status: 'MOUNTED', remote_path: '//server/case-062', project_id: 'PROJ-062', related_job: { job_id: 62, status: 'RUNNING', custody_status: 'PENDING_HANDOFF' } },
     ])
 
@@ -376,7 +376,7 @@ describe('DashboardView active jobs', () => {
         active_duration_seconds: 10,
       },
     ])
-    mocks.getMounts.mockResolvedValue([
+    mocks.getShares.mockResolvedValue([
       { id: 18, status: 'MOUNTED', remote_path: '//server/case-065', project_id: 'PROJ-065', related_job: { job_id: 65, status: 'RUNNING', custody_status: 'PENDING_HANDOFF' } },
     ])
 
@@ -412,7 +412,7 @@ describe('DashboardView active jobs', () => {
         active_duration_seconds: 0,
       },
     ])
-    mocks.getMounts.mockResolvedValue([])
+    mocks.getShares.mockResolvedValue([])
 
     const wrapper = mountView()
     await flushPromises()
@@ -448,7 +448,7 @@ describe('DashboardView active jobs', () => {
         files_failed: 0,
       },
     ])
-    mocks.getMounts.mockResolvedValue([])
+    mocks.getShares.mockResolvedValue([])
 
     const wrapper = mountView()
     await flushPromises()
@@ -483,7 +483,7 @@ describe('DashboardView active jobs', () => {
         files_failed: 0,
       },
     ])
-    mocks.getMounts.mockResolvedValue([
+    mocks.getShares.mockResolvedValue([
       { id: 17, status: 'MOUNTED', remote_path: '//server/case-064', project_id: 'PROJ-064', related_job: { job_id: 64, status: 'RUNNING', custody_status: 'PENDING_HANDOFF' } },
     ])
 
@@ -496,7 +496,7 @@ describe('DashboardView active jobs', () => {
 
   it('shows an empty needs-attention state when no follow-up items are present', async () => {
     mocks.listJobs.mockResolvedValue([])
-    mocks.getMounts.mockResolvedValue([])
+    mocks.getShares.mockResolvedValue([])
 
     const wrapper = mountView()
     await flushPromises()
@@ -507,7 +507,7 @@ describe('DashboardView active jobs', () => {
   it('refreshes jobs, drives, and mounts on the same poll tick as system health', async () => {
     mocks.getSystemHealth.mockResolvedValueOnce({ status: 'ok', database: 'connected', active_jobs: 1 })
     mocks.getDrives.mockResolvedValueOnce([{ id: 1, current_state: 'AVAILABLE' }])
-    mocks.getMounts.mockResolvedValueOnce([
+    mocks.getShares.mockResolvedValueOnce([
       { id: 10, status: 'UNMOUNTED', project_id: 'PROJ-000', related_job: { job_id: null, status: 'NO_RELATED_JOB', custody_status: 'NO_RELATED_JOB' } },
     ])
     mocks.listJobs.mockResolvedValueOnce([
@@ -525,7 +525,7 @@ describe('DashboardView active jobs', () => {
 
     mocks.getSystemHealth.mockResolvedValueOnce({ status: 'degraded', database: 'connected', active_jobs: 0 })
     mocks.getDrives.mockResolvedValueOnce([{ id: 2, current_state: 'DISABLED' }])
-    mocks.getMounts.mockResolvedValueOnce([
+    mocks.getShares.mockResolvedValueOnce([
       { id: 11, status: 'MOUNTED', project_id: 'PROJ-001', related_job: { job_id: 31, status: 'PENDING', custody_status: 'PENDING_HANDOFF' } },
     ])
     mocks.listJobs.mockResolvedValueOnce([])
@@ -549,7 +549,7 @@ describe('DashboardView active jobs', () => {
     expect(wrapper.find('.cell-link').exists()).toBe(false)
     expect(mocks.getSystemHealth).toHaveBeenCalledTimes(2)
     expect(mocks.getDrives).toHaveBeenCalledTimes(2)
-    expect(mocks.getMounts).toHaveBeenCalledTimes(2)
+    expect(mocks.getShares).toHaveBeenCalledTimes(2)
     expect(mocks.listJobs).toHaveBeenCalledTimes(2)
   })
 
@@ -658,7 +658,7 @@ describe('DashboardView active jobs', () => {
 
   it('shows a mounts summary with counts by related job lifecycle buckets', async () => {
     mocks.listJobs.mockResolvedValue([])
-    mocks.getMounts.mockResolvedValue([
+    mocks.getShares.mockResolvedValue([
       { id: 10, status: 'UNMOUNTED', project_id: 'PROJ-000', related_job: { job_id: null, status: 'NO_RELATED_JOB', custody_status: 'NO_RELATED_JOB' } },
       { id: 11, status: 'MOUNTED', project_id: 'PROJ-001', related_job: { job_id: 31, status: 'PENDING', custody_status: 'PENDING_HANDOFF' } },
       { id: 12, status: 'MOUNTED', project_id: 'PROJ-002', related_job: { job_id: 32, status: 'RUNNING', custody_status: 'PENDING_HANDOFF' } },
@@ -696,7 +696,7 @@ describe('DashboardView active jobs', () => {
 
   it('keeps completed and archived pending-handoff mounts out of the completed bucket', async () => {
     mocks.listJobs.mockResolvedValue([])
-    mocks.getMounts.mockResolvedValue([
+    mocks.getShares.mockResolvedValue([
       { id: 24, status: 'MOUNTED', project_id: 'PROJ-024', related_job: { job_id: 44, status: 'COMPLETED', custody_status: 'PENDING_HANDOFF' } },
       { id: 25, status: 'MOUNTED', project_id: 'PROJ-025', related_job: { job_id: 45, status: 'ARCHIVED', custody_status: 'PENDING_HANDOFF' } },
       { id: 26, status: 'MOUNTED', project_id: 'PROJ-026', related_job: { job_id: 46, status: 'COMPLETED', custody_status: 'HANDOFF_RECORDED' } },
@@ -715,7 +715,7 @@ describe('DashboardView active jobs', () => {
 
   it('shows unavailable mounts explicitly instead of silently dropping them', async () => {
     mocks.listJobs.mockResolvedValue([])
-    mocks.getMounts.mockResolvedValue([
+    mocks.getShares.mockResolvedValue([
       { id: 21, status: 'MOUNTED', project_id: 'PROJ-021', related_job: { job_id: 41, status: 'COMPLETED', custody_status: 'STATUS_UNAVAILABLE' } },
       { id: 22, status: 'UNMOUNTED', project_id: 'PROJ-022', related_job: { job_id: null, status: 'STATUS_UNAVAILABLE', custody_status: 'STATUS_UNAVAILABLE' } },
     ])
@@ -732,7 +732,7 @@ describe('DashboardView active jobs', () => {
   })
 
   it('keeps active jobs visible when mounts fail but jobs still load', async () => {
-    mocks.getMounts.mockRejectedValue(new Error('mounts unavailable'))
+    mocks.getShares.mockRejectedValue(new Error('mounts unavailable'))
     mocks.listJobs.mockResolvedValue([
       {
         id: 52,

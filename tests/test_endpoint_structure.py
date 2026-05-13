@@ -14,7 +14,7 @@ import pytest
 from pydantic import BaseModel
 
 from app.main import app
-from app.routers import audit, drives, introspection, jobs, mounts
+from app.routers import audit, drives, introspection, jobs, shares
 
 
 class TestEndpointDocumentation:
@@ -78,7 +78,7 @@ class TestEndpointDocumentation:
 
     def test_all_routers_have_tags(self):
         """All routers should define tags for organization in OpenAPI."""
-        routers = [drives.router, jobs.router, mounts.router, audit.router, introspection.router]
+        routers = [drives.router, jobs.router, shares.router, audit.router, introspection.router]
         
         for router in routers:
             assert hasattr(router, "tags"), f"Router {router} missing tags attribute"
@@ -103,7 +103,7 @@ class TestResponseModels:
         # These specific GET endpoints must have a non-None response_model
         expected_list_endpoints = [
             ("/drives", "GET"),
-            ("/mounts", "GET"),
+            ("/shares", "GET"),
             ("/audit", "GET"),
         ]
 
@@ -243,7 +243,7 @@ class TestOpenAPISchema:
         openapi_schema = app.openapi()
         tags = {t["name"]: t for t in openapi_schema.get("tags", [])}
 
-        expected_tags = ["drives", "jobs", "mounts", "audit", "introspection", "files"]
+        expected_tags = ["drives", "jobs", "shares", "audit", "introspection", "files"]
         for tag_name in expected_tags:
             assert tag_name in tags, f"Tag '{tag_name}' missing from OpenAPI schema"
             assert tags[tag_name].get("description"), (

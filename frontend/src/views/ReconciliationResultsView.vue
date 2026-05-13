@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getDrives } from '@/api/drives.js'
-import { getMounts } from '@/api/mounts.js'
+import { getShares } from '@/api/shares.js'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
@@ -176,7 +176,7 @@ async function loadDrives() {
 
 async function loadMounts() {
   try {
-    const response = await getMounts()
+    const response = await getShares()
     mounts.value = (response || []).map((item) =>
       normalizeProjectRecord(item, ['project_id'])
     )

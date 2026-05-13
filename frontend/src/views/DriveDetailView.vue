@@ -6,7 +6,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { getPublicAuthConfig } from '@/api/auth.js'
 import { getDrives, formatDrive, initializeDrive, mountDrive, prepareEjectDrive, refreshDrives, testDriveThroughput } from '@/api/drives.js'
 import { getJobChainOfCustody, listJobs } from '@/api/jobs.js'
-import { getMounts } from '@/api/mounts.js'
+import { getShares } from '@/api/shares.js'
 import { enablePort } from '@/api/admin.js'
 import { normalizeErrorMessage } from '@/api/client.js'
 import StatusBadge from '@/components/common/StatusBadge.vue'
@@ -368,7 +368,7 @@ function resetInitializeProjectSelection() {
 async function loadMountedProjects() {
   loadingProjects.value = true
   try {
-    const mounts = await getMounts()
+    const mounts = await getShares()
     mountedProjectOptions.value = normalizeMountedProjectOptions(mounts)
     resetInitializeProjectSelection()
   } catch {

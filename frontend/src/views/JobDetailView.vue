@@ -6,7 +6,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { analyzeJob, archiveJob, continueJobOverflow, getJob, getJobChainOfCustody, refreshJobChainOfCustody, getJobFiles, startJob, retryFailedJob, pauseJob, verifyJob, downloadManifest, updateJob, completeJob, deleteJob, clearJobStartupAnalysisCache, confirmJobChainOfCustodyHandoff } from '@/api/jobs.js'
 import { getFileHashes, compareFiles } from '@/api/files.js'
 import { getDrives } from '@/api/drives.js'
-import { getMounts } from '@/api/mounts.js'
+import { getShares } from '@/api/shares.js'
 import { usePolling } from '@/composables/usePolling.js'
 import CocReport from '@/components/audit/CocReport.vue'
 import JobEditorDialogContent from '@/components/jobs/JobEditorDialogContent.vue'
@@ -1138,7 +1138,7 @@ function cancelCocHandoffSubmission() {
 }
 
 async function loadSupportingData() {
-  const [driveResult, mountResult] = await Promise.allSettled([getDrives(), getMounts()])
+  const [driveResult, mountResult] = await Promise.allSettled([getDrives(), getShares()])
   supportingDrives.value = driveResult.status === 'fulfilled'
     ? (driveResult.value || []).map((item) => normalizeProjectRecord(item, ['current_project_id']))
     : []

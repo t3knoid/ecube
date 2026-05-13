@@ -5,13 +5,13 @@ import MountsView from '@/views/MountsView.vue'
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
-  getMounts: vi.fn(),
-  createMount: vi.fn(),
-  updateMount: vi.fn(),
-  deleteMount: vi.fn(),
+  getShares: vi.fn(),
+  createShare: vi.fn(),
+  updateShare: vi.fn(),
+  deleteShare: vi.fn(),
   validateAllMounts: vi.fn(),
-  validateMountCandidate: vi.fn(),
-  validateMount: vi.fn(),
+  validateShareCandidate: vi.fn(),
+  validateShare: vi.fn(),
   discoverMountShares: vi.fn(),
   getPublicAuthConfig: vi.fn(),
 }))
@@ -36,13 +36,13 @@ vi.mock('vue-router', () => ({
 }))
 
 vi.mock('@/api/mounts.js', () => ({
-  getMounts: (...args) => mocks.getMounts(...args),
-  createMount: (...args) => mocks.createMount(...args),
-  updateMount: (...args) => mocks.updateMount(...args),
-  deleteMount: (...args) => mocks.deleteMount(...args),
+  getShares: (...args) => mocks.getShares(...args),
+  createShare: (...args) => mocks.createShare(...args),
+  updateShare: (...args) => mocks.updateShare(...args),
+  deleteShare: (...args) => mocks.deleteShare(...args),
   validateAllMounts: (...args) => mocks.validateAllMounts(...args),
-  validateMountCandidate: (...args) => mocks.validateMountCandidate(...args),
-  validateMount: (...args) => mocks.validateMount(...args),
+  validateShareCandidate: (...args) => mocks.validateShareCandidate(...args),
+  validateShare: (...args) => mocks.validateShare(...args),
   discoverMountShares: (...args) => mocks.discoverMountShares(...args),
 }))
 
@@ -157,22 +157,22 @@ describe('MountsView removal flow', () => {
     matchMediaListeners.clear()
     installMatchMediaMock()
     mocks.push.mockReset()
-    mocks.getMounts.mockReset()
-    mocks.createMount.mockReset()
-    mocks.updateMount.mockReset()
-    mocks.deleteMount.mockReset()
+    mocks.getShares.mockReset()
+    mocks.createShare.mockReset()
+    mocks.updateShare.mockReset()
+    mocks.deleteShare.mockReset()
     mocks.validateAllMounts.mockReset()
-    mocks.validateMountCandidate.mockReset()
-    mocks.validateMount.mockReset()
+    mocks.validateShareCandidate.mockReset()
+    mocks.validateShare.mockReset()
     mocks.discoverMountShares.mockReset()
     mocks.getPublicAuthConfig.mockReset()
 
-    mocks.createMount.mockResolvedValue({})
-    mocks.updateMount.mockResolvedValue({})
-    mocks.deleteMount.mockResolvedValue({})
+    mocks.createShare.mockResolvedValue({})
+    mocks.updateShare.mockResolvedValue({})
+    mocks.deleteShare.mockResolvedValue({})
     mocks.validateAllMounts.mockResolvedValue([])
-    mocks.validateMountCandidate.mockResolvedValue(buildMount({ id: 999, status: 'MOUNTED' }))
-    mocks.validateMount.mockResolvedValue(buildMount())
+    mocks.validateShareCandidate.mockResolvedValue(buildMount({ id: 999, status: 'MOUNTED' }))
+    mocks.validateShare.mockResolvedValue(buildMount())
     mocks.discoverMountShares.mockResolvedValue({
       shares: [
         { remote_path: '//server/CaseDrop', display_name: 'CaseDrop' },
@@ -189,7 +189,7 @@ describe('MountsView removal flow', () => {
   })
 
   it('links the mount ID value to the mount detail page', async () => {
-    mocks.getMounts.mockResolvedValueOnce([buildMount({ status: 'UNMOUNTED' })])
+    mocks.getShares.mockResolvedValueOnce([buildMount({ status: 'UNMOUNTED' })])
 
     const wrapper = mountView()
     await flushPromises()
@@ -206,7 +206,7 @@ describe('MountsView removal flow', () => {
 
   it('preselects the workflow bucket from the route query and shows only matching mounts', async () => {
     routeState.query = { workflow: 'ASSIGNED' }
-    mocks.getMounts.mockResolvedValueOnce([
+    mocks.getShares.mockResolvedValueOnce([
       buildMount({ id: 11, related_job: { job_id: null, status: 'NO_RELATED_JOB', custody_status: 'NO_RELATED_JOB' } }),
       buildMount({ id: 12, related_job: { job_id: 21, status: 'PENDING', custody_status: 'PENDING_HANDOFF' } }),
     ])
@@ -224,7 +224,7 @@ describe('MountsView removal flow', () => {
 
   it('preselects the custody-pending workflow bucket from the route query and shows only matching mounts', async () => {
     routeState.query = { workflow: 'CUSTODY_PENDING' }
-    mocks.getMounts.mockResolvedValueOnce([
+    mocks.getShares.mockResolvedValueOnce([
       buildMount({ id: 11, related_job: { job_id: 31, status: 'COMPLETED', custody_status: 'PENDING_HANDOFF' } }),
       buildMount({ id: 12, related_job: { job_id: 32, status: 'ARCHIVED', custody_status: 'PENDING_HANDOFF' } }),
       buildMount({ id: 13, related_job: { job_id: 33, status: 'COMPLETED', custody_status: 'HANDOFF_RECORDED' } }),
@@ -241,7 +241,7 @@ describe('MountsView removal flow', () => {
   })
 
   it('uses the project value as the browse entry point for a mounted share', async () => {
-    mocks.getMounts.mockResolvedValueOnce([buildMount({ status: 'MOUNTED', local_mount_point: '/smb/demo-case-002' })])
+    mocks.getShares.mockResolvedValueOnce([buildMount({ status: 'MOUNTED', local_mount_point: '/smb/demo-case-002' })])
 
     const wrapper = mountView()
     await flushPromises()
@@ -259,7 +259,7 @@ describe('MountsView removal flow', () => {
 
   it('does not expose mounted-share browsing to auditors from the mounts list', async () => {
     authState.roles = ['auditor']
-    mocks.getMounts.mockResolvedValueOnce([buildMount({ status: 'MOUNTED', local_mount_point: '/smb/demo-case-002' })])
+    mocks.getShares.mockResolvedValueOnce([buildMount({ status: 'MOUNTED', local_mount_point: '/smb/demo-case-002' })])
 
     const wrapper = mountView()
     await flushPromises()
@@ -270,7 +270,7 @@ describe('MountsView removal flow', () => {
   })
 
   it('does not expose separate browse, edit, or remove buttons in the desktop list', async () => {
-    mocks.getMounts.mockResolvedValue([buildMount({ status: 'MOUNTED' })])
+    mocks.getShares.mockResolvedValue([buildMount({ status: 'MOUNTED' })])
 
     const wrapper = mountView()
     await flushPromises()
@@ -286,7 +286,7 @@ describe('MountsView removal flow', () => {
 
   it('hides the add mount action from processor-only roles', async () => {
     authState.roles = ['processor']
-    mocks.getMounts.mockResolvedValueOnce([buildMount({ status: 'UNMOUNTED' })])
+    mocks.getShares.mockResolvedValueOnce([buildMount({ status: 'UNMOUNTED' })])
 
     const wrapper = mountView()
     await flushPromises()
@@ -297,7 +297,7 @@ describe('MountsView removal flow', () => {
   })
 
   it('does not render a separate browse action control when the mount ID is clickable', async () => {
-    mocks.getMounts.mockResolvedValueOnce([buildMount({ status: 'MOUNTED', local_mount_point: '/smb/demo-case-002' })])
+    mocks.getShares.mockResolvedValueOnce([buildMount({ status: 'MOUNTED', local_mount_point: '/smb/demo-case-002' })])
 
     const wrapper = mountView()
     await flushPromises()
@@ -310,7 +310,7 @@ describe('MountsView removal flow', () => {
   it('omits wide metadata columns in mobile view while keeping compact status and mount-id browsing', async () => {
     viewportState.mobile = true
     installMatchMediaMock()
-    mocks.getMounts.mockResolvedValue([buildMount({ status: 'MOUNTED' })])
+    mocks.getShares.mockResolvedValue([buildMount({ status: 'MOUNTED' })])
 
     const wrapper = mountView()
     await flushPromises()
@@ -324,7 +324,7 @@ describe('MountsView removal flow', () => {
   })
 
   it('shows the related project job ID and links it to Job Detail', async () => {
-    mocks.getMounts.mockResolvedValue([buildMount({ project_id: 'PROJ-011', related_job: { job_id: 27, status: 'RUNNING' } })])
+    mocks.getShares.mockResolvedValue([buildMount({ project_id: 'PROJ-011', related_job: { job_id: 27, status: 'RUNNING' } })])
 
     const wrapper = mountView()
     await flushPromises()
@@ -346,7 +346,7 @@ describe('MountsView removal flow', () => {
   })
 
   it('keeps the related job cell non-actionable when the mount payload has no related job', async () => {
-    mocks.getMounts.mockResolvedValue([buildMount({ project_id: 'PROJ-011', related_job: { job_id: null, status: 'NO_RELATED_JOB' } })])
+    mocks.getShares.mockResolvedValue([buildMount({ project_id: 'PROJ-011', related_job: { job_id: null, status: 'NO_RELATED_JOB' } })])
 
     const wrapper = mountView()
     await flushPromises()
@@ -356,7 +356,7 @@ describe('MountsView removal flow', () => {
   })
 
   it('uppercases the project ID as the operator types and submits it normalized', async () => {
-    mocks.getMounts.mockResolvedValue([])
+    mocks.getShares.mockResolvedValue([])
 
     const wrapper = mountView()
     await flushPromises()
@@ -378,7 +378,7 @@ describe('MountsView removal flow', () => {
     await findDialogButton(wrapper, i18n.global.t('common.actions.create')).trigger('click')
     await flushPromises()
 
-    expect(mocks.validateMountCandidate).toHaveBeenCalledWith({
+    expect(mocks.validateShareCandidate).toHaveBeenCalledWith({
       type: 'SMB',
       remote_path: '//server/new-share',
       project_id: 'PROJ-NEW',
@@ -386,7 +386,7 @@ describe('MountsView removal flow', () => {
       password: null,
       credentials_file: null,
     }, { timeout: 180000 })
-    expect(mocks.createMount).toHaveBeenCalledWith({
+    expect(mocks.createShare).toHaveBeenCalledWith({
       type: 'SMB',
       remote_path: '//server/new-share',
       project_id: 'PROJ-NEW',
@@ -397,7 +397,7 @@ describe('MountsView removal flow', () => {
   })
 
   it('shows the configured NFS client version selector and submits the selected version for NFS mounts', async () => {
-    mocks.getMounts.mockResolvedValue([])
+    mocks.getShares.mockResolvedValue([])
 
     const wrapper = mountView()
     await flushPromises()
@@ -423,7 +423,7 @@ describe('MountsView removal flow', () => {
     await findDialogButton(wrapper, i18n.global.t('common.actions.create')).trigger('click')
     await flushPromises()
 
-    expect(mocks.validateMountCandidate).toHaveBeenCalledWith({
+    expect(mocks.validateShareCandidate).toHaveBeenCalledWith({
       type: 'NFS',
       remote_path: '192.168.20.240:/volume1/demo-case-001',
       project_id: 'PROJ-NFS42',
@@ -432,7 +432,7 @@ describe('MountsView removal flow', () => {
       password: null,
       credentials_file: null,
     }, { timeout: 180000 })
-    expect(mocks.createMount).toHaveBeenCalledWith({
+    expect(mocks.createShare).toHaveBeenCalledWith({
       type: 'NFS',
       remote_path: '192.168.20.240:/volume1/demo-case-001',
       project_id: 'PROJ-NFS42',
@@ -444,7 +444,7 @@ describe('MountsView removal flow', () => {
   })
 
   it('omits the per-mount NFS version when the dialog is left on the default option', async () => {
-    mocks.getMounts.mockResolvedValue([])
+    mocks.getShares.mockResolvedValue([])
 
     const wrapper = mountView()
     await flushPromises()
@@ -468,7 +468,7 @@ describe('MountsView removal flow', () => {
     await findDialogButton(wrapper, i18n.global.t('common.actions.create')).trigger('click')
     await flushPromises()
 
-    expect(mocks.validateMountCandidate).toHaveBeenCalledWith({
+    expect(mocks.validateShareCandidate).toHaveBeenCalledWith({
       type: 'NFS',
       remote_path: '192.168.20.240:/volume1/default-share',
       project_id: 'PROJ-DEFAULT',
@@ -476,7 +476,7 @@ describe('MountsView removal flow', () => {
       password: null,
       credentials_file: null,
     }, { timeout: 180000 })
-    expect(mocks.createMount).toHaveBeenCalledWith({
+    expect(mocks.createShare).toHaveBeenCalledWith({
       type: 'NFS',
       remote_path: '192.168.20.240:/volume1/default-share',
       project_id: 'PROJ-DEFAULT',
@@ -487,7 +487,7 @@ describe('MountsView removal flow', () => {
   })
 
   it('moves focus into the add mount dialog and closes it on Escape', async () => {
-    mocks.getMounts.mockResolvedValue([])
+    mocks.getShares.mockResolvedValue([])
 
     const wrapper = mountView()
     await flushPromises()
@@ -509,7 +509,7 @@ describe('MountsView removal flow', () => {
   })
 
   it('does not dismiss the add mount dialog when the overlay is clicked', async () => {
-    mocks.getMounts.mockResolvedValue([])
+    mocks.getShares.mockResolvedValue([])
 
     const wrapper = mountView()
     await flushPromises()
@@ -527,7 +527,7 @@ describe('MountsView removal flow', () => {
   })
 
   it('marks required add-mount fields as required for assistive tech', async () => {
-    mocks.getMounts.mockResolvedValue([])
+    mocks.getShares.mockResolvedValue([])
 
     const wrapper = mountView()
     await flushPromises()
@@ -548,7 +548,7 @@ describe('MountsView removal flow', () => {
   })
 
   it('announces load errors through an alert live region', async () => {
-    mocks.getMounts.mockRejectedValue(new Error('network down'))
+    mocks.getShares.mockRejectedValue(new Error('network down'))
 
     const wrapper = mountView()
     await flushPromises()
@@ -560,7 +560,7 @@ describe('MountsView removal flow', () => {
   })
 
   it('surfaces backend load error details instead of masking them as a network outage', async () => {
-    mocks.getMounts.mockRejectedValue({ response: { data: { detail: 'Database schema mismatch detected' } } })
+    mocks.getShares.mockRejectedValue({ response: { data: { detail: 'Database schema mismatch detected' } } })
 
     const wrapper = mountView()
     await flushPromises()
@@ -570,7 +570,7 @@ describe('MountsView removal flow', () => {
   })
 
   it('does not expose raw mount paths in browse labels', async () => {
-    mocks.getMounts.mockResolvedValue([buildMount({ status: 'MOUNTED', local_mount_point: '/smb/demo-case-002' })])
+    mocks.getShares.mockResolvedValue([buildMount({ status: 'MOUNTED', local_mount_point: '/smb/demo-case-002' })])
 
     const wrapper = mountView()
     await flushPromises()
@@ -587,7 +587,7 @@ describe('MountsView removal flow', () => {
   })
 
   it('does not render remote or local path columns in the mounts table', async () => {
-    mocks.getMounts.mockResolvedValue([buildMount()])
+    mocks.getShares.mockResolvedValue([buildMount()])
 
     const wrapper = mountView()
     await flushPromises()
@@ -598,7 +598,7 @@ describe('MountsView removal flow', () => {
   })
 
   it('clears password and credentials fields when the dialog closes', async () => {
-    mocks.getMounts.mockResolvedValue([])
+    mocks.getShares.mockResolvedValue([])
 
     const wrapper = mountView()
     await flushPromises()
@@ -623,7 +623,7 @@ describe('MountsView removal flow', () => {
   })
 
   it('discovers shares from the add dialog and fills the remote path from the selected share', async () => {
-    mocks.getMounts.mockResolvedValue([])
+    mocks.getShares.mockResolvedValue([])
 
     const wrapper = mountView()
     await flushPromises()
@@ -666,7 +666,7 @@ describe('MountsView removal flow', () => {
   })
 
   it('keeps share discovery controls available in demo mode', async () => {
-    mocks.getMounts.mockResolvedValue([])
+    mocks.getShares.mockResolvedValue([])
     mocks.getPublicAuthConfig.mockResolvedValue({ demo_mode_enabled: true })
 
     const wrapper = mountView()
@@ -682,7 +682,7 @@ describe('MountsView removal flow', () => {
   })
 
   it('shows actionable guidance when share browsing is unavailable on the host', async () => {
-    mocks.getMounts.mockResolvedValue([])
+    mocks.getShares.mockResolvedValue([])
     mocks.discoverMountShares.mockRejectedValue({
       response: {
         data: {
@@ -708,7 +708,7 @@ describe('MountsView removal flow', () => {
   })
 
   it('requires a passing in-dialog test before a new share can be created', async () => {
-    mocks.getMounts.mockResolvedValue([])
+    mocks.getShares.mockResolvedValue([])
 
     const wrapper = mountView()
     await flushPromises()
@@ -740,8 +740,8 @@ describe('MountsView removal flow', () => {
   })
 
   it('surfaces validation warnings returned by the add mount test action', async () => {
-    mocks.getMounts.mockResolvedValue([])
-    mocks.validateMountCandidate.mockResolvedValue(
+    mocks.getShares.mockResolvedValue([])
+    mocks.validateShareCandidate.mockResolvedValue(
       buildMount({
         id: 999,
         status: 'MOUNTED',
@@ -772,8 +772,8 @@ describe('MountsView removal flow', () => {
   })
 
   it('surfaces NFS fallback advisories returned on the add mount test error path', async () => {
-    mocks.getMounts.mockResolvedValue([])
-    mocks.validateMountCandidate.mockRejectedValue({
+    mocks.getShares.mockResolvedValue([])
+    mocks.validateShareCandidate.mockRejectedValue({
       response: {
         status: 409,
         data: {
@@ -807,8 +807,8 @@ describe('MountsView removal flow', () => {
   })
 
   it('keeps the add dialog open and shows feedback when the in-dialog test fails', async () => {
-    mocks.getMounts.mockResolvedValue([])
-    mocks.validateMountCandidate.mockRejectedValue({ response: { data: { detail: 'Authentication failed for new share.' } } })
+    mocks.getShares.mockResolvedValue([])
+    mocks.validateShareCandidate.mockRejectedValue({ response: { data: { detail: 'Authentication failed for new share.' } } })
 
     const wrapper = mountView()
     await flushPromises()
@@ -827,12 +827,12 @@ describe('MountsView removal flow', () => {
     expect(wrapper.find('#mount-type').exists()).toBe(true)
     expect(wrapper.find('.error-banner').text()).toContain('Authentication failed for new share.')
     expect(findDialogButton(wrapper, i18n.global.t('common.actions.create')).attributes('disabled')).toBeDefined()
-    expect(mocks.createMount).not.toHaveBeenCalled()
+    expect(mocks.createShare).not.toHaveBeenCalled()
   })
 
   it('does not render manager-only row actions for non-manager roles', async () => {
     authState.roles = ['auditor']
-    mocks.getMounts.mockResolvedValue([buildMount({ status: 'MOUNTED' })])
+    mocks.getShares.mockResolvedValue([buildMount({ status: 'MOUNTED' })])
 
     const wrapper = mountView()
     await flushPromises()
@@ -849,7 +849,7 @@ describe('MountsView removal flow', () => {
   })
 
   it('clears the test success banner when the add dialog is cancelled', async () => {
-    mocks.getMounts.mockResolvedValue([])
+    mocks.getShares.mockResolvedValue([])
 
     const wrapper = mountView()
     await flushPromises()

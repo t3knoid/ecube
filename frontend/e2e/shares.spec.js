@@ -41,11 +41,11 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
     await route.fallback()
   })
 
-  await page.route('**/api/mounts/validate', async (route) => {
+  await page.route('**/api/shares/validate', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mounts) })
   })
 
-  await page.route('**/api/mounts/test', async (route) => {
+  await page.route('**/api/shares/test', async (route) => {
     const body = route.request().postDataJSON()
     candidateValidatePayloads.push(body)
     await route.fulfill({
@@ -61,7 +61,7 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
     })
   })
 
-  await page.route('**/api/mounts/*/validate', async (route) => {
+  await page.route('**/api/shares/*/validate', async (route) => {
     const mountId = Number(route.request().url().split('/').slice(-2, -1)[0])
     const body = route.request().postDataJSON() ?? null
     if (body) {
@@ -80,7 +80,7 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
     })
   })
 
-  await page.route('**/api/mounts/*', async (route) => {
+  await page.route('**/api/shares/*', async (route) => {
     if (route.request().method() === 'PATCH') {
       const mountId = Number(route.request().url().split('/').pop())
       const body = route.request().postDataJSON()
@@ -98,7 +98,7 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
     await route.fallback()
   })
 
-  await page.goto('/mounts')
+  await page.goto('/shares')
   await expect(page.getByRole('heading', { name: 'Mounts' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Test All' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Test', exact: true })).toHaveCount(0)
@@ -238,7 +238,7 @@ test('mounts mobile mounted rows browse from the project value without expanding
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mounts) })
   })
 
-  await page.goto('/mounts')
+  await page.goto('/shares')
   await expect(page.getByRole('heading', { name: 'Mounts' })).toBeVisible()
 
   const row = page.locator('tbody tr').first()

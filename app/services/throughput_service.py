@@ -11,9 +11,9 @@ from app.config import settings
 from app.exceptions import service_exception
 from app.infrastructure.throughput_benchmark import ThroughputBenchmarkProvider
 from app.models.hardware import DriveFormatStatus, DriveState, UsbDrive
-from app.models.network import MountStatus, NetworkMount
+from app.models.network import MountStatus, NetworkShare
 from app.repositories.drive_repository import DriveRepository
-from app.repositories.mount_repository import MountRepository
+from app.repositories.share_repository import ShareRepository
 from app.services.audit_service import log_and_audit
 from app.services.copy_engine import THROUGHPUT_BENCHMARK_SAMPLE_BUCKETS, _build_throughput_benchmark_sample_plan, scan_source_files
 
@@ -199,8 +199,8 @@ def test_mount_read_throughput(
     benchmark_provider: ThroughputBenchmarkProvider,
     actor: Optional[str] = None,
     client_ip: Optional[str] = None,
-) -> NetworkMount:
-    mount_repo = MountRepository(db)
+) -> NetworkShare:
+    mount_repo = ShareRepository(db)
     mount = mount_repo.get(mount_id)
     if mount is None:
         raise service_exception(status_code=404, detail="Mount not found")

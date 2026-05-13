@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { getMounts, updateMount, deleteMount, testMountThroughput, validateMount } from '@/api/mounts.js'
+import { getShares, updateShare, deleteShare, testShareThroughput, validateShare } from '@/api/shares.js'
 import { getPublicAuthConfig } from '@/api/auth.js'
 import { normalizeErrorMessage } from '@/api/client.js'
 import StatusBadge from '@/components/common/StatusBadge.vue'
@@ -141,7 +141,7 @@ async function loadMount() {
   clearBanners()
   try {
     const [mountResult, configResult] = await Promise.allSettled([
-      getMounts(),
+      getShares(),
       getPublicAuthConfig(),
     ])
 
@@ -295,7 +295,7 @@ async function runDialogValidate() {
   dialogError.value = ''
   dialogSuccessMessage.value = ''
   try {
-    const result = await validateMount(mountRecord.value.id, buildMountPayload(), { timeout: networkMountTimeoutMs() })
+    const result = await validateShare(mountRecord.value.id, buildMountPayload(), { timeout: networkMountTimeoutMs() })
     if (result?.status === 'MOUNTED') {
       dialogValidationPassed.value = true
       dialogSuccessMessage.value = t('mounts.testSuccess')
@@ -315,7 +315,7 @@ async function submitMountDialog() {
   clearBanners()
   dialogError.value = ''
   try {
-    const updatedMount = await updateMount(mountRecord.value.id, buildMountPayload(), { timeout: networkMountTimeoutMs() })
+    const updatedMount = await updateShare(mountRecord.value.id, buildMountPayload(), { timeout: networkMountTimeoutMs() })
     if (updatedMount?.status === 'ERROR') {
       dialogError.value = t('mounts.updateFailed')
       return
@@ -335,7 +335,7 @@ async function runThroughputTest() {
   throughputTesting.value = true
   clearBanners()
   try {
-    mountRecord.value = normalizeProjectRecord(await testMountThroughput(mountRecord.value.id, { timeout: 0 }), ['project_id'])
+    mountRecord.value = normalizeProjectRecord(await testShareThroughput(mountRecord.value.id, { timeout: 0 }), ['project_id'])
     infoMessage.value = t('mounts.throughputTestSuccess')
   } catch (requestError) {
     const status = requestError?.response?.status
@@ -375,7 +375,7 @@ async function runRemove() {
   saving.value = true
   clearBanners()
   try {
-    await deleteMount(mountRecord.value.id)
+    await deleteShare(mountRecord.value.id)
     showRemoveDialog.value = false
     router.push({ name: 'mounts' })
   } catch {

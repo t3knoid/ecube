@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { getSystemHealth } from '@/api/introspection.js'
 import { getDrives } from '@/api/drives.js'
 import { listJobs } from '@/api/jobs.js'
-import { getMounts } from '@/api/mounts.js'
+import { getShares } from '@/api/shares.js'
 import { usePolling } from '@/composables/usePolling.js'
 import DataTable from '@/components/common/DataTable.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
@@ -408,7 +408,7 @@ async function refreshDashboard() {
   const results = await Promise.allSettled([
     getSystemHealth(),
     getDrives({ include_disconnected: true }),
-    getMounts(),
+    getShares(),
     listJobs({ limit: 200 }),
   ])
 

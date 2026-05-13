@@ -17,7 +17,7 @@ class MountStatus(str, enum.Enum):
     ERROR = "ERROR"
 
 
-class NetworkMount(Base):
+class NetworkShare(Base):
     __tablename__ = "network_mounts"
     __table_args__ = (
         Index("ix_network_mounts_status_project", "status", "project_id"),

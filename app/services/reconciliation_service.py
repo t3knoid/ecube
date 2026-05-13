@@ -41,7 +41,7 @@ from app.infrastructure import FilesystemDetector
 from app.exceptions import ConflictError
 from app.models.hardware import DriveState, UsbDrive
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, StartupAnalysisEntry, StartupAnalysisStatus
-from app.models.network import MountStatus, NetworkMount
+from app.models.network import MountStatus, NetworkShare
 from app.models.system import ReconciliationLock
 from app.repositories.job_repository import FileRepository, StartupAnalysisEntryRepository
 from app.repositories.user_role_repository import UserRoleRepository
@@ -49,7 +49,7 @@ from app.repositories.audit_repository import AuditRepository
 from app.services.callback_service import deliver_callback
 from app.services.drive_service import normalize_unreleased_drive_states
 from app.services.demo_seed_service import seed_runtime_demo_environment
-from app.services.mount_check_utils import check_mounted_with_configured_timeout
+from app.services.share_check_utils import check_mounted_with_configured_timeout
 from app.services.operation_context import details_with_operation_id as _details_with_operation_id, operation_extra as _operation_extra
 from app.constants import ECUBE_GROUP_ROLE_MAP
 from app.utils.network_mount_paths import cleanup_target_for_generated_network_mount_point, managed_network_mount_root
@@ -593,9 +593,9 @@ def reconcile_mounts(
     For USB drives, persisted mounted drives are re-mounted to their managed
     ECUBE mount slots when possible, and orphan managed USB mounts are removed.
     """
-    from app.services.mount_service import validate_mount
+    from app.services.share_service import validate_share
 
-    mounts = db.query(NetworkMount).all()
+    mounts = db.query(NetworkShare).all()
     live_mounts = read_mount_table()
     persisted_targets = {os.path.normpath(str(m.local_mount_point)) for m in mounts}
 
@@ -670,7 +670,7 @@ def reconcile_mounts(
             _cleanup_generated_network_mount_directory(str(mount.local_mount_point))
 
         try:
-            validate_mount(mount.id, db, actor="system", provider=mount_provider)
+            validate_share(mount.id, db, actor="system", provider=mount_provider)
         except Exception:
             failures += 1
             logger.exception(

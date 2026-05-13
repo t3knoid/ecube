@@ -32,27 +32,27 @@ describe('mounts api helpers', () => {
 
     await discoverMountShares({ type: 'SMB', remote_path: '//server' }, { timeout: 75000 })
 
-    expect(post).toHaveBeenCalledWith('/api/mounts/discover', { type: 'SMB', remote_path: '//server' }, expect.objectContaining({ timeout: 75000 }))
+    expect(post).toHaveBeenCalledWith('/api/shares/discover', { type: 'SMB', remote_path: '//server' }, expect.objectContaining({ timeout: 75000 }))
     expect(toData).toHaveBeenCalled()
   })
 
   it('forwards an optional timeout override for mount validation requests', async () => {
-    const { validateMountCandidate } = await import('@/api/mounts.js')
+    const { validateShareCandidate } = await import('@/api/mounts.js')
 
-    await validateMountCandidate({ type: 'SMB', remote_path: '//server/share', project_id: 'PROJ-1' }, { timeout: 180000 })
+    await validateShareCandidate({ type: 'SMB', remote_path: '//server/share', project_id: 'PROJ-1' }, { timeout: 180000 })
 
-    expect(post).toHaveBeenCalledWith('/api/mounts/test', { type: 'SMB', remote_path: '//server/share', project_id: 'PROJ-1' }, expect.objectContaining({ timeout: 180000 }))
+    expect(post).toHaveBeenCalledWith('/api/shares/test', { type: 'SMB', remote_path: '//server/share', project_id: 'PROJ-1' }, expect.objectContaining({ timeout: 180000 }))
     expect(toData).toHaveBeenCalled()
   })
 
   it('forwards an optional timeout override for mount create and update requests', async () => {
-    const { createMount, updateMount } = await import('@/api/mounts.js')
+    const { createShare, updateShare } = await import('@/api/mounts.js')
 
-    await createMount({ type: 'SMB', remote_path: '//server/share', project_id: 'PROJ-1' }, { timeout: 180000 })
-    await updateMount(11, { type: 'SMB', remote_path: '//server/share', project_id: 'PROJ-1' }, { timeout: 180000 })
+    await createShare({ type: 'SMB', remote_path: '//server/share', project_id: 'PROJ-1' }, { timeout: 180000 })
+    await updateShare(11, { type: 'SMB', remote_path: '//server/share', project_id: 'PROJ-1' }, { timeout: 180000 })
 
     expect(post).toHaveBeenCalledWith('/api/mounts', { type: 'SMB', remote_path: '//server/share', project_id: 'PROJ-1' }, expect.objectContaining({ timeout: 180000 }))
-    expect(patch).toHaveBeenCalledWith('/api/mounts/11', { type: 'SMB', remote_path: '//server/share', project_id: 'PROJ-1' }, expect.objectContaining({ timeout: 180000 }))
+    expect(patch).toHaveBeenCalledWith('/api/shares/11', { type: 'SMB', remote_path: '//server/share', project_id: 'PROJ-1' }, expect.objectContaining({ timeout: 180000 }))
     expect(toData).toHaveBeenCalled()
   })
 })

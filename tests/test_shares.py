@@ -10,13 +10,13 @@ from fastapi import HTTPException
 from app.infrastructure import throughput_benchmark
 from app.infrastructure.throughput_benchmark import LinuxThroughputBenchmarkProvider
 from app.models.jobs import ExportJob, JobStatus
-from app.models.network import MountStatus, MountType, NetworkMount
+from app.models.network import MountStatus, MountType, NetworkShare
 from app.config import settings
 from app.exceptions import ConflictError
-from app.schemas.network import MountUpdate
-from app.services.mount_check_utils import check_mounted_with_configured_timeout
-from app.services.mount_service import (
-    LinuxMountProvider,
+from app.schemas.network import ShareUpdate
+from app.services.share_check_utils import check_mounted_with_configured_timeout
+from app.services.share_service import (
+    LinuxShareProvider,
     _cleanup_generated_mount_directory,
     _ensure_mount_directory,
     sanitize_error_message,
@@ -25,14 +25,14 @@ from app.services.mount_service import (
 )
 
 
-def test_list_mounts_empty(client, db):
-    response = client.get("/mounts")
+def test_list_shares_empty(client, db):
+    response = client.get("/shares")
     assert response.status_code == 200
     assert response.json() == []
 
 
-def test_list_mounts_includes_related_job_status(client, db):
-    mount = NetworkMount(
+def test_list_shares_includes_related_job_status(client, db):
+    mount = NetworkShare(
         type=MountType.SMB,
         remote_path="//server/share",
         project_id="PROJ-011",
@@ -54,7 +54,7 @@ def test_list_mounts_includes_related_job_status(client, db):
     db.add_all([mount, older_job, newer_job])
     db.commit()
 
-    response = client.get("/mounts")
+    response = client.get("/shares")
 
     assert response.status_code == 200
     data = response.json()
@@ -65,8 +65,8 @@ def test_list_mounts_includes_related_job_status(client, db):
     }
 
 
-def test_list_mounts_includes_related_job_custody_status_for_completed_jobs(client, db, monkeypatch):
-    mount = NetworkMount(
+def test_list_shares_includes_related_job_custody_status_for_completed_jobs(client, db, monkeypatch):
+    mount = NetworkShare(
         type=MountType.SMB,
         remote_path="//server/share",
         project_id="PROJ-012",
@@ -87,7 +87,7 @@ def test_list_mounts_includes_related_job_custody_status_for_completed_jobs(clie
         lambda *_args, **_kwargs: {job.id: False},
     )
 
-    response = client.get("/mounts")
+    response = client.get("/shares")
 
     assert response.status_code == 200
     data = response.json()
@@ -98,8 +98,8 @@ def test_list_mounts_includes_related_job_custody_status_for_completed_jobs(clie
     }
 
 
-def test_list_mounts_uses_no_related_job_fallback(client, db):
-    mount = NetworkMount(
+def test_list_shares_uses_no_related_job_fallback(client, db):
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="server:/exports/evidence",
         project_id="PROJ-NONE",
@@ -109,7 +109,7 @@ def test_list_mounts_uses_no_related_job_fallback(client, db):
     db.add(mount)
     db.commit()
 
-    response = client.get("/mounts")
+    response = client.get("/shares")
 
     assert response.status_code == 200
     data = response.json()
@@ -120,8 +120,8 @@ def test_list_mounts_uses_no_related_job_fallback(client, db):
     }
 
 
-def test_list_mounts_uses_status_unavailable_fallback_when_related_job_lookup_fails(client, db, monkeypatch):
-    mount = NetworkMount(
+def test_list_shares_uses_status_unavailable_fallback_when_related_job_lookup_fails(client, db, monkeypatch):
+    mount = NetworkShare(
         type=MountType.SMB,
         remote_path="//server/share",
         project_id="PROJ-ERR",
@@ -140,7 +140,7 @@ def test_list_mounts_uses_status_unavailable_fallback_when_related_job_lookup_fa
 
     monkeypatch.setattr(db, "query", query_with_related_job_failure)
 
-    response = client.get("/mounts")
+    response = client.get("/shares")
 
     assert response.status_code == 200
     data = response.json()
@@ -151,11 +151,11 @@ def test_list_mounts_uses_status_unavailable_fallback_when_related_job_lookup_fa
     }
 
 
-def test_mount_throughput_test_persists_latest_measurement(manager_client, db, tmp_path):
+def test_share_throughput_test_persists_latest_measurement(manager_client, db, tmp_path):
     mount_root = tmp_path / "share"
     mount_root.mkdir()
     (mount_root / "sample.bin").write_bytes(b"a" * 8192)
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="server:/throughput",
         project_id="PROJ-THROUGHPUT",
@@ -182,10 +182,10 @@ def test_mount_throughput_test_persists_latest_measurement(manager_client, db, t
     assert mount.throughput_tested_at is not None
 
 
-def test_mount_throughput_test_requires_readable_files(manager_client, db, tmp_path):
+def test_share_throughput_test_requires_readable_files(manager_client, db, tmp_path):
     mount_root = tmp_path / "empty-share"
     mount_root.mkdir()
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="server:/empty-throughput",
         project_id="PROJ-EMPTY",
@@ -225,7 +225,7 @@ def test_share_read_benchmark_uses_best_effort_cache_hints(tmp_path):
     ]
 
 
-def test_add_mount(manager_client, db):
+def test_add_share(manager_client, db):
     with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
          patch("subprocess.run") as mock_run:
@@ -247,7 +247,7 @@ def test_add_mount(manager_client, db):
     assert data["status"] == "MOUNTED"
 
 
-def test_add_mount_uses_nfs_v4_1_to_avoid_slow_negotiation(manager_client, db):
+def test_add_share_uses_nfs_v4_1_to_avoid_slow_negotiation(manager_client, db):
     with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
          patch("subprocess.run") as mock_run:
@@ -293,7 +293,7 @@ def test_add_mount_uses_nfs_v4_1_to_avoid_slow_negotiation(manager_client, db):
     assert mount.nfs_client_version is None
 
 
-def test_add_mount_persists_requested_nfs_client_version(manager_client, db):
+def test_add_share_persists_requested_nfs_client_version(manager_client, db):
     with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
          patch("subprocess.run") as mock_run:
@@ -315,7 +315,7 @@ def test_add_mount_persists_requested_nfs_client_version(manager_client, db):
     assert "vers=4.2" in mock_run.call_args_list[0].args[0]
 
 
-def test_add_mount_persists_credentials_encrypted(manager_client, db):
+def test_add_share_persists_credentials_encrypted(manager_client, db):
     with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
          patch("subprocess.run") as mock_run:
@@ -348,7 +348,7 @@ def test_add_mount_persists_credentials_encrypted(manager_client, db):
     assert mount.encrypted_credentials_file != "/etc/ecube/mount.creds"
 
 
-def test_add_mount_requires_project_id(manager_client, db):
+def test_add_share_requires_project_id(manager_client, db):
     response = manager_client.post(
         "/mounts",
         json={
@@ -360,8 +360,8 @@ def test_add_mount_requires_project_id(manager_client, db):
     assert response.status_code == 422
 
 
-def test_update_mount_updates_existing_record_without_creating_new_one(manager_client, db):
-    mount = NetworkMount(
+def test_update_share_updates_existing_record_without_creating_new_one(manager_client, db):
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="192.168.1.10:/exports/original",
         project_id="PROJ-OLD",
@@ -370,14 +370,14 @@ def test_update_mount_updates_existing_record_without_creating_new_one(manager_c
     )
     db.add(mount)
     db.commit()
-    mount_id = mount.id
+    share_id = mount.id
 
     with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
          patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0)
         response = manager_client.patch(
-            f"/mounts/{mount_id}",
+            f"/mounts/{share_id}",
             json={
                 "type": "SMB",
                 "remote_path": "//server/updated-share",
@@ -389,7 +389,7 @@ def test_update_mount_updates_existing_record_without_creating_new_one(manager_c
 
     assert response.status_code == 200
     data = response.json()
-    assert data["id"] == mount_id
+    assert data["id"] == share_id
     assert data["type"] == "SMB"
     assert data["remote_path"] == "//server/updated-share"
     assert data["project_id"] == "PROJ-NEW"
@@ -399,19 +399,19 @@ def test_update_mount_updates_existing_record_without_creating_new_one(manager_c
     db.expire_all()
     mounts = db.query(NetworkMount).order_by(NetworkMount.id).all()
     assert len(mounts) == 1
-    assert mounts[0].id == mount_id
+    assert mounts[0].id == share_id
     assert mounts[0].project_id == "PROJ-NEW"
 
 
-def test_update_mount_rejects_conflicting_remote_path(manager_client, db):
-    existing = NetworkMount(
+def test_update_share_rejects_conflicting_remote_path(manager_client, db):
+    existing = NetworkShare(
         type=MountType.NFS,
         remote_path="192.168.1.20:/exports/existing",
         project_id="PROJ-EXISTING",
         local_mount_point="/nfs/existing",
         status=MountStatus.UNMOUNTED,
     )
-    target = NetworkMount(
+    target = NetworkShare(
         type=MountType.NFS,
         remote_path="192.168.1.21:/exports/target",
         project_id="PROJ-TARGET",
@@ -434,7 +434,7 @@ def test_update_mount_rejects_conflicting_remote_path(manager_client, db):
     assert "already configured" in response.json()["message"].lower()
 
 
-def test_update_mount_not_found(manager_client, db):
+def test_update_share_not_found(manager_client, db):
     response = manager_client.patch(
         "/mounts/999",
         json={
@@ -447,7 +447,7 @@ def test_update_mount_not_found(manager_client, db):
     assert response.status_code == 404
 
 
-def test_update_mount_preserves_existing_credentials_when_not_resubmitted(manager_client, db):
+def test_update_share_preserves_existing_credentials_when_not_resubmitted(manager_client, db):
     with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
          patch("subprocess.run") as mock_run:
@@ -464,14 +464,14 @@ def test_update_mount_preserves_existing_credentials_when_not_resubmitted(manage
         )
 
         assert created.status_code == 200
-        mount_id = created.json()["id"]
+        share_id = created.json()["id"]
 
-        original = db.query(NetworkMount).filter(NetworkMount.id == mount_id).one()
+        original = db.query(NetworkMount).filter(NetworkMount.id == share_id).one()
         original_encrypted_username = original.encrypted_username
         original_encrypted_password = original.encrypted_password
 
         updated = manager_client.patch(
-            f"/mounts/{mount_id}",
+            f"/mounts/{share_id}",
             json={
                 "type": "SMB",
                 "remote_path": "//server/updated-share",
@@ -482,13 +482,13 @@ def test_update_mount_preserves_existing_credentials_when_not_resubmitted(manage
     assert updated.status_code == 200
 
     db.expire_all()
-    saved = db.query(NetworkMount).filter(NetworkMount.id == mount_id).one()
+    saved = db.query(NetworkMount).filter(NetworkMount.id == share_id).one()
     assert saved.encrypted_username == original_encrypted_username
     assert saved.encrypted_password == original_encrypted_password
 
 
-def test_update_mount_api_remounts_live_nfs_share_with_new_client_version(manager_client, db):
-    mount = NetworkMount(
+def test_update_share_api_remounts_live_nfs_share_with_new_client_version(manager_client, db):
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="192.168.1.10:/exports/original",
         project_id="PROJ-OLD",
@@ -507,7 +507,7 @@ def test_update_mount_api_remounts_live_nfs_share_with_new_client_version(manage
         def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None, nfs_client_version=None):
             self.mount_calls.append(
                 {
-                    "mount_type": mount_type,
+                    "share_type": mount_type,
                     "remote_path": remote_path,
                     "local_mount_point": local_mount_point,
                     "credentials_file": credentials_file,
@@ -556,7 +556,7 @@ def test_update_mount_api_remounts_live_nfs_share_with_new_client_version(manage
     assert provider.unmount_calls == ["/nfs/original"]
     assert provider.mount_calls == [
         {
-            "mount_type": MountType.NFS,
+            "share_type": MountType.NFS,
             "remote_path": "192.168.1.10:/exports/updated",
             "local_mount_point": "/nfs/original",
             "credentials_file": None,
@@ -567,11 +567,11 @@ def test_update_mount_api_remounts_live_nfs_share_with_new_client_version(manage
     ]
 
 
-def test_update_mount_uses_stored_credentials_when_not_resubmitted(db):
-    from app.schemas.network import MountUpdate
+def test_update_share_uses_stored_credentials_when_not_resubmitted(db):
+    from app.schemas.network import ShareUpdate
     from app.services import mount_service
 
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=MountType.SMB,
         remote_path="//server/original-share",
         project_id="PROJ-ORIGINAL",
@@ -591,7 +591,7 @@ def test_update_mount_uses_stored_credentials_when_not_resubmitted(db):
         def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None, nfs_client_version=None):
             self.calls.append(
                 {
-                    "mount_type": mount_type,
+                    "share_type": mount_type,
                     "remote_path": remote_path,
                     "local_mount_point": local_mount_point,
                     "credentials_file": credentials_file,
@@ -620,7 +620,7 @@ def test_update_mount_uses_stored_credentials_when_not_resubmitted(db):
     assert result.status == MountStatus.MOUNTED
     assert provider.calls == [
         {
-            "mount_type": MountType.SMB,
+            "share_type": MountType.SMB,
             "remote_path": "//server/updated-share",
             "local_mount_point": "/smb/original-share",
             "credentials_file": None,
@@ -630,11 +630,11 @@ def test_update_mount_uses_stored_credentials_when_not_resubmitted(db):
     ]
 
 
-def test_update_mount_remounts_live_nfs_share_with_new_client_version(db):
-    from app.schemas.network import MountUpdate
+def test_update_share_remounts_live_nfs_share_with_new_client_version(db):
+    from app.schemas.network import ShareUpdate
     from app.services import mount_service
 
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="192.168.1.10:/exports/original",
         project_id="PROJ-ORIGINAL",
@@ -654,7 +654,7 @@ def test_update_mount_remounts_live_nfs_share_with_new_client_version(db):
         def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None, nfs_client_version=None):
             self.mount_calls.append(
                 {
-                    "mount_type": mount_type,
+                    "share_type": mount_type,
                     "remote_path": remote_path,
                     "local_mount_point": local_mount_point,
                     "credentials_file": credentials_file,
@@ -692,7 +692,7 @@ def test_update_mount_remounts_live_nfs_share_with_new_client_version(db):
     assert provider.unmount_calls == ["/nfs/original"]
     assert provider.mount_calls == [
         {
-            "mount_type": MountType.NFS,
+            "share_type": MountType.NFS,
             "remote_path": "192.168.1.10:/exports/updated",
             "local_mount_point": "/nfs/original",
             "credentials_file": None,
@@ -703,10 +703,10 @@ def test_update_mount_remounts_live_nfs_share_with_new_client_version(db):
     ]
 
 
-def test_validate_mount_uses_stored_credentials_when_share_is_not_active(db):
+def test_validate_share_uses_stored_credentials_when_share_is_not_active(db):
     from app.services import mount_service
 
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=MountType.SMB,
         remote_path="//server/validate-share",
         project_id="PROJ-VALIDATE",
@@ -726,7 +726,7 @@ def test_validate_mount_uses_stored_credentials_when_share_is_not_active(db):
         def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None, nfs_client_version=None):
             self.calls.append(
                 {
-                    "mount_type": mount_type,
+                    "share_type": mount_type,
                     "remote_path": remote_path,
                     "local_mount_point": local_mount_point,
                     "credentials_file": credentials_file,
@@ -747,7 +747,7 @@ def test_validate_mount_uses_stored_credentials_when_share_is_not_active(db):
     assert result.status == MountStatus.MOUNTED
     assert provider.calls == [
         {
-            "mount_type": MountType.SMB,
+            "share_type": MountType.SMB,
             "remote_path": "//server/validate-share",
             "local_mount_point": "/smb/validate-share",
             "credentials_file": None,
@@ -757,8 +757,8 @@ def test_validate_mount_uses_stored_credentials_when_share_is_not_active(db):
     ]
 
 
-def test_update_mount_requires_admin_or_manager(auditor_client, db):
-    mount = NetworkMount(
+def test_update_share_requires_admin_or_manager(auditor_client, db):
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="192.168.1.23:/exports/protected",
         project_id="PROJ-PROTECTED",
@@ -780,7 +780,7 @@ def test_update_mount_requires_admin_or_manager(auditor_client, db):
     assert response.status_code == 403
 
 
-def test_add_mount_normalizes_project_id(manager_client, db):
+def test_add_share_normalizes_project_id(manager_client, db):
     with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
          patch("subprocess.run") as mock_run:
@@ -800,7 +800,7 @@ def test_add_mount_normalizes_project_id(manager_client, db):
 
 
 def test_network_mount_model_normalizes_project_id(db):
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="192.168.1.9:/exports/direct-model",
         project_id="  proj-model  ",
@@ -814,7 +814,7 @@ def test_network_mount_model_normalizes_project_id(db):
     assert mount.project_id == "PROJ-MODEL"
 
 
-def test_add_mount_rejects_client_local_mount_point(manager_client, db):
+def test_add_share_rejects_client_local_mount_point(manager_client, db):
     response = manager_client.post(
         "/mounts",
         json={
@@ -826,7 +826,7 @@ def test_add_mount_rejects_client_local_mount_point(manager_client, db):
     assert response.status_code == 422
 
 
-def test_add_mount_logs_attempt_and_success(manager_client, db, caplog):
+def test_add_share_logs_attempt_and_success(manager_client, db, caplog):
     with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
          patch("subprocess.run") as mock_run:
@@ -850,7 +850,7 @@ def test_add_mount_logs_attempt_and_success(manager_client, db, caplog):
     assert not any("sudo -n" in m for m in messages)
 
 
-def test_add_mount_uses_unique_generated_local_mount_point(manager_client, db):
+def test_add_share_uses_unique_generated_local_mount_point(manager_client, db):
     with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
          patch("subprocess.run") as mock_run:
@@ -870,7 +870,7 @@ def test_add_mount_uses_unique_generated_local_mount_point(manager_client, db):
     assert second.json()["local_mount_point"] == f"{settings.network_mount_base_path}/evidence-2"
 
 
-def test_add_mount_acquires_create_lock(manager_client, db):
+def test_add_share_acquires_create_lock(manager_client, db):
     with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
          patch("app.services.mount_service.MountRepository.acquire_create_lock") as mock_lock, \
@@ -885,7 +885,7 @@ def test_add_mount_acquires_create_lock(manager_client, db):
     mock_lock.assert_called_once()
 
 
-def test_add_mount_rejects_exact_duplicate_remote_path_even_same_project(manager_client, db):
+def test_add_share_rejects_exact_duplicate_remote_path_even_same_project(manager_client, db):
     with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
          patch("subprocess.run") as mock_run:
@@ -904,7 +904,7 @@ def test_add_mount_rejects_exact_duplicate_remote_path_even_same_project(manager
     assert "already configured" in second.json()["message"].lower()
 
 
-def test_add_mount_rejects_nested_remote_path_for_different_project(manager_client, db):
+def test_add_share_rejects_nested_remote_path_for_different_project(manager_client, db):
     with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
          patch("subprocess.run") as mock_run:
@@ -923,7 +923,7 @@ def test_add_mount_rejects_nested_remote_path_for_different_project(manager_clie
     assert "overlap" in second.json()["message"].lower()
 
 
-def test_add_mount_rejects_parent_remote_path_for_different_project(manager_client, db):
+def test_add_share_rejects_parent_remote_path_for_different_project(manager_client, db):
     with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
          patch("subprocess.run") as mock_run:
@@ -942,7 +942,7 @@ def test_add_mount_rejects_parent_remote_path_for_different_project(manager_clie
     assert "overlap" in second.json()["message"].lower()
 
 
-def test_add_mount_allows_nested_remote_path_for_same_project(manager_client, db):
+def test_add_share_allows_nested_remote_path_for_same_project(manager_client, db):
     with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
          patch("subprocess.run") as mock_run:
@@ -961,7 +961,7 @@ def test_add_mount_allows_nested_remote_path_for_same_project(manager_client, db
     assert second.json()["project_id"] == "PROJ-001"
 
 
-def test_add_mount_rejects_exact_duplicate_smb_remote_path(manager_client, db):
+def test_add_share_rejects_exact_duplicate_smb_remote_path(manager_client, db):
     with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
          patch("subprocess.run") as mock_run:
@@ -980,7 +980,7 @@ def test_add_mount_rejects_exact_duplicate_smb_remote_path(manager_client, db):
     assert "already configured" in second.json()["message"].lower()
 
 
-def test_add_mount_rejects_nested_smb_remote_path_for_different_project(manager_client, db):
+def test_add_share_rejects_nested_smb_remote_path_for_different_project(manager_client, db):
     with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
          patch("subprocess.run") as mock_run:
@@ -999,7 +999,7 @@ def test_add_mount_rejects_nested_smb_remote_path_for_different_project(manager_
     assert "overlap" in second.json()["message"].lower()
 
 
-def test_add_mount_failure(manager_client, db):
+def test_add_share_failure(manager_client, db):
     from app.models.audit import AuditLog
 
     with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
@@ -1008,7 +1008,7 @@ def test_add_mount_failure(manager_client, db):
         mock_run.return_value = MagicMock(
             returncode=1,
             stderr=(
-                "mount.nfs: access denied by server while mounting "
+                "share.nfs: access denied by server while mounting "
                 f"192.168.1.1:/exports/evidence on {settings.network_mount_base_path}/evidence"
             ),
             stdout="",
@@ -1034,7 +1034,7 @@ def test_add_mount_failure(manager_client, db):
     assert f"{settings.network_mount_base_path}/evidence" not in str(audit.details)
 
 
-def test_add_mount_fails_when_mountpoint_owned_by_root(manager_client, db):
+def test_add_share_fails_when_mountpoint_owned_by_root(manager_client, db):
     with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
          patch(
              "app.services.mount_service._validate_mount_directory_owner",
@@ -1056,13 +1056,13 @@ def test_add_mount_fails_when_mountpoint_owned_by_root(manager_client, db):
     mock_run.assert_not_called()
 
 
-def test_add_mount_logs_failure(manager_client, db, caplog):
+def test_add_share_logs_failure(manager_client, db, caplog):
     with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
          patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(
             returncode=1,
-            stderr="mount.nfs: access denied by server while mounting 192.168.1.3:/exports/audit",
+            stderr="share.nfs: access denied by server while mounting 192.168.1.3:/exports/audit",
             stdout="",
         )
         with caplog.at_level("DEBUG"):
@@ -1095,13 +1095,13 @@ def test_add_mount_logs_failure(manager_client, db, caplog):
     assert not any("sudo -n" in m for m in messages)
 
 
-def test_add_mount_logs_useful_info_on_nfs_failure(manager_client, db, caplog):
+def test_add_share_logs_useful_info_on_nfs_failure(manager_client, db, caplog):
     with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
          patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(
             returncode=1,
-            stderr="mount.nfs: access denied by server while mounting 192.168.1.3:/exports/info",
+            stderr="share.nfs: access denied by server while mounting 192.168.1.3:/exports/info",
             stdout="",
         )
         with caplog.at_level("INFO"):
@@ -1120,7 +1120,7 @@ def test_add_mount_logs_useful_info_on_nfs_failure(manager_client, db, caplog):
     assert any(
         "Mount attempt failed" in message
         and "type=NFS" in message
-        and "mount_label=info" in message
+        and "share_label=info" in message
         and "failure_category=mount_add" in message
         and "reason=Permission or authentication failure" in message
         and "/exports/info" not in message
@@ -1129,8 +1129,8 @@ def test_add_mount_logs_useful_info_on_nfs_failure(manager_client, db, caplog):
     )
 
 
-def test_list_mounts(manager_client, db):
-    mount = NetworkMount(
+def test_list_shares(manager_client, db):
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="192.168.1.1:/data",
         local_mount_point="/mnt/data",
@@ -1139,15 +1139,15 @@ def test_list_mounts(manager_client, db):
     db.add(mount)
     db.commit()
 
-    response = manager_client.get("/mounts")
+    response = manager_client.get("/shares")
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 1
     assert data[0]["local_mount_point"] == "/mnt/data"
 
 
-def test_list_mounts_redacts_sensitive_paths_for_auditor(auditor_client, db):
-    mount = NetworkMount(
+def test_list_shares_redacts_sensitive_paths_for_auditor(auditor_client, db):
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="192.168.1.1:/data",
         local_mount_point="/mnt/data",
@@ -1156,7 +1156,7 @@ def test_list_mounts_redacts_sensitive_paths_for_auditor(auditor_client, db):
     db.add(mount)
     db.commit()
 
-    response = auditor_client.get("/mounts")
+    response = auditor_client.get("/shares")
 
     assert response.status_code == 200
     data = response.json()
@@ -1165,8 +1165,8 @@ def test_list_mounts_redacts_sensitive_paths_for_auditor(auditor_client, db):
     assert data[0]["local_mount_point"] == "[REDACTED]"
 
 
-def test_delete_mount(manager_client, db):
-    mount = NetworkMount(
+def test_delete_share(manager_client, db):
+    mount = NetworkShare(
         type=MountType.SMB,
         remote_path="//192.168.1.1/share",
         local_mount_point="/mnt/share",
@@ -1174,16 +1174,16 @@ def test_delete_mount(manager_client, db):
     )
     db.add(mount)
     db.commit()
-    mount_id = mount.id
+    share_id = mount.id
 
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0)
-        response = manager_client.delete(f"/mounts/{mount_id}")
+        response = manager_client.delete(f"/mounts/{share_id}")
     assert response.status_code == 204
 
 
-def test_delete_mount_removes_generated_mount_directory(manager_client, db):
-    mount = NetworkMount(
+def test_delete_share_removes_generated_mount_directory(manager_client, db):
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="192.168.1.1:/share",
         local_mount_point=f"{settings.network_mount_base_path}/share",
@@ -1200,8 +1200,8 @@ def test_delete_mount_removes_generated_mount_directory(manager_client, db):
     mock_rmdir.assert_called_once_with(f"{settings.network_mount_base_path}/share")
 
 
-def test_delete_mount_does_not_remove_legacy_mount_directory(manager_client, db):
-    mount = NetworkMount(
+def test_delete_share_does_not_remove_legacy_mount_directory(manager_client, db):
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="192.168.1.1:/share",
         local_mount_point="/nfs/share",
@@ -1218,8 +1218,8 @@ def test_delete_mount_does_not_remove_legacy_mount_directory(manager_client, db)
     mock_rmdir.assert_not_called()
 
 
-def test_delete_mount_does_not_remove_nested_managed_path(manager_client, db):
-    mount = NetworkMount(
+def test_delete_share_does_not_remove_nested_managed_path(manager_client, db):
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="192.168.1.1:/share",
         local_mount_point=f"{settings.network_mount_base_path}/team/music",
@@ -1286,13 +1286,13 @@ def test_ensure_mount_directory_uses_sudo_mkdir_and_chown_for_managed_paths(monk
     ]
 
 
-def test_delete_mount_not_found(manager_client, db):
-    response = manager_client.delete("/mounts/999")
+def test_delete_share_not_found(manager_client, db):
+    response = manager_client.delete("/shares/999")
     assert response.status_code == 404
 
 
-def test_delete_mount_returns_conflict_when_unmount_fails(manager_client, db, caplog):
-    mount = NetworkMount(
+def test_delete_share_returns_conflict_when_unmount_fails(manager_client, db, caplog):
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="192.168.1.1:/share",
         local_mount_point="/mnt/share",
@@ -1319,7 +1319,7 @@ def test_delete_mount_returns_conflict_when_unmount_fails(manager_client, db, ca
 
 
 def test_delete_unmounted_mount_skips_os_unmount_and_removes_record(manager_client, db):
-    mount = NetworkMount(
+    mount = NetworkShare(
         type=MountType.SMB,
         remote_path="//server/share",
         local_mount_point="/smb/project2",
@@ -1338,8 +1338,8 @@ def test_delete_unmounted_mount_skips_os_unmount_and_removes_record(manager_clie
     assert db.get(NetworkMount, mount.id) is None
 
 
-def test_delete_mount_treats_not_mounted_error_as_success(manager_client, db):
-    mount = NetworkMount(
+def test_delete_share_treats_not_mounted_error_as_success(manager_client, db):
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="192.168.1.1:/share",
         local_mount_point="/mnt/share",
@@ -1360,8 +1360,8 @@ def test_delete_mount_treats_not_mounted_error_as_success(manager_client, db):
     assert db.get(NetworkMount, mount.id) is None
 
 
-def test_validate_mount_success(manager_client, db):
-    mount = NetworkMount(
+def test_validate_share_success(manager_client, db):
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="192.168.1.1:/data",
         local_mount_point="/mnt/data",
@@ -1369,11 +1369,11 @@ def test_validate_mount_success(manager_client, db):
     )
     db.add(mount)
     db.commit()
-    mount_id = mount.id
+    share_id = mount.id
 
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0)
-        response = manager_client.post(f"/mounts/{mount_id}/validate")
+        response = manager_client.post(f"/mounts/{share_id}/validate")
 
     assert response.status_code == 200
     data = response.json()
@@ -1385,8 +1385,8 @@ def test_validate_mount_success(manager_client, db):
     assert "credentials_file" not in data
 
 
-def test_validate_mount_unmounted(manager_client, db):
-    mount = NetworkMount(
+def test_validate_share_unmounted(manager_client, db):
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="192.168.1.1:/data",
         local_mount_point="/mnt/data",
@@ -1394,11 +1394,11 @@ def test_validate_mount_unmounted(manager_client, db):
     )
     db.add(mount)
     db.commit()
-    mount_id = mount.id
+    share_id = mount.id
 
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=1)
-        response = manager_client.post(f"/mounts/{mount_id}/validate")
+        response = manager_client.post(f"/mounts/{share_id}/validate")
 
     assert response.status_code == 200
     data = response.json()
@@ -1406,8 +1406,8 @@ def test_validate_mount_unmounted(manager_client, db):
     assert data["last_checked_at"] is not None
 
 
-def test_validate_mount_command_failure(manager_client, db):
-    mount = NetworkMount(
+def test_validate_share_command_failure(manager_client, db):
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="192.168.1.1:/data",
         local_mount_point="/mnt/data",
@@ -1415,10 +1415,10 @@ def test_validate_mount_command_failure(manager_client, db):
     )
     db.add(mount)
     db.commit()
-    mount_id = mount.id
+    share_id = mount.id
 
     with patch("subprocess.run", side_effect=Exception("command not found")):
-        response = manager_client.post(f"/mounts/{mount_id}/validate")
+        response = manager_client.post(f"/mounts/{share_id}/validate")
 
     assert response.status_code == 200
     data = response.json()
@@ -1426,7 +1426,7 @@ def test_validate_mount_command_failure(manager_client, db):
     assert data["last_checked_at"] is not None
 
 
-def test_validate_mount_candidate_returns_candidate_without_persisting(manager_client, db, caplog):
+def test_validate_share_candidate_returns_candidate_without_persisting(manager_client, db, caplog):
     class StatefulProvider:
         def __init__(self):
             self.mounted = False
@@ -1439,7 +1439,7 @@ def test_validate_mount_candidate_returns_candidate_without_persisting(manager_c
         def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None, nfs_client_version=None):
             self.mount_calls.append(
                 {
-                    "mount_type": mount_type,
+                    "share_type": mount_type,
                     "remote_path": remote_path,
                     "local_mount_point": local_mount_point,
                     "credentials_file": credentials_file,
@@ -1462,7 +1462,7 @@ def test_validate_mount_candidate_returns_candidate_without_persisting(manager_c
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None):
         with caplog.at_level("INFO"):
             response = manager_client.post(
-                "/mounts/test",
+                "/shares/test",
                 json={
                     "type": "NFS",
                     "remote_path": "192.168.1.1:/exports/evidence",
@@ -1484,7 +1484,7 @@ def test_validate_mount_candidate_returns_candidate_without_persisting(manager_c
     assert db.query(NetworkMount).count() == 0
     assert provider.mount_calls == [
         {
-            "mount_type": MountType.NFS,
+            "share_type": MountType.NFS,
             "remote_path": "192.168.1.1:/exports/evidence",
             "local_mount_point": f"{settings.network_mount_base_path}/evidence",
             "credentials_file": None,
@@ -1498,7 +1498,7 @@ def test_validate_mount_candidate_returns_candidate_without_persisting(manager_c
     assert any("Mount candidate validation succeeded" in message for message in info_messages)
 
 
-def test_validate_mount_candidate_warns_when_nfs_41_is_slow_and_nfs_3_is_faster(manager_client, db):
+def test_validate_share_candidate_warns_when_nfs_41_is_slow_and_nfs_3_is_faster(manager_client, db):
     class StatefulProvider:
         def __init__(self):
             self.mounted = False
@@ -1527,7 +1527,7 @@ def test_validate_mount_candidate_warns_when_nfs_41_is_slow_and_nfs_3_is_faster(
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
          patch("app.services.mount_service._timed_mount_attempt", side_effect=fake_timed_mount_attempt):
         response = manager_client.post(
-            "/mounts/test",
+            "/shares/test",
             json={
                 "type": "NFS",
                 "remote_path": "192.168.20.240:/volume1/demo-case-002",
@@ -1548,7 +1548,7 @@ def test_validate_mount_candidate_warns_when_nfs_41_is_slow_and_nfs_3_is_faster(
     ]
 
 
-def test_validate_mount_candidate_warns_when_default_nfs_41_is_slow_and_nfs_3_is_faster(manager_client, db):
+def test_validate_share_candidate_warns_when_default_nfs_41_is_slow_and_nfs_3_is_faster(manager_client, db):
     class StatefulProvider:
         def __init__(self):
             self.mounted = False
@@ -1577,7 +1577,7 @@ def test_validate_mount_candidate_warns_when_default_nfs_41_is_slow_and_nfs_3_is
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
          patch("app.services.mount_service._timed_mount_attempt", side_effect=fake_timed_mount_attempt):
         response = manager_client.post(
-            "/mounts/test",
+            "/shares/test",
             json={
                 "type": "NFS",
                 "remote_path": "192.168.20.240:/volume1/demo-case-002",
@@ -1598,7 +1598,7 @@ def test_validate_mount_candidate_warns_when_default_nfs_41_is_slow_and_nfs_3_is
     ]
 
 
-def test_validate_mount_candidate_timeout_returns_conflict(manager_client, db, caplog):
+def test_validate_share_candidate_timeout_returns_conflict(manager_client, db, caplog):
     with patch("app.services.mount_service._ensure_mount_directory", return_value=None), \
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
          patch(
@@ -1610,7 +1610,7 @@ def test_validate_mount_candidate_timeout_returns_conflict(manager_client, db, c
          ):
         with caplog.at_level("INFO"):
             response = manager_client.post(
-                "/mounts/test",
+                "/shares/test",
                 json={
                     "type": "NFS",
                     "remote_path": "192.168.20.240:/volume1/demo-case-001",
@@ -1625,7 +1625,7 @@ def test_validate_mount_candidate_timeout_returns_conflict(manager_client, db, c
     assert any(
         "Mount candidate validation failed" in message
         and "type=NFS" in message
-        and "mount_label=demo-case-001" in message
+        and "share_label=demo-case-001" in message
         and "failure_category=mount_validate_candidate" in message
         and "reason=Operation timed out" in message
         for message in info_messages
@@ -1633,13 +1633,13 @@ def test_validate_mount_candidate_timeout_returns_conflict(manager_client, db, c
     assert any(
         "Mount command timed out" in message
         and "type=NFS" in message
-        and "mount_label=demo-case-001" in message
+        and "share_label=demo-case-001" in message
         and "reason=Operation timed out" in message
         for message in warning_messages
     )
 
 
-def test_validate_mount_candidate_reports_nfs_3_fallback_when_nfs_41_times_out(manager_client, db):
+def test_validate_share_candidate_reports_nfs_3_fallback_when_nfs_41_times_out(manager_client, db):
     class StatefulProvider:
         def __init__(self):
             self.mounted = False
@@ -1669,7 +1669,7 @@ def test_validate_mount_candidate_reports_nfs_3_fallback_when_nfs_41_times_out(m
          patch("app.services.mount_service._validate_mount_directory_owner", return_value=None), \
          patch("app.services.mount_service._timed_mount_attempt", side_effect=fake_timed_mount_attempt):
         response = manager_client.post(
-            "/mounts/test",
+            "/shares/test",
             json={
                 "type": "NFS",
                 "remote_path": "192.168.20.240:/volume1/demo-case-002",
@@ -1686,7 +1686,7 @@ def test_validate_mount_candidate_reports_nfs_3_fallback_when_nfs_41_times_out(m
     assert provider.unmount_calls == [f"{settings.network_mount_base_path}/demo-case-002"]
 
 
-def test_discover_mount_shares_returns_sanitized_remote_paths_and_reuses_credentials(manager_client, db):
+def test_discover_share_shares_returns_sanitized_remote_paths_and_reuses_credentials(manager_client, db):
     class FakeProvider:
         def __init__(self):
             self.calls = []
@@ -1694,7 +1694,7 @@ def test_discover_mount_shares_returns_sanitized_remote_paths_and_reuses_credent
         def discover_shares(self, mount_type, remote_path, *, credentials_file=None, username=None, password=None):
             self.calls.append(
                 {
-                    "mount_type": mount_type,
+                    "share_type": mount_type,
                     "remote_path": remote_path,
                     "credentials_file": credentials_file,
                     "username": username,
@@ -1707,7 +1707,7 @@ def test_discover_mount_shares_returns_sanitized_remote_paths_and_reuses_credent
 
     with patch("app.services.mount_service._default_provider", return_value=provider):
         response = manager_client.post(
-            "/mounts/discover",
+            "/shares/discover",
             json={
                 "type": "SMB",
                 "remote_path": "//fileserver",
@@ -1725,7 +1725,7 @@ def test_discover_mount_shares_returns_sanitized_remote_paths_and_reuses_credent
     }
     assert provider.calls == [
         {
-            "mount_type": MountType.SMB,
+            "share_type": MountType.SMB,
             "remote_path": "//fileserver",
             "credentials_file": None,
             "username": "svc-reader",
@@ -1734,14 +1734,14 @@ def test_discover_mount_shares_returns_sanitized_remote_paths_and_reuses_credent
     ]
 
 
-def test_discover_mount_shares_allows_admin_role(admin_client, db):
+def test_discover_share_shares_allows_admin_role(admin_client, db):
     class FakeProvider:
         def discover_shares(self, mount_type, remote_path, *, credentials_file=None, username=None, password=None):
             return ["//fileserver/AdminShare"]
 
     with patch("app.services.mount_service._default_provider", return_value=FakeProvider()):
         response = admin_client.post(
-            "/mounts/discover",
+            "/shares/discover",
             json={
                 "type": "SMB",
                 "remote_path": "//fileserver",
@@ -1756,9 +1756,9 @@ def test_discover_mount_shares_allows_admin_role(admin_client, db):
     }
 
 
-def test_discover_mount_shares_requires_authentication(unauthenticated_client, db):
+def test_discover_share_shares_requires_authentication(unauthenticated_client, db):
     response = unauthenticated_client.post(
-        "/mounts/discover",
+        "/shares/discover",
         json={
             "type": "SMB",
             "remote_path": "//fileserver",
@@ -1768,9 +1768,9 @@ def test_discover_mount_shares_requires_authentication(unauthenticated_client, d
     assert response.status_code == 401
 
 
-def test_discover_mount_shares_requires_admin_or_manager(auditor_client, db):
+def test_discover_share_shares_requires_admin_or_manager(auditor_client, db):
     response = auditor_client.post(
-        "/mounts/discover",
+        "/shares/discover",
         json={
             "type": "SMB",
             "remote_path": "//fileserver",
@@ -1780,7 +1780,7 @@ def test_discover_mount_shares_requires_admin_or_manager(auditor_client, db):
     assert response.status_code == 403
 
 
-def test_discover_mount_shares_allowed_in_demo_mode(manager_client, db):
+def test_discover_share_shares_allowed_in_demo_mode(manager_client, db):
     class FakeProvider:
         def discover_shares(self, mount_type, remote_path, *, credentials_file=None, username=None, password=None):
             return ["nfs-server/export-a"]
@@ -1788,7 +1788,7 @@ def test_discover_mount_shares_allowed_in_demo_mode(manager_client, db):
     with patch.object(type(settings), "is_demo_mode_enabled", return_value=True), \
             patch("app.services.mount_service._default_provider", return_value=FakeProvider()):
         response = manager_client.post(
-            "/mounts/discover",
+            "/shares/discover",
             json={
                 "type": "NFS",
                 "remote_path": "nfs-server",
@@ -1803,9 +1803,9 @@ def test_discover_mount_shares_allowed_in_demo_mode(manager_client, db):
     }
 
 
-def test_discover_mount_shares_requires_server_seed(manager_client, db):
+def test_discover_share_shares_requires_server_seed(manager_client, db):
     response = manager_client.post(
-        "/mounts/discover",
+        "/shares/discover",
         json={
             "type": "SMB",
             "remote_path": "//",
@@ -1816,14 +1816,14 @@ def test_discover_mount_shares_requires_server_seed(manager_client, db):
     assert "Enter a server address before browsing shares" in response.text
 
 
-def test_discover_mount_shares_returns_actionable_message_when_host_tool_is_missing(manager_client, db):
+def test_discover_share_shares_returns_actionable_message_when_host_tool_is_missing(manager_client, db):
     class MissingToolProvider:
         def discover_shares(self, mount_type, remote_path, *, credentials_file=None, username=None, password=None):
             raise FileNotFoundError("smbclient not available")
 
     with patch("app.services.mount_service._default_provider", return_value=MissingToolProvider()):
         response = manager_client.post(
-            "/mounts/discover",
+            "/shares/discover",
             json={
                 "type": "SMB",
                 "remote_path": "//fileserver",
@@ -1834,8 +1834,8 @@ def test_discover_mount_shares_returns_actionable_message_when_host_tool_is_miss
     assert "Share browsing requires the host smbclient tool. Install smbclient on the ECUBE host, then try again." in response.text
 
 
-def test_validate_mount_with_candidate_payload_uses_unsaved_values_without_persisting(db):
-    mount = NetworkMount(
+def test_validate_share_with_candidate_payload_uses_unsaved_values_without_persisting(db):
+    mount = NetworkShare(
         type=MountType.SMB,
         remote_path="//server/original-share",
         project_id="PROJ-OLD",
@@ -1857,7 +1857,7 @@ def test_validate_mount_with_candidate_payload_uses_unsaved_values_without_persi
         def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None, nfs_client_version=None):
             self.mount_calls.append(
                 {
-                    "mount_type": mount_type,
+                    "share_type": mount_type,
                     "remote_path": remote_path,
                     "local_mount_point": local_mount_point,
                     "credentials_file": credentials_file,
@@ -1906,7 +1906,7 @@ def test_validate_mount_with_candidate_payload_uses_unsaved_values_without_persi
 
     assert provider.mount_calls == [
         {
-            "mount_type": MountType.SMB,
+            "share_type": MountType.SMB,
             "remote_path": "//server/edited-share",
             "local_mount_point": "/smb/original-share",
             "credentials_file": None,
@@ -1917,8 +1917,8 @@ def test_validate_mount_with_candidate_payload_uses_unsaved_values_without_persi
     assert provider.unmount_calls == ["/smb/original-share"]
 
 
-def test_validate_mount_with_candidate_payload_returns_sanitized_failure_and_preserves_original_mount(db):
-    mount = NetworkMount(
+def test_validate_share_with_candidate_payload_returns_sanitized_failure_and_preserves_original_mount(db):
+    mount = NetworkShare(
         type=MountType.SMB,
         remote_path="//server/original-share",
         project_id="PROJ-OLD",
@@ -1940,7 +1940,7 @@ def test_validate_mount_with_candidate_payload_returns_sanitized_failure_and_pre
         def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None, nfs_client_version=None):
             self.mount_calls.append(
                 {
-                    "mount_type": mount_type,
+                    "share_type": mount_type,
                     "remote_path": remote_path,
                     "local_mount_point": local_mount_point,
                     "credentials_file": credentials_file,
@@ -1989,7 +1989,7 @@ def test_validate_mount_with_candidate_payload_returns_sanitized_failure_and_pre
     assert persisted.last_checked_at is not None
     assert provider.mount_calls == [
         {
-            "mount_type": MountType.SMB,
+            "share_type": MountType.SMB,
             "remote_path": "//server/edited-share",
             "local_mount_point": "/smb/original-share",
             "credentials_file": None,
@@ -2000,7 +2000,7 @@ def test_validate_mount_with_candidate_payload_returns_sanitized_failure_and_pre
     assert provider.unmount_calls == []
 
 
-def test_validate_mount_not_found(manager_client, db):
+def test_validate_share_not_found(manager_client, db):
     response = manager_client.post("/mounts/999/validate")
     assert response.status_code == 404
 
@@ -2008,7 +2008,7 @@ def test_validate_mount_not_found(manager_client, db):
 def test_validate_all_mounts(manager_client, db):
     for i in range(3):
         db.add(
-            NetworkMount(
+            NetworkShare(
                 type=MountType.NFS,
                 remote_path=f"192.168.1.1:/data{i}",
                 local_mount_point=f"/mnt/data{i}",
@@ -2019,7 +2019,7 @@ def test_validate_all_mounts(manager_client, db):
 
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0)
-        response = manager_client.post("/mounts/validate")
+        response = manager_client.post("/shares/validate")
 
     assert response.status_code == 200
     data = response.json()
@@ -2030,14 +2030,14 @@ def test_validate_all_mounts(manager_client, db):
 
 
 def test_validate_all_mounts_empty(manager_client, db):
-    response = manager_client.post("/mounts/validate")
+    response = manager_client.post("/shares/validate")
 
     assert response.status_code == 200
     assert response.json() == []
 
 
 def test_linux_mount_provider_check_mounted_uses_configured_default_timeout():
-    provider = LinuxMountProvider()
+    provider = LinuxShareProvider()
 
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0)
@@ -2049,7 +2049,7 @@ def test_linux_mount_provider_check_mounted_uses_configured_default_timeout():
 
 
 def test_linux_mount_provider_discover_shares_uses_dedicated_timeout():
-    provider = LinuxMountProvider()
+    provider = LinuxShareProvider()
 
     with patch("app.services.mount_service._resolve_showmount_binary", return_value="/usr/sbin/showmount"), \
          patch("subprocess.run") as mock_run:
@@ -2062,7 +2062,7 @@ def test_linux_mount_provider_discover_shares_uses_dedicated_timeout():
 
 
 def test_linux_mount_provider_smb_discover_shares_uses_dedicated_timeout():
-    provider = LinuxMountProvider()
+    provider = LinuxShareProvider()
 
     with patch("app.services.mount_service._resolve_smbclient_binary", return_value="/usr/bin/smbclient"), \
          patch("subprocess.run") as mock_run:
@@ -2075,7 +2075,7 @@ def test_linux_mount_provider_smb_discover_shares_uses_dedicated_timeout():
 
 
 def test_linux_mount_provider_uses_sudo_for_mount_when_configured(monkeypatch):
-    provider = LinuxMountProvider()
+    provider = LinuxShareProvider()
 
     monkeypatch.setattr("app.services.mount_service.settings.use_sudo", True)
     monkeypatch.setattr("app.services.mount_service.os.geteuid", lambda: 1000)
@@ -2097,7 +2097,7 @@ def test_linux_mount_provider_uses_sudo_for_mount_when_configured(monkeypatch):
 
 
 def test_linux_mount_provider_unmount_uses_network_mount_timeout():
-    provider = LinuxMountProvider()
+    provider = LinuxShareProvider()
 
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0, stderr="", stdout="")
@@ -2110,7 +2110,7 @@ def test_linux_mount_provider_unmount_uses_network_mount_timeout():
 
 
 def test_linux_mount_provider_uses_guest_option_for_credentialless_smb_mount(monkeypatch):
-    provider = LinuxMountProvider()
+    provider = LinuxShareProvider()
 
     monkeypatch.setattr("app.services.mount_service.settings.use_sudo", True)
     monkeypatch.setattr("app.services.mount_service.os.geteuid", lambda: 1000)
@@ -2133,7 +2133,7 @@ def test_linux_mount_provider_uses_guest_option_for_credentialless_smb_mount(mon
 
 
 def test_linux_mount_provider_uses_temporary_credentials_file_for_direct_smb_credentials(monkeypatch):
-    provider = LinuxMountProvider()
+    provider = LinuxShareProvider()
     captured = {"credentials_path": None}
 
     monkeypatch.setattr("app.services.mount_service.settings.use_sudo", True)
@@ -2179,7 +2179,7 @@ def test_linux_mount_provider_uses_temporary_credentials_file_for_direct_smb_cre
 
 
 def test_linux_mount_provider_cleans_up_temporary_credentials_file_and_keeps_password_out_of_logs(monkeypatch, caplog):
-    provider = LinuxMountProvider()
+    provider = LinuxShareProvider()
     captured = {"credentials_path": None}
 
     monkeypatch.setattr("app.services.mount_service.settings.use_sudo", True)
@@ -2194,7 +2194,7 @@ def test_linux_mount_provider_cleans_up_temporary_credentials_file_and_keeps_pas
             if os.path.exists(cmd[-1]):
                 os.remove(cmd[-1])
             return MagicMock(returncode=0, stderr="", stdout="")
-        return MagicMock(returncode=13, stderr="mount error(13): Permission denied", stdout="")
+        return MagicMock(returncode=13, stderr="share error(13): Permission denied", stdout="")
 
     with patch("app.services.mount_service._in_host_mount_namespace", return_value=True), \
          patch("subprocess.run", side_effect=fake_run):
@@ -2208,7 +2208,7 @@ def test_linux_mount_provider_cleans_up_temporary_credentials_file_and_keeps_pas
             )
 
     assert ok is False
-    assert err == "mount error(13): Permission denied"
+    assert err == "share error(13): Permission denied"
     assert captured["credentials_path"] is not None
     assert not os.path.exists(captured["credentials_path"])
     messages = [record.getMessage() for record in caplog.records]
@@ -2216,7 +2216,7 @@ def test_linux_mount_provider_cleans_up_temporary_credentials_file_and_keeps_pas
 
 
 def test_linux_mount_provider_treats_returncode_zero_with_inactive_mountpoint_as_failure(caplog):
-    provider = LinuxMountProvider()
+    provider = LinuxShareProvider()
 
     with patch("subprocess.run") as mock_run, patch.object(provider, "check_mounted", return_value=False):
         mock_run.return_value = MagicMock(returncode=0, stderr="", stdout="")
@@ -2240,7 +2240,7 @@ def test_linux_mount_provider_treats_returncode_zero_with_inactive_mountpoint_as
 
 
 def test_linux_mount_provider_uses_mount_namespace_flag_when_mount_namespace_differs(monkeypatch):
-    provider = LinuxMountProvider()
+    provider = LinuxShareProvider()
 
     monkeypatch.setattr("app.services.mount_service.settings.use_sudo", True)
     monkeypatch.setattr("app.services.mount_service.os.geteuid", lambda: 1000)
@@ -2267,7 +2267,7 @@ def test_linux_mount_provider_uses_mount_namespace_flag_when_mount_namespace_dif
 
 
 def test_check_mounted_uses_mount_namespace_flag_when_mount_namespace_differs(monkeypatch):
-    provider = LinuxMountProvider()
+    provider = LinuxShareProvider()
 
     monkeypatch.setattr("app.services.mount_service.settings.use_sudo", True)
     monkeypatch.setattr("app.services.mount_service.os.geteuid", lambda: 1000)
@@ -2286,7 +2286,7 @@ def test_check_mounted_uses_mount_namespace_flag_when_mount_namespace_differs(mo
 
 
 def test_linux_mount_provider_uses_mount_namespace_flag_when_host_namespace_read_fails(monkeypatch):
-    provider = LinuxMountProvider()
+    provider = LinuxShareProvider()
 
     monkeypatch.setattr("app.services.mount_service.settings.use_sudo", True)
     monkeypatch.setattr("app.services.mount_service.os.geteuid", lambda: 1000)
@@ -2310,7 +2310,7 @@ def test_linux_mount_provider_uses_mount_namespace_flag_when_host_namespace_read
 
 
 def test_linux_mount_provider_prefers_nsenter_when_host_namespace_differs(monkeypatch):
-    provider = LinuxMountProvider()
+    provider = LinuxShareProvider()
 
     monkeypatch.setattr("app.services.mount_service.settings.use_sudo", True)
     monkeypatch.setattr("app.services.mount_service.os.geteuid", lambda: 1000)
@@ -2334,9 +2334,9 @@ def test_linux_mount_provider_prefers_nsenter_when_host_namespace_differs(monkey
 
 
 def test_linux_mount_provider_uses_direct_helper_on_fstab_option_failure():
-    provider = LinuxMountProvider()
+    provider = LinuxShareProvider()
 
-    first = MagicMock(returncode=32, stderr="mount.nfs: failed to apply fstab options", stdout="")
+    first = MagicMock(returncode=32, stderr="share.nfs: failed to apply fstab options", stdout="")
     second = MagicMock(returncode=0, stderr="", stdout="")
 
     with patch("app.services.mount_service._resolve_mount_nfs_binary", return_value="/sbin/mount.nfs"), \
@@ -2357,10 +2357,10 @@ def test_linux_mount_provider_uses_direct_helper_on_fstab_option_failure():
 
 
 def test_linux_mount_provider_returns_retry_error_when_fstab_retry_fails():
-    provider = LinuxMountProvider()
+    provider = LinuxShareProvider()
 
-    first = MagicMock(returncode=32, stderr="mount.nfs: failed to apply fstab options", stdout="")
-    second = MagicMock(returncode=1, stderr="mount.nfs: access denied by server", stdout="")
+    first = MagicMock(returncode=32, stderr="share.nfs: failed to apply fstab options", stdout="")
+    second = MagicMock(returncode=1, stderr="share.nfs: access denied by server", stdout="")
 
     with patch("app.services.mount_service._resolve_mount_nfs_binary", return_value=None), \
          patch("subprocess.run", side_effect=[first, second]):
@@ -2375,9 +2375,9 @@ def test_linux_mount_provider_returns_retry_error_when_fstab_retry_fails():
 
 
 def test_linux_mount_provider_uses_direct_nfs_helper_after_fstab_failures(caplog):
-    provider = LinuxMountProvider()
+    provider = LinuxShareProvider()
 
-    first = MagicMock(returncode=32, stderr="mount.nfs: failed to apply fstab options", stdout="")
+    first = MagicMock(returncode=32, stderr="share.nfs: failed to apply fstab options", stdout="")
     second = MagicMock(returncode=0, stderr="", stdout="")
 
     with patch("app.services.mount_service._resolve_mount_nfs_binary", return_value="/sbin/mount.nfs"), \
@@ -2412,9 +2412,9 @@ def test_linux_mount_provider_uses_direct_nfs_helper_after_fstab_failures(caplog
 
 
 def test_linux_mount_provider_treats_active_mountpoint_as_success_after_failures():
-    provider = LinuxMountProvider()
+    provider = LinuxShareProvider()
 
-    first = MagicMock(returncode=32, stderr="mount.nfs: failed to apply fstab options", stdout="")
+    first = MagicMock(returncode=32, stderr="share.nfs: failed to apply fstab options", stdout="")
     second = MagicMock(returncode=1, stderr="still failing", stdout="")
 
     with patch("app.services.mount_service._resolve_mount_nfs_binary", return_value="/sbin/mount.nfs"), \
@@ -2431,7 +2431,7 @@ def test_linux_mount_provider_treats_active_mountpoint_as_success_after_failures
 
 
 def test_linux_mount_provider_check_mounted_non_positive_timeout_uses_default():
-    provider = LinuxMountProvider()
+    provider = LinuxShareProvider()
 
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0)
@@ -2442,8 +2442,8 @@ def test_linux_mount_provider_check_mounted_non_positive_timeout_uses_default():
     assert mock_run.call_args.kwargs["timeout"] == settings.network_mount_timeout_seconds
 
 
-def test_validate_mount_passes_configured_timeout_to_provider(db):
-    mount = NetworkMount(
+def test_validate_share_passes_configured_timeout_to_provider(db):
+    mount = NetworkShare(
         type=MountType.NFS,
         remote_path="192.168.1.1:/data",
         local_mount_point="/mnt/data-timeout",

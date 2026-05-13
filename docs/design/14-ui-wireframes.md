@@ -15,7 +15,7 @@
 - [Screen 2.5: Password Expiration](#screen-25-password-expiration)
 - [Screen 3: Dashboard](#screen-3-dashboard)
 - [Screen 4: Drive Management](#screen-4-drive-management)
-- [Screen 5: Mount Management](#screen-5-mount-management)
+- [Screen 5: Share Management](#screen-5-mount-management)
 - [Screen 6: Export Jobs](#screen-6-export-jobs)
 - [Screen 7: Audit Logs](#screen-7-audit-logs)
 - [Screen 8: User & Role Administration](#screen-8-user--role-administration)
@@ -667,7 +667,7 @@ Accessible from the Drive Management screen via a "Manage Hubs" button. Visible 
 
 ---
 
-## Screen 5: Mount Management
+## Screen 5: Share Management
 
 ### 5a — Mount List View (UC-5.1, UC-5.4, UC-5.5, UC-5.6)
 

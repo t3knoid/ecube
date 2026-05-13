@@ -120,6 +120,11 @@
 			"key": "action_code",
 			"value": "sample-action_code",
 			"type": "string"
+		},
+		{
+			"key": "share_id",
+			"value": "1",
+			"type": "string"
 		}
 	],
 	"item": [
@@ -784,136 +789,6 @@
 							]
 						},
 						"description": "Complete copy/verify and transition drive back to AVAILABLE for safe removal. Roles: admin, manager."
-					}
-				}
-			]
-		},
-		{
-			"name": "Mounts",
-			"item": [
-				{
-					"name": "List Mounts",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('List Mounts returns 200', function () {",
-									"    pm.response.to.have.status(200);",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/mounts",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"mounts"
-							]
-						},
-						"description": "List all registered network mounts and connectivity status. Roles: admin, manager, processor, auditor."
-					}
-				},
-				{
-					"name": "Add Mount",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"type\": \"SMB\",\n  \"remote_path\": \"//server/share\",\n  \"project_id\": \"{{project_id}}\",\n  \"username\": \"user\",\n  \"password\": \"password\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/mounts",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"mounts"
-							]
-						},
-						"description": "Register a new network mount (SMB/NFS). Required fields: type, remote_path, project_id. Optional: username, password, credentials_file. The response includes the managed local_mount_point assigned by ECUBE. Roles: admin, manager."
-					}
-				},
-				{
-					"name": "Remove Mount",
-					"request": {
-						"method": "DELETE",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/mounts/{{mount_id}}",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"mounts",
-								"{{mount_id}}"
-							],
-							"variable": [
-								{
-									"key": "mount_id",
-									"value": "1",
-									"description": "ID of the mount to remove"
-								}
-							]
-						},
-						"description": "Delete mount configuration and credentials. Returns 204. Roles: admin, manager."
-					}
-				},
-				{
-					"name": "Validate All Mounts",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/mounts/validate",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"mounts",
-								"validate"
-							]
-						},
-						"description": "Test connectivity for all mounts and update status. Roles: admin, manager."
-					}
-				},
-				{
-					"name": "Validate Single Mount",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/mounts/{{mount_id}}/validate",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"mounts",
-								"{{mount_id}}",
-								"validate"
-							],
-							"variable": [
-								{
-									"key": "mount_id",
-									"value": "1",
-									"description": "ID of the mount to validate"
-								}
-							]
-						},
-						"description": "Test connectivity for a specific mount. Roles: admin, manager."
 					}
 				}
 			]
@@ -3735,177 +3610,6 @@
 					"response": []
 				},
 				{
-					"name": "GET /mounts",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/mounts",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"mounts"
-							]
-						},
-						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: List Mounts\n\noperationId: list_mounts_mounts_get"
-					},
-					"response": []
-				},
-				{
-					"name": "POST /mounts",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/mounts",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"mounts"
-							]
-						},
-						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Add Mount\n\noperationId: add_mount_mounts_post"
-					},
-					"response": []
-				},
-				{
-					"name": "POST /mounts/discover",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/mounts/discover",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"mounts",
-								"discover"
-							]
-						},
-						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Discover Mount Shares\n\noperationId: discover_mount_shares_mounts_discover_post"
-					},
-					"response": []
-				},
-				{
-					"name": "POST /mounts/test",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/mounts/test",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"mounts",
-								"test"
-							]
-						},
-						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Validate Mount Candidate\n\noperationId: validate_mount_candidate_mounts_test_post"
-					},
-					"response": []
-				},
-				{
-					"name": "POST /mounts/validate",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/mounts/validate",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"mounts",
-								"validate"
-							]
-						},
-						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Validate All Mounts\n\noperationId: validate_all_mounts_mounts_validate_post"
-					},
-					"response": []
-				},
-				{
-					"name": "DELETE /mounts/{mount_id}",
-					"request": {
-						"method": "DELETE",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/mounts/{{mount_id}}",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"mounts",
-								"{{mount_id}}"
-							]
-						},
-						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Remove Mount\n\noperationId: remove_mount_mounts__mount_id__delete"
-					},
-					"response": []
-				},
-				{
-					"name": "PATCH /mounts/{mount_id}",
-					"request": {
-						"method": "PATCH",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/mounts/{{mount_id}}",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"mounts",
-								"{{mount_id}}"
-							]
-						},
-						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Update Mount\n\noperationId: update_mount_mounts__mount_id__patch"
-					},
-					"response": []
-				},
-				{
-					"name": "POST /mounts/{mount_id}/throughput-test",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/mounts/{{mount_id}}/throughput-test",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"mounts",
-								"{{mount_id}}",
-								"throughput-test"
-							]
-						},
-						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Test Mount Throughput\n\noperationId: test_mount_throughput_mounts__mount_id__throughput_test_post"
-					},
-					"response": []
-				},
-				{
-					"name": "POST /mounts/{mount_id}/validate",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/mounts/{{mount_id}}/validate",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"mounts",
-								"{{mount_id}}",
-								"validate"
-							]
-						},
-						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Validate Mount\n\noperationId: validate_mount_mounts__mount_id__validate_post"
-					},
-					"response": []
-				},
-				{
 					"name": "POST /setup/database/provision",
 					"request": {
 						"method": "POST",
@@ -4060,6 +3764,177 @@
 							]
 						},
 						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Get Setup Status\n\noperationId: get_setup_status_setup_status_get"
+					},
+					"response": []
+				},
+				{
+					"name": "GET /shares",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/shares",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"shares"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: List Shares\n\noperationId: list_shares_shares_get"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /shares",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/shares",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"shares"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Add Share\n\noperationId: add_share_shares_post"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /shares/discover",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/shares/discover",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"shares",
+								"discover"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Discover Shares\n\noperationId: discover_shares_shares_discover_post"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /shares/test",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/shares/test",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"shares",
+								"test"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Validate Share Candidate\n\noperationId: validate_share_candidate_shares_test_post"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /shares/validate",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/shares/validate",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"shares",
+								"validate"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Validate All Shares\n\noperationId: validate_all_shares_shares_validate_post"
+					},
+					"response": []
+				},
+				{
+					"name": "DELETE /shares/{share_id}",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/shares/{{share_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"shares",
+								"{{share_id}}"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Remove Share\n\noperationId: remove_share_shares__share_id__delete"
+					},
+					"response": []
+				},
+				{
+					"name": "PATCH /shares/{share_id}",
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/shares/{{share_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"shares",
+								"{{share_id}}"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Update Share\n\noperationId: update_share_shares__share_id__patch"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /shares/{share_id}/throughput-test",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/shares/{{share_id}}/throughput-test",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"shares",
+								"{{share_id}}",
+								"throughput-test"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Test Share Throughput\n\noperationId: test_share_throughput_shares__share_id__throughput_test_post"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /shares/{share_id}/validate",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/shares/{{share_id}}/validate",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"shares",
+								"{{share_id}}",
+								"validate"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Validate Share\n\noperationId: validate_share_shares__share_id__validate_post"
 					},
 					"response": []
 				},

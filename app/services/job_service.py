@@ -22,7 +22,7 @@ from app.repositories.job_repository import (
     JobRepository,
     ManifestRepository,
 )
-from app.repositories.mount_repository import MountRepository
+from app.repositories.share_repository import ShareRepository
 from app.schemas.jobs import JobCreate, JobOverflowContinueRequest, JobStart, JobUpdate
 from app.services import copy_engine
 from app.services.callback_service import deliver_callback
@@ -466,7 +466,7 @@ def _resolve_job_source_path(body: JobCreate, db: Session) -> str:
         except ValueError as exc:
             raise service_exception(status_code=422, detail=str(exc)) from exc
 
-    mount = MountRepository(db).get(body.mount_id)
+    mount = ShareRepository(db).get(body.mount_id)
     if not mount:
         raise service_exception(status_code=404, detail="Mount not found")
 

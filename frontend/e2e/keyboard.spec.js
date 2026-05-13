@@ -40,11 +40,11 @@ test('keyboard navigation: ConfirmDialog closes with Escape', async ({ page }) =
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mounts) })
   })
   await routeJson(page, '**/api/jobs**', [])
-  await page.route('**/api/mounts/*', async (route) => {
+  await page.route('**/api/shares/*', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
   })
 
-  await page.goto('/mounts/10')
+  await page.goto('/shares/10')
 
   // Open ConfirmDialog via the Remove button
   await page.getByRole('button', { name: 'Remove' }).click()
@@ -67,11 +67,11 @@ test('keyboard navigation: ConfirmDialog confirm button reachable by Tab', async
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mounts) })
   })
   await routeJson(page, '**/api/jobs**', [])
-  await page.route('**/api/mounts/*', async (route) => {
+  await page.route('**/api/shares/*', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
   })
 
-  await page.goto('/mounts/10')
+  await page.goto('/shares/10')
 
   await page.getByRole('button', { name: 'Remove' }).click()
   const dialog = page.getByRole('dialog')

@@ -23,7 +23,7 @@ const mocks = vi.hoisted(() => ({
   clearJobStartupAnalysisCache: vi.fn(),
   confirmJobChainOfCustodyHandoff: vi.fn(),
   getDrives: vi.fn(),
-  getMounts: vi.fn(),
+  getShares: vi.fn(),
   getFileHashes: vi.fn(),
   compareFiles: vi.fn(),
   hasAnyRole: vi.fn(),
@@ -90,7 +90,7 @@ vi.mock('@/api/drives.js', () => ({
 }))
 
 vi.mock('@/api/mounts.js', () => ({
-  getMounts: (...args) => mocks.getMounts(...args),
+  getShares: (...args) => mocks.getShares(...args),
 }))
 
 vi.mock('@/api/files.js', () => ({
@@ -205,7 +205,7 @@ describe('JobDetailView start action', () => {
     mocks.clearJobStartupAnalysisCache.mockReset()
     mocks.confirmJobChainOfCustodyHandoff.mockReset()
     mocks.getDrives.mockReset()
-    mocks.getMounts.mockReset()
+    mocks.getShares.mockReset()
     mocks.getFileHashes.mockReset()
     mocks.compareFiles.mockReset()
     mocks.hasAnyRole.mockReset()
@@ -252,7 +252,7 @@ describe('JobDetailView start action', () => {
       { id: 1, device_identifier: 'USB-001', port_system_path: '2-1', current_project_id: 'PROJ-001', current_state: 'AVAILABLE', mount_path: '/mnt/ecube/1' },
       { id: 2, device_identifier: 'USB-002', port_system_path: '2-2', current_project_id: 'PROJ-001', current_state: 'AVAILABLE', mount_path: '/mnt/ecube/2' },
     ])
-    mocks.getMounts.mockResolvedValue([
+    mocks.getShares.mockResolvedValue([
       { id: 4, project_id: 'PROJ-001', status: 'MOUNTED', remote_path: 'server:/exports/project-001', local_mount_point: '/nfs/project-001' },
     ])
     mocks.updateJob.mockResolvedValue({ id: 6, status: 'PENDING', project_id: 'PROJ-001', evidence_number: 'EV-UPDATED', thread_count: 4, copied_bytes: 0, total_bytes: 0, source_path: '/nfs/project-001/updated', target_mount_path: '/mnt/ecube/1' })

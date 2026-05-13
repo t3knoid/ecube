@@ -89,7 +89,7 @@ describe('router configuration/admin guards', () => {
   it('allows auditors to access Mounts', async () => {
     const { router } = await loadRouter({ roles: ['auditor'] })
 
-    await router.push('/mounts')
+    await router.push('/shares')
 
     expect(router.currentRoute.value.name).toBe('mounts')
   })
@@ -97,7 +97,7 @@ describe('router configuration/admin guards', () => {
   it('allows processors to access Mounts', async () => {
     const { router } = await loadRouter({ roles: ['processor'] })
 
-    await router.push('/mounts')
+    await router.push('/shares')
 
     expect(router.currentRoute.value.name).toBe('mounts')
   })

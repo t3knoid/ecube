@@ -7,7 +7,7 @@ from app.repositories.job_repository import (
     JobRepository,
     ManifestRepository,
 )
-from app.repositories.mount_repository import MountRepository
+from app.repositories.share_repository import ShareRepository
 
 __all__ = [
     "AuditRepository",
@@ -18,5 +18,5 @@ __all__ = [
     "FileRepository",
     "JobRepository",
     "ManifestRepository",
-    "MountRepository",
+    "ShareRepository",
 ]

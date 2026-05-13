@@ -29,7 +29,7 @@ from app.config import settings
 from app.exceptions import ECUBEException, service_exception
 from app.infrastructure.mount_info import is_active_mount_point
 from app.models.hardware import DriveState, UsbDrive
-from app.models.network import MountStatus, NetworkMount
+from app.models.network import MountStatus, NetworkShare
 from app.schemas.browse import BrowseEntry, BrowseResponse, EntryType
 from app.services.audit_service import log_and_audit
 from app.utils.sanitize import sanitize_error_message
@@ -66,12 +66,12 @@ def _lookup_mount_root(path: str, db: Session) -> Tuple[Optional[str], str, Opti
         return usb_path[0].rstrip("/"), "usb_drive", None
 
     net_path = (
-        db.query(NetworkMount.local_mount_point, NetworkMount.type)
+        db.query(NetworkShare.local_mount_point, NetworkShare.type)
         .filter(
-            NetworkMount.status == MountStatus.MOUNTED,
-            NetworkMount.local_mount_point.isnot(None),
-            NetworkMount.local_mount_point != "",
-            NetworkMount.local_mount_point.in_(candidates),
+            NetworkShare.status == MountStatus.MOUNTED,
+            NetworkShare.local_mount_point.isnot(None),
+            NetworkShare.local_mount_point != "",
+            NetworkShare.local_mount_point.in_(candidates),
         )
         .first()
     )
@@ -84,12 +84,12 @@ def _lookup_mount_root(path: str, db: Session) -> Tuple[Optional[str], str, Opti
 
 def _lookup_network_mount_root_by_id(mount_id: int, db: Session) -> Tuple[Optional[str], Optional[str]]:
     net_path = (
-        db.query(NetworkMount.local_mount_point, NetworkMount.type)
+        db.query(NetworkShare.local_mount_point, NetworkShare.type)
         .filter(
-            NetworkMount.id == mount_id,
-            NetworkMount.status == MountStatus.MOUNTED,
-            NetworkMount.local_mount_point.isnot(None),
-            NetworkMount.local_mount_point != "",
+            NetworkShare.id == mount_id,
+            NetworkShare.status == MountStatus.MOUNTED,
+            NetworkShare.local_mount_point.isnot(None),
+            NetworkShare.local_mount_point != "",
         )
         .first()
     )

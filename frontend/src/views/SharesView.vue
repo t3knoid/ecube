@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { getMounts, createMount, updateMount, deleteMount, validateMount, validateMountCandidate, discoverMountShares } from '@/api/mounts.js'
+import { getShares, createShare, updateShare, deleteShare, validateShare, validateShareCandidate, discoverShares } from '@/api/shares.js'
 import { getPublicAuthConfig } from '@/api/auth.js'
 import { normalizeErrorMessage } from '@/api/client.js'
 import DataTable from '@/components/common/DataTable.vue'
@@ -219,7 +219,7 @@ async function loadMounts() {
   loading.value = true
   error.value = ''
   try {
-    const mountResult = await getMounts()
+    const mountResult = await getShares()
 
     mounts.value = (mountResult || []).map((item) => {
       const mount = normalizeProjectRecord(item, ['project_id'])
@@ -431,7 +431,7 @@ async function submitMountDialog() {
   try {
     const payload = buildMountPayload()
     if (isEditMode.value && editingMountId.value !== null) {
-      const updatedMount = await updateMount(editingMountId.value, payload, { timeout: networkMountTimeoutMs() })
+      const updatedMount = await updateShare(editingMountId.value, payload, { timeout: networkMountTimeoutMs() })
       replaceMount(updatedMount)
       if (updatedMount?.status === 'ERROR') {
         dialogError.value = t('mounts.updateFailed')
@@ -439,7 +439,7 @@ async function submitMountDialog() {
       }
       successMessage.value = t('mounts.updateSuccess')
     } else {
-      await createMount(payload, { timeout: networkMountTimeoutMs() })
+      await createShare(payload, { timeout: networkMountTimeoutMs() })
       successMessage.value = t('mounts.createSuccess')
     }
     showAddDialog.value = false
@@ -462,8 +462,8 @@ async function runDialogValidate() {
   try {
     const payload = buildMountPayload()
     const result = isEditMode.value && editingMountId.value !== null
-      ? await validateMount(editingMountId.value, payload, { timeout: networkMountTimeoutMs() })
-      : await validateMountCandidate(payload, { timeout: networkMountTimeoutMs() })
+      ? await validateShare(editingMountId.value, payload, { timeout: networkMountTimeoutMs() })
+      : await validateShareCandidate(payload, { timeout: networkMountTimeoutMs() })
     if (result?.status === 'MOUNTED') {
       dialogValidationPassed.value = true
       dialogSuccessMessage.value = t('mounts.testSuccess')
@@ -494,7 +494,7 @@ async function openShareBrowser(event) {
   discoveredShares.value = []
 
   try {
-    const result = await discoverMountShares(buildShareDiscoveryPayload(), { timeout: mountShareDiscoveryTimeoutMs() })
+    const result = await discoverShares(buildShareDiscoveryPayload(), { timeout: mountShareDiscoveryTimeoutMs() })
     discoveredShares.value = Array.isArray(result?.shares) ? result.shares : []
   } catch (requestError) {
     shareBrowserError.value = normalizeErrorMessage(requestError?.response?.data, t('mounts.browseSharesFailed'))
@@ -603,7 +603,7 @@ async function runRemove(target = removeTarget.value) {
   error.value = ''
   successMessage.value = ''
   try {
-    await deleteMount(target.id)
+    await deleteShare(target.id)
     if (browsingMountId.value === target.id) {
       browsingMountId.value = null
     }

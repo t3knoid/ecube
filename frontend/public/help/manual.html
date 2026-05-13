@@ -549,7 +549,7 @@ Open Mount Detail for an existing mount definition from the clickable mount ID
 </li><li>
 Filter the list by workflow bucket (<code>Unassigned</code>, <code>Assigned</code>, <code>Active</code>, <code>Blocked</code>, <code>Custody Pending</code>, <code>Completed</code>, or <code>Unavailable</code>) or search by mount details
 </li></ul>
-<p><code>admin</code> and <code>manager</code> users can also add a new mount definition and edit or remove a mount from Mount Detail. <code>processor</code> users can browse mounted shares from the clickable project value on the Mounts page and from Mount Detail. <code>auditor</code> users can open the Mounts page and Mount Detail, but they do not see browse, <code>Test Throughput</code>, <code>Edit</code>, or <code>Remove</code> actions and sensitive path fields remain redacted.</p>
+<p><code>admin</code> and <code>manager</code> users can also add a new mount definition and edit or remove a mount from Mount Detail. <code>processor</code> users can browse mounted shares from the clickable project value on the Shares page and from Mount Detail. <code>auditor</code> users can open the Shares page and Mount Detail, but they do not see browse, <code>Test Throughput</code>, <code>Edit</code>, or <code>Remove</code> actions and sensitive path fields remain redacted.</p>
 <p>When you arrive from a Dashboard <code>Mounts Summary</code> entry, the matching workflow bucket is preselected so the destination list stays aligned with the dashboard context.</p>
 <h2 id="5-1-adding-a-mount">5.1 Adding a Mount</h2>
 <p>The add-mount dialog supports common fields such as:</p>
@@ -1150,10 +1150,10 @@ A summary panel with <code>Status</code>, checked/corrected counts for network m
 </li><li>
 A <code>Current USB Drives</code> table with drive fields similar to the Drives page.
 </li><li>
-A <code>Current Shared Mounts</code> table with mount fields similar to the Mounts page.
+A <code>Current Shared Mounts</code> table with mount fields similar to the Shares page.
 </li></ul>
 <p>These tables are post-run snapshots of current drive and mount state to help operators investigate reconciliation outcomes; they are not limited to only rows that were corrected during the run.</p>
-<p>On smaller screens, these tables follow the same compact treatment as the main Drives and Mounts pages by keeping the most important columns visible and reducing lower-priority metadata.</p>
+<p>On smaller screens, these tables follow the same compact treatment as the main Drives and Shares pages by keeping the most important columns visible and reducing lower-priority metadata.</p>
 <p>Status meanings:</p>
 <ul><li>
 <code>completed</code> means no corrective-operation failures were recorded.

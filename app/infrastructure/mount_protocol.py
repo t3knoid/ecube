@@ -3,7 +3,7 @@
 This module contains only the :class:`MountProvider` typing Protocol so that
 any module can import it without pulling in the service module's heavier
 dependencies (FastAPI, SQLAlchemy ORM models, repositories).  The concrete
-Linux implementation lives in :mod:`app.services.mount_service`.
+Linux implementation lives in :mod:`app.services.share_service`.
 """
 
 from __future__ import annotations
