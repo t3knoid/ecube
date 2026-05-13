@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.audit import AuditLog
-from app.models.hardware import DriveState, UsbDrive, UsbHub, UsbPort
+from app.models.hardware import DriveFormatStatus, DriveState, UsbDrive, UsbHub, UsbPort
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, StartupAnalysisEntry, StartupAnalysisStatus
 from app.models.network import MountStatus, MountType, NetworkMount
 from app.models.system import ReconciliationLock
@@ -1326,11 +1326,37 @@ class TestRunStartupReconciliation:
         assert "groups" in result["identity"]
         assert "demo" not in result["identity"]
         assert "users" in result["identity"]
+        assert "drive_state_normalization" in result
         assert "mounts" in result
         assert "jobs" in result
         assert "drives" in result
         assert result["identity"]["groups"]["groups_created"] == 1
+        assert result["drive_state_normalization"]["rows_normalized"] == 0
         assert result["mounts"]["mounts_corrected"] == 1
+
+    def test_reconciliation_normalizes_orphaned_pending_formats_under_lock(self, db: Session):
+        drive = _make_drive(
+            db,
+            device_identifier="USB-RECON-FORMAT-001",
+            state=DriveState.AVAILABLE,
+        )
+        drive.format_status = DriveFormatStatus.PENDING
+        drive.format_started_at = datetime.now(timezone.utc)
+        db.commit()
+
+        result = run_startup_reconciliation(
+            db,
+            FakeMountProvider(mounted_paths=set()),
+            drive_mount_provider=FakeDriveMountProvider(),
+            topology_source=_empty_topology,
+            filesystem_detector=FakeFilesystemDetector(),
+        )
+
+        db.refresh(drive)
+        assert result["drive_state_normalization"] == {"rows_normalized": 1}
+        assert drive.format_status == DriveFormatStatus.FAILED
+        assert drive.format_failure_message == "Drive format was interrupted during restart; retry the request"
+        assert drive.format_finished_at is not None
 
     def test_startup_reconciliation_seeds_demo_accounts_from_runtime_settings(self, db: Session, monkeypatch):
         provider = FakeMountProvider(mounted_paths=set())

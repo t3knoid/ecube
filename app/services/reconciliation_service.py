@@ -47,6 +47,7 @@ from app.repositories.job_repository import FileRepository, StartupAnalysisEntry
 from app.repositories.user_role_repository import UserRoleRepository
 from app.repositories.audit_repository import AuditRepository
 from app.services.callback_service import deliver_callback
+from app.services.drive_service import normalize_unreleased_drive_states
 from app.services.demo_seed_service import seed_runtime_demo_environment
 from app.services.mount_check_utils import check_mounted_with_configured_timeout
 from app.services.operation_context import details_with_operation_id as _details_with_operation_id, operation_extra as _operation_extra
@@ -1263,6 +1264,23 @@ def run_startup_reconciliation(
 
     try:
         results: Dict[str, Any] = {}
+
+        logger.info("Startup reconciliation: normalizing persisted drive state", extra=_operation_extra(operation_id))
+        try:
+            results["drive_state_normalization"] = {
+                "rows_normalized": normalize_unreleased_drive_states(db),
+            }
+        except Exception as exc:
+            db.rollback()
+            db.expire_all()
+            hint = _schema_mismatch_hint(exc)
+            if hint:
+                logger.error("Drive-state normalization failed: %s", hint, extra=_operation_extra(operation_id))
+            else:
+                logger.exception("Drive-state normalization failed", extra=_operation_extra(operation_id))
+            results["drive_state_normalization"] = {"error": hint or "drive-state normalization failed"}
+
+        _refresh_reconciliation_lock(db)
 
         if os_user_provider is not None:
             results["identity"] = {}
