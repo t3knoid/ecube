@@ -1987,9 +1987,6 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div v-if="liveTransferSummary" class="detail-callout" aria-live="polite">
-          <strong>{{ t('jobs.liveCopySummary') }}</strong>
-        </div>
       </section>
 
       <section class="detail-section job-information-panel" aria-labelledby="job-detail-information-title">
@@ -3012,17 +3009,46 @@ select {
 .detail-subpanel-grid {
   display: grid;
   gap: var(--space-md);
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  align-items: start;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+@media (max-width: 1080px) {
+  .detail-subpanel-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .detail-subpanel-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .detail-subpanel {
   display: grid;
+  align-content: start;
   gap: var(--space-sm);
+  height: 100%;
+  container-type: inline-size;
   padding: var(--space-sm);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius);
   background: var(--color-bg-primary);
+}
+
+.detail-subpanel .detail-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@container (max-width: 32rem) {
+  .detail-subpanel .detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .detail-subpanel .detail-grid-item--wide {
+    grid-column: auto;
+  }
 }
 
 .detail-grid {
@@ -3073,7 +3099,6 @@ select {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 7rem;
   padding: 0.125rem 0.5rem;
   border: 1px solid transparent;
   border-radius: 999px;

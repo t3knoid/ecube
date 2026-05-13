@@ -1925,7 +1925,7 @@ describe('JobDetailView start action', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Live copy summary')
+    expect(wrapper.text()).toContain('Current Task')
     expect(wrapper.text()).toContain('Started at')
     expect(wrapper.text()).toContain(new Date('2026-04-24T15:00:00Z').toLocaleString())
     expect(wrapper.text()).toContain('Duration')
@@ -2016,7 +2016,7 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).not.toContain('/nfs/project-001')
   })
 
-  it('does not show live copy summary while the job is verifying', async () => {
+  it('shows verification progress copy without the removed live copy summary heading', async () => {
     mocks.getJob.mockResolvedValue({
       id: 6,
       status: 'VERIFYING',
@@ -2037,7 +2037,7 @@ describe('JobDetailView start action', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.text()).not.toContain('Live copy summary')
+    expect(wrapper.text()).toContain('Current Task')
     expect(wrapper.find('.progressbar-stub').text()).toContain(i18n.global.t('jobs.verificationProgressLabel'))
     expect(wrapper.find('.progressbar-stub').text()).not.toContain('% •')
     expect(wrapper.text()).toContain(i18n.global.t('jobs.verificationProgressDetail'))

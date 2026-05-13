@@ -243,7 +243,6 @@
     "sourceInformation": "Source Information",
     "destinationInformation": "Destination Information",
     "completionSummary": "Job Completion Summary",
-    "liveCopySummary": "Live copy summary",
     "startedAt": "Started at",
     "copyThreads": "Copy threads",
     "filesCopied": "Files copied",
