@@ -185,6 +185,10 @@ def _attach_related_job_contexts(
         drive = drive_by_id.get(drive_id)
         if drive is None:
             continue
+        if not normalize_project_id(drive.current_project_id):
+            continue
+        if normalize_project_id(drive.current_project_id) != normalize_project_id(job_project_id):
+            continue
         if not normalize_project_id(job_project_id):
             continue
         selected_jobs[drive_id] = (job_id, evidence_number)

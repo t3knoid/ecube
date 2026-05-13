@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
