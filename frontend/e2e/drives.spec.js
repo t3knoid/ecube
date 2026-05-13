@@ -247,6 +247,7 @@ test('prepare eject surfaces busy-drive detail without trapping the dialog', asy
 test('drives list and drive detail admin flows', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
 
+  let drivesRequestCount = 0
   const drive = {
     id: 1,
     device_identifier: '/dev/sdb',
@@ -262,9 +263,20 @@ test('drives list and drive detail admin flows', async ({ page }) => {
     current_state: 'AVAILABLE',
     current_project_id: null,
     mount_path: null,
+    format_status: null,
+    format_failure_message: null,
+    format_started_at: null,
+    format_finished_at: null,
   }
 
-  await routeJson(page, '**/api/drives', () => [drive])
+  await routeJson(page, '**/api/drives', () => {
+    drivesRequestCount += 1
+    if (drive.format_status === 'PENDING' && drivesRequestCount >= 3) {
+      drive.format_status = null
+      drive.format_finished_at = '2026-05-13T18:00:00Z'
+    }
+    return [drive]
+  })
   await routeJson(page, '**/api/jobs**', [])
   await routeJson(page, '**/api/drives/refresh', { ok: true })
   await routeJson(page, '**/api/mounts', [{
@@ -276,8 +288,11 @@ test('drives list and drive detail admin flows', async ({ page }) => {
   }])
 
   await page.route('**/api/drives/1/format', async (route) => {
-    drive.filesystem_type = route.request().postDataJSON().filesystem_type || 'ext4'
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(drive) })
+    drive.format_status = 'PENDING'
+    drive.format_failure_message = null
+    drive.format_started_at = '2026-05-13T17:59:00Z'
+    drive.format_finished_at = null
+    await route.fulfill({ status: 202, contentType: 'application/json', body: JSON.stringify(drive) })
   })
   await page.route('**/api/drives/1/mount', async (route) => {
     drive.mount_path = '/mnt/ecube/1'
@@ -304,7 +319,9 @@ test('drives list and drive detail admin flows', async ({ page }) => {
   await expect(page).toHaveURL(/\/drives\/1$/)
   await page.getByRole('button', { name: 'Format' }).click()
   await page.getByRole('button', { name: 'Format' }).last().click()
-  await expect(page.getByText('Drive format request submitted.')).toBeVisible()
+  await expect(page.getByText('Drive format started. Drive Detail refreshes automatically until it completes.')).toBeVisible()
+  await expect(page.getByText('Drive format is in progress. Drive actions stay disabled until formatting completes.')).toBeVisible()
+  await expect(page.getByText('Drive formatted successfully.')).toBeVisible({ timeout: 10000 })
 
   await page.getByRole('button', { name: 'Mount' }).click()
   await expect(page.getByText('Drive mounted successfully.')).toBeVisible()
