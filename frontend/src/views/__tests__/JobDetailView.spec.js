@@ -434,16 +434,14 @@ describe('JobDetailView start action', () => {
     const wrapper = mountView()
     await flushPromises()
 
+    expect(wrapper.text()).toContain('Last data analyzed')
     expect(wrapper.text()).toContain('Analysis status')
     expect(wrapper.text()).toContain('Ready')
     expect(wrapper.text()).toContain('Discovered files')
     expect(wrapper.text()).toContain('3')
     expect(wrapper.text()).toContain('Estimated total bytes')
     expect(wrapper.text()).toContain('24 MB')
-    expect(wrapper.text()).not.toContain('Estimated copy rate')
-    expect(wrapper.text()).not.toContain('Estimated duration')
-    expect(wrapper.text()).toContain('Ready to start')
-    expect(wrapper.text()).toContain('Yes')
+    expect(wrapper.text()).not.toContain('Ready to start')
 
     const analyzeButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.analyze'))
     expect(analyzeButton).toBeTruthy()
@@ -1719,6 +1717,140 @@ describe('JobDetailView start action', () => {
     expect(wrapper.find('.progressbar-stub').text()).toContain('true|true')
   })
 
+  it('surfaces dashboard-derived next-step and follow-up guidance in the current-task panel', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'FAILED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 25,
+      total_bytes: 100,
+      file_count: 4,
+      files_succeeded: 1,
+      files_failed: 2,
+      files_timed_out: 1,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Current Task')
+    expect(wrapper.text()).toContain(i18n.global.t('dashboard.nextStep'))
+    expect(wrapper.text()).toContain(i18n.global.t('dashboard.nextStepReviewFailedFiles'))
+    expect(wrapper.text()).toContain(i18n.global.t('dashboard.attentionType'))
+    expect(wrapper.text()).toContain(i18n.global.t('dashboard.attentionBlocked'))
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.filesFailed'))
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.filesTimedOut'))
+  })
+
+  it('groups job information into source, destination, and job-details panels', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'RUNNING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      callback_url: 'https://example.test/callback',
+      notes: 'Operator handoff note',
+      thread_count: 4,
+      copied_bytes: 60,
+      total_bytes: 120,
+      file_count: 4,
+      files_succeeded: 2,
+      files_failed: 0,
+      startup_analysis_status: 'READY',
+      startup_analysis_last_analyzed_at: '2026-04-24T15:00:00Z',
+      startup_analysis_file_count: 4,
+      startup_analysis_total_bytes: 120,
+      drive: { id: 1, available_bytes: 2048, display_device_label: 'Destination One' },
+      overflow_assignments: [{
+        id: 22,
+        state: 'RESERVED',
+        drive: { id: 2, display_device_label: 'Reserved Overflow Device' },
+      }],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Job Information')
+    expect(wrapper.text()).toContain('Source Information')
+    expect(wrapper.text()).toContain('Destination Information')
+    expect(wrapper.text()).toContain('Job details')
+    expect(wrapper.text()).toContain('Discovered files')
+    expect(wrapper.text()).toContain('Estimated total bytes')
+    expect(wrapper.text()).toContain('Thread count')
+    expect(wrapper.text()).toContain('4')
+    expect(wrapper.text()).toContain('Callback URL')
+    expect(wrapper.text()).toContain('Operator handoff note')
+    expect(wrapper.text()).toContain('Available Space')
+    expect(wrapper.text()).toContain('Files copied')
+    expect(wrapper.text()).toContain('Reserved Overflow Device')
+  })
+
+  it('shows N/A for source file count and size before source totals are known', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'PENDING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      callback_url: 'https://example.test/callback',
+      notes: 'Operator handoff note',
+      thread_count: 4,
+      copied_bytes: 0,
+      total_bytes: 0,
+      file_count: 0,
+      files_succeeded: 0,
+      files_failed: 0,
+      startup_analysis_status: 'NOT_ANALYZED',
+      startup_analysis_last_analyzed_at: null,
+      drive: { id: 1, available_bytes: 2048, display_device_label: 'Destination One' },
+      overflow_assignments: [],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Discovered files')
+    expect(wrapper.text()).toContain('Estimated total bytes')
+    expect(wrapper.text()).toContain(i18n.global.t('common.labels.notAvailable'))
+  })
+
+  it('shows none for overflow drives when destination information has no overflow assignments', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'RUNNING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      callback_url: 'https://example.test/callback',
+      notes: 'Operator handoff note',
+      thread_count: 4,
+      copied_bytes: 60,
+      total_bytes: 120,
+      file_count: 4,
+      files_succeeded: 2,
+      files_failed: 0,
+      startup_analysis_status: 'READY',
+      startup_analysis_last_analyzed_at: '2026-04-24T15:00:00Z',
+      drive: { id: 1, available_bytes: 2048, display_device_label: 'Destination One' },
+      overflow_assignments: [],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Overflow drives')
+    expect(wrapper.text()).toContain(i18n.global.t('common.labels.none'))
+  })
+
   it('uses conservative file progress when bytes hit 100% before all files finish', async () => {
     mocks.getJob.mockResolvedValue({
       id: 6,
@@ -1906,6 +2038,9 @@ describe('JobDetailView start action', () => {
     await flushPromises()
 
     expect(wrapper.text()).not.toContain('Live copy summary')
+    expect(wrapper.find('.progressbar-stub').text()).toContain(i18n.global.t('jobs.verificationProgressLabel'))
+    expect(wrapper.find('.progressbar-stub').text()).not.toContain('% •')
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.verificationProgressDetail'))
   })
 
   it('does not show 100% while a running job is still below 1%', async () => {
@@ -2068,7 +2203,7 @@ describe('JobDetailView start action', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Completion summary')
+    expect(wrapper.text()).toContain('Job Completion Summary')
     expect(wrapper.text()).toContain('Started at')
     expect(wrapper.text()).toContain('4/18/2026')
     expect(wrapper.text()).toContain('Copy threads')
@@ -2108,7 +2243,7 @@ describe('JobDetailView start action', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Completion summary')
+    expect(wrapper.text()).toContain('Job Completion Summary')
     expect(wrapper.text()).toContain('Duration')
     expect(wrapper.text()).toContain('1m 0s')
     expect(wrapper.text()).toContain('Copy rate')
@@ -2137,7 +2272,7 @@ describe('JobDetailView start action', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Completion summary')
+    expect(wrapper.text()).toContain('Job Completion Summary')
     expect(wrapper.find('.completion-summary').classes()).toContain('completion-summary--danger')
   })
 
@@ -2587,7 +2722,7 @@ describe('JobDetailView start action', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Completion summary')
+    expect(wrapper.text()).toContain('Job Completion Summary')
     expect(wrapper.text()).toContain('2m 5s')
     expect(wrapper.text()).toContain('0.1 MB/s')
   })
@@ -2611,7 +2746,7 @@ describe('JobDetailView start action', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Webhook callback URL')
+    expect(wrapper.text()).toContain('Callback URL')
     expect(wrapper.text()).toContain('https://example.com/current-webhook')
 
     const editButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit'))

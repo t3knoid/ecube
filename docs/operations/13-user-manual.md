@@ -663,7 +663,9 @@ Archived jobs remain readable from Job Detail, but they are intentionally treate
 
 The job detail page provides deeper inspection and follow-up controls.
 
-Near the top of the page, Job Detail also shows the selected destination, the trusted source path, the last known available space for the related drive when ECUBE has one, the current job-specific webhook callback URL, any operator notes captured when the job was created, and the current reserved or active overflow drive assignments for that job. Source paths are shown relative to the selected mounted share so they match the browse workflow; `/` means the root of that share, and nested folders appear under that root such as `/evidence`.
+The page is organized into three major panels before the action row. `Current Task` appears first and keeps the shared progress surface, the Dashboard-derived `Next Step` guidance, the Dashboard-aligned `Follow-up` state when one applies, and any failed-file or timed-out-file counters that explain the immediate operator task. `Job Information` appears next and groups read-only metadata into `Source Information`, `Destination Information`, and `Job details` panels. `Job Completion Summary` follows that grouped metadata so operators can review completion and manifest state before choosing the next action.
+
+Within `Job Information`, `Source Information` shows the trusted source path together with the source `Discovered files`, `Estimated total bytes`, `Analysis status`, and `Last data analyzed` values. When source totals are not available yet, the count and size fields show `N/A` until ECUBE determines them. `Destination Information` shows the selected destination drive, last known available space, the current `Files copied` count, and any reserved or active overflow assignments associated with later media. `Job details` shows the user-entered job metadata that is not source-specific or destination-specific, including `Thread count`, the job-specific `Callback URL`, and operator notes. Source paths are shown relative to the selected mounted share so they match the browse workflow; `/` means the root of that share, and nested folders appear under that root such as `/evidence`.
 
 Typical functions include:
 
@@ -686,7 +688,7 @@ Job Detail keeps full job duration and copy performance as separate read-only va
 
 #### 9.4.1 Editing, Lifecycle Actions, Retrying Failed Files, Completing, Verifying, and Generating a Manifest
 
-Action buttons are shown near the top of the job detail screen.
+Action buttons are shown after the `Job Completion Summary` panel.
 
 Use them when appropriate:
 
@@ -780,6 +782,8 @@ For evidence-bearing work, treat `Chain of Custody` as the standard sunset path.
 The completion summary uses the normal success styling for clean completions. If the summary still shows any failed or timed-out file counts, the summary switches to a red warning background so operators can distinguish a partial-success completion from a clean completed run at a glance.
 
 During startup analysis, Job Detail can show `Preparing copy...` before any totals are known. While this state is visible, the page also explains that ECUBE is still scanning the source files and calculating totals, which can take time for large evidence sets.
+
+During `VERIFYING`, Job Detail keeps the same progress surface in `Current Task` but switches its text to verification-specific guidance. The page does not present an exact verification percentage because the current API does not expose verification counters.
 
 Manual Analyze runs use the same startup-analysis engine before copy begins. Job Detail can show `Startup analysis started.` while the scan is running, then replace it with `Startup analysis completed.` when the persisted analysis summary is ready. The summary panel can show the startup-analysis state, discovered files, estimated total bytes, last analyzed time, and a sanitized failure reason when analysis fails.
 

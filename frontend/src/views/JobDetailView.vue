@@ -17,7 +17,7 @@ import ProgressBar from '@/components/common/ProgressBar.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import { formatDriveIdentity } from '@/utils/driveIdentity.js'
 import { buildJobErrorMessage } from '@/utils/jobErrors.js'
-import { canEditJob, canOperateOnInactiveJob, canReadJobCoc, getJobDetailPrimaryActionKeys, getJobLifecycleToggleAction } from '@/utils/jobActions.js'
+import { canEditJob, canOperateOnInactiveJob, canReadJobCoc, getDashboardFollowUpKey, getDashboardNextStepKey, getJobDetailPrimaryActionKeys, getJobLifecycleToggleAction } from '@/utils/jobActions.js'
 import { calculateJobProgress, isJobProgressActive } from '@/utils/jobProgress.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
@@ -266,6 +266,39 @@ const startupAnalysisSummary = computed(() => {
   }
 })
 
+const sourceFilesToCopyLabel = computed(() => {
+  if (!job.value) return t('common.labels.notAvailable')
+
+  const lastAnalyzedAt = job.value.startup_analysis_last_analyzed_at
+  if (lastAnalyzedAt) {
+    return String(Number(job.value.startup_analysis_file_count || 0))
+  }
+
+  const status = currentStatus.value
+  const fileCount = Number(job.value.file_count || 0)
+  if (['RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING', 'COMPLETED', 'FAILED', 'ARCHIVED'].includes(status)) {
+    return String(fileCount)
+  }
+
+  return t('common.labels.notAvailable')
+})
+
+const sourceSizeToCopyLabel = computed(() => {
+  if (!job.value) return t('common.labels.notAvailable')
+
+  const lastAnalyzedAt = job.value.startup_analysis_last_analyzed_at
+  if (lastAnalyzedAt) {
+    return formatBytes(Number(job.value.startup_analysis_total_bytes || 0))
+  }
+
+  const status = currentStatus.value
+  if (['RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING', 'COMPLETED', 'FAILED', 'ARCHIVED'].includes(status)) {
+    return formatBytes(Number(job.value.total_bytes || 0))
+  }
+
+  return t('common.labels.notAvailable')
+})
+
 const fileColumns = computed(() => ([
   { key: 'id', label: t('common.labels.id'), align: 'right' },
   { key: 'relative_path', label: t('jobs.path'), width: isMobileViewport.value ? '12rem' : null },
@@ -355,7 +388,13 @@ const progressMetrics = computed(() => {
   }
 })
 
+const isVerificationState = computed(() => currentStatus.value === 'VERIFYING')
+
 const progressLabel = computed(() => {
+  if (isVerificationState.value) {
+    return t('jobs.verificationProgressLabel')
+  }
+
   const metrics = progressMetrics.value
   if (metrics.initializing) {
     return t('jobs.progressPreparing')
@@ -368,6 +407,93 @@ const progressLabel = computed(() => {
 
 const progressActive = computed(() => {
   return isJobProgressActive(job.value)
+})
+
+const currentTaskSummary = computed(() => {
+  if (!job.value) return []
+
+  const entries = [
+    {
+      label: t('dashboard.nextStep'),
+      value: t(getDashboardNextStepKey({
+        jobStatus: job.value.status,
+        startupAnalysisStatus: job.value.startup_analysis_status,
+        custodyStatus: job.value.custody_status,
+        failedFiles: job.value.files_failed,
+        timedOutFiles: job.value.files_timed_out,
+      })),
+    },
+  ]
+
+  const followUpKey = getDashboardFollowUpKey({
+    jobStatus: job.value.status,
+    startupAnalysisStatus: job.value.startup_analysis_status,
+    custodyStatus: job.value.custody_status,
+  })
+
+  if (followUpKey) {
+    entries.push({
+      label: t('dashboard.attentionType'),
+      value: t(followUpKey),
+    })
+  }
+
+  const failedFiles = Number(job.value.files_failed || 0)
+  const timedOutFiles = Number(job.value.files_timed_out || 0)
+
+  if (failedFiles > 0) {
+    entries.push({ label: t('jobs.filesFailed'), value: String(failedFiles) })
+  }
+  if (timedOutFiles > 0) {
+    entries.push({ label: t('jobs.filesTimedOut'), value: String(timedOutFiles) })
+  }
+
+  if (liveTransferSummary.value) {
+    entries.push(
+      { label: t('jobs.startedAt'), value: liveTransferSummary.value.startedAt },
+      { label: t('jobs.duration'), value: liveTransferSummary.value.duration },
+      { label: t('jobs.copyRate'), value: liveTransferSummary.value.copyRate },
+      { label: t('jobs.timeRemaining'), value: liveTransferSummary.value.timeRemaining },
+      { label: t('jobs.estimatedCompletion'), value: liveTransferSummary.value.estimatedCompletion },
+    )
+  }
+
+  return entries
+})
+
+const destinationFilesCopiedLabel = computed(() => {
+  if (!job.value) return '-'
+
+  const finishedFiles = Number(progressMetrics.value.finishedFiles || 0)
+  const totalFiles = Number(progressMetrics.value.totalFiles || 0)
+  if (totalFiles > 0) {
+    return `${finishedFiles} of ${totalFiles}`
+  }
+  if (Number.isFinite(finishedFiles) && finishedFiles > 0) {
+    return String(finishedFiles)
+  }
+  return '-'
+})
+
+const completionPanelRows = computed(() => {
+  return [
+    { label: t('jobs.startedAt'), value: completionSummary.value?.startedAt || '-' },
+    { label: t('jobs.copyThreads'), value: completionSummary.value?.copyThreads ?? '-' },
+    {
+      label: t('jobs.filesCopied'),
+      value: completionSummary.value
+        ? `${completionSummary.value.filesCopied} of ${completionSummary.value.totalFiles}`
+        : destinationFilesCopiedLabel.value,
+    },
+    { label: t('jobs.filesFailed'), value: completionSummary.value?.filesFailed ?? Number(job.value?.files_failed || 0) },
+    { label: t('jobs.filesTimedOut'), value: completionSummary.value?.filesTimedOut ?? Number(job.value?.files_timed_out || 0) },
+    { label: t('jobs.totalCopied'), value: completionSummary.value?.totalCopied || formatBytes(Number(job.value?.copied_bytes || 0)) },
+    { label: t('jobs.duration'), value: completionSummary.value?.duration || '-' },
+    { label: t('jobs.copyRate'), value: completionSummary.value?.copyRate || '-' },
+    { label: t('jobs.completedAt'), value: completionSummary.value?.completedAt || '-' },
+    { label: t('jobs.lastManifestCreated'), value: manifestSummary.value?.createdAtLabel || '-' },
+    { label: t('jobs.manifestStatus'), value: manifestSummary.value?.statusLabel || '-' },
+  ]
 })
 
 const lifecycleToggleAction = computed(() => {
@@ -1839,81 +1965,129 @@ onUnmounted(() => {
         <span>{{ t('jobs.evidence') }}: {{ job.evidence_number }}</span>
       </div>
 
-      <div class="hash-grid">
-        <span>{{ t('jobs.destinationGroup') }}</span><strong class="mono wrap-anywhere">{{ resolveJobDestinationLabel(job) }}</strong>
-        <span>{{ t('jobs.sourcePath') }}</span><strong class="mono wrap-anywhere">{{ displaySourcePath(job) || '-' }}</strong>
-        <span>{{ t('drives.availableSpace') }}</span><strong>{{ formatBytes(job.drive?.available_bytes) }}</strong>
-        <span>{{ t('jobs.callbackUrl') }}</span><strong class="mono wrap-anywhere">{{ job.callback_url || '-' }}</strong>
-      </div>
+      <section class="detail-section current-task-panel" aria-labelledby="job-detail-current-task-title">
+        <div class="detail-section-header">
+          <h2 id="job-detail-current-task-title">{{ t('jobs.currentTask') }}</h2>
+        </div>
 
-      <div v-if="job.notes" class="detail-notes">
-        <strong>{{ t('audit.notes') }}</strong>
-        <p class="wrap-anywhere">{{ job.notes }}</p>
-      </div>
+        <ProgressBar
+          :value="progressMetrics.value"
+          :total="progressMetrics.total"
+          :label="progressLabel"
+          :full-width="true"
+          :active="progressActive"
+        />
+        <p v-if="progressMetrics.initializing" class="muted">{{ t('jobs.progressPreparingDetail') }}</p>
+        <p v-else-if="isVerificationState" class="muted">{{ t('jobs.verificationProgressDetail') }}</p>
+        <p class="muted">{{ formatBytes(progressMetrics.copiedBytes) }} / {{ formatBytes(progressMetrics.totalBytes) }}</p>
 
-      <div v-if="overflowAssignments.length" class="completion-summary" aria-live="polite">
-        <strong>{{ t('jobs.overflowPanelTitle') }}</strong>
-        <div v-for="assignment in overflowAssignments" :key="assignment.id" class="detail-overflow-assignment">
-          <div class="hash-grid">
-            <span>{{ t('jobs.destinationGroup') }}</span><strong class="mono wrap-anywhere">{{ overflowAssignmentDriveLabel(assignment) }}</strong>
-            <span>{{ t('common.labels.status') }}</span><strong>{{ overflowAssignmentStateLabel(assignment.state) }}</strong>
+        <div class="detail-grid">
+          <div v-for="entry in currentTaskSummary" :key="entry.label" class="detail-grid-item">
+            <span>{{ entry.label }}</span><strong>{{ entry.value }}</strong>
           </div>
         </div>
-      </div>
 
-      <ProgressBar
-        :value="progressMetrics.value"
-        :total="progressMetrics.total"
-        :label="progressLabel"
-        :full-width="true"
-        :active="progressActive"
-      />
-      <p v-if="progressMetrics.initializing" class="muted">{{ t('jobs.progressPreparingDetail') }}</p>
-      <p class="muted">{{ formatBytes(progressMetrics.copiedBytes) }} / {{ formatBytes(progressMetrics.totalBytes) }}</p>
-
-      <div v-if="liveTransferSummary" class="completion-summary" aria-live="polite">
-        <strong>{{ t('jobs.liveCopySummary') }}</strong>
-        <div class="hash-grid">
-          <span>{{ t('jobs.startedAt') }}</span><strong>{{ liveTransferSummary.startedAt }}</strong>
-          <span>{{ t('jobs.duration') }}</span><strong>{{ liveTransferSummary.duration }}</strong>
-          <span>{{ t('jobs.copyRate') }}</span><strong>{{ liveTransferSummary.copyRate }}</strong>
-          <span>{{ t('jobs.timeRemaining') }}</span><strong>{{ liveTransferSummary.timeRemaining }}</strong>
-          <span>{{ t('jobs.estimatedCompletion') }}</span><strong>{{ liveTransferSummary.estimatedCompletion }}</strong>
+        <div v-if="liveTransferSummary" class="detail-callout" aria-live="polite">
+          <strong>{{ t('jobs.liveCopySummary') }}</strong>
         </div>
-      </div>
+      </section>
 
-      <div v-if="startupAnalysisSummary" class="analysis-summary" aria-live="polite">
-        <strong>{{ t('jobs.analysisSummary') }}</strong>
-        <div class="hash-grid">
-          <span>{{ t('jobs.analysisStatus') }}</span><strong>{{ startupAnalysisSummary.statusLabel }}</strong>
-          <span>{{ t('jobs.analysisLastAnalyzedAt') }}</span><strong>{{ startupAnalysisSummary.lastAnalyzedAt }}</strong>
-          <span>{{ t('jobs.analysisDiscoveredFiles') }}</span><strong>{{ startupAnalysisSummary.discoveredFiles }}</strong>
-          <span>{{ t('jobs.analysisEstimatedBytes') }}</span><strong>{{ startupAnalysisSummary.estimatedBytes }}</strong>
-          <span>{{ t('jobs.analysisReadyToStart') }}</span><strong>{{ startupAnalysisSummary.readyToStart ? t('jobs.analysisReadyYes') : t('jobs.analysisReadyNo') }}</strong>
+      <section class="detail-section job-information-panel" aria-labelledby="job-detail-information-title">
+        <div class="detail-section-header">
+          <h2 id="job-detail-information-title">{{ t('jobs.jobInformation') }}</h2>
         </div>
-        <p v-if="startupAnalysisSummary.failureReason" class="error-text">{{ t('jobs.analysisFailureReason') }}: {{ startupAnalysisSummary.failureReason }}</p>
-      </div>
 
-      <div
-        v-if="completionSummary"
-        :class="['completion-summary', { 'completion-summary--danger': completionSummaryHasFailures }]"
+        <div class="detail-subpanel-grid">
+          <section class="detail-subpanel" aria-labelledby="job-detail-neutral-information-title">
+            <h3 id="job-detail-neutral-information-title">{{ t('jobs.jobDetailsGroup') }}</h3>
+            <div class="detail-grid">
+              <div class="detail-grid-item">
+                <span>{{ t('jobs.threadCount') }}</span><strong>{{ job.thread_count ?? '-' }}</strong>
+              </div>
+              <div class="detail-grid-item detail-grid-item--wide">
+                <span>{{ t('jobs.callbackUrl') }}</span><strong class="mono wrap-anywhere">{{ job.callback_url || '-' }}</strong>
+              </div>
+              <div class="detail-grid-item detail-grid-item--wide">
+                <span>{{ t('audit.notes') }}</span>
+                <strong v-if="job.notes" class="wrap-anywhere">{{ job.notes }}</strong>
+                <strong v-else>-</strong>
+              </div>
+            </div>
+          </section>
+
+          <section class="detail-subpanel" aria-labelledby="job-detail-source-information-title">
+            <h3 id="job-detail-source-information-title">{{ t('jobs.sourceInformation') }}</h3>
+            <div class="detail-grid">
+              <div class="detail-grid-item">
+                <span>{{ t('jobs.sourcePath') }}</span><strong class="mono wrap-anywhere">{{ displaySourcePath(job) || '-' }}</strong>
+              </div>
+              <div class="detail-grid-item">
+                <span>{{ t('jobs.analysisDiscoveredFiles') }}</span><strong>{{ sourceFilesToCopyLabel }}</strong>
+              </div>
+              <div class="detail-grid-item">
+                <span>{{ t('jobs.analysisEstimatedBytes') }}</span><strong>{{ sourceSizeToCopyLabel }}</strong>
+              </div>
+              <div v-if="startupAnalysisSummary" class="detail-grid-item">
+                <span>{{ t('jobs.analysisSummary') }}</span><strong>{{ startupAnalysisSummary.statusLabel }}</strong>
+              </div>
+              <div v-if="startupAnalysisSummary" class="detail-grid-item">
+                <span>{{ t('jobs.analysisLastAnalyzedAt') }}</span><strong>{{ startupAnalysisSummary.lastAnalyzedAt }}</strong>
+              </div>
+            </div>
+            <p v-if="startupAnalysisSummary?.failureReason" class="error-text">{{ t('jobs.analysisFailureReason') }}: {{ startupAnalysisSummary.failureReason }}</p>
+          </section>
+
+          <section class="detail-subpanel" aria-labelledby="job-detail-destination-information-title">
+            <h3 id="job-detail-destination-information-title">{{ t('jobs.destinationInformation') }}</h3>
+            <div class="detail-grid">
+              <div class="detail-grid-item">
+                <span>{{ t('jobs.destinationDrive') }}</span><strong class="mono wrap-anywhere">{{ resolveJobDestinationLabel(job) }}</strong>
+              </div>
+              <div class="detail-grid-item">
+                <span>{{ t('drives.availableSpace') }}</span><strong>{{ formatBytes(job.drive?.available_bytes) }}</strong>
+              </div>
+              <div class="detail-grid-item">
+                <span>{{ t('jobs.filesCopied') }}</span><strong>{{ destinationFilesCopiedLabel }}</strong>
+              </div>
+              <div class="detail-grid-item detail-grid-item--wide">
+                <span>{{ t('jobs.overflowPanelTitle') }}</span>
+                <strong v-if="overflowAssignments.length" class="mono wrap-anywhere">{{ overflowAssignments.map((assignment) => overflowAssignmentDriveLabel(assignment)).join(', ') }}</strong>
+                <strong v-else>{{ t('common.labels.none') }}</strong>
+              </div>
+            </div>
+
+            <div v-if="overflowAssignments.length" class="detail-callout" aria-live="polite">
+              <strong>{{ t('jobs.overflowPanelTitle') }}</strong>
+              <div v-for="assignment in overflowAssignments" :key="assignment.id" class="detail-overflow-assignment">
+                <div class="detail-grid">
+                  <div class="detail-grid-item">
+                    <span>{{ t('jobs.destinationDrive') }}</span><strong class="mono wrap-anywhere">{{ overflowAssignmentDriveLabel(assignment) }}</strong>
+                  </div>
+                  <div class="detail-grid-item">
+                    <span>{{ t('common.labels.status') }}</span><strong>{{ overflowAssignmentStateLabel(assignment.state) }}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section
+        :class="['detail-section', 'completion-summary', { 'completion-summary--danger': completionSummaryHasFailures }]"
+        aria-labelledby="job-detail-completion-title"
         aria-live="polite"
       >
-        <strong>{{ t('jobs.completionSummary') }}</strong>
-        <div class="hash-grid">
-          <span>{{ t('jobs.startedAt') }}</span><strong>{{ completionSummary.startedAt }}</strong>
-          <span>{{ t('jobs.copyThreads') }}</span><strong>{{ completionSummary.copyThreads }}</strong>
-          <span>{{ t('jobs.filesCopied') }}</span><strong>{{ completionSummary.filesCopied }} of {{ completionSummary.totalFiles }}</strong>
-          <span>{{ t('jobs.filesFailed') }}</span><strong>{{ completionSummary.filesFailed }}</strong>
-          <span>{{ t('jobs.filesTimedOut') }}</span><strong>{{ completionSummary.filesTimedOut }}</strong>
-          <span>{{ t('jobs.totalCopied') }}</span><strong>{{ completionSummary.totalCopied }}</strong>
-          <span>{{ t('jobs.duration') }}</span><strong>{{ completionSummary.duration }}</strong>
-          <span>{{ t('jobs.copyRate') }}</span><strong>{{ completionSummary.copyRate }}</strong>
-          <span>{{ t('jobs.completedAt') }}</span><strong>{{ completionSummary.completedAt }}</strong>
-          <span>{{ t('jobs.lastManifestCreated') }}</span><strong>{{ manifestSummary?.createdAtLabel || '-' }}</strong>
-          <span>{{ t('jobs.manifestStatus') }}</span><strong :class="['manifest-status-text', `manifest-status-text--${manifestSummary?.tone || 'muted'}`]">{{ manifestSummary?.statusLabel || '-' }}</strong>
+        <div class="detail-section-header">
+          <h2 id="job-detail-completion-title">{{ t('jobs.completionSummary') }}</h2>
         </div>
-      </div>
+        <div class="detail-grid">
+          <div v-for="entry in completionPanelRows" :key="entry.label" class="detail-grid-item">
+            <span>{{ entry.label }}</span>
+            <strong :class="entry.label === t('jobs.manifestStatus') ? ['manifest-status-text', `manifest-status-text--${manifestSummary?.tone || 'muted'}`] : null">{{ entry.value }}</strong>
+          </div>
+        </div>
+      </section>
 
       <div v-if="jobFailureReason" class="failure-summary" role="alert" aria-live="polite">
         <strong>{{ t('jobs.failureReason') }}</strong>
@@ -2802,6 +2976,82 @@ select {
 
 .wrap-anywhere {
   overflow-wrap: anywhere;
+}
+
+.detail-section {
+  display: grid;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg-secondary);
+}
+
+.detail-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.detail-section-header h2,
+.detail-subpanel h3 {
+  margin: 0;
+}
+
+.current-task-panel {
+  background: color-mix(in srgb, var(--color-info, #2563eb) 6%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-info, #2563eb) 28%, var(--color-border));
+}
+
+.job-information-panel {
+  background: color-mix(in srgb, var(--color-info, #2563eb) 6%, var(--color-bg-secondary));
+  border-color: color-mix(in srgb, var(--color-info, #2563eb) 28%, var(--color-border));
+}
+
+.detail-subpanel-grid {
+  display: grid;
+  gap: var(--space-md);
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  align-items: start;
+}
+
+.detail-subpanel {
+  display: grid;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg-primary);
+}
+
+.detail-grid {
+  display: grid;
+  gap: var(--space-sm);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.detail-grid-item {
+  display: grid;
+  gap: var(--space-2xs);
+  min-width: 0;
+}
+
+.detail-grid-item > span {
+  font-weight: var(--font-weight-bold);
+}
+
+.detail-grid-item--wide {
+  grid-column: 1 / -1;
+}
+
+.detail-callout {
+  display: grid;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg-primary);
 }
 
 .completion-summary {

@@ -134,6 +134,26 @@ export function getDashboardNextStepKey({ jobStatus, startupAnalysisStatus, cust
   return 'dashboard.nextStepOpenDetail'
 }
 
+export function getDashboardFollowUpKey({ jobStatus, startupAnalysisStatus, custodyStatus }) {
+  const status = normalizeJobStatus(jobStatus)
+  const normalizedStartupAnalysisStatus = normalizeStartupAnalysisStatus(startupAnalysisStatus)
+  const normalizedCustodyStatus = String(custodyStatus || '').toUpperCase()
+
+  if (status === 'FAILED' || status === 'PAUSED') {
+    return 'dashboard.attentionBlocked'
+  }
+
+  if (status === 'PENDING' && canStartJob({ canOperate: true, jobStatus: status, startupAnalysisStatus: normalizedStartupAnalysisStatus })) {
+    return 'dashboard.attentionWaitingToStart'
+  }
+
+  if (['COMPLETED', 'ARCHIVED'].includes(status) && normalizedCustodyStatus === 'PENDING_HANDOFF') {
+    return 'dashboard.attentionWaitingForCustody'
+  }
+
+  return ''
+}
+
 export function getJobDetailPrimaryActionKeys({ jobStatus, canRetryFailed, canReadCoc }) {
   const status = normalizeJobStatus(jobStatus)
 

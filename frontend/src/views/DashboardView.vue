@@ -14,7 +14,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { formatDriveIdentity } from '@/utils/driveIdentity.js'
 import { calculateJobProgress, isJobProgressActive } from '@/utils/jobProgress.js'
 import { MOUNT_WORKFLOW_BUCKETS, buildMountWorkflowCounts } from '@/utils/mountWorkflow.js'
-import { canStartJob, getDashboardNextStepKey, normalizeJobStatus } from '@/utils/jobActions.js'
+import { canStartJob, getDashboardFollowUpKey, getDashboardNextStepKey, normalizeJobStatus } from '@/utils/jobActions.js'
 import { normalizeProjectId, normalizeProjectRecord } from '@/utils/projectId.js'
 
 const { t } = useI18n()
@@ -116,22 +116,27 @@ const needsAttentionItems = computed(() => {
   for (const job of jobs.value) {
     const jobId = Number(job.id)
     const status = normalizeJobStatus(job.status)
+    const followUpKey = getDashboardFollowUpKey({
+      jobStatus: status,
+      startupAnalysisStatus: job.startup_analysis_status,
+      custodyStatus: job.custody_status,
+    })
     if (!Number.isInteger(jobId) || jobId < 1) continue
 
-    if (status === 'FAILED' || status === 'PAUSED') {
+    if (followUpKey === 'dashboard.attentionBlocked') {
       items.push({
         ...job,
-        attention: t('dashboard.attentionBlocked'),
+        attention: t(followUpKey),
         attentionPriority: 0,
       })
       seenJobIds.add(jobId)
       continue
     }
 
-    if (status === 'PENDING' && canStartJob({ canOperate: true, jobStatus: status, startupAnalysisStatus: job.startup_analysis_status })) {
+    if (followUpKey === 'dashboard.attentionWaitingToStart') {
       items.push({
         ...job,
-        attention: t('dashboard.attentionWaitingToStart'),
+        attention: t(followUpKey),
         attentionPriority: 1,
       })
       seenJobIds.add(jobId)
@@ -145,7 +150,13 @@ const needsAttentionItems = computed(() => {
     const matchedJob = jobsById.get(relatedJobId)
 
     if (!Number.isInteger(relatedJobId) || relatedJobId < 1 || seenJobIds.has(relatedJobId)) continue
-    if (!['COMPLETED', 'ARCHIVED'].includes(relatedJobStatus) || custodyStatus !== 'PENDING_HANDOFF') continue
+    const followUpKey = getDashboardFollowUpKey({
+      jobStatus: relatedJobStatus,
+      startupAnalysisStatus: matchedJob?.startup_analysis_status,
+      custodyStatus,
+    })
+
+    if (followUpKey !== 'dashboard.attentionWaitingForCustody') continue
 
     items.push({
       ...(matchedJob || {}),
@@ -153,7 +164,7 @@ const needsAttentionItems = computed(() => {
       project_id: matchedJob?.project_id || mount.project_id,
       status: relatedJobStatus,
       custody_status: custodyStatus,
-      attention: t('dashboard.attentionWaitingForCustody'),
+      attention: t(followUpKey),
       attentionPriority: 2,
     })
     seenJobIds.add(relatedJobId)
