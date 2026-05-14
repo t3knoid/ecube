@@ -92,7 +92,7 @@ describe("LoginView logo behavior", () => {
     expect(wrapper.find(".demo-login-panel").exists()).toBe(false);
   });
 
-  it("renders public demo guidance when demo mode is enabled", async () => {
+  it("renders public demo guidance without exposing the demo password", async () => {
     mocks.getPublicAuthConfig.mockResolvedValue({
       demo_mode_enabled: true,
       login_message: "Use the shared demo accounts below.",
@@ -116,8 +116,8 @@ describe("LoginView logo behavior", () => {
     expect(panel.text()).toContain("demo_manager");
     expect(panel.text()).toContain("Manager demo");
     expect(panel.text()).toContain("Review mounts, drives, and jobs.");
-    expect(panel.text()).toContain(i18n.global.t("auth.demoSharedPassword"));
-    expect(panel.text()).toContain("Demo#123456");
+    expect(panel.text()).not.toContain(i18n.global.t("auth.demoSharedPassword"));
+    expect(panel.text()).not.toContain("Demo#123456");
 
     const passwordInput = wrapper.find("#password");
     expect(passwordInput.element.value).toBe("Demo#123456");

@@ -70,13 +70,13 @@ const showLogoImage = computed(
 );
 const showDemoLoginPanel = computed(() => {
   const config = publicAuthConfig.value;
+  // Keep demo guidance visible without rendering raw password text.
   return Boolean(
     config.demo_mode_enabled &&
     ((typeof config.login_message === "string" &&
       config.login_message.trim()) ||
-      (typeof config.shared_password === "string" &&
-        config.shared_password.trim()) ||
-      config.demo_accounts.length),
+      config.demo_accounts.length ||
+      config.password_change_allowed === false),
   );
 });
 const isDemoPasswordReadOnly = computed(() => {
@@ -302,14 +302,6 @@ async function handlePasswordChangeConfirm() {
         </p>
         <p v-if="publicAuthConfig.login_message" class="demo-login-message">
           {{ publicAuthConfig.login_message }}
-        </p>
-
-        <p
-          v-if="publicAuthConfig.shared_password"
-          class="demo-login-message"
-        >
-          <strong>{{ t("auth.demoSharedPassword") }}:</strong>
-          {{ publicAuthConfig.shared_password }}
         </p>
 
         <ul
