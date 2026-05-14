@@ -71,7 +71,7 @@ async function mockCoreApis(page) {
     capacity_bytes: 1000,
     mount_path: '/mnt/ecube/1',
   }])
-  await routeJson(page, '**/api/mounts', [{
+  await routeJson(page, '**/api/shares', [{
     id: 7,
     project_id: 'PRJ',
     status: 'MOUNTED',
@@ -230,7 +230,7 @@ async function waitForShotReady(page, shotName) {
   }
 
   if (shotName === 'mounts') {
-    await expect(page.getByRole('heading', { name: 'Mounts' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Shares' })).toBeVisible()
     await expect(page.locator('.data-table')).toBeVisible()
     return
   }

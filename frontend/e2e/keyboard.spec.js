@@ -32,13 +32,11 @@ test('keyboard navigation: login form Tab order and Enter submit', async ({ page
 test('keyboard navigation: ConfirmDialog closes with Escape', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
 
-  const mounts = [
+  const shares = [
     { id: 10, type: 'NFS', remote_path: '10.0.0.4:/exports', local_mount_point: '/mnt/evidence', status: 'MOUNTED' },
   ]
 
-  await page.route('**/api/mounts', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mounts) })
-  })
+  await routeJson(page, '**/api/shares', shares)
   await routeJson(page, '**/api/jobs**', [])
   await page.route('**/api/shares/*', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
@@ -59,13 +57,11 @@ test('keyboard navigation: ConfirmDialog closes with Escape', async ({ page }) =
 test('keyboard navigation: ConfirmDialog confirm button reachable by Tab', async ({ page }) => {
   await setupAuthenticatedPage(page, ['admin'])
 
-  const mounts = [
+  const shares = [
     { id: 10, type: 'NFS', remote_path: '10.0.0.4:/exports', local_mount_point: '/mnt/evidence', status: 'MOUNTED' },
   ]
 
-  await page.route('**/api/mounts', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mounts) })
-  })
+  await routeJson(page, '**/api/shares', shares)
   await routeJson(page, '**/api/jobs**', [])
   await page.route('**/api/shares/*', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
@@ -144,7 +140,7 @@ test('keyboard navigation: sidebar navigation links are Tab-reachable', async ({
   await setupAuthenticatedPage(page, ['admin'])
   await routeJson(page, '**/api/drives', [])
   await routeJson(page, '**/api/jobs**', [])
-  await routeJson(page, '**/api/mounts**', [])
+  await routeJson(page, '**/api/shares**', [])
 
   await page.goto('/')
 

@@ -85,7 +85,7 @@ test('job detail chain of custody report renders printable sections and CoC expo
   await page.setViewportSize({ width: 390, height: 844 })
   await setupAuthenticatedPage(page, ['auditor'])
   await routeJson(page, '**/api/drives**', [])
-  await routeJson(page, '**/api/mounts', [])
+  await routeJson(page, '**/api/shares', [])
   await routeJson(page, '**/api/jobs/12/files', { total_files: 0, returned_files: 0, files: [] })
   await routeJson(page, '**/api/jobs/12', {
     id: 12,
@@ -220,7 +220,7 @@ test('job detail hides CoC refresh on mobile when loaded custody is already comp
   await page.setViewportSize({ width: 390, height: 844 })
   await setupAuthenticatedPage(page, ['manager'])
   await routeJson(page, '**/api/drives**', [])
-  await routeJson(page, '**/api/mounts', [])
+  await routeJson(page, '**/api/shares', [])
   await routeJson(page, '**/api/jobs/12/files', { total_files: 0, returned_files: 0, files: [] })
   await routeJson(page, '**/api/jobs/12', {
     id: 12,
@@ -287,7 +287,7 @@ test.describe('chain of custody handoff', () => {
   test('requires warning confirmation and submits custody handoff from job detail', async ({ page }) => {
     await setupAuthenticatedPage(page, ['manager'])
     await routeJson(page, '**/api/drives**', [])
-    await routeJson(page, '**/api/mounts', [])
+    await routeJson(page, '**/api/shares', [])
     await routeJson(page, '**/api/jobs/12/files', { total_files: 0, returned_files: 0, files: [] })
 
     await page.route(/\/api\/audit(?!\/)/, async (route) => {

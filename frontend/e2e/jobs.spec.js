@@ -32,7 +32,7 @@ test('jobs create, start, compare, and manifest flow', async ({ page }) => {
     current_project_id: 'P-77',
     mount_path: '/mnt/ecube/1',
   }])
-  await routeJson(page, '**/api/mounts', [{
+  await routeJson(page, '**/api/shares', [{
     id: 4,
     project_id: 'P-77',
     status: 'MOUNTED',
@@ -239,7 +239,7 @@ test('jobs create dialog traps keyboard focus and restores the trigger', async (
       mount_path: '/mnt/ecube/1',
     },
   ])
-  await routeJson(page, '**/api/mounts', [
+  await routeJson(page, '**/api/shares', [
     {
       id: 4,
       project_id: 'P-77',
@@ -292,7 +292,7 @@ test('jobs list supports safe pause and resume flow', async ({ page }) => {
   }
 
   await routeJson(page, '**/api/drives', [])
-  await routeJson(page, '**/api/mounts', [])
+  await routeJson(page, '**/api/shares', [])
 
   await page.route('**/api/jobs**', async (route) => {
     if (route.request().method() !== 'GET') {
@@ -384,7 +384,7 @@ test('jobs archived toggle appears when archived jobs become available and revea
   }
 
   await routeJson(page, '**/api/drives', [])
-  await routeJson(page, '**/api/mounts', [])
+  await routeJson(page, '**/api/shares', [])
 
   await page.route('**/api/jobs**', async (route) => {
     if (route.request().method() !== 'GET') {
@@ -444,7 +444,7 @@ test('jobs mobile overflow menu stays visible without expanding the row', async 
   }
 
   await routeJson(page, '**/api/drives', [])
-  await routeJson(page, '**/api/mounts', [])
+  await routeJson(page, '**/api/shares', [])
   await routeJson(page, '**/api/jobs**', [jobState])
 
   await page.goto('/jobs')
@@ -476,7 +476,7 @@ test('jobs surfaces preparing labels during startup analysis', async ({ page }) 
   await setupAuthenticatedPage(page, ['admin'])
 
   await routeJson(page, '**/api/drives', [])
-  await routeJson(page, '**/api/mounts', [])
+  await routeJson(page, '**/api/shares', [])
   await routeJson(page, '**/api/jobs**', [{
     id: 92,
     project_id: 'P-92',
@@ -540,7 +540,7 @@ test('job detail lets manager clear cached startup analysis', async ({ page }) =
   }
 
   await routeJson(page, '**/api/drives', [])
-  await routeJson(page, '**/api/mounts', [])
+  await routeJson(page, '**/api/shares', [])
   await routeJson(page, '**/api/jobs**', [])
   await page.route('**/api/jobs/93', async (route) => {
     await route.fulfill({
@@ -606,7 +606,7 @@ test('job detail lets processor analyze and then start from prepared analysis', 
   }
 
   await routeJson(page, '**/api/drives', [])
-  await routeJson(page, '**/api/mounts', [])
+  await routeJson(page, '**/api/shares', [])
   await routeJson(page, '**/api/jobs**', [])
   await page.route('**/api/jobs/94', async (route) => {
     await route.fulfill({
@@ -681,7 +681,7 @@ test('job detail polls and reflects status progression', async ({ page }) => {
   const base = { id: 88, project_id: 'P-88', evidence_number: 'EV-88', thread_count: 4, total_bytes: 400 }
 
   await routeJson(page, '**/api/drives', [])
-  await routeJson(page, '**/api/mounts', [])
+  await routeJson(page, '**/api/shares', [])
   await routeJson(page, '**/api/jobs/88/files', { files: [] })
   await page.route('**/api/jobs/88', async (route) => {
     pollCount += 1
@@ -709,7 +709,7 @@ test('job detail prefers persisted failure reasons over derived file summaries',
   await setupAuthenticatedPage(page, ['admin'])
 
   await routeJson(page, '**/api/drives', [])
-  await routeJson(page, '**/api/mounts', [])
+  await routeJson(page, '**/api/shares', [])
   await routeJson(page, '**/api/jobs/91', {
     id: 91,
     project_id: 'P-91',

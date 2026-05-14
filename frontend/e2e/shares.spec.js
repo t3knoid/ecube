@@ -20,7 +20,7 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
     has_more: false,
   })
 
-  await page.route('**/api/mounts', async (route) => {
+  await page.route('**/api/shares', async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mounts) })
       return
@@ -99,11 +99,11 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
   })
 
   await page.goto('/shares')
-  await expect(page.getByRole('heading', { name: 'Mounts' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Shares' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Test All' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Test', exact: true })).toHaveCount(0)
 
-  await page.getByRole('button', { name: 'Add Mount' }).click()
+  await page.getByRole('button', { name: 'Add Share' }).click()
   await expect(page.getByRole('heading', { name: 'Add Share' })).toBeVisible()
   const addDialog = page.getByRole('dialog', { name: 'Add Share' })
   await page.getByLabel('Remote Path').fill('10.0.0.8:/cases')
@@ -154,8 +154,8 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
   await expect(page.locator('.breadcrumb').getByRole('button', { name: '/' })).toBeVisible()
 
   await page.getByRole('row').filter({ has: page.getByText('CASE-2026-001') }).getByRole('button', { name: '11' }).click()
-  await expect(page).toHaveURL(/\/mounts\/11$/)
-  await expect(page.getByRole('heading', { name: 'Mount Detail #11' })).toBeVisible()
+  await expect(page).toHaveURL(/\/shares\/11$/)
+  await expect(page.getByRole('heading', { name: 'Share Detail #11' })).toBeVisible()
 
   await page.getByRole('button', { name: 'Edit' }).click()
   await expect(page.getByRole('heading', { name: 'Edit Share' })).toBeVisible()
@@ -215,12 +215,12 @@ test('mounts add/edit/test/remove flow', async ({ page }) => {
   await page.getByRole('button', { name: 'Remove' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Remove' }).click()
 
-  await expect(page).toHaveURL(/\/mounts$/)
+  await expect(page).toHaveURL(/\/shares$/)
 
   await expectNoCriticalA11yViolations(page)
 })
 
-test('mounts mobile mounted rows browse from the project value without expanding the row', async ({ page }) => {
+test('shares mobile mounted rows browse from the project value without expanding the row', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await setupAuthenticatedPage(page, ['admin'])
 
@@ -234,12 +234,12 @@ test('mounts mobile mounted rows browse from the project value without expanding
     has_more: false,
   })
 
-  await page.route('**/api/mounts', async (route) => {
+  await page.route('**/api/shares', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mounts) })
   })
 
   await page.goto('/shares')
-  await expect(page.getByRole('heading', { name: 'Mounts' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Shares' })).toBeVisible()
 
   const row = page.locator('tbody tr').first()
   const rowBoxBefore = await row.boundingBox()

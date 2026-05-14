@@ -279,7 +279,7 @@ test('drives list and drive detail admin flows', async ({ page }) => {
   })
   await routeJson(page, '**/api/jobs**', [])
   await routeJson(page, '**/api/drives/refresh', { ok: true })
-  await routeJson(page, '**/api/mounts', [{
+  await routeJson(page, '**/api/shares', [{
     id: 4,
     project_id: 'PRJ-112',
     status: 'MOUNTED',
@@ -420,7 +420,7 @@ test('drive detail shows trusted custody status and related job link on mobile',
   }
 
   await routeJson(page, '**/api/drives**', () => [drive])
-  await routeJson(page, '**/api/mounts', [])
+  await routeJson(page, '**/api/shares', [])
 
   await gotoDriveDetail(page, 7)
 

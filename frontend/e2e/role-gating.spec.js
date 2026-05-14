@@ -4,7 +4,7 @@ import { expectNoCriticalA11yViolations } from './helpers/a11y.js'
 
 async function commonRoutes(page) {
   await routeJson(page, '**/api/drives', [{ id: 1, current_state: 'AVAILABLE', device_identifier: '/dev/sdb', filesystem_type: 'ext4', capacity_bytes: 1000 }])
-  await routeJson(page, '**/api/mounts', [])
+  await routeJson(page, '**/api/shares', [])
   await page.route('**/api/jobs**', async (route) => {
     const url = route.request().url()
     if (route.request().method() === 'GET' && /\/api\/jobs(?:\?|$)/.test(url)) {
