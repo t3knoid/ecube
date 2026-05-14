@@ -14,7 +14,7 @@
 - [Group 2: Authentication \& Session Management](#group-2-authentication--session-management)
 - [Group 3: User \& Role Management (Admin Only)](#group-3-user--role-management-admin-only)
 - [Group 4: Drive Management](#group-4-drive-management)
-- [Group 5: Share Management](#group-5-mount-management)
+- [Group 5: Share Management](#group-5-share-management)
 - [Group 6: Export Job Workflow](#group-6-export-job-workflow)
 - [Group 7: Audit \& Compliance](#group-7-audit--compliance)
 - [Group 8: System Monitoring \& Introspection](#group-8-system-monitoring--introspection)
