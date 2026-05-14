@@ -1078,6 +1078,7 @@ def reconcile_drives(
         actor="system",
         topology_source=topology_source,
         filesystem_detector=filesystem_detector,
+        source="startup_reconciliation",
         operation_id=operation_id,
     )
 

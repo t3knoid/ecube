@@ -1300,7 +1300,7 @@ Managers cannot view or trigger password policy, webhook secret, logging infrast
 </li><li>
 <code>Drive Mount Timeout (seconds)</code> controls how long ECUBE allows a drive mount command to run before treating it as failed. Increase it for large removable media or slower USB links that need extra time to mount.
 </li><li>
-<code>Auto USB Discovery Interval (seconds)</code> controls how often ECUBE polls for USB topology and drive-state changes in the background. Set it to <code>0</code> to pause automatic polling, or set a positive value to resume periodic discovery without restarting the service.
+<code>Auto USB Discovery Interval (seconds)</code> selects runtime USB discovery mode. Set it to <code>0</code> to turn off timed polling and turn on event-driven udev monitoring mode. Set it to a positive value to turn off udev runtime monitoring and use timed polling mode.
 </li><li>
 <code>Network Mount Timeout (seconds)</code> controls how long ECUBE allows SMB and NFS mount workflows to run before treating them as failed. The same setting also governs related unmount and mount-state verification checks, so increase it when slow servers, DNS resolution, or authentication handshakes make network shares slow to validate or reconnect.
 </li><li>

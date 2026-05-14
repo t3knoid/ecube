@@ -154,6 +154,7 @@ def run_discovery_sync(
     *,
     topology_source: Callable[[], DiscoveredTopology] = _default_topology_source,
     filesystem_detector: FilesystemDetector,
+    source: Optional[str] = None,
     client_ip: Optional[str] = None,
     operation_id: Optional[str] = None,
 ) -> dict:
@@ -176,6 +177,10 @@ def run_discovery_sync(
         must supply an instance explicitly; production routers pass the result
         of :func:`get_filesystem_detector`, while tests inject a lightweight
         fake.
+    source:
+        Stable origin label for the discovery trigger.  Used in logs and
+        audit details to distinguish startup, runtime polling, and event-driven
+        refreshes.
 
     Returns
     -------
@@ -184,7 +189,14 @@ def run_discovery_sync(
     """
     operation_id = operation_id or str(uuid.uuid4())
 
-    logger.debug("USB discovery sync started", extra=_operation_extra(operation_id, actor=actor or "system"))
+    logger.debug(
+        "USB discovery sync started",
+        extra=_operation_extra(
+            operation_id,
+            actor=actor or "system",
+            discovery_source=source or "system",
+        ),
+    )
 
     topology = topology_source()
 
@@ -553,7 +565,10 @@ def run_discovery_sync(
             audit_repo.add(
                 action="USB_DISCOVERY_SYNC",
                 user=actor,
-                details=_details_with_operation_id(summary, operation_id),
+                details=_details_with_operation_id(
+                    {**summary, "discovery_source": source or "system"},
+                    operation_id,
+                ),
                 client_ip=client_ip,
             )
         except Exception:
@@ -561,6 +576,7 @@ def run_discovery_sync(
 
     completion_metadata = {
         "actor": actor or "system",
+        "discovery_source": source or "system",
         "hubs_upserted": summary["hubs_upserted"],
         "ports_upserted": summary["ports_upserted"],
         "drives_inserted": summary["drives_inserted"],

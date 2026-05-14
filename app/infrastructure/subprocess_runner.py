@@ -26,6 +26,16 @@ def run_subprocess(
     return active_runner(list(cmd), **kwargs)
 
 
+def open_subprocess(
+    cmd: Sequence[str],
+    *,
+    popen_factory: Callable[..., subprocess.Popen[Any]] | None = None,
+    **kwargs: Any,
+) -> subprocess.Popen[Any]:
+    active_factory = popen_factory or subprocess.Popen
+    return active_factory(list(cmd), **kwargs)
+
+
 def resolve_binary(
     candidates: Sequence[str],
     *,

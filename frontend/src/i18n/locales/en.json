@@ -760,7 +760,7 @@
       },
       "usb_discovery_interval": {
         "label": "Auto USB Discovery Interval (seconds)",
-        "help": "How often ECUBE polls for USB drive changes in the background. Set to 0 to turn off automatic discovery."
+        "help": "How often ECUBE polls for USB drive changes in the background. Set to 0 to disable polling and enable udev hotplug discovery."
       },
       "job_detail_files_page_size": {
         "label": "Job Detail Files Per Page",

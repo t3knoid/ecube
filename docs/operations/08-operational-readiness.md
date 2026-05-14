@@ -463,7 +463,7 @@ Before moving ECUBE to production, verify:
 | `COPY_TIMEOUT_SECONDS` | Integer | `300` | Timeout (seconds) for individual file copy |
 | `NFS_MOUNT_TIMEOUT` | Integer | `30` | Timeout (seconds) for NFS mount attempts |
 | `SMB_MOUNT_TIMEOUT` | Integer | `30` | Timeout (seconds) for SMB mount attempts |
-| `USB_DISCOVERY_INTERVAL` | Integer | `5` | USB hub discovery interval (seconds) |
+| `USB_DISCOVERY_INTERVAL` | Integer | `0` | USB discovery mode selector: `0` enables event-driven udev monitoring (default), positive values enable timed polling |
 | `READINESS_USB_DISCOVERY_CACHE_TTL_SECONDS` | Float | `5.0` | Cache TTL (seconds) for successful USB readiness checks to avoid full discovery on every probe |
 | `STARTUP_WAIT_TIMEOUT` | Integer | `300` | Max time (seconds) to wait for startup reconciliation |
 

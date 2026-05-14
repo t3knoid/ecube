@@ -328,7 +328,7 @@ Notes:
 - `processor` and `auditor` receive `403 Forbidden`.
 - Requests that try to send admin-only configuration fields through `/configuration` are rejected with `403 Forbidden`.
 - Managers can see the current effective `log_file` name on `GET /configuration`. The response returns a basename only, not a host path, and changing it remains admin-only through `/admin/configuration`.
-- `usb_discovery_interval` applies to future background discovery polls without a service restart. Setting it to `0` pauses automatic discovery until a positive interval is configured again.
+- `usb_discovery_interval` selects runtime USB discovery mode without a service restart. Setting it to `0` turns off timed polling and turns on event-driven udev monitoring mode. Setting it to a positive value turns off udev runtime monitoring and enables timed polling at the configured interval.
 - This surface intentionally does not expose password policy, webhook secret, database runtime, logging infrastructure, or restart controls.
 
 ---

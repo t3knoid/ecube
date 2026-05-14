@@ -21,6 +21,7 @@ from app.infrastructure.drive_format import DriveFormatter
 from app.infrastructure.drive_space import DriveSpaceProbe
 from app.infrastructure.throughput_benchmark import ThroughputBenchmarkProvider
 from app.infrastructure.usb_discovery import DriveDiscoveryProvider
+from app.infrastructure.usb_event_monitor import UsbEventMonitor
 from app.infrastructure.drive_eject import (
     DriveEjectProvider,
     EjectError,
@@ -40,6 +41,7 @@ __all__ = [
     "DriveSpaceProbe",
     "ThroughputBenchmarkProvider",
     "DriveDiscoveryProvider",
+    "UsbEventMonitor",
     "DriveEjectProvider",
     "EjectError",
     "EjectResult",
@@ -55,6 +57,7 @@ __all__ = [
     "get_drive_space_probe",
     "get_throughput_benchmark",
     "get_drive_discovery",
+    "get_usb_event_monitor",
     "get_drive_eject",
     "get_drive_mount",
     "get_mount_provider",
@@ -100,6 +103,11 @@ def _linux_throughput_benchmark() -> type[ThroughputBenchmarkProvider]:
 def _linux_drive_discovery() -> type[DriveDiscoveryProvider]:
     from app.infrastructure.usb_discovery import LinuxDriveDiscovery
     return LinuxDriveDiscovery
+
+
+def _linux_usb_event_monitor() -> type[UsbEventMonitor]:
+    from app.infrastructure.usb_event_monitor import LinuxUdevUsbEventMonitor
+    return LinuxUdevUsbEventMonitor
 
 def _linux_drive_eject() -> type[DriveEjectProvider]:
     from app.infrastructure.drive_eject import LinuxDriveEject
@@ -153,6 +161,10 @@ _THROUGHPUT_BENCHMARK_REGISTRY: dict[str, Callable[[], type[ThroughputBenchmarkP
 
 _DRIVE_DISCOVERY_REGISTRY: dict[str, Callable[[], type[DriveDiscoveryProvider]]] = {
     "linux": _linux_drive_discovery,
+}
+
+_USB_EVENT_MONITOR_REGISTRY: dict[str, Callable[[], type[UsbEventMonitor]]] = {
+    "linux": _linux_usb_event_monitor,
 }
 
 _DRIVE_EJECT_REGISTRY: dict[str, Callable[[], type[DriveEjectProvider]]] = {
@@ -221,6 +233,11 @@ def get_throughput_benchmark() -> ThroughputBenchmarkProvider:
 def get_drive_discovery() -> DriveDiscoveryProvider:
     """Return the platform-appropriate :class:`DriveDiscoveryProvider`."""
     return _resolve(_DRIVE_DISCOVERY_REGISTRY, "DriveDiscoveryProvider")
+
+
+def get_usb_event_monitor() -> UsbEventMonitor:
+    """Return the platform-appropriate :class:`UsbEventMonitor`."""
+    return _resolve(_USB_EVENT_MONITOR_REGISTRY, "UsbEventMonitor")
 
 
 def get_drive_eject() -> DriveEjectProvider:

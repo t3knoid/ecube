@@ -56,7 +56,7 @@ class TestSettingsDefaults:
 
     def test_usb_discovery_interval_default(self):
         s = Settings(database_url="sqlite://")
-        assert s.usb_discovery_interval == 30
+        assert s.usb_discovery_interval == 0
 
     def test_callback_default_url_default(self):
         s = Settings(database_url="sqlite://")

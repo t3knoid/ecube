@@ -169,6 +169,20 @@ def test_initial_sync_emits_drive_discovered_audit_log(db):
     assert log.details["discovered_at"]
 
 
+def test_initial_sync_records_discovery_source_in_usb_audit_log(db):
+    run_discovery_sync(
+        db,
+        actor="admin-user",
+        source="udev_event",
+        topology_source=_simple_topology,
+        filesystem_detector=_NULL_DETECTOR,
+    )
+
+    log = db.query(AuditLog).filter(AuditLog.action == "USB_DISCOVERY_SYNC").order_by(AuditLog.id.desc()).first()
+    assert log is not None
+    assert log.details["discovery_source"] == "udev_event"
+
+
 def test_initial_sync_drive_discovered_audit_handles_missing_optional_fields(db):
     topology = DiscoveredTopology(
         hubs=[DiscoveredHub(system_identifier="usb1", name="Test Hub")],

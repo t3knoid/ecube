@@ -165,9 +165,10 @@ class Settings(BaseSettings):
     #: overly small or excessively large file page requests.
     job_detail_files_page_size: int = Field(default=40, ge=20, le=100)
 
-    #: Interval in seconds between automatic USB discovery sweeps.
-    #: ``0`` disables periodic discovery.
-    usb_discovery_interval: int = 30
+    #: Runtime USB discovery mode selector.
+    #: Positive values enable timed polling mode; ``0`` enables
+    #: event-driven udev monitoring mode.
+    usb_discovery_interval: int = 0
 
     #: Maximum number of bytes sampled during startup-analysis transfer
     #: benchmarking and manual throughput tests. Share benchmarks read up to
