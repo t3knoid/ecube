@@ -2,6 +2,19 @@
 import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
 
 const threadCountOptions = Array.from({ length: 32 }, (_unused, index) => index + 1)
+const copyChunkSizeOptions = [
+  { value: 1_048_576, label: '1 MiB' },
+  { value: 4_194_304, label: '4 MiB' },
+  { value: 8_388_608, label: '8 MiB' },
+  { value: 16_777_216, label: '16 MiB' },
+]
+const copyProgressFlushOptions = [
+  { value: 8_388_608, label: '8 MiB' },
+  { value: 33_554_432, label: '32 MiB' },
+  { value: 67_108_864, label: '64 MiB' },
+  { value: 134_217_728, label: '128 MiB' },
+  { value: 268_435_456, label: '256 MiB' },
+]
 
 const props = defineProps({
   title: {
@@ -184,6 +197,30 @@ const props = defineProps({
     type: String,
     required: true,
   },
+  copyChunkSizeLabel: {
+    type: String,
+    required: true,
+  },
+  copyChunkSizeHint: {
+    type: String,
+    required: true,
+  },
+  copyProgressFlushLabel: {
+    type: String,
+    required: true,
+  },
+  copyProgressFlushHint: {
+    type: String,
+    required: true,
+  },
+  copyFileFsyncLabel: {
+    type: String,
+    required: true,
+  },
+  copyFileFsyncHint: {
+    type: String,
+    required: true,
+  },
   allowThreadCountDefaultOption: {
     type: Boolean,
     default: false,
@@ -245,6 +282,14 @@ const props = defineProps({
     required: true,
   },
   runImmediatelyLabel: {
+    type: String,
+    required: true,
+  },
+  enabledLabel: {
+    type: String,
+    required: true,
+  },
+  disabledLabel: {
     type: String,
     required: true,
   },
@@ -345,6 +390,36 @@ const emit = defineEmits(['close', 'submit', 'toggle-source-browser'])
               <option v-if="allowThreadCountDefaultOption" :value="null">{{ threadCountDefaultOptionLabel }}</option>
               <option v-for="count in threadCountOptions" :key="count" :value="count">{{ count }}</option>
             </select>
+          </div>
+        </div>
+
+        <div class="copy-tuning-grid">
+          <div class="copy-tuning-field">
+            <label for="job-copy-chunk-size">{{ copyChunkSizeLabel }}</label>
+            <select id="job-copy-chunk-size" v-model.number="form.copy_chunk_size_bytes" :disabled="!projectSelected">
+              <option v-if="allowThreadCountDefaultOption" :value="null">{{ threadCountDefaultOptionLabel }}</option>
+              <option v-for="option in copyChunkSizeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+            </select>
+            <p class="muted field-hint">{{ copyChunkSizeHint }}</p>
+          </div>
+
+          <div class="copy-tuning-field">
+            <label for="job-copy-progress-flush">{{ copyProgressFlushLabel }}</label>
+            <select id="job-copy-progress-flush" v-model.number="form.copy_progress_flush_bytes" :disabled="!projectSelected">
+              <option v-if="allowThreadCountDefaultOption" :value="null">{{ threadCountDefaultOptionLabel }}</option>
+              <option v-for="option in copyProgressFlushOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+            </select>
+            <p class="muted field-hint">{{ copyProgressFlushHint }}</p>
+          </div>
+
+          <div class="copy-tuning-field">
+            <label for="job-copy-file-fsync">{{ copyFileFsyncLabel }}</label>
+            <select id="job-copy-file-fsync" v-model="form.copy_file_fsync_enabled" :disabled="!projectSelected">
+              <option v-if="allowThreadCountDefaultOption" :value="null">{{ threadCountDefaultOptionLabel }}</option>
+              <option :value="true">{{ enabledLabel }}</option>
+              <option :value="false">{{ disabledLabel }}</option>
+            </select>
+            <p class="muted field-hint">{{ copyFileFsyncHint }}</p>
           </div>
         </div>
       </fieldset>
@@ -500,6 +575,18 @@ const emit = defineEmits(['close', 'submit', 'toggle-source-browser'])
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius);
   background: var(--color-bg-secondary);
+}
+
+.copy-tuning-grid {
+  display: grid;
+  gap: var(--space-sm);
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  margin-top: var(--space-sm);
+}
+
+.copy-tuning-field {
+  display: grid;
+  gap: var(--space-xs);
 }
 
 input,

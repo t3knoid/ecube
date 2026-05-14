@@ -821,7 +821,7 @@ Create a new job.
 
 ### `PUT /jobs/{job_id}`
 
-Update a pending job from the Job Detail workflow. Editing remains available after startup analysis completes only while the job is still `PENDING`, so project isolation and drive assignments cannot be redefined after copy work starts. The existing project binding cannot be changed.
+Update a job from the Job Detail workflow. Pending jobs support the full pre-start edit surface. After copy work has started, editing remains available only for runtime copy tuning overrides (`thread_count`, `copy_chunk_size_bytes`, `copy_progress_flush_bytes`, `copy_file_fsync_enabled`) and reserved overflow-drive assignments, so project isolation, source selection, and primary drive binding cannot be redefined after copy work starts. The existing project binding cannot be changed.
 
 **Roles:** `admin`, `manager`, `processor`
 

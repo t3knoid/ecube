@@ -132,7 +132,10 @@ Table export_jobs {
   total_bytes bigint [default: 0]
   copied_bytes bigint [default: 0]
   file_count int [default: 0]
-  thread_count int [default: 4]
+  thread_count int
+  copy_chunk_size_bytes int
+  copy_progress_flush_bytes bigint
+  copy_file_fsync_enabled boolean
   max_file_retries int [default: 3]
   retry_delay_seconds int [default: 1]
   active_duration_seconds int [not null, default: 0]

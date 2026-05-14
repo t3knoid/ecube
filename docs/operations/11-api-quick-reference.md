@@ -222,6 +222,8 @@ Compatibility note: To support project-to-source-path policy, use project source
 
 **Mounted Source Resolution:** Current job creation also includes the selected mounted share identifier plus any optional `overflow_drive_ids`. The API resolves the final source path on the trusted backend, treats / as the selected share root, rejects traversal outside that share with **422**, and returns **404** or **409** if the selected mount is missing, unmounted, or assigned to a different project. Primary and overflow drives must all be mounted and already bound to the selected project when the job is created explicitly.
 
+**Per-Job Copy Tuning:** Job create and update requests can include optional per-job overrides for `thread_count`, `copy_chunk_size_bytes`, `copy_progress_flush_bytes`, and `copy_file_fsync_enabled`. Job responses return the stored override values plus `effective_thread_count`, `effective_copy_chunk_size_bytes`, `effective_copy_progress_flush_bytes`, and `effective_copy_file_fsync_enabled` so Job Detail can explain whether the runtime behavior comes from a job override or the global Configuration defaults.
+
 **Progress Semantics:** Job list, dashboard, and detail views all use `copied_bytes` together with completed-file counters so active jobs do not appear 100% complete before file completion has caught up.
 
 **File Outcome Counters:** Job payloads include `files_succeeded`, `files_failed`, and `files_timed_out`. `files_timed_out` tracks per-file timeout outcomes (for example, `File copy timed out after 3600s`) and is reported separately from whole-job failure classification.

@@ -60,6 +60,9 @@ const form = ref({
   mount_id: null,
   source_path: '/',
   thread_count: null,
+  copy_chunk_size_bytes: null,
+  copy_progress_flush_bytes: null,
+  copy_file_fsync_enabled: null,
   notes: '',
   callback_url: '',
   run_immediately: false,
@@ -123,6 +126,15 @@ function jobStatusIcon(status) {
   return '?'
 }
 
+function getJobThreadCountOverride(job) {
+  if (!job) return null
+  if (job.thread_count_override != null) return Number(job.thread_count_override)
+  if (Object.prototype.hasOwnProperty.call(job, 'thread_count_source')) {
+    return String(job.thread_count_source || '').toLowerCase() === 'job' ? Number(job.thread_count) : null
+  }
+  return job.thread_count != null ? Number(job.thread_count) : null
+}
+
 function isRowActionBusy(job) {
   return Number(actingJobId.value) === Number(job?.id)
 }
@@ -172,7 +184,8 @@ async function runJobAction(job, action) {
   actingJobId.value = job.id
   pageError.value = ''
   try {
-    const startPayload = job?.thread_count == null ? {} : { thread_count: Number(job.thread_count) }
+    const threadCountOverride = getJobThreadCountOverride(job)
+    const startPayload = threadCountOverride == null ? {} : { thread_count: Number(threadCountOverride) }
     const updated = normalizeProjectRecord(
       action === 'start'
         ? await startJob(job.id, startPayload)
@@ -253,6 +266,9 @@ function resetForm() {
     mount_id: null,
     source_path: '/',
     thread_count: null,
+    copy_chunk_size_bytes: null,
+    copy_progress_flush_bytes: null,
+    copy_file_fsync_enabled: null,
     notes: '',
     callback_url: '',
     run_immediately: false,
@@ -591,6 +607,15 @@ async function submitCreateJob() {
     if (form.value.thread_count != null && form.value.thread_count !== '') {
       payload.thread_count = Number(form.value.thread_count)
     }
+    if (form.value.copy_chunk_size_bytes != null && form.value.copy_chunk_size_bytes !== '') {
+      payload.copy_chunk_size_bytes = Number(form.value.copy_chunk_size_bytes)
+    }
+    if (form.value.copy_progress_flush_bytes != null && form.value.copy_progress_flush_bytes !== '') {
+      payload.copy_progress_flush_bytes = Number(form.value.copy_progress_flush_bytes)
+    }
+    if (form.value.copy_file_fsync_enabled != null && form.value.copy_file_fsync_enabled !== '') {
+      payload.copy_file_fsync_enabled = Boolean(form.value.copy_file_fsync_enabled)
+    }
 
     const created = normalizeProjectRecord(await createJob(payload), ['project_id'])
 
@@ -867,6 +892,12 @@ onBeforeUnmount(() => {
             :callback-url-label="t('jobs.callbackUrl')"
             :callback-url-hint="t('jobs.callbackUrlHint')"
             :thread-count-label="t('jobs.threadCount')"
+            :copy-chunk-size-label="t('configuration.fields.copy_chunk_size_bytes.label')"
+            :copy-chunk-size-hint="t('configuration.fields.copy_chunk_size_bytes.help')"
+            :copy-progress-flush-label="t('configuration.fields.copy_progress_flush_bytes.label')"
+            :copy-progress-flush-hint="t('configuration.fields.copy_progress_flush_bytes.help')"
+            :copy-file-fsync-label="t('configuration.fields.copy_file_fsync_enabled.label')"
+            :copy-file-fsync-hint="t('configuration.fields.copy_file_fsync_enabled.help')"
             :allow-thread-count-default-option="true"
             :thread-count-default-option-label="t('jobs.threadCountUseConfiguredDefault')"
             :job-details-group-label="t('jobs.jobDetailsGroup')"
@@ -883,6 +914,8 @@ onBeforeUnmount(() => {
             :no-eligible-overflow-drives-label="t('jobs.noEligibleOverflowDrives')"
             :execution-group-label="t('jobs.executionGroup')"
             :run-immediately-label="t('jobs.runImmediately')"
+            :enabled-label="t('common.labels.enabled')"
+            :disabled-label="t('common.labels.disabled')"
             :format-mount-label="formatMountLabel"
             :format-drive-label="formatDriveLabel"
             @close="closeCreateDialog"

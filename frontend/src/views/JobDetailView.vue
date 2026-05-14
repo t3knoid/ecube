@@ -91,6 +91,9 @@ const editForm = ref({
   drive_id: null,
   overflow_drive_ids: [],
   thread_count: 4,
+  copy_chunk_size_bytes: null,
+  copy_progress_flush_bytes: null,
+  copy_file_fsync_enabled: null,
   callback_url: '',
 })
 
@@ -781,7 +784,7 @@ const completionSummary = computed(() => {
 
   return {
     startedAt: formatTimestamp(job.value.started_at),
-    copyThreads: Number(job.value.thread_count || 0),
+    copyThreads: Number(getEffectiveThreadCount(job.value) || 0),
     filesCopied: Number(job.value.files_succeeded || 0),
     filesFailed: Number(job.value.files_failed || 0),
     filesTimedOut: Number(job.value.files_timed_out || 0),
@@ -843,6 +846,38 @@ function formatBytes(value) {
     idx += 1
   }
   return `${next.toFixed(next >= 10 ? 0 : 1)} ${units[idx]}`
+}
+
+function getJobThreadCountOverride(record) {
+  if (!record) return null
+  if (record.thread_count_override != null) return Number(record.thread_count_override)
+  if (Object.prototype.hasOwnProperty.call(record, 'thread_count_source')) {
+    return String(record.thread_count_source || '').toLowerCase() === 'job' ? Number(record.thread_count) : null
+  }
+  return record.thread_count != null ? Number(record.thread_count) : null
+}
+
+function getEffectiveThreadCount(record) {
+  if (!record) return null
+  if (record.effective_thread_count != null) return Number(record.effective_thread_count)
+  return record.thread_count != null ? Number(record.thread_count) : null
+}
+
+function copyTuningSourceLabel(source) {
+  return String(source || '').toLowerCase() === 'job'
+    ? t('jobs.copyTuningSourceJob')
+    : t('jobs.copyTuningSourceDefault')
+}
+
+function formatCopyTuningBytes(value, source) {
+  if (value == null) return '-'
+  return `${formatBytes(Number(value))} (${copyTuningSourceLabel(source)})`
+}
+
+function formatCopyTuningBoolean(value, source) {
+  if (value == null) return '-'
+  const label = value ? t('common.labels.enabled') : t('common.labels.disabled')
+  return `${label} (${copyTuningSourceLabel(source)})`
 }
 
 function formatTimestamp(value) {
@@ -1373,7 +1408,10 @@ async function openEditDialog() {
     source_path: buildEditSourcePath(job.value, inferredMount),
     drive_id: job.value.drive?.id ?? null,
     overflow_drive_ids: reservedOverflowAssignments.value.map((assignment) => Number(assignment.drive_id)),
-    thread_count: Number(job.value.thread_count || 4),
+    thread_count: getJobThreadCountOverride(job.value),
+    copy_chunk_size_bytes: job.value.copy_chunk_size_bytes ?? null,
+    copy_progress_flush_bytes: job.value.copy_progress_flush_bytes ?? null,
+    copy_file_fsync_enabled: job.value.copy_file_fsync_enabled ?? null,
     callback_url: String(job.value.callback_url || ''),
   }
   showEditSourceBrowser.value = false
@@ -1387,7 +1425,7 @@ async function openOverflowDialog() {
   await loadSupportingData()
   overflowForm.value = {
     drive_id: overflowEligibleDrives.value[0]?.id ?? null,
-    thread_count: Number(job.value.thread_count || 4),
+    thread_count: Number(getEffectiveThreadCount(job.value) || 4),
   }
   showOverflowDialog.value = true
 }
@@ -1399,7 +1437,7 @@ async function submitOverflowContinuation() {
   try {
     job.value = normalizeProjectRecord(await continueJobOverflow(job.value.id, {
       drive_id: Number(overflowForm.value.drive_id),
-      thread_count: Number(overflowForm.value.thread_count || job.value.thread_count || 4),
+      thread_count: Number(overflowForm.value.thread_count || getEffectiveThreadCount(job.value) || 4),
     }), ['project_id'])
     closeOverflowDialog()
     await refreshAll()
@@ -1413,7 +1451,7 @@ async function submitOverflowContinuation() {
 
 function editFormReady() {
   if (startedJobEditMode.value) {
-    return Number.isInteger(Number(editForm.value.thread_count || NaN))
+    return editForm.value.thread_count == null || Number.isInteger(Number(editForm.value.thread_count || NaN))
   }
 
   return !!normalizeProjectId(editForm.value.project_id)
@@ -1437,7 +1475,10 @@ async function submitEditJob() {
       overflow_drive_ids: Array.isArray(editForm.value.overflow_drive_ids)
         ? editForm.value.overflow_drive_ids.map((value) => Number(value)).filter((value) => Number.isInteger(value))
         : [],
-      thread_count: Number(editForm.value.thread_count || 4),
+      thread_count: editForm.value.thread_count == null ? null : Number(editForm.value.thread_count),
+      copy_chunk_size_bytes: editForm.value.copy_chunk_size_bytes == null ? null : Number(editForm.value.copy_chunk_size_bytes),
+      copy_progress_flush_bytes: editForm.value.copy_progress_flush_bytes == null ? null : Number(editForm.value.copy_progress_flush_bytes),
+      copy_file_fsync_enabled: editForm.value.copy_file_fsync_enabled,
       max_file_retries: Number(job.value.max_file_retries || 3),
       retry_delay_seconds: Number(job.value.retry_delay_seconds || 1),
       callback_url: String(editForm.value.callback_url || '').trim() || null,
@@ -1656,7 +1697,8 @@ async function runAction(action) {
   try {
     if (action === 'start') {
       closePausePendingDialog()
-      const startPayload = job.value.thread_count == null ? {} : { thread_count: Number(job.value.thread_count) }
+      const threadCountOverride = getJobThreadCountOverride(job.value)
+      const startPayload = threadCountOverride == null ? {} : { thread_count: Number(threadCountOverride) }
       job.value = await startJob(job.value.id, startPayload)
     } else if (action === 'retry-failed') {
       closePausePendingDialog()
@@ -1999,7 +2041,16 @@ onUnmounted(() => {
             <h3 id="job-detail-neutral-information-title">{{ t('jobs.jobDetailsGroup') }}</h3>
             <div class="detail-grid">
               <div class="detail-grid-item">
-                <span>{{ t('jobs.threadCount') }}</span><strong>{{ job.thread_count ?? '-' }}</strong>
+                <span>{{ t('jobs.threadCount') }}</span><strong>{{ getEffectiveThreadCount(job) ?? '-' }}{{ getEffectiveThreadCount(job) != null ? ` (${copyTuningSourceLabel(job.thread_count_source)})` : '' }}</strong>
+              </div>
+              <div class="detail-grid-item">
+                <span>{{ t('configuration.fields.copy_chunk_size_bytes.label') }}</span><strong>{{ formatCopyTuningBytes(job.effective_copy_chunk_size_bytes, job.copy_chunk_size_source) }}</strong>
+              </div>
+              <div class="detail-grid-item">
+                <span>{{ t('configuration.fields.copy_progress_flush_bytes.label') }}</span><strong>{{ formatCopyTuningBytes(job.effective_copy_progress_flush_bytes, job.copy_progress_flush_source) }}</strong>
+              </div>
+              <div class="detail-grid-item">
+                <span>{{ t('configuration.fields.copy_file_fsync_enabled.label') }}</span><strong>{{ formatCopyTuningBoolean(job.effective_copy_file_fsync_enabled, job.copy_file_fsync_source) }}</strong>
               </div>
               <div class="detail-grid-item detail-grid-item--wide">
                 <span>{{ t('jobs.callbackUrl') }}</span><strong class="mono wrap-anywhere">{{ job.callback_url || '-' }}</strong>
@@ -2313,6 +2364,14 @@ onUnmounted(() => {
             :callback-url-label="t('jobs.callbackUrl')"
             :callback-url-hint="t('jobs.callbackUrlHint')"
             :thread-count-label="t('jobs.threadCount')"
+            :copy-chunk-size-label="t('configuration.fields.copy_chunk_size_bytes.label')"
+            :copy-chunk-size-hint="t('configuration.fields.copy_chunk_size_bytes.help')"
+            :copy-progress-flush-label="t('configuration.fields.copy_progress_flush_bytes.label')"
+            :copy-progress-flush-hint="t('configuration.fields.copy_progress_flush_bytes.help')"
+            :copy-file-fsync-label="t('configuration.fields.copy_file_fsync_enabled.label')"
+            :copy-file-fsync-hint="t('configuration.fields.copy_file_fsync_enabled.help')"
+            :allow-thread-count-default-option="true"
+            :thread-count-default-option-label="t('jobs.threadCountUseConfiguredDefault')"
             :job-details-group-label="t('jobs.jobDetailsGroup')"
             :source-group-label="t('jobs.sourceGroup')"
             :select-mount-label="t('jobs.selectMount')"
@@ -2327,6 +2386,8 @@ onUnmounted(() => {
             :no-eligible-overflow-drives-label="t('jobs.noEligibleOverflowDrives')"
             :execution-group-label="t('jobs.executionGroup')"
             :run-immediately-label="t('jobs.runImmediately')"
+            :enabled-label="t('common.labels.enabled')"
+            :disabled-label="t('common.labels.disabled')"
             :format-mount-label="formatMountLabel"
             :format-drive-label="formatDriveLabel"
             @close="closeEditDialog"

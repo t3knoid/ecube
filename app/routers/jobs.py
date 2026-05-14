@@ -34,6 +34,7 @@ from app.schemas.jobs import (
 from app.services.drive_space_service import request_available_space_refresh_for_drive
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_409, R_422, R_500
 from app.services import audit_service, job_service
+from app.services.copy_tuning import resolve_job_copy_tuning
 from app.utils.client_ip import get_client_ip
 from app.utils.sanitize import redact_pathlike_substrings
 
@@ -189,6 +190,7 @@ def _redact_ip(job, user: CurrentUser, db: Session) -> ExportJobSchema:
     uses :func:`_enrich_jobs_bulk` instead to avoid N+1 queries.
     """
     schema = ExportJobSchema.model_validate(job)
+    _apply_copy_tuning_snapshot(schema, job)
     if not _IP_VISIBLE_ROLES.intersection(user.roles):
         schema.client_ip = None
 
@@ -275,6 +277,7 @@ def _enrich_jobs_bulk(
     result: List[ExportJobSchema] = []
     for job in jobs:
         schema = ExportJobSchema.model_validate(job)
+        _apply_copy_tuning_snapshot(schema, job)
         if redact_ip:
             schema.client_ip = None
 
@@ -297,6 +300,20 @@ def _enrich_jobs_bulk(
 
         result.append(schema)
     return result
+
+
+def _apply_copy_tuning_snapshot(schema: ExportJobSchema, job: object) -> None:
+    tuning = resolve_job_copy_tuning(job)
+    schema.thread_count = tuning.effective_thread_count
+    schema.thread_count_override = tuning.thread_count_override
+    schema.effective_thread_count = tuning.effective_thread_count
+    schema.thread_count_source = tuning.thread_count_source
+    schema.effective_copy_chunk_size_bytes = tuning.effective_copy_chunk_size_bytes
+    schema.copy_chunk_size_source = tuning.copy_chunk_size_source
+    schema.effective_copy_progress_flush_bytes = tuning.effective_copy_progress_flush_bytes
+    schema.copy_progress_flush_source = tuning.copy_progress_flush_source
+    schema.effective_copy_file_fsync_enabled = tuning.effective_copy_file_fsync_enabled
+    schema.copy_file_fsync_source = tuning.copy_file_fsync_source
 
 
 @router.get("", response_model=list[ExportJobSchema], responses={**R_401, **R_403, **R_422})

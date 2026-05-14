@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
+from app.config import settings
 from app.routers import jobs as jobs_router
 from app.models.audit import AuditLog
 from app.models.hardware import UsbDrive, DriveState, UsbHub, UsbPort
@@ -932,6 +933,47 @@ def test_get_job(client, db):
     assert response.status_code == 200
     assert response.json()["id"] == job_id
     assert response.json()["drive"]["available_bytes"] == 4096
+
+
+def test_get_job_includes_effective_copy_tuning_snapshot(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-GET-TUNING-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-TUNING-001",
+        mount_path="/mnt/ecube/get-tuning-001",
+    )
+    job = ExportJob(
+        project_id="PROJ-TUNING-001",
+        evidence_number="EV-TUNING-001",
+        source_path="/data/evidence",
+        target_mount_path=drive.mount_path,
+        status=JobStatus.PENDING,
+        thread_count=None,
+        copy_chunk_size_bytes=8_388_608,
+        copy_progress_flush_bytes=None,
+        copy_file_fsync_enabled=True,
+    )
+    db.add_all([drive, job])
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id, activated_at=datetime.now(timezone.utc)))
+    db.commit()
+
+    response = client.get(f"/jobs/{job.id}")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["thread_count"] == settings.copy_default_thread_count
+    assert data["thread_count_override"] is None
+    assert data["thread_count_source"] == "default"
+    assert data["copy_chunk_size_bytes"] == 8_388_608
+    assert data["effective_copy_chunk_size_bytes"] == 8_388_608
+    assert data["copy_chunk_size_source"] == "job"
+    assert data["copy_progress_flush_bytes"] is None
+    assert data["effective_copy_progress_flush_bytes"] == settings.copy_progress_flush_bytes
+    assert data["copy_progress_flush_source"] == "default"
+    assert data["copy_file_fsync_enabled"] is True
+    assert data["effective_copy_file_fsync_enabled"] is True
+    assert data["copy_file_fsync_source"] == "job"
 
 
 def test_get_job_includes_latest_manifest_created_at(client, db):
@@ -4238,8 +4280,8 @@ def test_update_job_rejects_started_job_states(client, db):
 
         assert response.status_code == 409
         payload = response.json()
-        assert payload.get("detail") == "Started jobs can only update thread count and overflow drive selections" \
-            or payload.get("message") == "Started jobs can only update thread count and overflow drive selections"
+        assert payload.get("detail") == "Started jobs can only update copy tuning overrides and overflow drive selections" \
+            or payload.get("message") == "Started jobs can only update copy tuning overrides and overflow drive selections"
 
         assignment = db.query(DriveAssignment).filter(DriveAssignment.job_id == job.id).one()
         db.delete(assignment)
@@ -4295,6 +4337,9 @@ def test_update_started_job_allows_thread_count_and_overflow_drive_changes(clien
             "drive_id": drive.id,
             "overflow_drive_ids": [overflow_drive.id],
             "thread_count": 32,
+            "copy_chunk_size_bytes": 8_388_608,
+            "copy_progress_flush_bytes": 134_217_728,
+            "copy_file_fsync_enabled": True,
             "max_file_retries": 3,
             "retry_delay_seconds": 1,
             "callback_url": None,
@@ -4304,10 +4349,20 @@ def test_update_started_job_allows_thread_count_and_overflow_drive_changes(clien
     assert response.status_code == 200
     data = response.json()
     assert data["thread_count"] == 32
+    assert data["thread_count_override"] == 32
+    assert data["copy_chunk_size_bytes"] == 8_388_608
+    assert data["effective_copy_chunk_size_bytes"] == 8_388_608
+    assert data["copy_progress_flush_bytes"] == 134_217_728
+    assert data["effective_copy_progress_flush_bytes"] == 134_217_728
+    assert data["copy_file_fsync_enabled"] is True
+    assert data["effective_copy_file_fsync_enabled"] is True
     assert [assignment["drive_id"] for assignment in data["overflow_assignments"]] == [overflow_drive.id]
     db.refresh(job)
     db.refresh(overflow_drive)
     assert job.thread_count == 32
+    assert job.copy_chunk_size_bytes == 8_388_608
+    assert job.copy_progress_flush_bytes == 134_217_728
+    assert job.copy_file_fsync_enabled is True
     assert overflow_drive.current_state == DriveState.IN_USE
     reserved_assignment = db.query(DriveAssignment).filter(
         DriveAssignment.job_id == job.id,

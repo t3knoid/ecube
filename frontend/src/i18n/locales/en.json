@@ -183,6 +183,8 @@
     "browseSourcePath": "Browse folders",
     "threadCount": "Thread count",
     "threadCountUseConfiguredDefault": "Use configured default",
+    "copyTuningSourceDefault": "configuration default",
+    "copyTuningSourceJob": "job override",
     "analyze": "Analyze",
     "start": "Start",
     "continueOverflow": "Continue on Another Drive",

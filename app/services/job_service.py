@@ -26,6 +26,7 @@ from app.repositories.share_repository import ShareRepository
 from app.schemas.jobs import JobCreate, JobOverflowContinueRequest, JobStart, JobUpdate
 from app.services import copy_engine
 from app.services.callback_service import deliver_callback
+from app.services.copy_tuning import resolve_job_copy_tuning
 from app.utils.sanitize import is_encoding_error, resolve_source_path, sanitize_error_message, validate_source_path
 from app.utils.path_overlap import classify_source_path_overlap
 
@@ -739,7 +740,6 @@ def create_job(
     drive_repo = DriveRepository(db)
     audit_repo = AuditRepository(db)
     resolved_source_path = _resolve_job_source_path(body, db)
-    resolved_thread_count = int(body.thread_count or settings.copy_default_thread_count)
 
     if seeded_job_id is not None:
         existing_job = db.query(ExportJob).filter(ExportJob.id == seeded_job_id).one_or_none()
@@ -752,7 +752,10 @@ def create_job(
         evidence_number=body.evidence_number,
         source_path=resolved_source_path,
         target_mount_path=None,
-        thread_count=resolved_thread_count,
+        thread_count=_optional_int(body.thread_count),
+        copy_chunk_size_bytes=_optional_int(body.copy_chunk_size_bytes),
+        copy_progress_flush_bytes=_optional_int(body.copy_progress_flush_bytes),
+        copy_file_fsync_enabled=_optional_bool(body.copy_file_fsync_enabled),
         max_file_retries=body.max_file_retries,
         retry_delay_seconds=body.retry_delay_seconds,
         created_by=actor,
@@ -967,6 +970,15 @@ def create_job(
             "project_id": body.project_id,
             "evidence_number": body.evidence_number,
         }
+        tuning = resolve_job_copy_tuning(job)
+        if body.thread_count is not None:
+            audit_details["thread_count"] = tuning.effective_thread_count
+        if body.copy_chunk_size_bytes is not None:
+            audit_details["copy_chunk_size_bytes"] = tuning.effective_copy_chunk_size_bytes
+        if body.copy_progress_flush_bytes is not None:
+            audit_details["copy_progress_flush_bytes"] = tuning.effective_copy_progress_flush_bytes
+        if body.copy_file_fsync_enabled is not None:
+            audit_details["copy_file_fsync_enabled"] = tuning.effective_copy_file_fsync_enabled
         if body.notes:
             audit_details["processor_notes"] = body.notes
         if body.overflow_drive_ids:
@@ -1270,8 +1282,20 @@ def _started_job_update_only_allows_runtime_fields(
     if immutable_changes:
         raise service_exception(
             status_code=409,
-            detail="Started jobs can only update thread count and overflow drive selections",
+            detail="Started jobs can only update copy tuning overrides and overflow drive selections",
         )
+
+
+def _optional_int(value: object) -> Optional[int]:
+    if value is None:
+        return None
+    return int(value)
+
+
+def _optional_bool(value: object) -> Optional[bool]:
+    if value is None:
+        return None
+    return bool(value)
 
 
 def _reject_when_startup_analysis_running(job: ExportJob, *, action: str) -> None:
@@ -1574,7 +1598,7 @@ def update_job(
         if update_is_limited_to_runtime_fields:
             raise service_exception(
                 status_code=409,
-                detail="Started jobs can only update thread count and overflow drive selections",
+                detail="Started jobs can only update copy tuning overrides and overflow drive selections",
             )
         raise service_exception(
             status_code=409,
@@ -1664,8 +1688,14 @@ def update_job(
         changed_fields.append("evidence_number")
     if not update_is_limited_to_runtime_fields and cast(Optional[str], job_row.source_path) != validated_source_path:
         changed_fields.append("source_path")
-    if int(cast(Optional[int], job_row.thread_count) or 0) != int(body.thread_count):
+    if _optional_int(body.thread_count) != cast(Optional[int], job_row.thread_count):
         changed_fields.append("thread_count")
+    if _optional_int(body.copy_chunk_size_bytes) != cast(Optional[int], getattr(job_row, "copy_chunk_size_bytes", None)):
+        changed_fields.append("copy_chunk_size_bytes")
+    if _optional_int(body.copy_progress_flush_bytes) != cast(Optional[int], getattr(job_row, "copy_progress_flush_bytes", None)):
+        changed_fields.append("copy_progress_flush_bytes")
+    if _optional_bool(body.copy_file_fsync_enabled) != cast(Optional[bool], getattr(job_row, "copy_file_fsync_enabled", None)):
+        changed_fields.append("copy_file_fsync_enabled")
     if not update_is_limited_to_runtime_fields and int(cast(Optional[int], job_row.max_file_retries) or 0) != int(body.max_file_retries):
         changed_fields.append("max_file_retries")
     if not update_is_limited_to_runtime_fields and int(cast(Optional[int], job_row.retry_delay_seconds) or 0) != int(body.retry_delay_seconds):
@@ -1772,7 +1802,10 @@ def update_job(
     drive_row.current_state = DriveState.IN_USE
     source_path_changed = cast(Optional[str], job_row.source_path) != validated_source_path
 
-    job_row.thread_count = int(body.thread_count)
+    job_row.thread_count = _optional_int(body.thread_count)
+    job_row.copy_chunk_size_bytes = _optional_int(body.copy_chunk_size_bytes)
+    job_row.copy_progress_flush_bytes = _optional_int(body.copy_progress_flush_bytes)
+    job_row.copy_file_fsync_enabled = _optional_bool(body.copy_file_fsync_enabled)
     if not update_is_limited_to_runtime_fields:
         job_row.evidence_number = body.evidence_number
         job_row.source_path = validated_source_path
@@ -1810,6 +1843,12 @@ def update_job(
                 "drive_id": int(requested_drive_id),
                 "updated_fields": changed_fields,
                 "overflow_drive_ids": desired_overflow_drive_ids,
+                "copy_tuning": {
+                    "thread_count": cast(Optional[int], job_row.thread_count),
+                    "copy_chunk_size_bytes": cast(Optional[int], getattr(job_row, "copy_chunk_size_bytes", None)),
+                    "copy_progress_flush_bytes": cast(Optional[int], getattr(job_row, "copy_progress_flush_bytes", None)),
+                    "copy_file_fsync_enabled": cast(Optional[bool], getattr(job_row, "copy_file_fsync_enabled", None)),
+                },
             },
             client_ip=client_ip,
         )

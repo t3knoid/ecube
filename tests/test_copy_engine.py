@@ -3301,6 +3301,9 @@ def test_run_copy_job_logs_effective_runtime_parameters_at_debug(db, tmp_path, c
         retry_delay_seconds=7,
     )
     job.thread_count = 3
+    job.copy_chunk_size_bytes = 1_048_576
+    job.copy_progress_flush_bytes = 4_194_304
+    job.copy_file_fsync_enabled = False
     db.commit()
     db.refresh(job)
 
@@ -3334,9 +3337,12 @@ def test_run_copy_job_logs_effective_runtime_parameters_at_debug(db, tmp_path, c
     assert record.retry_delay_seconds == 7.0
     assert record.retry_delay_source == "job"
     assert record.copy_job_timeout_seconds == 123
-    assert record.copy_chunk_size_bytes == 2_097_152
-    assert record.copy_progress_flush_threshold_bytes == 8_388_608
-    assert record.copy_file_fsync_enabled is True
+    assert record.copy_chunk_size_bytes == 1_048_576
+    assert record.copy_chunk_size_source == "job"
+    assert record.copy_progress_flush_threshold_bytes == 4_194_304
+    assert record.copy_progress_flush_source == "job"
+    assert record.copy_file_fsync_enabled is False
+    assert record.copy_file_fsync_source == "job"
     assert record.pending_batch_limit == 12
     assert record.pending_batch_multiplier == copy_engine.COPY_PENDING_BATCH_MULTIPLIER
 

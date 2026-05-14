@@ -2794,6 +2794,16 @@ describe('JobDetailView start action', () => {
       source_path: '/nfs/project-001/evidence',
       target_mount_path: '/mnt/ecube/1',
       thread_count: 4,
+      thread_count_override: 4,
+      effective_copy_chunk_size_bytes: 4_194_304,
+      copy_chunk_size_bytes: null,
+      copy_chunk_size_source: 'default',
+      effective_copy_progress_flush_bytes: 67_108_864,
+      copy_progress_flush_bytes: null,
+      copy_progress_flush_source: 'default',
+      effective_copy_file_fsync_enabled: false,
+      copy_file_fsync_enabled: null,
+      copy_file_fsync_source: 'default',
       copied_bytes: 512,
       total_bytes: 1024,
       callback_url: 'https://example.com/current-webhook',
@@ -2825,6 +2835,7 @@ describe('JobDetailView start action', () => {
       project_id: 'PROJ-001',
       evidence_number: 'EV-006',
       thread_count: 8,
+      thread_count_override: 8,
       copied_bytes: 512,
       total_bytes: 1024,
       source_path: '/nfs/project-001/evidence',
@@ -2848,6 +2859,9 @@ describe('JobDetailView start action', () => {
     expect(wrapper.find('#job-mount').exists()).toBe(false)
     expect(wrapper.find('#job-drive').exists()).toBe(false)
     expect(wrapper.find('#job-thread-count').element.value).toBe('4')
+    expect(wrapper.find('#job-copy-chunk-size').exists()).toBe(true)
+    expect(wrapper.find('#job-copy-progress-flush').exists()).toBe(true)
+    expect(wrapper.find('#job-copy-file-fsync').exists()).toBe(true)
     const overflowCheckbox = wrapper.find('input[type="checkbox"][value="2"]')
     expect(overflowCheckbox.exists()).toBe(true)
     expect(overflowCheckbox.element.checked).toBe(true)
@@ -2856,6 +2870,9 @@ describe('JobDetailView start action', () => {
     expect(newlyAddedDriveCheckbox.element.checked).toBe(false)
 
     await wrapper.find('#job-thread-count').setValue('16')
+    await wrapper.find('#job-copy-chunk-size').setValue('8388608')
+    await wrapper.find('#job-copy-progress-flush').setValue('134217728')
+    await wrapper.find('#job-copy-file-fsync').setValue('true')
     await overflowCheckbox.setChecked(false)
     await wrapper.find('#job-submit').trigger('click')
     await flushPromises()
@@ -2865,6 +2882,9 @@ describe('JobDetailView start action', () => {
       source_path: '/evidence',
       drive_id: 1,
       thread_count: 16,
+      copy_chunk_size_bytes: 8388608,
+      copy_progress_flush_bytes: 134217728,
+      copy_file_fsync_enabled: true,
       overflow_drive_ids: [],
       callback_url: 'https://example.com/current-webhook',
     }))

@@ -25,6 +25,7 @@ from app.repositories.job_repository import (
     StartupAnalysisEntryRepository,
 )
 from app.services.callback_service import deliver_callback
+from app.services.copy_tuning import resolve_job_copy_tuning, resolve_progress_flush_threshold_bytes
 from app.services.copy_worker_runtime import (
     register_active_copy_worker,
     unregister_active_copy_worker,
@@ -63,6 +64,8 @@ class CopyEngine(Protocol):
         checksum_algorithm: str = "sha256",
         progress_callback: Optional[Callable[[int], None]] = None,
         timeout_seconds: int = 0,
+        chunk_size: Optional[int] = None,
+        fsync_enabled: Optional[bool] = None,
     ) -> Tuple[bool, Optional[str], Optional[str]]: ...
 
     def checksum_only(
@@ -70,6 +73,7 @@ class CopyEngine(Protocol):
         src: Path,
         progress_callback: Optional[Callable[[int], None]] = None,
         timeout_seconds: int = 0,
+        chunk_size: Optional[int] = None,
     ) -> Tuple[bool, Optional[str], Optional[str]]: ...
 
 
@@ -86,6 +90,8 @@ class NativeCopyEngine:
         checksum_algorithm: str = "sha256",
         progress_callback: Optional[Callable[[int], None]] = None,
         timeout_seconds: int = 0,
+        chunk_size: Optional[int] = None,
+        fsync_enabled: Optional[bool] = None,
     ) -> Tuple[bool, Optional[str], Optional[str]]:
         return copy_file(
             src,
@@ -93,6 +99,8 @@ class NativeCopyEngine:
             checksum_algorithm,
             progress_callback=progress_callback,
             timeout_seconds=timeout_seconds,
+            chunk_size=chunk_size,
+            fsync_enabled=fsync_enabled,
         )
 
     def checksum_only(
@@ -100,8 +108,14 @@ class NativeCopyEngine:
         src: Path,
         progress_callback: Optional[Callable[[int], None]] = None,
         timeout_seconds: int = 0,
+        chunk_size: Optional[int] = None,
     ) -> Tuple[bool, Optional[str], Optional[str]]:
-        return _checksum_only(src, progress_callback=progress_callback, timeout_seconds=timeout_seconds)
+        return _checksum_only(
+            src,
+            progress_callback=progress_callback,
+            timeout_seconds=timeout_seconds,
+            chunk_size=chunk_size,
+        )
 
 
 def scan_source_files(source_path: str) -> List[Path]:
@@ -154,6 +168,8 @@ def copy_file(
     checksum_algorithm: str = "sha256",
     progress_callback: Optional[Callable[[int], None]] = None,
     timeout_seconds: int = 0,
+    chunk_size: Optional[int] = None,
+    fsync_enabled: Optional[bool] = None,
 ) -> Tuple[bool, Optional[str], Optional[str]]:
     """Copy *src* to *dst* and compute a checksum.
 
@@ -163,7 +179,7 @@ def copy_file(
     try:
         dst.parent.mkdir(parents=True, exist_ok=True)
         h = hashlib.new(checksum_algorithm)
-        chunk_size = settings.copy_chunk_size_bytes
+        chunk_size = int(chunk_size or settings.copy_chunk_size_bytes)
         start_time = time.monotonic()
         with open(src, "rb") as fsrc, open(dst, "wb") as fdst:
             while True:
@@ -178,7 +194,7 @@ def copy_file(
                 fdst.write(chunk)
                 if progress_callback is not None:
                     progress_callback(len(chunk))
-            if settings.copy_file_fsync_enabled:
+            if bool(settings.copy_file_fsync_enabled if fsync_enabled is None else fsync_enabled):
                 fdst.flush()
                 os.fsync(fdst.fileno())
         return True, h.hexdigest(), None
@@ -198,11 +214,12 @@ def _checksum_only(
     src: Path,
     progress_callback: Optional[Callable[[int], None]] = None,
     timeout_seconds: int = 0,
+    chunk_size: Optional[int] = None,
 ) -> Tuple[bool, Optional[str], Optional[str]]:
     """Compute a SHA-256 checksum without copying."""
     try:
         h = hashlib.sha256()
-        chunk_size = settings.copy_chunk_size_bytes
+        chunk_size = int(chunk_size or settings.copy_chunk_size_bytes)
         start_time = time.monotonic()
         with open(src, "rb") as f:
             while True:
@@ -228,12 +245,6 @@ def _calculate_copy_rate_mb_s(copied_bytes: int, elapsed_seconds: float) -> floa
     if copied_bytes <= 0 or elapsed_seconds <= 0:
         return 0.0
     return round((copied_bytes / (1024 * 1024)) / elapsed_seconds, 2)
-
-
-def _progress_flush_threshold_bytes() -> int:
-    configured = int(getattr(settings, "copy_progress_flush_bytes", 0) or 0)
-    chunk_size = int(getattr(settings, "copy_chunk_size_bytes", 0) or 0)
-    return max(1, configured, chunk_size)
 
 
 def _sanitize_job_failure_reason(
@@ -332,21 +343,25 @@ def _log_copy_job_runtime_parameters(
     copy_progress_flush_threshold_bytes: int,
     copy_file_fsync_enabled: bool,
 ) -> None:
+    tuning = resolve_job_copy_tuning(job)
     logger.debug(
         "Copy job runtime parameters",
         extra={
             "job_id": int(job.id),
             "project_id": job.project_id,
             "thread_count": max_workers,
-            "thread_count_source": "job" if job.thread_count is not None else "default",
+            "thread_count_source": tuning.thread_count_source,
             "max_file_retries": max_retries,
             "max_file_retries_source": "job" if job.max_file_retries is not None else "default",
             "retry_delay_seconds": retry_delay_seconds,
             "retry_delay_source": "job" if job.retry_delay_seconds is not None else "default",
             "copy_job_timeout_seconds": file_timeout_seconds,
             "copy_chunk_size_bytes": copy_chunk_size_bytes,
+            "copy_chunk_size_source": tuning.copy_chunk_size_source,
             "copy_progress_flush_threshold_bytes": copy_progress_flush_threshold_bytes,
+            "copy_progress_flush_source": tuning.copy_progress_flush_source,
             "copy_file_fsync_enabled": copy_file_fsync_enabled,
+            "copy_file_fsync_source": tuning.copy_file_fsync_source,
             "pending_batch_limit": batch_limit,
             "pending_batch_multiplier": COPY_PENDING_BATCH_MULTIPLIER,
         },
@@ -1820,6 +1835,9 @@ def _process_file(
     target: Optional[Path],
     max_retries: int = 0,
     retry_delay: float = 1.0,
+    copy_chunk_size_bytes: Optional[int] = None,
+    copy_progress_flush_threshold_bytes: Optional[int] = None,
+    copy_file_fsync_enabled: Optional[bool] = None,
 ) -> None:
     """Worker executed inside the thread pool.
 
@@ -1905,7 +1923,7 @@ def _process_file(
         success = False
         checksum: Optional[str] = None
         bytes_reported = 0
-        progress_flush_threshold = _progress_flush_threshold_bytes()
+        progress_flush_threshold = int(copy_progress_flush_threshold_bytes or 1)
         timed_out = False
         timeout_elapsed_seconds = 0.0
 
@@ -1987,6 +2005,8 @@ def _process_file(
                         dst,
                         progress_callback=_report_progress,
                         timeout_seconds=file_timeout_seconds,
+                        chunk_size=copy_chunk_size_bytes,
+                        fsync_enabled=copy_file_fsync_enabled,
                     )
                 except TimeoutError as timeout_exc:
                     timeout_elapsed_seconds = time.monotonic() - timeout_start
@@ -2001,6 +2021,7 @@ def _process_file(
                         src_file,
                         progress_callback=_report_progress,
                         timeout_seconds=file_timeout_seconds,
+                        chunk_size=copy_chunk_size_bytes,
                     )
                 except TimeoutError as timeout_exc:
                     timeout_elapsed_seconds = time.monotonic() - timeout_start
@@ -2152,9 +2173,6 @@ def run_copy_job(job_id: int) -> None:
         job_repo = JobRepository(db)
         file_repo = FileRepository(db)
         file_timeout_seconds = int(getattr(settings, "copy_job_timeout", 0) or 0)
-        copy_chunk_size_bytes = int(getattr(settings, "copy_chunk_size_bytes", 0) or 0)
-        copy_progress_flush_threshold_bytes = _progress_flush_threshold_bytes()
-        copy_file_fsync_enabled = bool(getattr(settings, "copy_file_fsync_enabled", False))
 
         job = job_repo.get(job_id)
         if not job:
@@ -2232,7 +2250,11 @@ def run_copy_job(job_id: int) -> None:
                 retry_delay = float(job.retry_delay_seconds) if job.retry_delay_seconds is not None else settings.copy_default_retry_delay_seconds
 
                 if not pause_requested:
-                    max_workers = int(job.thread_count or settings.copy_default_thread_count)
+                    tuning = resolve_job_copy_tuning(job)
+                    max_workers = tuning.effective_thread_count
+                    copy_chunk_size_bytes = tuning.effective_copy_chunk_size_bytes
+                    copy_progress_flush_threshold_bytes = resolve_progress_flush_threshold_bytes(job)
+                    copy_file_fsync_enabled = tuning.effective_copy_file_fsync_enabled
                     batch_limit = max(1, max_workers * COPY_PENDING_BATCH_MULTIPLIER)
                     _log_copy_job_runtime_parameters(
                         job,
@@ -2296,6 +2318,9 @@ def run_copy_job(job_id: int) -> None:
                                     target,
                                     max_retries,
                                     retry_delay,
+                                    copy_chunk_size_bytes,
+                                    copy_progress_flush_threshold_bytes,
+                                    copy_file_fsync_enabled,
                                 ): ef.id
                                 for ef in pending_files
                             }
