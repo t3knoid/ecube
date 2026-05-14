@@ -262,7 +262,7 @@
 </tr>
 <tr>
 <td><code>manager</code></td>
-<td>Drive, mount, and job oversight</td>
+<td>Drive, share, and job oversight</td>
 </tr>
 <tr>
 <td><code>processor</code></td>
@@ -309,7 +309,7 @@ Footer at the bottom
 </li><li>
 <code>Drives</code>
 </li><li>
-<code>Mounts</code>
+<code>Shares</code>
 </li><li>
 <code>Jobs</code>
 </li><li>
@@ -373,7 +373,7 @@ Mount workflow summary (<code>Unassigned</code>, <code>Assigned</code>, <code>Ac
 </li><li>
 Table of active jobs with derived <code>Next Step</code> guidance plus trusted source, destination, and live-copy context on wider screens with compact status and progress treatment on smaller screens
 </li></ul>
-<p>The <code>Needs Attention</code> section highlights trusted workflow items that require follow-up from processors or managers. <code>Blocked</code> covers failed or paused jobs, <code>Waiting to Start</code> highlights pending assignments, and <code>Waiting on Custody Closeout</code> highlights completed or archived jobs whose trusted custody state is still <code>Pending handoff</code>. The <code>Needs Attention</code> and active-jobs tables both include a read-only <code>Next Step</code> column derived from trusted lifecycle, startup-analysis, failed-file, and custody state so operators can triage work before opening Job Detail. Each row uses the <code>Job ID</code> value as the direct navigation path into Job Detail. On wider screens, the <code>Project</code> column also carries trusted source-mount, source-path, destination-drive, and follow-up context when those fields are available. On smaller screens, the dashboard stacks the summary cards vertically, hides the <code>Project</code> column in the <code>Needs Attention</code> and active-jobs tables to avoid horizontal overflow, replaces full status badges with compact labeled icons, and reduces active-job progress to the percentage label while preserving <code>Next Step</code> guidance. The dashboard source-mount label follows the same role boundary as Mount Detail: <code>admin</code> and <code>manager</code> users see the raw mount path, while lower-privilege operational roles see a redacted value.</p>
+<p>The <code>Needs Attention</code> section highlights trusted workflow items that require follow-up from processors or managers. <code>Blocked</code> covers failed or paused jobs, <code>Waiting to Start</code> highlights pending assignments, and <code>Waiting on Custody Closeout</code> highlights completed or archived jobs whose trusted custody state is still <code>Pending handoff</code>. The <code>Needs Attention</code> and active-jobs tables both include a read-only <code>Next Step</code> column derived from trusted lifecycle, startup-analysis, failed-file, and custody state so operators can triage work before opening Job Detail. Each row uses the <code>Job ID</code> value as the direct navigation path into Job Detail. On wider screens, the <code>Project</code> column also carries trusted source-share, source-path, destination-drive, and follow-up context when those fields are available. On smaller screens, the dashboard stacks the summary cards vertically, hides the <code>Project</code> column in the <code>Needs Attention</code> and active-jobs tables to avoid horizontal overflow, replaces full status badges with compact labeled icons, and reduces active-job progress to the percentage label while preserving <code>Next Step</code> guidance. The dashboard source-share label follows the same role boundary as Share Detail: <code>admin</code> and <code>manager</code> users see the raw mount path, while lower-privilege operational roles see a redacted value.</p>
 <p>Auditor users see the dashboard with only the system-health summary card; drive summary, Shares summary, needs-attention items, and active-job counts/tables are hidden.</p>
 <p>If your password is nearing expiration, the dashboard shows a dismissible warning banner with the remaining days. Dismissing the banner hides it only for the current browser session.</p>
 <p>Use the dashboard when you need a quick answer to questions such as:</p>
@@ -678,7 +678,7 @@ Progress label or percentage
 <ol><li>
 <code>Job details</code> — project, evidence number, optional notes, webhook callback URL, and thread count
 </li><li>
-<code>Source</code> — the mounted project source, a trusted source path field, and a folder browser for the selected mount
+<code>Source</code> — the mounted project share, a trusted source path field, and a folder browser for the selected mount
 </li><li>
 <code>Destination</code> — the eligible mounted USB device for the selected project
 </li><li>
@@ -688,17 +688,18 @@ Progress label or percentage
 <p>The destination selector is labeled <code>Select device</code> and shows the same port-based <code>Device</code> value used elsewhere in the UI, rather than a serial number or <code>#id</code> prefix.</p>
 <p>ECUBE does not copy from an arbitrary share to an arbitrary USB drive. The source side and destination side must both be compatible with the same project:</p>
 <ul><li>
-The source share must already exist in <code>Mounts</code>, be assigned to the project ID, and be in the <code>MOUNTED</code> state
+The source share must already exist in <code>Shares</code>, be assigned to the project ID, and be in the <code>MOUNTED</code> state
 </li><li>
-The destination drive must be mounted and project-compatible for that same project
+The destination drive must be mounted and already bound to that same project
 </li><li>
 In the standard operator workflow, that means the drive has already been initialized for that project before the copy starts
 </li></ul>
+<p>If an operator tries to create or edit a job with an explicit primary or overflow drive that is still unassigned, ECUBE rejects the request and tells the operator to initialize and bind the drive before selecting it.</p>
 <p>Before creating a job, confirm:</p>
 <ul><li>
 The correct project is selected first
 </li><li>
-The source mount and destination drive both match that project
+The source share and destination drive both match that project
 </li><li>
 The evidence number and source path are correct
 </li><li>
@@ -1280,7 +1281,7 @@ Managers cannot view or trigger password policy, webhook secret, logging infrast
 </li><li>
 <code>Network Mount Timeout (seconds)</code> controls how long ECUBE allows SMB and NFS mount workflows to run before treating them as failed. The same setting also governs related unmount and mount-state verification checks, so increase it when slow servers, DNS resolution, or authentication handshakes make network shares slow to validate or reconnect.
 </li><li>
-<code>Mount Share Discovery Timeout (seconds)</code> controls how long ECUBE allows SMB share browsing and NFS export discovery to run before treating them as failed. Increase it when the Add Mount <code>Browse</code> dialog times out against slow servers or high-latency networks.
+<code>Mount Share Discovery Timeout (seconds)</code> controls how long ECUBE allows SMB share browsing and NFS export discovery to run before treating them as failed. Increase it when the Add Share <code>Browse</code> dialog times out against slow servers or high-latency networks.
 </li><li>
 <code>Copy Chunk Size</code>, <code>Progress Flush Threshold</code>, and <code>Default Copy Worker Count</code> let managers tune copy throughput for different workloads. Larger values reduce loop or transaction overhead but use more memory per active worker. <code>Default Copy Worker Count</code> is the fallback ECUBE uses when a job request omits its per-job <code>Thread count</code> value.
 </li><li>
@@ -1645,7 +1646,7 @@ Mapping is applied before ECUBE signs the payload, so the final mapped JSON body
 <ol><li>
 Insert the new USB drive into the ECUBE host.
 </li><li>
-Open <code>Mounts</code> and confirm the correct source share for the project has been added, assigned to the project ID, and is currently <code>MOUNTED</code>.
+Open <code>Shares</code> and confirm the correct source share for the project has been added, assigned to the project ID, and is currently <code>MOUNTED</code>.
 </li><li>
 Open <code>Drives</code>.
 </li><li>
@@ -1696,7 +1697,7 @@ The drive transitions back to <code>IN_USE</code> for the same project.
 <p><strong>Allowed roles:</strong> <code>admin</code>, <code>manager</code></p>
 <p>If a drive must be reassigned to a different project, a format is required to wipe existing data and clear the project binding:</p>
 <ol><li>
-Open <code>Mounts</code> and make sure the destination project's source share has already been added, assigned the correct project ID, and mounted successfully.
+Open <code>Shares</code> and make sure the destination project's source share has already been added, assigned the correct project ID, and mounted successfully.
 </li><li>
 Open <code>Drives</code> and locate the drive (state must be <code>AVAILABLE</code>).
 </li><li>

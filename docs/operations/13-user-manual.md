@@ -111,7 +111,7 @@ Regardless of installation method, the user-facing workflow is intended to remai
 - Open the ECUBE URL in a supported browser
 - Authenticate with the account provided to you
 - Use the navigation items allowed by your role
-- Perform drive, mount, job, and audit tasks through the UI
+- Perform drive, share, job, and audit tasks through the UI
 
 The main differences between installations are usually:
 
@@ -150,7 +150,7 @@ The UI adapts to the roles assigned to your account.
 | Role | Typical Access |
 | ---- | -------------- |
 | `admin` | Full access to all UI areas, including user administration |
-| `manager` | Drive, mount, and job oversight |
+| `manager` | Drive, share, and job oversight |
 | `processor` | Create and manage export jobs, view system state |
 | `auditor` | Read-only access to audit, job verification, and evidence review areas |
 
@@ -247,7 +247,7 @@ Common navigation items include:
 
 - `Dashboard`
 - `Drives`
-- `Mounts`
+- `Shares`
 - `Jobs`
 - `Audit` (role-restricted)
 - `System`
@@ -310,7 +310,7 @@ Typical information shown:
 - Mount workflow summary (`Unassigned`, `Assigned`, `Active`, `Blocked`, `Custody Pending`, `Completed`, `Unavailable`), where `Assigned` means a job exists but has not started, `Active` includes preparing, running, pausing, and verifying work, `Blocked` captures paused or failed work, `Custody Pending` captures completed or archived jobs whose handoff is still pending, and `Unavailable` marks shares whose trusted related-job or custody state could not be derived
 - Table of active jobs with derived `Next Step` guidance plus trusted source, destination, and live-copy context on wider screens with compact status and progress treatment on smaller screens
 
-The `Needs Attention` section highlights trusted workflow items that require follow-up from processors or managers. `Blocked` covers failed or paused jobs, `Waiting to Start` highlights pending assignments, and `Waiting on Custody Closeout` highlights completed or archived jobs whose trusted custody state is still `Pending handoff`. The `Needs Attention` and active-jobs tables both include a read-only `Next Step` column derived from trusted lifecycle, startup-analysis, failed-file, and custody state so operators can triage work before opening Job Detail. Each row uses the `Job ID` value as the direct navigation path into Job Detail. On wider screens, the `Project` column also carries trusted source-mount, source-path, destination-drive, and follow-up context when those fields are available. On smaller screens, the dashboard stacks the summary cards vertically, hides the `Project` column in the `Needs Attention` and active-jobs tables to avoid horizontal overflow, replaces full status badges with compact labeled icons, and reduces active-job progress to the percentage label while preserving `Next Step` guidance. The dashboard source-mount label follows the same role boundary as Mount Detail: `admin` and `manager` users see the raw mount path, while lower-privilege operational roles see a redacted value.
+The `Needs Attention` section highlights trusted workflow items that require follow-up from processors or managers. `Blocked` covers failed or paused jobs, `Waiting to Start` highlights pending assignments, and `Waiting on Custody Closeout` highlights completed or archived jobs whose trusted custody state is still `Pending handoff`. The `Needs Attention` and active-jobs tables both include a read-only `Next Step` column derived from trusted lifecycle, startup-analysis, failed-file, and custody state so operators can triage work before opening Job Detail. Each row uses the `Job ID` value as the direct navigation path into Job Detail. On wider screens, the `Project` column also carries trusted source-share, source-path, destination-drive, and follow-up context when those fields are available. On smaller screens, the dashboard stacks the summary cards vertically, hides the `Project` column in the `Needs Attention` and active-jobs tables to avoid horizontal overflow, replaces full status badges with compact labeled icons, and reduces active-job progress to the percentage label while preserving `Next Step` guidance. The dashboard source-share label follows the same role boundary as Share Detail: `admin` and `manager` users see the raw mount path, while lower-privilege operational roles see a redacted value.
 
 Auditor users see the dashboard with only the system-health summary card; drive summary, Shares summary, needs-attention items, and active-job counts/tables are hidden.
 
@@ -619,7 +619,7 @@ Job creation uses a grouped dialog. The same grouped dialog shell is also reused
 The dialog is organized into four sections:
 
 1. `Job details` — project, evidence number, optional notes, webhook callback URL, and thread count
-2. `Source` — the mounted project source, a trusted source path field, and a folder browser for the selected mount
+2. `Source` — the mounted project share, a trusted source path field, and a folder browser for the selected mount
 3. `Destination` — the eligible mounted USB device for the selected project
 4. `Execution` — the optional `Run job immediately` checkbox
 
@@ -629,14 +629,16 @@ The destination selector is labeled `Select device` and shows the same port-base
 
 ECUBE does not copy from an arbitrary share to an arbitrary USB drive. The source side and destination side must both be compatible with the same project:
 
-- The source share must already exist in `Mounts`, be assigned to the project ID, and be in the `MOUNTED` state
-- The destination drive must be mounted and project-compatible for that same project
+- The source share must already exist in `Shares`, be assigned to the project ID, and be in the `MOUNTED` state
+- The destination drive must be mounted and already bound to that same project
 - In the standard operator workflow, that means the drive has already been initialized for that project before the copy starts
+
+If an operator tries to create or edit a job with an explicit primary or overflow drive that is still unassigned, ECUBE rejects the request and tells the operator to initialize and bind the drive before selecting it.
 
 Before creating a job, confirm:
 
 - The correct project is selected first
-- The source mount and destination drive both match that project
+- The source share and destination drive both match that project
 - The evidence number and source path are correct
 - If you need a job-specific webhook, enter the `Webhook callback URL` in the `Job details` section
 - If you enable `Run job immediately`, the job will start as soon as creation succeeds
@@ -1155,7 +1157,7 @@ Important operational notes:
 - `Drive Mount Timeout (seconds)` controls how long ECUBE allows a drive mount command to run before treating it as failed. Increase it for large removable media or slower USB links that need extra time to mount.
 - `Auto USB Discovery Interval (seconds)` controls how often ECUBE polls for USB topology and drive-state changes in the background. Set it to `0` to pause automatic polling, or set a positive value to resume periodic discovery without restarting the service.
 - `Network Mount Timeout (seconds)` controls how long ECUBE allows SMB and NFS mount workflows to run before treating them as failed. The same setting also governs related unmount and mount-state verification checks, so increase it when slow servers, DNS resolution, or authentication handshakes make network shares slow to validate or reconnect.
-- `Mount Share Discovery Timeout (seconds)` controls how long ECUBE allows SMB share browsing and NFS export discovery to run before treating them as failed. Increase it when the Add Mount `Browse` dialog times out against slow servers or high-latency networks.
+- `Mount Share Discovery Timeout (seconds)` controls how long ECUBE allows SMB share browsing and NFS export discovery to run before treating them as failed. Increase it when the Add Share `Browse` dialog times out against slow servers or high-latency networks.
 - `Copy Chunk Size`, `Progress Flush Threshold`, and `Default Copy Worker Count` let managers tune copy throughput for different workloads. Larger values reduce loop or transaction overhead but use more memory per active worker. `Default Copy Worker Count` is the fallback ECUBE uses when a job request omits its per-job `Thread count` value.
 - `Force per-file disk sync` controls whether ECUBE calls `fsync()` after every copied file. Leave it disabled for maximum throughput when restart recovery from the last committed `DONE` file is acceptable.
 - The `Copy and Job Workflow` section also includes workload profile shortcuts for `Small-file heavy`, `Mixed workload`, `Large-file heavy`, and `Greedy throughput` so operators can apply a tested tuning bundle before making fine-grained adjustments.
@@ -1374,7 +1376,7 @@ The following source fields can be used in `Callback Payload Source Fields` and 
 **Allowed roles:** `admin`, `manager`
 
 1. Insert the new USB drive into the ECUBE host.
-2. Open `Mounts` and confirm the correct source share for the project has been added, assigned to the project ID, and is currently `MOUNTED`.
+2. Open `Shares` and confirm the correct source share for the project has been added, assigned to the project ID, and is currently `MOUNTED`.
 3. Open `Drives`.
 4. Refresh or rescan the drive list until the new device appears.
 5. Open the drive detail page.
@@ -1413,7 +1415,7 @@ No format is required when re-using the same project, but both the mounted-share
 
 If a drive must be reassigned to a different project, a format is required to wipe existing data and clear the project binding:
 
-1. Open `Mounts` and make sure the destination project's source share has already been added, assigned the correct project ID, and mounted successfully.
+1. Open `Shares` and make sure the destination project's source share has already been added, assigned the correct project ID, and mounted successfully.
 2. Open `Drives` and locate the drive (state must be `AVAILABLE`).
 3. Open the drive detail page.
 4. Click `Format` and select the target filesystem. Confirm the format.

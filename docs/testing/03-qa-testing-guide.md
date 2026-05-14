@@ -51,6 +51,16 @@ Add the following manual checks when a release includes routing, role-visibility
 | Shares navigation remains consistent after refresh | Sign in as `auditor` or `processor`, open `/shares`, then refresh the browser tab | The SPA route resolves back to Shares and the page remains functional after reload |
 | Host mount table fallback still reads Linux proc mounts paths | Run the backend mount-info test file and inspect the namespace fallback assertions | Tests verify the default path `/proc/mounts` and host fallback path `/proc/1/mounts` so mount-table parsing stays aligned with Linux procfs semantics |
 
+## Manual Verification Additions for Explicit Drive Binding in Jobs
+
+Add the following manual checks when a release includes explicit destination-drive validation changes in the Jobs create or edit workflow.
+
+| Scenario | Steps | Expected |
+|---|---|---|
+| Create job rejects an explicitly selected unassigned primary drive | Leave one mounted drive uninitialized or otherwise unassigned, open `Jobs`, start the create dialog, select the matching project and source, then try to save with the unassigned drive selected | The job is not created, and the dialog shows a tailored message instructing the operator to initialize and bind the drive before selecting it |
+| Create job rejects an explicitly selected unassigned overflow drive | Open the create dialog for a project that already has one eligible primary drive, add an unassigned mounted drive as overflow, and submit | The job is not created, and the dialog shows the same initialize-and-bind instruction instead of silently rebinding the overflow drive |
+| Edit job rejects an explicitly selected unassigned drive | Open a pending job in Job Detail, enter `Edit`, switch the primary or overflow selection to an unassigned mounted drive, and save | The edit is rejected, the existing job definition stays unchanged, and the dialog instructs the operator to initialize and bind the drive before selecting it |
+
 ## Manual Verification Additions for Archived Jobs
 
 Add the following manual checks when a release includes the archived-job workflow on the Jobs page and Job Detail page.
