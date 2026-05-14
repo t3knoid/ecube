@@ -98,7 +98,7 @@ class TestJobCreationDBFailures:
 
     def test_create_job_drive_assignment_db_failure(self, client, db):
         """If the single-transaction commit fails, return 500 and leave no orphaned job."""
-        drive = _make_drive(db)
+        drive = _make_drive(db, project_id="PROJ-001")
 
         original_commit = db.commit
 

@@ -332,6 +332,7 @@ def test_double_assign_prevented(manager_client, db):
     drive = UsbDrive(
         device_identifier="USB-GUARD-01",
         current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-GUARD",
         filesystem_type="ext4",
         mount_path="/mnt/ecube/guard-01",
     )

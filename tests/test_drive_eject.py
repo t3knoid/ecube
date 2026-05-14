@@ -860,5 +860,5 @@ class TestHostAwareMountDiscovery:
 
         assert error is None
         assert result == ["/media/usb"]
-        mocked_open.assert_called_with("/proc/1/shares", encoding="utf-8", errors="replace")
+        mocked_open.assert_called_with("/proc/1/mounts", encoding="utf-8", errors="replace")
 

@@ -413,7 +413,8 @@ class TestSpaFrontendServing:
 
         resp = client.get("/api/shares/123", headers={"accept": "application/json"})
 
-        assert resp.status_code == 404
+        assert resp.status_code == 200
+        assert resp.json() == {"route": "share-detail", "share_id": 123}
 
     def test_stripped_api_request_to_colliding_route_keeps_backend_route(self, tmp_path):
         dist = self._build_dist(tmp_path)
