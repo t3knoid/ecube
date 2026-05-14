@@ -259,12 +259,16 @@ def _startup_reconciliation_counts(payload: Any) -> dict[str, Any]:
     return counts
 
 
-async def _wait_for_next_usb_discovery_cycle() -> None:
+async def _wait_for_next_usb_discovery_cycle() -> bool:
     """Wait until the next automatic USB discovery cycle should run.
 
     The configured interval is re-read continuously so runtime configuration
     changes can pause, resume, or retime background polling without requiring
     a service restart.
+
+    Returns ``True`` when the next polling cycle should run, or ``False`` when
+    polling mode has been disabled and the caller should re-evaluate the active
+    discovery mode.
     """
     remaining_seconds: float | None = None
     active_interval: int | None = None
@@ -272,10 +276,7 @@ async def _wait_for_next_usb_discovery_cycle() -> None:
     while True:
         configured_interval = int(getattr(settings, "usb_discovery_interval", 0) or 0)
         if configured_interval <= 0:
-            remaining_seconds = None
-            active_interval = None
-            await asyncio.sleep(1.0)
-            continue
+            return False
 
         if remaining_seconds is None or active_interval != configured_interval:
             active_interval = configured_interval
@@ -285,7 +286,7 @@ async def _wait_for_next_usb_discovery_cycle() -> None:
         await asyncio.sleep(sleep_for)
         remaining_seconds -= sleep_for
         if remaining_seconds <= 0:
-            return
+            return True
 
 
 def _run_usb_discovery_sync_once(*, discovery_source: str) -> None:
@@ -306,9 +307,15 @@ def _run_usb_discovery_sync_once(*, discovery_source: str) -> None:
 
 
 async def _usb_discovery_poll_loop() -> None:
-    """Run USB discovery on the configured timed polling interval."""
+    """Run USB discovery on the configured timed polling interval.
+
+    The loop exits when runtime configuration switches away from polling mode
+    so the caller can activate the alternate discovery path immediately.
+    """
     while True:
-        await _wait_for_next_usb_discovery_cycle()
+        should_run_cycle = await _wait_for_next_usb_discovery_cycle()
+        if not should_run_cycle:
+            return
         try:
             await asyncio.to_thread(_run_usb_discovery_sync_once, discovery_source="polling")
         except asyncio.CancelledError:
@@ -322,9 +329,10 @@ async def _usb_discovery_event_loop() -> None:
 
     This loop does not fall back to timed polling.  When the monitor cannot be
     started or exits unexpectedly, the loop logs the condition and retries the
-    monitor startup.  Each monitor cycle begins with a baseline sync so drives
-    that become visible between startup reconciliation and monitor readiness
-    are still persisted without waiting for a later hotplug event.
+    monitor startup while remaining in event-driven mode.  A single baseline
+    sync runs when event mode is activated so drives that become visible
+    between startup reconciliation and monitor readiness are still persisted
+    without waiting for a later hotplug event.
     """
     from app.infrastructure import get_usb_event_monitor
 
@@ -342,16 +350,19 @@ async def _usb_discovery_event_loop() -> None:
         except Exception:
             logger.exception("USB discovery refresh failed after udev event")
 
+    try:
+        await asyncio.to_thread(
+            _run_usb_discovery_sync_once,
+            discovery_source="udev_startup",
+        )
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logger.exception("USB discovery baseline sync failed before event monitoring")
+
     while True:
-        try:
-            await asyncio.to_thread(
-                _run_usb_discovery_sync_once,
-                discovery_source="udev_startup",
-            )
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            logger.exception("USB discovery baseline sync failed before event monitoring")
+        if int(getattr(settings, "usb_discovery_interval", 0) or 0) > 0:
+            return
 
         try:
             monitor = get_usb_event_monitor()
@@ -363,21 +374,44 @@ async def _usb_discovery_event_loop() -> None:
             await asyncio.sleep(2.0)
             continue
 
+        monitor_task = asyncio.create_task(asyncio.to_thread(monitor.run, _handle_usb_event))
         try:
-            await asyncio.to_thread(monitor.run, _handle_usb_event)
+            while not monitor_task.done():
+                await asyncio.sleep(1.0)
+                if int(getattr(settings, "usb_discovery_interval", 0) or 0) > 0:
+                    monitor.stop()
+                    await monitor_task
+                    return
         except asyncio.CancelledError:
             monitor.stop()
+            try:
+                await monitor_task
+            except Exception:
+                pass
             raise
         except Exception:
+            monitor.stop()
+            try:
+                await monitor_task
+            except Exception:
+                pass
             logger.warning(
                 "USB event monitor failed; restarting event monitor",
                 extra={"discovery_source": "udev_event", "monitor_status": "failed"},
             )
         else:
-            logger.warning(
-                "USB event monitor stopped unexpectedly; restarting event monitor",
-                extra={"discovery_source": "udev_event", "monitor_status": "stopped"},
-            )
+            try:
+                await monitor_task
+            except Exception:
+                logger.warning(
+                    "USB event monitor failed; restarting event monitor",
+                    extra={"discovery_source": "udev_event", "monitor_status": "failed"},
+                )
+            else:
+                logger.warning(
+                    "USB event monitor stopped unexpectedly; restarting event monitor",
+                    extra={"discovery_source": "udev_event", "monitor_status": "stopped"},
+                )
 
         await asyncio.sleep(1.0)
 
@@ -388,12 +422,13 @@ async def _usb_discovery_runtime_loop() -> None:
     ``usb_discovery_interval > 0`` enables timed polling mode.
     ``usb_discovery_interval == 0`` enables event-driven udev monitoring mode.
     """
-    configured_interval = int(getattr(settings, "usb_discovery_interval", 0) or 0)
-    if configured_interval > 0:
-        await _usb_discovery_poll_loop()
-        return
+    while True:
+        configured_interval = int(getattr(settings, "usb_discovery_interval", 0) or 0)
+        if configured_interval > 0:
+            await _usb_discovery_poll_loop()
+            continue
 
-    await _usb_discovery_event_loop()
+        await _usb_discovery_event_loop()
 
 
 def _log_demo_runtime_configuration() -> None:

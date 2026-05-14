@@ -67,8 +67,6 @@ class LinuxUdevUsbEventMonitor:
             self._udevadm_path,
             "monitor",
             "--udev",
-            "--subsystem-match=usb",
-            "--subsystem-match=block",
         ]
         try:
             process = self._process_factory(

@@ -84,7 +84,7 @@ def _simple_topology(
 
 def test_initial_sync_inserts_hub_port_drive(db):
     topology = _simple_topology()
-    # First sync discovers ports (disabled by default) — drives inserted as EMPTY.
+    # First sync discovers ports (disabled by default) — drives inserted as DISABLED.
     run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
     _enable_all_ports(db)
     # Re-sync to transition drives to AVAILABLE on enabled ports.

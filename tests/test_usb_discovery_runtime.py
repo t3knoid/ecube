@@ -47,6 +47,8 @@ async def test_usb_discovery_event_loop_refreshes_on_udev_event(monkeypatch):
     observed_event = threading.Event()
     monitor = _BlockingUsbEventMonitor()
 
+    monkeypatch.setattr(main_module.settings, "usb_discovery_interval", 0)
+
     def _record_sync(*, discovery_source: str) -> None:
         observed_sources.append(discovery_source)
         if discovery_source == "udev_event":
@@ -72,9 +74,17 @@ async def test_usb_discovery_event_loop_refreshes_on_udev_event(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_usb_discovery_event_loop_does_not_fallback_to_polling_when_monitor_fails(monkeypatch):
+    observed_sources: list[str] = []
     observed: list[str] = []
 
+    monkeypatch.setattr(main_module.settings, "usb_discovery_interval", 0)
+
     monkeypatch.setattr(infra_module, "get_usb_event_monitor", lambda: _FailingUsbEventMonitor())
+    monkeypatch.setattr(
+        main_module,
+        "_run_usb_discovery_sync_once",
+        lambda *, discovery_source: observed_sources.append(discovery_source),
+    )
 
     async def _fake_sleep(_seconds):
         observed.append("slept")
@@ -85,6 +95,7 @@ async def test_usb_discovery_event_loop_does_not_fallback_to_polling_when_monito
     with pytest.raises(asyncio.CancelledError):
         await main_module._usb_discovery_event_loop()
 
+    assert observed_sources == ["udev_startup"]
     assert observed == ["slept"]
 
 
@@ -93,6 +104,8 @@ async def test_usb_discovery_event_loop_runs_baseline_sync_before_monitor_blocks
     observed_sources: list[str] = []
     monitor_started = threading.Event()
     release_monitor = threading.Event()
+
+    monkeypatch.setattr(main_module.settings, "usb_discovery_interval", 0)
 
     class _WaitingMonitor:
         def run(self, handler):
@@ -111,10 +124,7 @@ async def test_usb_discovery_event_loop_runs_baseline_sync_before_monitor_blocks
 
     task = asyncio.create_task(main_module._usb_discovery_event_loop())
 
-    for _ in range(100):
-        if observed_sources and monitor_started.is_set():
-            break
-        await asyncio.sleep(0)
+    await asyncio.wait_for(asyncio.to_thread(monitor_started.wait, 1.0), timeout=2.0)
 
     assert observed_sources == ["udev_startup"]
     assert monitor_started.is_set()
@@ -132,6 +142,7 @@ async def test_usb_discovery_runtime_loop_selects_polling_mode(monkeypatch):
 
     async def _fake_poll_loop():
         observed.append("polling")
+        raise asyncio.CancelledError
 
     async def _unexpected_event_loop():
         raise AssertionError("event loop should not run when polling mode is selected")
@@ -139,7 +150,8 @@ async def test_usb_discovery_runtime_loop_selects_polling_mode(monkeypatch):
     monkeypatch.setattr(main_module, "_usb_discovery_poll_loop", _fake_poll_loop)
     monkeypatch.setattr(main_module, "_usb_discovery_event_loop", _unexpected_event_loop)
 
-    await main_module._usb_discovery_runtime_loop()
+    with pytest.raises(asyncio.CancelledError):
+        await main_module._usb_discovery_runtime_loop()
 
     assert observed == ["polling"]
 
@@ -152,6 +164,7 @@ async def test_usb_discovery_runtime_loop_selects_event_mode(monkeypatch):
 
     async def _fake_event_loop():
         observed.append("udev")
+        raise asyncio.CancelledError
 
     async def _unexpected_poll_loop():
         raise AssertionError("polling loop should not run when event mode is selected")
@@ -159,6 +172,53 @@ async def test_usb_discovery_runtime_loop_selects_event_mode(monkeypatch):
     monkeypatch.setattr(main_module, "_usb_discovery_event_loop", _fake_event_loop)
     monkeypatch.setattr(main_module, "_usb_discovery_poll_loop", _unexpected_poll_loop)
 
-    await main_module._usb_discovery_runtime_loop()
+    with pytest.raises(asyncio.CancelledError):
+        await main_module._usb_discovery_runtime_loop()
 
     assert observed == ["udev"]
+
+
+@pytest.mark.asyncio
+async def test_usb_discovery_runtime_loop_switches_from_event_mode_to_polling(monkeypatch):
+    observed: list[str] = []
+
+    monkeypatch.setattr(main_module.settings, "usb_discovery_interval", 0)
+
+    async def _fake_event_loop():
+        observed.append("udev")
+        main_module.settings.usb_discovery_interval = 5
+
+    async def _fake_poll_loop():
+        observed.append("polling")
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(main_module, "_usb_discovery_event_loop", _fake_event_loop)
+    monkeypatch.setattr(main_module, "_usb_discovery_poll_loop", _fake_poll_loop)
+
+    with pytest.raises(asyncio.CancelledError):
+        await main_module._usb_discovery_runtime_loop()
+
+    assert observed == ["udev", "polling"]
+
+
+@pytest.mark.asyncio
+async def test_usb_discovery_runtime_loop_switches_from_polling_to_event_mode(monkeypatch):
+    observed: list[str] = []
+
+    monkeypatch.setattr(main_module.settings, "usb_discovery_interval", 5)
+
+    async def _fake_poll_loop():
+        observed.append("polling")
+        main_module.settings.usb_discovery_interval = 0
+
+    async def _fake_event_loop():
+        observed.append("udev")
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(main_module, "_usb_discovery_poll_loop", _fake_poll_loop)
+    monkeypatch.setattr(main_module, "_usb_discovery_event_loop", _fake_event_loop)
+
+    with pytest.raises(asyncio.CancelledError):
+        await main_module._usb_discovery_runtime_loop()
+
+    assert observed == ["polling", "udev"]
