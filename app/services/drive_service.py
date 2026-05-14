@@ -840,6 +840,9 @@ def mount_drive(
         },
     )
 
+    # Refresh persisted free-space telemetry immediately after mount succeeds.
+    request_available_space_refresh_for_drive(drive)
+
     _attach_related_job_contexts(db, [drive], include_related_job_custody=True)
     return drive
 

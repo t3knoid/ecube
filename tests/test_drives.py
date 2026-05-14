@@ -764,7 +764,10 @@ def test_mount_drive_success(manager_client, db):
     provider = MagicMock()
     provider.mount_drive.return_value = (True, None)
 
-    with patch("app.routers.drives.get_drive_mount", return_value=provider):
+    with (
+        patch("app.routers.drives.get_drive_mount", return_value=provider),
+        patch("app.services.drive_service.request_available_space_refresh_for_drive") as refresh_mock,
+    ):
         response = manager_client.post(f"/drives/{drive.id}/mount")
 
     assert response.status_code == 200
@@ -774,6 +777,10 @@ def test_mount_drive_success(manager_client, db):
         "/dev/sdb",
         f"{settings.usb_mount_base_path}/{drive.id}",
     )
+    refresh_mock.assert_called_once()
+    refreshed_drive = refresh_mock.call_args.args[0]
+    assert refreshed_drive.id == drive.id
+    assert refreshed_drive.mount_path == f"{settings.usb_mount_base_path}/{drive.id}"
 
     audit = db.query(AuditLog).filter(AuditLog.action == "DRIVE_MOUNTED").first()
     assert audit is not None

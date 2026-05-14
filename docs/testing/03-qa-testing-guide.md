@@ -1193,6 +1193,7 @@ Validate authenticated-session behavior from the UI shell and API access pattern
 | 5a | Initialize a `DISABLED` drive (present but disabled / not ready) | 409, `CONFLICT`; audit `INIT_REJECTED_NOT_AVAILABLE` recorded with `current_state=DISABLED` |
 | 6 | Initialize an `AVAILABLE` drive that is not mounted even though the project share is `MOUNTED` | 409, `CONFLICT`; audit `INIT_REJECTED_NOT_MOUNTED` recorded |
 | 7 | Mount an `AVAILABLE` or `IN_USE` drive with a recognized filesystem | 200, `mount_path` is populated |
+| 7a | Mount an eligible drive whose persisted `available_bytes` is missing or stale | 200 from `POST /drives/{drive_id}/mount`; the drive remains mounted and its `available_bytes` value updates shortly after mount as the available-space refresh completes |
 | 8 | Mount a drive with `filesystem_type=unknown`, `unformatted`, or `NULL` | 409, `CONFLICT` — must have recognized filesystem |
 | 8a | Mount a drive when the host lacks filesystem runtime support for that filesystem | 500 with a safe remediation message telling the operator to install the required filesystem runtime and retry; response must not expose device paths |
 | 8b | Mount a drive when the managed mount root is not writable by the ECUBE service account | 500 with a safe remediation message telling the operator to fix host permissions and retry; response must not expose mount paths |

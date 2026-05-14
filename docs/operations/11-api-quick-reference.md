@@ -112,6 +112,8 @@ Drive responses include both the stable `device_identifier` and the port-based `
 
 `POST /drives/{drive_id}/throughput-test` requires the drive to be in a mounted managed state (`AVAILABLE` or `IN_USE` with a managed `mount_path`). On success it stores the latest measured write speed and test timestamp so Drive Detail can continue showing the last known result to all roles. Rejected or failed attempts are audit logged with operator-safe outcome metadata.
 
+After `POST /drives/{drive_id}/mount` succeeds, ECUBE immediately requests a persisted available-space refresh for that drive using the existing non-blocking background refresh flow. `available_bytes` can update shortly after mount as the trusted probe completes.
+
 ---
 
 ## Shares (`/shares`)
