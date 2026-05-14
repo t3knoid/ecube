@@ -61,10 +61,7 @@ const form = ref({
   overflow_drive_ids: [],
   mount_id: null,
   source_path: '/',
-  thread_count: copyTuningDefaults.threadCount,
-  copy_chunk_size_bytes: copyTuningDefaults.copyChunkSizeBytes,
-  copy_progress_flush_bytes: copyTuningDefaults.copyProgressFlushBytes,
-  copy_file_fsync_enabled: copyTuningDefaults.copyFileFsyncEnabled,
+  ...copyTuningDefaults.currentDefaults(),
   notes: '',
   callback_url: '',
   run_immediately: false,
@@ -260,6 +257,7 @@ function formatMountLabel(mount) {
 
 function resetForm() {
   showSourceBrowser.value = false
+  const tuning = copyTuningDefaults.currentDefaults()
   form.value = {
     project_id: '',
     evidence_number: '',
@@ -267,10 +265,10 @@ function resetForm() {
     overflow_drive_ids: [],
     mount_id: null,
     source_path: '/',
-    thread_count: copyTuningDefaults.threadCount,
-    copy_chunk_size_bytes: copyTuningDefaults.copyChunkSizeBytes,
-    copy_progress_flush_bytes: copyTuningDefaults.copyProgressFlushBytes,
-    copy_file_fsync_enabled: copyTuningDefaults.copyFileFsyncEnabled,
+    thread_count: tuning.thread_count,
+    copy_chunk_size_bytes: tuning.copy_chunk_size_bytes,
+    copy_progress_flush_bytes: tuning.copy_progress_flush_bytes,
+    copy_file_fsync_enabled: tuning.copy_file_fsync_enabled,
     notes: '',
     callback_url: '',
     run_immediately: false,
@@ -646,16 +644,20 @@ async function submitCreateJob() {
   }
 }
 
-function openCreateDialog(event) {
+async function openCreateDialog(event) {
   createDialogTriggerRef.value = event?.currentTarget instanceof HTMLElement ? event.currentTarget : document.activeElement
-  void copyTuningDefaults.ensureLoaded().then(() => {
-    if (showCreateDialog.value) {
-      form.value.thread_count = copyTuningDefaults.threadCount
-      form.value.copy_chunk_size_bytes = copyTuningDefaults.copyChunkSizeBytes
-      form.value.copy_progress_flush_bytes = copyTuningDefaults.copyProgressFlushBytes
-      form.value.copy_file_fsync_enabled = copyTuningDefaults.copyFileFsyncEnabled
-    }
-  })
+  // Resolve the live copy-tuning defaults BEFORE seeding the form so the
+  // Workflow tab opens with the configured values from the start. The
+  // defaults become the per-job starting point at create time and are
+  // persisted as overrides on save (see docs/operations/13-user-manual.md).
+  // ensureLoaded() dedupes concurrent callers and resolves immediately
+  // after the first successful fetch.
+  try {
+    await copyTuningDefaults.ensureLoaded()
+  } catch (_err) {
+    // refresh() already handles its own logging; fall through to the
+    // fallback defaults rather than blocking dialog open.
+  }
   resetForm()
   createDialogError.value = ''
   showCreateDialog.value = true
@@ -742,6 +744,9 @@ onMounted(async () => {
   }
 
   await Promise.all([loadJobs(), loadSupportingData(), loadArchivedAvailability()])
+  // Best-effort prefetch of the copy-tuning defaults so the Create Job
+  // dialog seeds without waiting for an additional round-trip on first open.
+  void copyTuningDefaults.ensureLoaded()
   syncJobsRefreshTimer()
 })
 

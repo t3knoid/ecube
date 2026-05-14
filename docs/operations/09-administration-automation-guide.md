@@ -1061,13 +1061,13 @@ Optional parameters:
 | `callback_url` | `null` | HTTPS URL that receives a job-status callback when the job reaches `COMPLETED` or `FAILED` |
 | `created_by` | `null` | Optional username attribution override for audit/job metadata |
 
-> **Thread count guidance:** `thread_count` controls parallel copy workers, not a guaranteed throughput multiplier. Choose a value no higher than the number of logical CPUs visible to the operating system, start conservatively at `min(4, visible logical CPU count)`, and increase only if throughput improves without making the ECUBE host unresponsive.
+> **Thread count guidance:** `thread_count` controls parallel copy workers, not a guaranteed throughput multiplier. Copy work is I/O-bound rather than CPU-bound, so the best value depends mostly on the source data shape and the source and destination media rather than on the number of CPUs.
 >
 > Typical starting points:
 >
-> - 2 visible CPUs: start with `2`
-> - 4 visible CPUs: start with `4`
-> - 8 or more visible CPUs: start with `4`, then test `6` and `8` only if the source share, destination drive, and host remain stable
+> - Mostly small files (many files, small per-file size): start higher, for example `12`. Per-file overhead dominates and parallel workers help keep the source and destination busy.
+> - Mostly large files (few files, large per-file size): start lower, for example `4`. Each file already streams continuously, so additional threads add little throughput.
+> - Mixed workloads: start at `4` to `8` and adjust from there.
 >
 > More copy threads are not always better. If copy speed plateaus, other services slow down, or the UI becomes sluggish, reduce `thread_count`.
 

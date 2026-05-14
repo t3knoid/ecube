@@ -45,6 +45,14 @@ export const useCopyTuningDefaultsStore = defineStore('copyTuningDefaults', () =
       applyDefaults(data)
       loaded.value = true
     } catch (err) {
+      // The Job Editor falls back to FALLBACK_COPY_TUNING_DEFAULTS when the
+      // backend defaults cannot be loaded. Surface this at warn level so an
+      // operator-visible drift between the dialog seed and the live
+      // Configuration values is at least observable in the browser logs;
+      // include the raw error at debug level for troubleshooting.
+      logger.warn(
+        '[copyTuningDefaults] using hardcoded fallback defaults; backend defaults could not be loaded',
+      )
       logger.debug('[copyTuningDefaults] failed to load configured defaults:', err)
     } finally {
       loading.value = false
@@ -70,6 +78,18 @@ export const useCopyTuningDefaultsStore = defineStore('copyTuningDefaults', () =
     inflight = null
   }
 
+  // Snapshot the current defaults into a plain object suitable for seeding
+  // a Job Editor form. Keeping this on the store keeps the Create and Edit
+  // surfaces in sync without each view re-listing the four field names.
+  function currentDefaults() {
+    return {
+      thread_count: threadCount.value,
+      copy_chunk_size_bytes: copyChunkSizeBytes.value,
+      copy_progress_flush_bytes: copyProgressFlushBytes.value,
+      copy_file_fsync_enabled: copyFileFsyncEnabled.value,
+    }
+  }
+
   return {
     threadCount,
     copyChunkSizeBytes,
@@ -80,5 +100,6 @@ export const useCopyTuningDefaultsStore = defineStore('copyTuningDefaults', () =
     ensureLoaded,
     refresh,
     reset,
+    currentDefaults,
   }
 })

@@ -6191,3 +6191,28 @@ def test_get_copy_tuning_defaults_tracks_runtime_overrides(client, monkeypatch):
         "copy_progress_flush_bytes": 32 * 1024 * 1024,
         "copy_file_fsync_enabled": True,
     }
+
+
+def test_get_copy_tuning_defaults_requires_authentication(unauthenticated_client):
+    response = unauthenticated_client.get("/jobs/copy-tuning-defaults")
+    assert response.status_code == 401
+    # Body must be the shared error envelope, not raw config values.
+    assert "thread_count" not in response.text
+
+
+def test_get_copy_tuning_defaults_forbidden_for_auditor(auditor_client):
+    response = auditor_client.get("/jobs/copy-tuning-defaults")
+    assert response.status_code == 403
+    assert "thread_count" not in response.text
+
+
+def test_get_copy_tuning_defaults_allowed_for_manager(manager_client):
+    response = manager_client.get("/jobs/copy-tuning-defaults")
+    assert response.status_code == 200
+    payload = response.json()
+    assert set(payload) == {
+        "thread_count",
+        "copy_chunk_size_bytes",
+        "copy_progress_flush_bytes",
+        "copy_file_fsync_enabled",
+    }

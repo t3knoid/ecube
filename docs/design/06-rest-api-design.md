@@ -800,7 +800,9 @@ List the most recent export jobs, ordered by creation time descending.
 
 ### `GET /jobs/copy-tuning-defaults`
 
-Return the live copy-tuning defaults the Job Editor uses to pre-select copy-tuning form fields. The values reflect the current backend settings (including `.env` overrides such as `COPY_DEFAULT_THREAD_COUNT`, `COPY_CHUNK_SIZE_BYTES`, `COPY_PROGRESS_FLUSH_BYTES`, and `COPY_FILE_FSYNC_ENABLED`) so Create Job and Edit Job dialog defaults track configuration changes without exposing the broader Configuration API to processors.
+Return the live copy-tuning defaults the Job Editor uses to pre-select copy-tuning form fields. The values reflect the current backend settings (including `.env` values such as `COPY_DEFAULT_THREAD_COUNT`, `COPY_CHUNK_SIZE_BYTES`, `COPY_PROGRESS_FLUSH_BYTES`, and `COPY_FILE_FSYNC_ENABLED`) so the Create Job and Edit Job dialogs always seed from the latest configured values without exposing the broader Configuration API to processors.
+
+The Job Editor uses these values as the per-job starting point: when an operator saves the dialog the four values shown on the Workflow tab are persisted on the job as per-job copy-tuning settings (a snapshot taken at create time). Subsequent changes to the global defaults do not retroactively update jobs that were already created, so API clients should expect every Create and Edit request from the standard Job Editor to set `thread_count`, `copy_chunk_size_bytes`, `copy_progress_flush_bytes`, and `copy_file_fsync_enabled` explicitly.
 
 **Roles:** `admin`, `manager`, `processor`
 

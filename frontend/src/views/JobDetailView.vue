@@ -92,10 +92,7 @@ const editForm = ref({
   source_path: '/',
   drive_id: null,
   overflow_drive_ids: [],
-  thread_count: copyTuningDefaults.threadCount,
-  copy_chunk_size_bytes: copyTuningDefaults.copyChunkSizeBytes,
-  copy_progress_flush_bytes: copyTuningDefaults.copyProgressFlushBytes,
-  copy_file_fsync_enabled: copyTuningDefaults.copyFileFsyncEnabled,
+  ...copyTuningDefaults.currentDefaults(),
   callback_url: '',
 })
 
@@ -1402,6 +1399,7 @@ async function openEditDialog() {
   error.value = ''
   await Promise.all([loadSupportingData(), copyTuningDefaults.ensureLoaded()])
   const inferredMount = inferMountForJob(job.value)
+  const tuningDefaults = copyTuningDefaults.currentDefaults()
   editForm.value = {
     project_id: normalizeProjectId(job.value.project_id) || '',
     evidence_number: String(job.value.evidence_number || ''),
@@ -1410,10 +1408,10 @@ async function openEditDialog() {
     source_path: buildEditSourcePath(job.value, inferredMount),
     drive_id: job.value.drive?.id ?? null,
     overflow_drive_ids: reservedOverflowAssignments.value.map((assignment) => Number(assignment.drive_id)),
-    thread_count: getJobThreadCountOverride(job.value) ?? (job.value.effective_thread_count != null ? Number(job.value.effective_thread_count) : copyTuningDefaults.threadCount),
-    copy_chunk_size_bytes: job.value.copy_chunk_size_bytes ?? job.value.effective_copy_chunk_size_bytes ?? copyTuningDefaults.copyChunkSizeBytes,
-    copy_progress_flush_bytes: job.value.copy_progress_flush_bytes ?? job.value.effective_copy_progress_flush_bytes ?? copyTuningDefaults.copyProgressFlushBytes,
-    copy_file_fsync_enabled: job.value.copy_file_fsync_enabled ?? job.value.effective_copy_file_fsync_enabled ?? copyTuningDefaults.copyFileFsyncEnabled,
+    thread_count: getJobThreadCountOverride(job.value) ?? (job.value.effective_thread_count != null ? Number(job.value.effective_thread_count) : tuningDefaults.thread_count),
+    copy_chunk_size_bytes: job.value.copy_chunk_size_bytes ?? job.value.effective_copy_chunk_size_bytes ?? tuningDefaults.copy_chunk_size_bytes,
+    copy_progress_flush_bytes: job.value.copy_progress_flush_bytes ?? job.value.effective_copy_progress_flush_bytes ?? tuningDefaults.copy_progress_flush_bytes,
+    copy_file_fsync_enabled: job.value.copy_file_fsync_enabled ?? job.value.effective_copy_file_fsync_enabled ?? tuningDefaults.copy_file_fsync_enabled,
     callback_url: String(job.value.callback_url || ''),
   }
   showEditSourceBrowser.value = false

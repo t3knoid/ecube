@@ -41,6 +41,12 @@ vi.mock('@/stores/copyTuningDefaults.js', () => ({
     loaded: true,
     ensureLoaded: () => Promise.resolve(),
     refresh: () => Promise.resolve(),
+    currentDefaults: () => ({
+      thread_count: 12,
+      copy_chunk_size_bytes: 4_194_304,
+      copy_progress_flush_bytes: 67_108_864,
+      copy_file_fsync_enabled: false,
+    }),
   }),
 }))
 

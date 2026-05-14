@@ -200,11 +200,19 @@ class JobDeleteResponse(BaseModel):
 
 
 class JobCopyTuningDefaults(BaseModel):
-    """Current configured copy tuning defaults used to seed new jobs."""
+    """Current configured copy tuning defaults used to seed new jobs.
 
-    thread_count: int = Field(..., ge=1, le=32, description="Configured default worker thread pool size")
-    copy_chunk_size_bytes: int = Field(..., ge=262_144, le=67_108_864, description="Configured default copy chunk size in bytes")
-    copy_progress_flush_bytes: int = Field(..., ge=1_048_576, le=1_073_741_824, description="Configured default progress flush threshold in bytes")
+    Bounds are intentionally permissive on this read-only response. Input
+    validation lives on the Configuration write path; clamping responses to
+    a stricter range here would cause readbacks to fail if a future settings
+    value (e.g. an ``.env`` override) sits outside the input range. The
+    ``ge=1`` floors only guard against logically invalid (zero/negative)
+    values that should never be served.
+    """
+
+    thread_count: int = Field(..., ge=1, description="Configured default worker thread pool size")
+    copy_chunk_size_bytes: int = Field(..., ge=1, description="Configured default copy chunk size in bytes")
+    copy_progress_flush_bytes: int = Field(..., ge=1, description="Configured default progress flush threshold in bytes")
     copy_file_fsync_enabled: bool = Field(..., description="Configured default per-file fsync behavior")
 
 
