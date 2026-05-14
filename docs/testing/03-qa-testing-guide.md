@@ -101,6 +101,16 @@ Add the following manual checks when a release includes the restricted started-j
 | Started job can add or remove reserved overflow drives | Open a started job with at least one eligible additional drive, change the overflow-drive selection, save, and refresh Job Detail | The save succeeds, the reserved overflow assignment list matches the new selection, and removed reserved drives are no longer shown on the job |
 | Started job cannot redefine immutable fields | Attempt to change the project, source path, or primary destination for a started job through the UI or direct API call | The UI does not expose those edits in started-job mode, and any direct API attempt is rejected with a conflict response rather than mutating the job definition |
 
+## Manual Verification Additions for System Thread Timeline
+
+Add the following manual checks when a release includes the System Health job-grouped copy-thread timeline.
+
+| Scenario | Steps | Expected |
+|---|---|---|
+| Timeline lanes follow configured worker count per job | Start a job with `Thread count` set to a value greater than 1, open `System` > `Health`, and inspect the timeline for that job | The timeline groups rows by job ID and project, and lane count matches the configured worker count even if only some lanes are actively copying at that moment |
+| Timeline states distinguish active and waiting samples | While a job transitions through `PREPARING` into `RUNNING`, keep the `Health` tab open and observe segment colors for the job lanes | Preparing samples render as waiting, active copy samples render as active, and lanes without active work render as inactive |
+| Timeline refreshes without manual page reload | Leave the `Health` tab open during active copy activity and watch for updates for at least one polling interval | New timeline samples appear automatically in place on the same screen and the scale advances toward `Now` without requiring manual browser refresh |
+
 
 ---
 

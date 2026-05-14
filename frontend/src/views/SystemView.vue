@@ -16,6 +16,7 @@ import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
 import { useAuthStore } from '@/stores/auth.js'
+import { usePolling } from '@/composables/usePolling.js'
 import { normalizeProjectId } from '@/utils/projectId.js'
 import { formatUsbSpeed } from '@/utils/usbSpeed.js'
 
@@ -68,6 +69,12 @@ const page = ref(1)
 const pageSize = ref(10)
 const isMobileViewport = ref(false)
 let mobileViewportQuery = null
+
+const THREAD_TIMELINE_POLL_INTERVAL_MS = 2000
+const THREAD_TIMELINE_WINDOW_MS = 120000
+const THREAD_TIMELINE_MAX_SAMPLES = Math.max(Math.floor(THREAD_TIMELINE_WINDOW_MS / THREAD_TIMELINE_POLL_INTERVAL_MS), 12)
+const THREAD_TIMELINE_WAITING_STATUSES = new Set(['PREPARING', 'PAUSING'])
+const threadTimelineHistory = ref([])
 
 const tabColumns = computed(() => {
   if (activeTab.value === 'usb') {
@@ -349,6 +356,209 @@ const activeCopyThreadCountDisplay = computed(() => {
   return count != null ? count : ecubeProcess.value?.active_copy_threads?.length || 0
 })
 
+function parsePositiveInteger(value) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return null
+  const normalized = Math.trunc(parsed)
+  return normalized > 0 ? normalized : null
+}
+
+function normalizeJobStatus(value) {
+  const normalized = String(value || '').trim().toUpperCase()
+  return normalized || ''
+}
+
+function buildFallbackWorkerLabel(jobId, index) {
+  return `copy-job-${jobId}_${index}`
+}
+
+function getThreadLaneState(thread) {
+  const jobStatus = normalizeJobStatus(thread?.job_status)
+  if (THREAD_TIMELINE_WAITING_STATUSES.has(jobStatus)) return 'waiting'
+  return 'active'
+}
+
+function normalizeActiveCopyThreadsSnapshot(activeThreads, capturedAtMs = Date.now()) {
+  const jobs = {}
+  const threads = Array.isArray(activeThreads) ? activeThreads : []
+
+  for (const rawThread of threads) {
+    const jobId = parsePositiveInteger(rawThread?.job_id)
+    if (jobId == null) continue
+
+    if (!jobs[jobId]) {
+      jobs[jobId] = {
+        jobId,
+        projectId: rawThread?.project_id || null,
+        jobStatus: normalizeJobStatus(rawThread?.job_status),
+        configuredThreadCount: parsePositiveInteger(rawThread?.configured_thread_count),
+        lanes: {},
+      }
+    }
+
+    const job = jobs[jobId]
+    const configuredThreadCount = parsePositiveInteger(rawThread?.configured_thread_count)
+    if (configuredThreadCount != null) {
+      job.configuredThreadCount = Math.max(job.configuredThreadCount || 0, configuredThreadCount)
+    }
+    if (!job.projectId && rawThread?.project_id) {
+      job.projectId = rawThread.project_id
+    }
+    if (!job.jobStatus && rawThread?.job_status) {
+      job.jobStatus = normalizeJobStatus(rawThread.job_status)
+    }
+
+    const workerLabel = String(rawThread?.worker_label || '').trim() || buildFallbackWorkerLabel(jobId, 0)
+    job.lanes[workerLabel] = {
+      state: getThreadLaneState(rawThread),
+      status: normalizeJobStatus(rawThread?.job_status),
+    }
+  }
+
+  for (const job of Object.values(jobs)) {
+    const configuredThreadCount = parsePositiveInteger(job.configuredThreadCount)
+    if (configuredThreadCount == null) continue
+
+    for (let index = 0; index < configuredThreadCount; index += 1) {
+      const workerLabel = buildFallbackWorkerLabel(job.jobId, index)
+      if (!job.lanes[workerLabel]) {
+        job.lanes[workerLabel] = {
+          state: THREAD_TIMELINE_WAITING_STATUSES.has(job.jobStatus) ? 'waiting' : 'inactive',
+          status: job.jobStatus,
+        }
+      }
+    }
+  }
+
+  return {
+    capturedAtMs,
+    jobs,
+  }
+}
+
+function appendThreadTimelineSnapshot(activeThreads, capturedAtMs = Date.now()) {
+  const snapshot = normalizeActiveCopyThreadsSnapshot(activeThreads, capturedAtMs)
+  const minCapturedAtMs = capturedAtMs - THREAD_TIMELINE_WINDOW_MS
+
+  threadTimelineHistory.value = [...threadTimelineHistory.value, snapshot]
+    .filter((item) => item.capturedAtMs >= minCapturedAtMs)
+    .slice(-THREAD_TIMELINE_MAX_SAMPLES)
+}
+
+const threadTimelineState = computed(() => {
+  if (!threadTimelineHistory.value.length) return 'loading'
+  if ((health.value?.active_jobs || 0) > 0) {
+    const hasThreadSamples = threadTimelineHistory.value.some((snapshot) => Object.keys(snapshot.jobs || {}).length > 0)
+    if (!hasThreadSamples) return 'unavailable'
+  }
+  return 'ready'
+})
+
+const threadTimelineScaleMarkers = computed(() => {
+  const points = threadTimelineHistory.value
+  if (!points.length) return []
+
+  const totalSpanSeconds = (points.length - 1) * (THREAD_TIMELINE_POLL_INTERVAL_MS / 1000)
+  return [0, 0.25, 0.5, 0.75, 1].map((fraction, index) => {
+    if (index === 4) {
+      return {
+        key: `marker-${index}`,
+        label: t('system.threadTimelineNow'),
+      }
+    }
+    const seconds = Math.round(totalSpanSeconds * (1 - fraction))
+    return {
+      key: `marker-${index}`,
+      label: t('system.threadTimelineAgo', { seconds }),
+    }
+  })
+})
+
+const threadTimelineJobs = computed(() => {
+  const snapshots = threadTimelineHistory.value
+  if (!snapshots.length) return []
+
+  const registry = new Map()
+
+  for (const snapshot of snapshots) {
+    for (const [rawJobId, job] of Object.entries(snapshot.jobs || {})) {
+      const jobId = parsePositiveInteger(rawJobId)
+      if (jobId == null) continue
+
+      if (!registry.has(jobId)) {
+        registry.set(jobId, {
+          jobId,
+          projectId: null,
+          configuredThreadCount: null,
+          lanes: new Set(),
+        })
+      }
+
+      const record = registry.get(jobId)
+      if (!record.projectId && job.projectId) {
+        record.projectId = job.projectId
+      }
+
+      const configuredThreadCount = parsePositiveInteger(job.configuredThreadCount)
+      if (configuredThreadCount != null) {
+        record.configuredThreadCount = Math.max(record.configuredThreadCount || 0, configuredThreadCount)
+      }
+
+      for (const label of Object.keys(job.lanes || {})) {
+        record.lanes.add(label)
+      }
+    }
+  }
+
+  for (const [jobId, record] of registry.entries()) {
+    const configuredThreadCount = parsePositiveInteger(record.configuredThreadCount)
+    if (configuredThreadCount == null) continue
+    for (let index = 0; index < configuredThreadCount; index += 1) {
+      record.lanes.add(buildFallbackWorkerLabel(jobId, index))
+    }
+  }
+
+  const sampleCount = snapshots.length
+  return Array.from(registry.values())
+    .sort((a, b) => a.jobId - b.jobId)
+    .map((job) => {
+      const lanes = Array.from(job.lanes)
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }))
+        .map((workerLabel) => {
+          const segments = snapshots.map((snapshot) => {
+            const lane = snapshot.jobs?.[job.jobId]?.lanes?.[workerLabel]
+            if (lane?.state) return lane.state
+
+            const snapshotJobStatus = normalizeJobStatus(snapshot.jobs?.[job.jobId]?.jobStatus)
+            if (THREAD_TIMELINE_WAITING_STATUSES.has(snapshotJobStatus)) {
+              return 'waiting'
+            }
+            return 'inactive'
+          })
+
+          return {
+            workerLabel,
+            segments,
+            latestState: segments[segments.length - 1] || 'inactive',
+          }
+        })
+
+      return {
+        jobId: job.jobId,
+        projectId: job.projectId,
+        sampleCount,
+        lanes,
+      }
+    })
+})
+
+const threadTimelineColumnStyle = computed(() => {
+  const count = Math.max(threadTimelineHistory.value.length, 1)
+  return {
+    gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))`,
+  }
+})
+
 function formatProjectId(value) {
   return normalizeProjectId(value) || t('dashboard.project')
 }
@@ -490,12 +700,39 @@ async function confirmSystemHealthAction() {
   }
 }
 
+async function fetchSystemHealthSnapshot() {
+  const snapshot = await getSystemHealth()
+  health.value = snapshot
+  appendThreadTimelineSnapshot(snapshot?.ecube_process?.active_copy_threads, Date.now())
+  return snapshot
+}
+
+const { start: startHealthPolling, stop: stopHealthPolling } = usePolling(
+  async () => {
+    if (activeTab.value !== 'health' || loading.value) return null
+    return fetchSystemHealthSnapshot()
+  },
+  {
+    intervalMs: THREAD_TIMELINE_POLL_INTERVAL_MS,
+    immediate: false,
+    allowOverlap: false,
+  }
+)
+
+function syncHealthPolling() {
+  if (activeTab.value === 'health') {
+    startHealthPolling()
+  } else {
+    stopHealthPolling()
+  }
+}
+
 async function loadTabData() {
   loading.value = true
   error.value = ''
   try {
     if (activeTab.value === 'health') {
-      health.value = await getSystemHealth()
+      await fetchSystemHealthSnapshot()
     } else if (activeTab.value === 'usb') {
       const response = await getUsbTopology()
       usbDevices.value = response.devices || []
@@ -564,6 +801,7 @@ async function loadTabData() {
     }
   } finally {
     loading.value = false
+    syncHealthPolling()
   }
 }
 
@@ -667,6 +905,7 @@ watch(activeTab, async () => {
   page.value = 1
   error.value = ''
   successMessage.value = ''
+  stopHealthPolling()
   await loadTabData()
 })
 
@@ -686,10 +925,12 @@ onMounted(() => {
   }
 
   void loadTabData()
+  syncHealthPolling()
 })
 
 onBeforeUnmount(() => {
   mobileViewportQuery?.removeEventListener('change', syncViewportState)
+  stopHealthPolling()
 })
 </script>
 
@@ -793,38 +1034,98 @@ onBeforeUnmount(() => {
 
         <div class="health-thread-divider" aria-hidden="true" />
 
-        <div class="health-thread-table-wrap">
-          <table class="health-thread-table">
-            <caption class="health-thread-table-caption">{{ t('system.activeCopyThreads') }}</caption>
-            <thead>
-              <tr>
-                <th scope="col">{{ t('system.workerLabel') }}</th>
-                <th scope="col">{{ t('dashboard.jobId') }}</th>
-                <th scope="col">{{ t('dashboard.project') }}</th>
-                <th scope="col">{{ t('common.labels.status') }}</th>
-                <th scope="col">{{ t('system.configuredThreads') }}</th>
-                <th scope="col">{{ t('system.elapsed') }}</th>
-                <th scope="col">{{ t('system.cpuTime') }}</th>
-              </tr>
-            </thead>
-            <tbody v-if="ecubeProcess.active_copy_threads.length">
-              <tr v-for="thread in ecubeProcess.active_copy_threads" :key="`${thread.job_id}-${thread.worker_label}`">
-                <td>{{ thread.worker_label }}</td>
-                <td>{{ thread.job_id }}</td>
-                <td>{{ thread.project_id ? formatProjectId(thread.project_id) : t('common.labels.notAvailable') }}</td>
-                <td>{{ thread.job_status || t('common.labels.notAvailable') }}</td>
-                <td>{{ thread.configured_thread_count ?? t('common.labels.notAvailable') }}</td>
-                <td>{{ formatSeconds(thread.elapsed_seconds) }}</td>
-                <td>{{ formatSeconds(thread.cpu_time_seconds) }}</td>
-              </tr>
-            </tbody>
-            <tbody v-else>
-              <tr>
-                <td class="health-thread-table-empty" colspan="7">{{ t('system.noActiveCopyThreads') }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <section class="thread-timeline" aria-live="polite">
+          <h3 class="thread-timeline-title">{{ t('system.threadTimelineTitle') }}</h3>
+          <p class="thread-timeline-copy">{{ t('system.threadTimelineDescription') }}</p>
+
+          <div class="thread-timeline-legend" role="list" :aria-label="t('system.threadTimelineLegendLabel')">
+            <span class="thread-timeline-legend-item" role="listitem">
+              <span class="thread-timeline-legend-swatch thread-timeline-segment--active" aria-hidden="true" />
+              {{ t('system.threadTimelineLegendActive') }}
+            </span>
+            <span class="thread-timeline-legend-item" role="listitem">
+              <span class="thread-timeline-legend-swatch thread-timeline-segment--waiting" aria-hidden="true" />
+              {{ t('system.threadTimelineLegendWaiting') }}
+            </span>
+            <span class="thread-timeline-legend-item" role="listitem">
+              <span class="thread-timeline-legend-swatch thread-timeline-segment--inactive" aria-hidden="true" />
+              {{ t('system.threadTimelineLegendInactive') }}
+            </span>
+          </div>
+
+          <p v-if="threadTimelineState === 'unavailable'" class="thread-timeline-empty">
+            {{ t('system.threadTimelineUnavailable') }}
+          </p>
+          <div v-else-if="threadTimelineJobs.length" class="thread-timeline-jobs">
+            <article v-for="job in threadTimelineJobs" :key="job.jobId" class="thread-timeline-job">
+              <header class="thread-timeline-job-header">
+                <strong>{{ t('dashboard.jobId') }} {{ job.jobId }}</strong>
+                <span>{{ job.projectId ? formatProjectId(job.projectId) : t('common.labels.notAvailable') }}</span>
+              </header>
+
+              <div class="thread-timeline-scale">
+                <span v-for="(marker, index) in threadTimelineScaleMarkers" :key="marker.key" class="thread-timeline-scale-label" :class="{ 'thread-timeline-scale-label--end': index === threadTimelineScaleMarkers.length - 1 }">
+                  {{ marker.label }}
+                </span>
+              </div>
+
+              <div class="thread-timeline-lanes">
+                <div v-for="lane in job.lanes" :key="lane.workerLabel" class="thread-timeline-lane-row">
+                  <span class="thread-timeline-lane-label">{{ lane.workerLabel }}</span>
+                  <div class="thread-timeline-lane-track" :style="threadTimelineColumnStyle">
+                    <span
+                      v-for="(segment, segmentIndex) in lane.segments"
+                      :key="`${lane.workerLabel}-${segmentIndex}`"
+                      class="thread-timeline-segment"
+                      :class="`thread-timeline-segment--${segment}`"
+                      :data-state="segment"
+                      :aria-label="`${lane.workerLabel} ${segment}`"
+                    />
+                  </div>
+                </div>
+              </div>
+            </article>
+          </div>
+          <p v-else class="thread-timeline-empty">
+            {{ t('system.threadTimelineEmpty') }}
+          </p>
+        </section>
+
+        <details class="health-thread-table-details">
+          <summary class="health-thread-table-summary">{{ t('system.activeCopyThreads') }}</summary>
+          <div class="health-thread-table-wrap">
+            <table class="health-thread-table">
+              <caption class="health-thread-table-caption">{{ t('system.activeCopyThreads') }}</caption>
+              <thead>
+                <tr>
+                  <th scope="col">{{ t('system.workerLabel') }}</th>
+                  <th scope="col">{{ t('dashboard.jobId') }}</th>
+                  <th scope="col">{{ t('dashboard.project') }}</th>
+                  <th scope="col">{{ t('common.labels.status') }}</th>
+                  <th scope="col">{{ t('system.configuredThreads') }}</th>
+                  <th scope="col">{{ t('system.elapsed') }}</th>
+                  <th scope="col">{{ t('system.cpuTime') }}</th>
+                </tr>
+              </thead>
+              <tbody v-if="ecubeProcess.active_copy_threads.length">
+                <tr v-for="thread in ecubeProcess.active_copy_threads" :key="`${thread.job_id}-${thread.worker_label}`">
+                  <td>{{ thread.worker_label }}</td>
+                  <td>{{ thread.job_id }}</td>
+                  <td>{{ thread.project_id ? formatProjectId(thread.project_id) : t('common.labels.notAvailable') }}</td>
+                  <td>{{ thread.job_status || t('common.labels.notAvailable') }}</td>
+                  <td>{{ thread.configured_thread_count ?? t('common.labels.notAvailable') }}</td>
+                  <td>{{ formatSeconds(thread.elapsed_seconds) }}</td>
+                  <td>{{ formatSeconds(thread.cpu_time_seconds) }}</td>
+                </tr>
+              </tbody>
+              <tbody v-else>
+                <tr>
+                  <td class="health-thread-table-empty" colspan="7">{{ t('system.noActiveCopyThreads') }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
       </section>
     </article>
 
@@ -989,6 +1290,19 @@ onBeforeUnmount(() => {
   overflow-x: auto;
 }
 
+.health-thread-table-details {
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg-primary);
+}
+
+.health-thread-table-summary {
+  cursor: pointer;
+  padding: var(--space-xs) var(--space-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
 .health-thread-divider {
   border-top: 1px solid var(--color-border);
 }
@@ -1013,6 +1327,136 @@ onBeforeUnmount(() => {
 }
 
 .health-thread-table-empty {
+  color: var(--color-text-secondary);
+}
+
+.thread-timeline {
+  display: grid;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background: var(--color-bg-primary);
+}
+
+.thread-timeline-title {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.thread-timeline-copy {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.thread-timeline-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+}
+
+.thread-timeline-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: 0.85rem;
+}
+
+.thread-timeline-legend-swatch {
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 2px;
+  border: 1px solid var(--color-border);
+}
+
+.thread-timeline-jobs {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.thread-timeline-job {
+  display: grid;
+  gap: var(--space-xs);
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-xs);
+}
+
+.thread-timeline-job:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.thread-timeline-job-header {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+}
+
+.thread-timeline-scale {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-xs);
+}
+
+.thread-timeline-scale-label {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.thread-timeline-scale-label--end {
+  justify-self: end;
+}
+
+.thread-timeline-lanes {
+  display: grid;
+  gap: var(--space-2xs);
+}
+
+.thread-timeline-lane-row {
+  display: grid;
+  grid-template-columns: minmax(9rem, max-content) minmax(0, 1fr);
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.thread-timeline-lane-label {
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.thread-timeline-lane-track {
+  display: grid;
+  gap: 1px;
+  min-height: 0.85rem;
+}
+
+.thread-timeline-segment {
+  border-radius: 2px;
+  border: 1px solid transparent;
+  min-height: 0.85rem;
+}
+
+.thread-timeline-segment--active {
+  background: #2f9e44;
+  border-color: #2b8a3e;
+}
+
+.thread-timeline-segment--waiting {
+  background: color-mix(in srgb, var(--color-alert-warning-bg) 70%, var(--color-bg-primary));
+  border-color: color-mix(in srgb, var(--color-alert-warning-border) 80%, transparent);
+}
+
+.thread-timeline-segment--inactive {
+  background: color-mix(in srgb, var(--color-border) 45%, transparent);
+  border-color: color-mix(in srgb, var(--color-border) 75%, transparent);
+}
+
+.thread-timeline-empty {
+  margin: 0;
   color: var(--color-text-secondary);
 }
 
@@ -1214,6 +1658,11 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 768px) {
+  .thread-timeline-lane-row {
+    grid-template-columns: 1fr;
+    gap: var(--space-2xs);
+  }
+
   .usb-topology-table :deep(.data-table) {
     table-layout: fixed;
   }

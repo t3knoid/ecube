@@ -223,6 +223,117 @@ describe('SystemView USB topology tab', () => {
     expect(wrapper.text()).not.toContain('Metrics Note')
   })
 
+  it('renders a grouped thread timeline with one lane per configured thread', async () => {
+    mocks.getSystemHealth.mockResolvedValue({
+      status: 'ok',
+      database: 'connected',
+      active_jobs: 1,
+      ecube_process: {
+        active_copy_thread_count: 2,
+        active_copy_threads: [
+          {
+            job_id: 42,
+            project_id: 'proj-42',
+            job_status: 'RUNNING',
+            configured_thread_count: 3,
+            worker_label: 'copy-job-42_0',
+            elapsed_seconds: 5.5,
+            cpu_time_seconds: 1.0,
+          },
+          {
+            job_id: 42,
+            project_id: 'proj-42',
+            job_status: 'RUNNING',
+            configured_thread_count: 3,
+            worker_label: 'copy-job-42_2',
+            elapsed_seconds: 5.5,
+            cpu_time_seconds: 1.0,
+          },
+        ],
+      },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('system.threadTimelineTitle'))
+    expect(wrapper.findAll('.thread-timeline-job')).toHaveLength(1)
+    expect(wrapper.findAll('.thread-timeline-lane-row')).toHaveLength(3)
+    expect(wrapper.text()).toContain('copy-job-42_1')
+  })
+
+  it('shows waiting timeline segments when thread status is preparing', async () => {
+    mocks.getSystemHealth.mockResolvedValue({
+      status: 'ok',
+      database: 'connected',
+      active_jobs: 1,
+      ecube_process: {
+        active_copy_thread_count: 1,
+        active_copy_threads: [
+          {
+            job_id: 15,
+            project_id: 'proj-15',
+            job_status: 'PREPARING',
+            configured_thread_count: 1,
+            worker_label: 'copy-job-15_0',
+            elapsed_seconds: 1.2,
+            cpu_time_seconds: 0.2,
+          },
+        ],
+      },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const waitingSegments = wrapper.findAll('.thread-timeline-segment--waiting')
+    expect(waitingSegments.length).toBeGreaterThan(0)
+  })
+
+  it('shows a timeline unavailable state when active jobs exist without thread samples', async () => {
+    mocks.getSystemHealth.mockResolvedValue({
+      status: 'degraded',
+      database: 'connected',
+      active_jobs: 2,
+      ecube_process: {
+        active_copy_thread_count: 0,
+        active_copy_threads: [],
+      },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('system.threadTimelineUnavailable'))
+  })
+
+  it('polls system health while the health tab remains active', async () => {
+    vi.useFakeTimers()
+    try {
+      mocks.getSystemHealth.mockResolvedValue({
+        status: 'ok',
+        database: 'connected',
+        active_jobs: 0,
+        ecube_process: {
+          active_copy_thread_count: 0,
+          active_copy_threads: [],
+        },
+      })
+
+      const wrapper = mountView()
+      await flushPromises()
+      expect(mocks.getSystemHealth).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(2100)
+      await flushPromises()
+
+      expect(mocks.getSystemHealth).toHaveBeenCalledTimes(2)
+      wrapper.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('renders explicit system-health warnings when the backend returns them', async () => {
     mocks.getSystemHealth.mockResolvedValue({
       status: 'degraded',
