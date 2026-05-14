@@ -259,7 +259,7 @@ def _startup_reconciliation_counts(payload: Any) -> dict[str, Any]:
     return counts
 
 
-async def _wait_for_next_usb_discovery_cycle() -> bool:
+async def _wait_for_next_usb_discovery_cycle(*, exit_when_disabled: bool = False) -> bool:
     """Wait until the next automatic USB discovery cycle should run.
 
     The configured interval is re-read continuously so runtime configuration
@@ -276,7 +276,12 @@ async def _wait_for_next_usb_discovery_cycle() -> bool:
     while True:
         configured_interval = int(getattr(settings, "usb_discovery_interval", 0) or 0)
         if configured_interval <= 0:
-            return False
+            if exit_when_disabled:
+                return False
+            await asyncio.sleep(1.0)
+            remaining_seconds = None
+            active_interval = None
+            continue
 
         if remaining_seconds is None or active_interval != configured_interval:
             active_interval = configured_interval
@@ -313,7 +318,7 @@ async def _usb_discovery_poll_loop() -> None:
     so the caller can activate the alternate discovery path immediately.
     """
     while True:
-        should_run_cycle = await _wait_for_next_usb_discovery_cycle()
+        should_run_cycle = await _wait_for_next_usb_discovery_cycle(exit_when_disabled=True)
         if not should_run_cycle:
             return
         try:

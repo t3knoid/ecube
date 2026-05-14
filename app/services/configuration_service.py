@@ -280,10 +280,9 @@ def update_configuration(values: Dict[str, Any], *, scope: str) -> Dict[str, Any
     for key, new_value_raw in values.items():
         current_value = _normalized_value(key, getattr(settings, key))
         new_value = _normalized_value(key, new_value_raw)
-        if current_value == new_value:
-            continue
-
         spec = _EDITABLE_FIELDS[key]
+        serialized_new_value = spec.serializer(new_value)
+
         old_values[key] = current_value
         changed_settings.append(key)
         changed_setting_values[key] = {
@@ -295,7 +294,7 @@ def update_configuration(values: Dict[str, Any], *, scope: str) -> Dict[str, Any
         else:
             applied_immediately.append(key)
 
-        env_updates[spec.env_key] = spec.serializer(new_value)
+        env_updates[spec.env_key] = serialized_new_value
         rollback_env_updates[spec.env_key] = spec.serializer(current_value)
         pending_values[key] = new_value
 
