@@ -39,7 +39,7 @@ vi.mock('@/api/drives.js', () => ({
   getDrives: mocks.getDrives,
 }))
 
-vi.mock('@/api/mounts.js', () => ({
+vi.mock('@/api/shares.js', () => ({
   getShares: mocks.getShares,
 }))
 

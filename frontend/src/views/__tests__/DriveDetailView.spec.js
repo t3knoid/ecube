@@ -50,7 +50,7 @@ vi.mock('@/api/jobs.js', () => ({
   listJobs: (...args) => mocks.listJobs(...args),
 }))
 
-vi.mock('@/api/mounts.js', () => ({
+vi.mock('@/api/shares.js', () => ({
   getShares: (...args) => mocks.getShares(...args),
 }))
 

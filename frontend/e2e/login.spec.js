@@ -2,10 +2,12 @@ import { test, expect } from '@playwright/test'
 import { makeToken, routeJson, setupPublicPage } from './helpers/app.js'
 import { expectNoCriticalA11yViolations } from './helpers/a11y.js'
 import { STORAGE_TOKEN_KEY } from '../src/constants/storage.js'
+import { EXPIRED_QUERY_KEY, EXPIRED_QUERY_VALUE } from '../src/constants/auth.js'
 
 test('login success, login failure, and session expiry banner', async ({ page }) => {
   await setupPublicPage(page, { initialized: true })
   await routeJson(page, '**/api/drives', [])
+  await routeJson(page, '**/api/shares', [])
   await routeJson(page, '**/api/jobs**', [])
 
   await page.route('**/api/auth/token', async (route) => {
@@ -33,8 +35,10 @@ test('login success, login failure, and session expiry banner', async ({ page })
   await page.getByLabel('Password').fill('pass')
   await page.getByRole('button', { name: 'Log In' }).click()
   await expect(page).toHaveURL(/\/$/)
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
 
-  await page.goto('/login?expired=1')
+  await page.evaluate((key) => sessionStorage.removeItem(key), STORAGE_TOKEN_KEY)
+  await page.goto(`/login?${EXPIRED_QUERY_KEY}=${EXPIRED_QUERY_VALUE}`)
   await expect(page.getByText('Session Expired')).toBeVisible()
 
   await expectNoCriticalA11yViolations(page)
@@ -43,6 +47,7 @@ test('login success, login failure, and session expiry banner', async ({ page })
 test('redirect to login when stored token is already expired', async ({ page }) => {
   await setupPublicPage(page, { initialized: true })
   await routeJson(page, '**/api/drives', [])
+  await routeJson(page, '**/api/shares', [])
   await routeJson(page, '**/api/jobs**', [])
 
   // Inject a token that has already expired

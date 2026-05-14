@@ -752,7 +752,7 @@ test('job detail opens per-file error details from the errored status control', 
   await setupAuthenticatedPage(page, ['admin'])
 
   await routeJson(page, '**/api/drives', [])
-  await routeJson(page, '**/api/mounts', [])
+  await routeJson(page, '**/api/shares', [])
   await routeJson(page, '**/api/jobs**', [])
   await routeJson(page, '**/api/jobs/92', {
     id: 92,
