@@ -976,6 +976,37 @@ def test_get_job_includes_effective_copy_tuning_snapshot(client, db):
     assert data["copy_file_fsync_source"] == "job"
 
 
+def test_get_job_normalizes_effective_progress_flush_threshold_to_chunk_size(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-GET-TUNING-NORMALIZED-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-TUNING-002",
+        mount_path="/mnt/ecube/get-tuning-normalized-001",
+    )
+    job = ExportJob(
+        project_id="PROJ-TUNING-002",
+        evidence_number="EV-TUNING-002",
+        source_path="/data/evidence",
+        target_mount_path=drive.mount_path,
+        status=JobStatus.PENDING,
+        copy_chunk_size_bytes=8_388_608,
+        copy_progress_flush_bytes=1_048_576,
+    )
+    db.add_all([drive, job])
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id, activated_at=datetime.now(timezone.utc)))
+    db.commit()
+
+    response = client.get(f"/jobs/{job.id}")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["copy_chunk_size_bytes"] == 8_388_608
+    assert data["copy_progress_flush_bytes"] == 1_048_576
+    assert data["effective_copy_progress_flush_bytes"] == 8_388_608
+    assert data["copy_progress_flush_source"] == "job"
+
+
 def test_get_job_includes_latest_manifest_created_at(client, db):
     job = ExportJob(
         project_id="PROJ-MANIFEST-GET-001",

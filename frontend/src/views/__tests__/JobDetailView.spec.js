@@ -2890,6 +2890,68 @@ describe('JobDetailView start action', () => {
     }))
   })
 
+  it('keeps mount_id null for started-job runtime edits when no mount can be inferred', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'RUNNING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      notes: 'Original note',
+      source_path: '/local-evidence/case-006',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      thread_count_override: 4,
+      effective_copy_chunk_size_bytes: 4_194_304,
+      copy_chunk_size_bytes: null,
+      copy_chunk_size_source: 'default',
+      effective_copy_progress_flush_bytes: 67_108_864,
+      copy_progress_flush_bytes: null,
+      copy_progress_flush_source: 'default',
+      effective_copy_file_fsync_enabled: false,
+      copy_file_fsync_enabled: null,
+      copy_file_fsync_source: 'default',
+      copied_bytes: 512,
+      total_bytes: 1024,
+      callback_url: 'https://example.com/current-webhook',
+      drive: { id: 1, available_bytes: 2048 },
+      overflow_assignments: [],
+    })
+    mocks.getShares.mockResolvedValue([])
+    mocks.updateJob.mockResolvedValue({
+      id: 6,
+      status: 'RUNNING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      thread_count: 8,
+      thread_count_override: 8,
+      copied_bytes: 512,
+      total_bytes: 1024,
+      source_path: '/local-evidence/case-006',
+      target_mount_path: '/mnt/ecube/1',
+      drive: { id: 1, available_bytes: 2048 },
+      overflow_assignments: [],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const editButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit'))
+    expect(editButton).toBeTruthy()
+    await editButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('#job-mount').exists()).toBe(false)
+    await wrapper.find('#job-thread-count').setValue('8')
+    await wrapper.find('#job-submit').trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateJob).toHaveBeenCalledWith(6, expect.objectContaining({
+      mount_id: null,
+      source_path: '/local-evidence/case-006',
+      thread_count: 8,
+    }))
+  })
+
   it('clears the callback URL when the edit field is blank', async () => {
     mocks.getJob.mockResolvedValue({
       id: 6,

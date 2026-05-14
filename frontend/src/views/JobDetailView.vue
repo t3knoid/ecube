@@ -1466,10 +1466,11 @@ async function submitEditJob() {
   acting.value = true
   error.value = ''
   try {
+    const mountId = editForm.value.mount_id == null ? null : Number(editForm.value.mount_id)
     const updated = await updateJob(job.value.id, {
       project_id: normalizeProjectId(editForm.value.project_id),
       evidence_number: String(editForm.value.evidence_number || '').trim(),
-      mount_id: Number(editForm.value.mount_id),
+      mount_id: mountId,
       source_path: String(editForm.value.source_path || '').trim(),
       drive_id: Number(editForm.value.drive_id),
       overflow_drive_ids: Array.isArray(editForm.value.overflow_drive_ids)
