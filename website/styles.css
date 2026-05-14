@@ -362,6 +362,19 @@ a {
   font-weight: 700;
 }
 
+.tour-step {
+  animation: tourStepPulse 32s infinite;
+}
+
+.tour-step-1 { animation-delay: 0s; }
+.tour-step-2 { animation-delay: 4s; }
+.tour-step-3 { animation-delay: 8s; }
+.tour-step-4 { animation-delay: 12s; }
+.tour-step-5 { animation-delay: 16s; }
+.tour-step-6 { animation-delay: 20s; }
+.tour-step-7 { animation-delay: 24s; }
+.tour-step-8 { animation-delay: 28s; }
+
 .tour-stage {
   display: grid;
   align-items: center;
@@ -496,6 +509,39 @@ a {
   14% { opacity: 1; transform: translateY(0); }
   17% { opacity: 0; transform: translateY(-4px); }
   100% { opacity: 0; }
+}
+
+@keyframes tourStepPulse {
+  0% {
+    background: rgba(37, 99, 235, 0.08);
+    border-color: rgba(37, 99, 235, 0.16);
+    color: var(--accent-strong);
+    transform: translateY(0);
+  }
+  3% {
+    background: rgba(37, 99, 235, 0.2);
+    border-color: rgba(37, 99, 235, 0.4);
+    color: #0f2f72;
+    transform: translateY(-1px);
+  }
+  14% {
+    background: rgba(37, 99, 235, 0.2);
+    border-color: rgba(37, 99, 235, 0.4);
+    color: #0f2f72;
+    transform: translateY(-1px);
+  }
+  18% {
+    background: rgba(37, 99, 235, 0.08);
+    border-color: rgba(37, 99, 235, 0.16);
+    color: var(--accent-strong);
+    transform: translateY(0);
+  }
+  100% {
+    background: rgba(37, 99, 235, 0.08);
+    border-color: rgba(37, 99, 235, 0.16);
+    color: var(--accent-strong);
+    transform: translateY(0);
+  }
 }
 
 .shot-card {
@@ -779,7 +825,8 @@ a {
 
 @media (prefers-reduced-motion: reduce) {
   .tour-frame,
-  .tour-callout {
+  .tour-callout,
+  .tour-step {
     animation: none !important;
   }
 
