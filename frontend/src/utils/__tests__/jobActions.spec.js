@@ -119,6 +119,7 @@ describe('job action helpers', () => {
     const t = (key, params) => (key === 'common.errors.serverError' ? `${key}:${params.status}` : key)
 
     expect(buildJobErrorMessage({ response: { status: 409, data: { detail: 'Conflict detail' } } }, t)).toBe('Conflict detail')
+    expect(buildJobErrorMessage({ response: { status: 409, data: { code: 'DRIVE_NOT_PROJECT_BOUND', message: 'Raw backend message' } } }, t)).toBe('common.errors.driveNotProjectBound')
     expect(buildJobErrorMessage({ response: { status: 500, data: {} } }, t)).toBe('common.errors.serverError:500')
     expect(buildJobErrorMessage(new TypeError('Invalid job id'), t, { includeInvalidId: true })).toBe('common.errors.invalidRequest')
   })

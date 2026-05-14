@@ -2903,6 +2903,46 @@ describe('JobDetailView start action', () => {
     }))
   })
 
+  it('shows a tailored edit-dialog message when the selected drive is not bound to the job project', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'PENDING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 0,
+      total_bytes: 0,
+      callback_url: 'https://example.com/current-webhook',
+    })
+    mocks.updateJob.mockRejectedValue({
+      response: {
+        status: 409,
+        data: {
+          code: 'DRIVE_NOT_PROJECT_BOUND',
+          message: 'Drive is unassigned; initialize and bind it to this project before selecting it',
+        },
+      },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const editButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit'))
+    expect(editButton).toBeTruthy()
+    await editButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#job-mount').setValue('4')
+    await wrapper.find('#job-drive').setValue('1')
+    await wrapper.find('#job-submit').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('common.errors.driveNotProjectBound'))
+    expect(wrapper.text()).not.toContain('Drive is unassigned; initialize and bind it to this project before selecting it')
+  })
+
   it('shows complete and pending-delete controls and confirms deletion', async () => {
     mocks.getJob.mockResolvedValue({
       id: 6,

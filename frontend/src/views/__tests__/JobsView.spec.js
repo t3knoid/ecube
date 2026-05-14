@@ -630,6 +630,41 @@ describe('JobsView grouped create dialog', () => {
     expect(wrapper.text()).toContain('Assigned drive is not mounted')
   })
 
+  it('shows a tailored message when the selected drive is not bound to the chosen project', async () => {
+    mocks.createJob.mockRejectedValue({
+      response: {
+        status: 409,
+        data: {
+          code: 'DRIVE_NOT_PROJECT_BOUND',
+          message: 'Drive is unassigned; initialize and bind it to this project before selecting it',
+        },
+      },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const createButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.create'))
+    await createButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#job-project').setValue('PROJ-001')
+    await flushPromises()
+    await wrapper.find('#job-evidence').setValue('EVID-77')
+    await wrapper.find('#job-mount').setValue('11')
+    await wrapper.find('#job-source-browse-toggle').trigger('click')
+    await flushPromises()
+    await wrapper.findComponent('.directory-browser-stub').vm.$emit('update:currentDirectory', 'folder')
+    await flushPromises()
+    await wrapper.find('#job-drive').setValue('1')
+
+    await wrapper.find('#job-submit').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.dialog-error-banner').text()).toContain(i18n.global.t('common.errors.driveNotProjectBound'))
+    expect(wrapper.find('.dialog-error-banner').text()).not.toContain('Drive is unassigned; initialize and bind it to this project before selecting it')
+  })
+
   it('rejects an overlapping source path in the UI before submitting create job', async () => {
     mocks.listJobs
       .mockResolvedValueOnce([])

@@ -841,6 +841,7 @@
       "invalidRequest": "Invalid request. Please check your input.",
       "notFound": "The requested resource was not found.",
       "insufficientPermissions": "Insufficient permissions. Your role may not allow this action.",
+      "driveNotProjectBound": "Selected drive is not bound to this project. Initialize and bind the drive before selecting it.",
       "requestConflict": "Request conflict. Please refresh and try again.",
       "validationFailed": "Validation failed. Please review your input.",
       "serverErrorGeneric": "Server error."
