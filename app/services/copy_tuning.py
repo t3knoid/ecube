@@ -27,7 +27,11 @@ def resolve_job_copy_tuning(job: object) -> ResolvedJobCopyTuning:
 
     effective_thread_count = thread_count_override or int(settings.copy_default_thread_count)
     effective_copy_chunk_size_bytes = copy_chunk_size_bytes_override or int(settings.copy_chunk_size_bytes)
-    effective_copy_progress_flush_bytes = copy_progress_flush_bytes_override or int(settings.copy_progress_flush_bytes)
+    configured_copy_progress_flush_bytes = copy_progress_flush_bytes_override or int(settings.copy_progress_flush_bytes)
+    effective_copy_progress_flush_bytes = _normalize_progress_flush_threshold_bytes(
+        effective_copy_chunk_size_bytes,
+        configured_copy_progress_flush_bytes,
+    )
     effective_copy_file_fsync_enabled = (
         copy_file_fsync_enabled_override
         if copy_file_fsync_enabled_override is not None
@@ -52,7 +56,11 @@ def resolve_job_copy_tuning(job: object) -> ResolvedJobCopyTuning:
 
 def resolve_progress_flush_threshold_bytes(job: object) -> int:
     tuning = resolve_job_copy_tuning(job)
-    return max(1, tuning.effective_copy_progress_flush_bytes, tuning.effective_copy_chunk_size_bytes)
+    return tuning.effective_copy_progress_flush_bytes
+
+
+def _normalize_progress_flush_threshold_bytes(chunk_size_bytes: int, flush_threshold_bytes: int) -> int:
+    return max(1, int(chunk_size_bytes), int(flush_threshold_bytes))
 
 
 def _optional_int(value: object) -> int | None:
