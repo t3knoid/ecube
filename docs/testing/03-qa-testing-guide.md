@@ -505,11 +505,11 @@ curl -sk https://localhost:8443/introspection/mounts \
   -H "Authorization: Bearer $TOKEN" | jq
 ```
 
-### 11.2 Mount Management
+### 11.2 Share Management
 
 ```bash
-# Add an NFS mount
-MOUNT_JSON=$(curl -sk -X POST https://localhost:8443/mounts \
+# Add an NFS share
+SHARE_JSON=$(curl -sk -X POST https://localhost:8443/shares \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -518,24 +518,24 @@ MOUNT_JSON=$(curl -sk -X POST https://localhost:8443/mounts \
   }')
 
 # Capture the local mount point returned by ECUBE
-MOUNT_POINT=$(echo "$MOUNT_JSON" | jq -r '.local_mount_point')
-echo "Mount point: $MOUNT_POINT"
-echo "$MOUNT_JSON" | jq
+SHARE_MOUNT_POINT=$(echo "$SHARE_JSON" | jq -r '.local_mount_point')
+echo "Mount point: $SHARE_MOUNT_POINT"
+echo "$SHARE_JSON" | jq
 
-# List all mounts
-curl -sk https://localhost:8443/mounts \
+# List all shares
+curl -sk https://localhost:8443/shares \
   -H "Authorization: Bearer $TOKEN" | jq
 
-# Validate a specific mount (replace {mount_id})
-curl -sk -X POST https://localhost:8443/mounts/{mount_id}/validate \
+# Validate a specific share (replace {share_id})
+curl -sk -X POST https://localhost:8443/shares/{share_id}/validate \
   -H "Authorization: Bearer $TOKEN" | jq
 
-# Validate all mounts
-curl -sk -X POST https://localhost:8443/mounts/validate \
+# Validate all shares
+curl -sk -X POST https://localhost:8443/shares/validate \
   -H "Authorization: Bearer $TOKEN" | jq
 
-# Remove a mount (replace {mount_id})
-curl -sk -X DELETE https://localhost:8443/mounts/{mount_id} \
+# Remove a share (replace {share_id})
+curl -sk -X DELETE https://localhost:8443/shares/{share_id} \
   -H "Authorization: Bearer $TOKEN" | jq
 ```
 
@@ -1144,7 +1144,7 @@ If an earlier test temporarily disabled password-quality enforcement, run `sudo 
 | 1 | No token | `curl -sk https://localhost:8443/drives` | 401, `UNAUTHORIZED` |
 | 2 | Garbage token | Add header `Authorization: Bearer not.a.real.token` | 401, `UNAUTHORIZED` |
 | 3 | Expired token | Generate token with `'exp': int(time.time()) - 60` | 401, `UNAUTHORIZED` |
-| 4 | Processor adds mount | `POST /mounts` with processor token | 403, `FORBIDDEN` |
+| 4 | Processor adds share | `POST /shares` with processor token | 403, `FORBIDDEN` |
 | 5 | Processor initializes drive | `POST /drives/{drive_id}/initialize` with processor token | 403, `FORBIDDEN` |
 | 6 | Processor mounts drive | `POST /drives/{drive_id}/mount` with processor token | 403, `FORBIDDEN` |
 | 7 | Auditor mounts drive | `POST /drives/{drive_id}/mount` with auditor token | 403, `FORBIDDEN` |
@@ -1444,7 +1444,7 @@ Walk through the complete data export lifecycle:
    ls -la /mnt/smb-evidence/
    ```
 
-2. **Add the mount** via `POST /mounts` and record the returned `local_mount_point`.
+2. **Add the share** via `POST /shares` and record the returned `local_mount_point`.
 
 3. **Plug in a USB drive** and wait for auto-discovery.
 
@@ -1522,7 +1522,8 @@ Recommended QA sink: https://webhook.site/
 |---|------|----------|
 | 1 | `GET /jobs/99999` | 404, `NOT_FOUND` |
 | 2 | `GET /jobs/99999/files` | 404, `NOT_FOUND` |
-| 3 | `DELETE /mounts/99999` | 404, `NOT_FOUND` |
+| 3 | `DELETE /shares/99999` | 404, `NOT_FOUND` |
+| 3a | Legacy share-management endpoint path is rejected | `POST /mounts` or `DELETE /mounts/99999` | 404 `NOT_FOUND` or 405 `Method Not Allowed`, and no share data is created, deleted, or modified |
 | 4 | Start an already-running job | 409, `CONFLICT` |
 | 5 | Pause a running job | 200, job status transitions to `PAUSING` |
 | 6 | Start a job while it is `PAUSING` | 409, `CONFLICT` |
