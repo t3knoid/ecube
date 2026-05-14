@@ -399,7 +399,7 @@ def test_create_job_rejects_traversal_outside_selected_mount(client, db):
     assert "selected mounted share" in response.json()["message"].lower()
 
 
-def test_create_job_explicit_unbound_drive_writes_project_bound_audit(client, db):
+def test_create_job_rejects_explicit_unbound_drive(client, db):
     drive = UsbDrive(
         device_identifier="USB-EXPLICIT-UNBOUND-001",
         current_state=DriveState.AVAILABLE,
@@ -419,11 +419,41 @@ def test_create_job_explicit_unbound_drive_writes_project_bound_audit(client, db
         },
     )
 
-    assert response.status_code == 200
-    audit = db.query(AuditLog).filter(AuditLog.action == "DRIVE_PROJECT_BOUND").first()
-    assert audit is not None
-    assert audit.details["drive_id"] == drive.id
-    assert audit.details["project_id"] == "PROJ-BOUND"
+    assert response.status_code == 409
+    assert response.json()["code"] == "DRIVE_NOT_PROJECT_BOUND"
+    assert "initialize and bind it to this project" in response.json()["message"]
+
+
+def test_create_job_rejects_explicit_unbound_overflow_drive(client, db):
+    primary_drive = UsbDrive(
+        device_identifier="USB-EXPLICIT-OVERFLOW-PRIMARY-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-BOUND-OVERFLOW",
+        mount_path="/mnt/ecube/explicit-overflow-primary-001",
+    )
+    overflow_drive = UsbDrive(
+        device_identifier="USB-EXPLICIT-OVERFLOW-UNBOUND-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id=None,
+        mount_path="/mnt/ecube/explicit-overflow-unbound-001",
+    )
+    db.add_all([primary_drive, overflow_drive])
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-BOUND-OVERFLOW",
+            "evidence_number": "EV-BOUND-OVERFLOW-001",
+            "source_path": "/data/evidence",
+            "drive_id": primary_drive.id,
+            "overflow_drive_ids": [overflow_drive.id],
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "DRIVE_NOT_PROJECT_BOUND"
+    assert "initialize and bind it to this project" in response.json()["message"]
 
 
 def test_create_job_rejects_exact_duplicate_source_path_on_same_drive(client, db):
@@ -4294,6 +4324,124 @@ def test_update_started_job_releases_removed_reserved_overflow_drive(client, db)
         DriveAssignment.drive_id == overflow_drive.id,
     ).one()
     assert released_assignment.released_at is not None
+
+
+def test_update_job_rejects_explicit_unbound_primary_drive(client, db):
+    mount = NetworkShare(
+        type=MountType.NFS,
+        remote_path="server:/exports/project-update-unbound-primary",
+        project_id="PROJ-UPDATE-UNBOUND-PRIMARY",
+        local_mount_point="/nfs/project-update-unbound-primary",
+        status=MountStatus.MOUNTED,
+    )
+    current_drive = UsbDrive(
+        device_identifier="USB-UPDATE-UNBOUND-PRIMARY-CURRENT-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-UPDATE-UNBOUND-PRIMARY",
+        mount_path="/mnt/ecube/update-unbound-primary-current-001",
+    )
+    unbound_drive = UsbDrive(
+        device_identifier="USB-UPDATE-UNBOUND-PRIMARY-NEW-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id=None,
+        mount_path="/mnt/ecube/update-unbound-primary-new-001",
+    )
+    db.add_all([mount, current_drive, unbound_drive])
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-UPDATE-UNBOUND-PRIMARY",
+        evidence_number="EV-UPDATE-UNBOUND-PRIMARY-001",
+        source_path="/nfs/project-update-unbound-primary/evidence",
+        target_mount_path=current_drive.mount_path,
+        status=JobStatus.PENDING,
+        thread_count=4,
+        max_file_retries=3,
+        retry_delay_seconds=1,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=current_drive.id, job_id=job.id, activated_at=datetime.now(timezone.utc)))
+    db.commit()
+
+    response = client.put(
+        f"/jobs/{job.id}",
+        json={
+            "project_id": "PROJ-UPDATE-UNBOUND-PRIMARY",
+            "evidence_number": "EV-UPDATE-UNBOUND-PRIMARY-001",
+            "source_path": "/evidence",
+            "mount_id": mount.id,
+            "drive_id": unbound_drive.id,
+            "overflow_drive_ids": [],
+            "thread_count": 4,
+            "max_file_retries": 3,
+            "retry_delay_seconds": 1,
+            "callback_url": None,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "DRIVE_NOT_PROJECT_BOUND"
+    assert "initialize and bind it to this project" in response.json()["message"]
+
+
+def test_update_job_rejects_explicit_unbound_overflow_drive(client, db):
+    mount = NetworkShare(
+        type=MountType.NFS,
+        remote_path="server:/exports/project-update-unbound-overflow",
+        project_id="PROJ-UPDATE-UNBOUND-OVERFLOW",
+        local_mount_point="/nfs/project-update-unbound-overflow",
+        status=MountStatus.MOUNTED,
+    )
+    current_drive = UsbDrive(
+        device_identifier="USB-UPDATE-UNBOUND-OVERFLOW-CURRENT-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-UPDATE-UNBOUND-OVERFLOW",
+        mount_path="/mnt/ecube/update-unbound-overflow-current-001",
+    )
+    unbound_overflow_drive = UsbDrive(
+        device_identifier="USB-UPDATE-UNBOUND-OVERFLOW-NEW-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id=None,
+        mount_path="/mnt/ecube/update-unbound-overflow-new-001",
+    )
+    db.add_all([mount, current_drive, unbound_overflow_drive])
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-UPDATE-UNBOUND-OVERFLOW",
+        evidence_number="EV-UPDATE-UNBOUND-OVERFLOW-001",
+        source_path="/nfs/project-update-unbound-overflow/evidence",
+        target_mount_path=current_drive.mount_path,
+        status=JobStatus.PENDING,
+        thread_count=4,
+        max_file_retries=3,
+        retry_delay_seconds=1,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=current_drive.id, job_id=job.id, activated_at=datetime.now(timezone.utc)))
+    db.commit()
+
+    response = client.put(
+        f"/jobs/{job.id}",
+        json={
+            "project_id": "PROJ-UPDATE-UNBOUND-OVERFLOW",
+            "evidence_number": "EV-UPDATE-UNBOUND-OVERFLOW-001",
+            "source_path": "/evidence",
+            "mount_id": mount.id,
+            "drive_id": current_drive.id,
+            "overflow_drive_ids": [unbound_overflow_drive.id],
+            "thread_count": 4,
+            "max_file_retries": 3,
+            "retry_delay_seconds": 1,
+            "callback_url": None,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "DRIVE_NOT_PROJECT_BOUND"
+    assert "initialize and bind it to this project" in response.json()["message"]
 
 
 def test_clear_job_startup_analysis_cache_manager_allowed_and_audited(manager_client, db):

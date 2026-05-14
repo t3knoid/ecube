@@ -31,6 +31,8 @@ from app.utils.path_overlap import classify_source_path_overlap
 
 logger = logging.getLogger(__name__)
 
+_UNASSIGNED_DRIVE_SELECTION_CODE = "DRIVE_NOT_PROJECT_BOUND"
+
 
 def _log_startup_analysis_service_failure(
     message: str,
@@ -766,7 +768,6 @@ def create_job(
         db.add(job)
         db.flush()  # obtain job.id for the assignment FK
 
-        explicit_bound = False
         selected_drive_ids: set[int] = set()
 
         if body.drive_id is not None and int(body.drive_id) in {int(value) for value in body.overflow_drive_ids}:
@@ -779,8 +780,6 @@ def create_job(
             activate_now: bool,
             require_primary_overlap_check: bool,
         ) -> UsbDrive:
-            nonlocal explicit_bound
-
             if drive_id in selected_drive_ids:
                 raise service_exception(status_code=422, detail="Drive selections must be unique")
 
@@ -793,7 +792,12 @@ def create_job(
             current_state = cast(DriveState, drive_row.current_state)
             mount_path = cast(Optional[str], drive_row.mount_path)
 
-            if current_project_id not in (None, body.project_id):
+            if current_project_id is None:
+                raise ConflictError(
+                    "Drive is unassigned; initialize and bind it to this project before selecting it",
+                    code=_UNASSIGNED_DRIVE_SELECTION_CODE,
+                )
+            if current_project_id != body.project_id:
                 db.rollback()
                 _audit_project_isolation_violation(
                     audit_repo=audit_repo,
@@ -810,10 +814,6 @@ def create_job(
                 raise service_exception(status_code=409, detail="Assigned drive is not mounted")
             if not require_primary_overlap_check and _is_drive_assigned_to_another_job(db, drive_id=drive_id):
                 raise service_exception(status_code=409, detail="Drive is already assigned to another job")
-
-            if current_project_id is None:
-                drive_row.current_project_id = body.project_id
-                explicit_bound = True
 
             try:
                 validated_source_path = validate_source_path(
@@ -938,18 +938,6 @@ def create_job(
     selected_drive_id = cast(int, drive_row.id)
 
     # Best-effort audit logging — failures never abort job creation.
-    try:
-        if body.drive_id is not None and explicit_bound:
-            audit_repo.add(
-                action="DRIVE_PROJECT_BOUND",
-                user=actor,
-                job_id=created_job_id,
-                details={"drive_id": body.drive_id, "project_id": body.project_id},
-                client_ip=client_ip,
-            )
-    except Exception:
-        logger.exception("Failed to write audit log for explicit drive project binding")
-
     try:
         if body.drive_id is None:
             if auto_selection == "unbound_fallback":
@@ -1628,6 +1616,12 @@ def update_job(
     drive_state = cast(DriveState, drive_row.current_state)
     drive_mount_path = cast(Optional[str], drive_row.mount_path)
 
+    if body.drive_id is not None and drive_project_id is None:
+        raise ConflictError(
+            "Drive is unassigned; initialize and bind it to this project before selecting it",
+            code=_UNASSIGNED_DRIVE_SELECTION_CODE,
+        )
+
     if drive_project_id not in (None, cast(Optional[str], job_row.project_id)):
         _audit_project_isolation_violation(
             audit_repo=audit_repo,
@@ -1643,9 +1637,6 @@ def update_job(
         raise service_exception(status_code=409, detail="Drive is not available")
     if not drive_mount_path:
         raise service_exception(status_code=409, detail="Assigned drive is not mounted")
-
-    if drive_project_id is None:
-        drive_row.current_project_id = cast(Optional[str], job_row.project_id)
 
     try:
         validated_source_path = validate_source_path(
@@ -1745,6 +1736,12 @@ def update_job(
         overflow_state = cast(DriveState, overflow_drive_row.current_state)
         overflow_mount_path = cast(Optional[str], overflow_drive_row.mount_path)
 
+        if overflow_project_id is None:
+            raise ConflictError(
+                "Drive is unassigned; initialize and bind it to this project before selecting it",
+                code=_UNASSIGNED_DRIVE_SELECTION_CODE,
+            )
+
         if overflow_project_id not in (None, cast(Optional[str], job_row.project_id)):
             _audit_project_isolation_violation(
                 audit_repo=audit_repo,
@@ -1762,9 +1759,6 @@ def update_job(
             raise service_exception(status_code=409, detail="Assigned drive is not mounted")
         if _is_drive_assigned_to_another_job(db, drive_id=overflow_drive_id, exclude_job_id=job_id):
             raise service_exception(status_code=409, detail="Drive is already assigned to another job")
-
-        if overflow_project_id is None:
-            overflow_drive_row.current_project_id = cast(Optional[str], job_row.project_id)
 
         db.add(
             DriveAssignment(

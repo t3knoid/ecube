@@ -340,7 +340,7 @@ const eligibleDrives = computed(() => {
     const boundProject = normalizeProjectId(drive?.current_project_id)
     return ['AVAILABLE', 'IN_USE'].includes(state)
       && !!drive?.mount_path
-      && (!boundProject || boundProject === selectedProject.value)
+      && boundProject === selectedProject.value
   })
 })
 

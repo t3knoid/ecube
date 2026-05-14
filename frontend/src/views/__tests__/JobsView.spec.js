@@ -350,10 +350,10 @@ describe('JobsView grouped create dialog', () => {
     expect(driveOptions.join(' ')).not.toContain('#3')
     expect(driveOptions.join(' ')).not.toContain('#5')
     expect(driveOptionValues).toContain('1')
-    expect(driveOptionValues).toContain('2')
     expect(driveOptionValues).toContain('4')
-    expect(overflowOptionValues).toContain('2')
     expect(overflowOptionValues).toContain('4')
+    expect(driveOptionValues).not.toContain('2')
+    expect(overflowOptionValues).not.toContain('2')
     expect(overflowOptionValues).not.toContain('1')
 
     expect(mountOptions.join(' ')).toContain('project-001')
@@ -388,15 +388,15 @@ describe('JobsView grouped create dialog', () => {
     await flushPromises()
 
     const overflowInputs = wrapper.findAll('.overflow-drive-option input')
-    expect(overflowInputs).toHaveLength(2)
-    expect(overflowInputs.map((node) => node.element.value)).toEqual(['2', '4'])
+    expect(overflowInputs).toHaveLength(1)
+    expect(overflowInputs.map((node) => node.element.value)).toEqual(['4'])
 
     await overflowInputs[0].setValue(true)
     await flushPromises()
 
     const driveOptionValues = wrapper.find('#job-drive').findAll('option').map((node) => node.element.value)
-    expect(driveOptionValues).not.toContain('2')
-    expect(driveOptionValues).toContain('4')
+    expect(driveOptionValues).not.toContain('4')
+    expect(driveOptionValues).toContain('1')
   })
 
   it('creates and optionally starts the job from the grouped dialog', async () => {
@@ -432,7 +432,7 @@ describe('JobsView grouped create dialog', () => {
       mount_id: 11,
       source_path: '/folder/subfolder',
       drive_id: 1,
-      overflow_drive_ids: [2],
+      overflow_drive_ids: [4],
       thread_count: 3,
       notes: 'Operator note',
       callback_url: 'https://example.com/ecube/webhook',

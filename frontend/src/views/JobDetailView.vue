@@ -332,7 +332,7 @@ const overflowEligibleDrives = computed(() => {
     return Number(drive?.id) !== activeDriveId
       && state === 'AVAILABLE'
       && !!drive?.mount_path
-      && (!boundProject || boundProject === projectId)
+      && boundProject === projectId
   })
 })
 
@@ -669,7 +669,7 @@ const editEligibleDrives = computed(() => {
     const boundProject = normalizeProjectId(drive?.current_project_id)
     return ['AVAILABLE', 'IN_USE'].includes(state)
       && !!drive?.mount_path
-      && (!boundProject || boundProject === projectId)
+      && boundProject === projectId
   })
 })
 
@@ -690,7 +690,7 @@ const editOverflowEligibleDrives = computed(() => {
     const boundProject = normalizeProjectId(drive?.current_project_id)
     return driveId !== activeDriveId
       && !!drive?.mount_path
-      && (!boundProject || boundProject === projectId)
+      && boundProject === projectId
       && (['AVAILABLE', 'IN_USE'].includes(state) || selectedOverflowDriveIds.has(driveId))
   })
 })
