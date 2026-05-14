@@ -1952,7 +1952,7 @@ curl -k -H "Authorization: Bearer $JWT_TOKEN" \
 ```
 
 Each entry includes the `old_status` and `reason: "interrupted by restart"`.
-These jobs can be re-created and re-started normally.
+Use `POST /jobs/{job_id}/start` on the same failed job when the destination remains valid for continuation. This restart path preserves file rows already marked `DONE` and re-queues non-`DONE` rows during `PREPARING`, so recovery behavior matches the failed-job workflow shown in Job Detail.
 
 ### Mounts Showing UNMOUNTED or ERROR After Restart
 

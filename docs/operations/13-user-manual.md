@@ -719,6 +719,8 @@ Verify and Manifest stay disabled until the job reaches a truly complete 100% st
 
 For a partial-success `COMPLETED` job, Job Detail can show `Retry Failed Files` instead of exposing Verify or Manifest too early. This action is available only to `admin`, `manager`, and `processor`, moves the job back into `PREPARING`, re-queues only failed or timed-out files, preserves already successful copies, and returns to `RUNNING` after preparation completes.
 
+When `Start` is used on a `FAILED` job, ECUBE restarts that same job and returns it to `PREPARING` before copy resumes. During preparation, file rows that are not `DONE` are re-queued for copy while rows already marked `DONE` remain preserved. This is the standard recovery path for failures caused by runtime errors and for jobs marked failed during startup reconciliation with `JOB_RECONCILED`.
+
 If the original destination drive fills or the remaining copy work must move to new media, ECUBE first checks for the next reserved overflow drive that was preassigned to the job during creation. When that reserved drive is still mounted, still belongs to the same project, and passes the trusted backend free-space check for the remaining estimated bytes, ECUBE keeps the same job ID, activates that reserved drive assignment for chain-of-custody purposes, and automatically resumes only the remaining work on that next drive. If no assigned drive is available or can be validated for continuation, ECUBE marks the job `FAILED` with a safe destination-capacity reason. Job Detail can then show `Continue on Another Drive` so the operator can choose another mounted project-compatible drive and optionally adjust thread count. Automatic manifest generation still waits for a later clean completion, but it refreshes manifests per drive assignment instead of only on the final drive.
 
 This is not limited to only two drives. If the second drive also fills, the same job can be continued again onto a third drive, and later onto additional drives if needed, as long as each new drive is mounted and project-compatible.
@@ -799,7 +801,7 @@ If the Jobs page remains open while a manual analyze run finishes, ECUBE can sho
 
 If a job is restarted after a failed, paused, or partially successful run and its persisted startup-analysis snapshot is still current, ECUBE can reuse that cached scan instead of repeating the full startup analysis. ECUBE clears the reusable snapshot automatically only after a clean completion with no failed or timed-out files. When operators need to discard that snapshot, the `Clear startup analysis cache` action opens a confirmation dialog and removes only the cached startup-analysis data. It does not remove per-file history, copied-file state, or other audit-relevant job records.
 
-When a job is paused, completed, or fails, the detail view shows a summary with the job start time, copy thread count, files copied, files failed, files timed out, total copied, elapsed time, copy rate, completion time, and manifest freshness state, plus any failure reason or related log hint. The manifest summary includes `Last manifest created` and a text status such as `Current`, `Stale`, or `No manifest available` so operators can tell whether the latest manifest post-dates the latest completed job state. A `COMPLETED` job means all files reached a terminal state, not necessarily that every file copied successfully, so the summary can still report failed or timed-out files after a partial-success completion. The elapsed time remains cumulative across earlier run segments, so a paused and later resumed job keeps the same additive runtime history that was shown while it was active. Failed jobs prefer a persisted sanitized job-level failure reason when one is available, so operators can see stable messages such as `Unexpected copy failure` or `Job interrupted by service restart before completion` before any derived per-file fallback. Completed jobs with file-level failures instead show the safe per-file failure summaries and counters without exposing raw provider errors or host paths. When `COPY_JOB_TIMEOUT` is exceeded for an individual file attempt, that timeout is recorded as a per-file error (for example `File copy timed out after 3600s`) rather than a whole-job timeout reason.
+When a job is paused, completed, or fails, the detail view shows a summary with the job start time, copy thread count, files copied, files failed, files timed out, total copied, elapsed time, copy rate, completion time, and manifest freshness state, plus any failure reason or related log hint. The manifest summary includes `Last manifest created` and a text status such as `Current`, `Stale`, or `No manifest available` so operators can tell whether the latest manifest post-dates the latest completed job state. A `COMPLETED` job means all files reached a terminal state, not necessarily that every file copied successfully, so the summary can still report failed or timed-out files after a partial-success completion. In this panel, `Files failed` counts file rows currently in `ERROR`, while `Files timed out` counts file rows currently in `TIMEOUT`. The elapsed time remains cumulative across earlier run segments, so a paused and later resumed job keeps the same additive runtime history that was shown while it was active. Failed jobs prefer a persisted sanitized job-level failure reason when one is available, so operators can see stable messages such as `Unexpected copy failure` or `Job interrupted by service restart before completion` before any derived per-file fallback. Completed jobs with file-level failures instead show the safe per-file failure summaries and counters without exposing raw provider errors or host paths. When `COPY_JOB_TIMEOUT` is exceeded for an individual file attempt, that timeout is recorded as a per-file error (for example `File copy timed out after 3600s`) rather than a whole-job timeout reason.
 
 When ECUBE can safely correlate a failed copy to the selected source or destination for that job, the failure summary may add relative hints such as `source: reports/a.txt` or `destination: reports/a.txt`. Raw host or mount paths are not shown in the Job Detail summary.
 
@@ -1491,6 +1493,24 @@ Notes:
 - Automatic manifest generation happens only after the resumed job finishes cleanly; at that point ECUBE refreshes one manifest per drive used by the job instead of writing only to the currently active replacement drive.
 - This same workflow can be repeated on a third, fourth, or later drive if additional overflow events occur before the job reaches a clean final completion.
 - ECUBE auto-selects only the next reserved overflow drive for that job when it is still mounted and suitable for the remaining workload; otherwise the operator chooses the next destination manually.
+
+### 15.3b Restart a Failed Job
+
+**Allowed roles:** `admin`, `manager`, `processor`
+
+1. Open the failed job in `Job Detail`.
+2. Review `Current Task` and note `Files failed` and `Files timed out`.
+3. Confirm the destination drive or continuation drive is mounted and project-compatible.
+4. Click `Start`.
+5. Confirm the job returns to `PREPARING`, then `RUNNING`.
+6. Monitor progress and counters until the retry run stabilizes.
+
+Notes:
+
+- `Start` on a `FAILED` job reuses the same job record and re-queues file rows that are not `DONE`.
+- File rows already marked `DONE` remain preserved and are not re-copied by default.
+- This recovery workflow is the same when the failure reason indicates restart reconciliation, including `JOB_RECONCILED` audit evidence.
+- `Retry Failed Files` is a different action that appears for partial-success `COMPLETED` jobs and re-queues only failed terminal rows.
 
 ### 15.4 Review Copy Results
 
