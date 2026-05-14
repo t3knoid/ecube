@@ -23,6 +23,18 @@ engine = create_engine(INTEGRATION_DATABASE_URL, pool_pre_ping=True)
 IntegrationSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
+async def _noop_usb_discovery_runtime_loop() -> None:
+    """Keep integration app startup from reconciling real host USB hardware.
+
+    Integration tests seed their own drive rows into the shared PostgreSQL test
+    database. The live runtime USB loop observes host hardware and can mutate
+    those synthetic rows during TestClient startup, so disable it here and let
+    individual tests exercise discovery behavior explicitly when needed.
+    """
+
+    return None
+
+
 def _get_integration_alembic_revision(bind, existing_tables: set[str]) -> str | None:
     if "alembic_version" not in existing_tables:
         return None
@@ -149,9 +161,10 @@ def integration_client(integration_db, integration_auth_headers):
         "app.services.reconciliation_service.run_startup_reconciliation",
         return_value={"identity": {}, "mounts": {}, "jobs": {}, "drives": {}},
     ):
-        with TestClient(app) as client:
-            client.headers.update(integration_auth_headers)
-            yield client
+        with patch("app.main._usb_discovery_runtime_loop", _noop_usb_discovery_runtime_loop):
+            with TestClient(app) as client:
+                client.headers.update(integration_auth_headers)
+                yield client
     app.dependency_overrides.clear()
 
 
@@ -168,6 +181,7 @@ def integration_unauthenticated_client(integration_db):
         "app.services.reconciliation_service.run_startup_reconciliation",
         return_value={"identity": {}, "mounts": {}, "jobs": {}, "drives": {}},
     ):
-        with TestClient(app) as client:
-            yield client
+        with patch("app.main._usb_discovery_runtime_loop", _noop_usb_discovery_runtime_loop):
+            with TestClient(app) as client:
+                yield client
     app.dependency_overrides.clear()

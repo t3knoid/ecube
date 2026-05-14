@@ -48,6 +48,7 @@ def test_create_job_with_drive_assignment_marks_drive_in_use(integration_client,
     drive = UsbDrive(
         device_identifier="IT-DRV-JOB-001",
         current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-JOB-002",
         mount_path="/mnt/ecube/it-job-001",
     )
     integration_db.add(drive)
