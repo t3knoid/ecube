@@ -1,5 +1,7 @@
 <script setup>
+import { computed, ref, watch } from 'vue'
 import DirectoryBrowser from '@/components/browse/DirectoryBrowser.vue'
+import TabbedDialog from '@/components/common/TabbedDialog.vue'
 
 const threadCountOptions = Array.from({ length: 32 }, (_unused, index) => index + 1)
 const copyChunkSizeOptions = [
@@ -221,13 +223,38 @@ const props = defineProps({
     type: String,
     required: true,
   },
-  allowThreadCountDefaultOption: {
+  copyAndJobWorkflowTabLabel: {
+    type: String,
+    required: true,
+  },
+  workflowGroupLabel: {
+    type: String,
+    default: '',
+  },
+  detailsTabLabel: {
+    type: String,
+    default: '',
+  },
+  workflowTabDescription: {
+    type: String,
+    default: '',
+  },
+  workflowTabDefaultHelp: {
+    type: String,
+    default: '',
+  },
+  workflowTabLockedHelp: {
+    type: String,
+    default: '',
+  },
+  showWorkflowLockedHelp: {
     type: Boolean,
     default: false,
   },
-  threadCountDefaultOptionLabel: {
+  initialTab: {
     type: String,
-    default: '',
+    default: 'details',
+    validator: (value) => ['details', 'workflow'].includes(value),
   },
   jobDetailsGroupLabel: {
     type: String,
@@ -304,6 +331,34 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'submit', 'toggle-source-browser'])
+
+const activeTab = ref(props.initialTab)
+
+const tabs = computed(() => [
+  {
+    key: 'details',
+    label: props.detailsTabLabel || props.jobDetailsGroupLabel,
+  },
+  {
+    key: 'workflow',
+    label: props.copyAndJobWorkflowTabLabel,
+  },
+])
+
+const workflowTabMessage = computed(() => {
+  if (props.showWorkflowLockedHelp && props.workflowTabLockedHelp) {
+    return props.workflowTabLockedHelp
+  }
+
+  return props.workflowTabDefaultHelp
+})
+
+watch(
+  () => props.initialTab,
+  (value) => {
+    activeTab.value = value
+  },
+)
 </script>
 
 <template>
@@ -317,7 +372,9 @@ const emit = defineEmits(['close', 'submit', 'toggle-source-browser'])
   </div>
 
   <div class="dialog-body job-create-scroll-region">
-    <div class="dialog-groups">
+    <TabbedDialog v-model:active-tab="activeTab" :tabs="tabs" id-prefix="job-editor" aria-label="Job editor sections">
+      <template #panel-details>
+      <div class="dialog-groups dialog-groups--details">
       <fieldset class="dialog-group dialog-group--details">
         <legend>{{ jobDetailsGroupLabel }}</legend>
 
@@ -368,58 +425,6 @@ const emit = defineEmits(['close', 'submit', 'toggle-source-browser'])
               :disabled="!projectSelected || !callbackUrlEditable"
               :placeholder="callbackUrlHint"
             />
-          </div>
-
-          <div class="thread-count-row">
-            <label for="job-thread-count">
-              {{ threadCountLabel }}
-              <span class="required-indicator" aria-hidden="true">
-                <svg class="required-indicator-icon" viewBox="0 0 16 16" focusable="false">
-                  <path d="M8 0.75 9.41 5.59 14.25 4.18 10.82 8l3.43 3.82-4.84-1.41L8 15.25l-1.41-4.84-4.84 1.41L5.18 8 1.75 4.18l4.84 1.41L8 0.75Z" />
-                </svg>
-              </span>
-              <span class="sr-only">required</span>
-            </label>
-            <select
-              id="job-thread-count"
-              v-model.number="form.thread_count"
-              :disabled="!projectSelected"
-              :required="!allowThreadCountDefaultOption"
-              :aria-required="!allowThreadCountDefaultOption"
-            >
-              <option v-if="allowThreadCountDefaultOption" :value="null">{{ threadCountDefaultOptionLabel }}</option>
-              <option v-for="count in threadCountOptions" :key="count" :value="count">{{ count }}</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="copy-tuning-grid">
-          <div class="copy-tuning-field">
-            <label for="job-copy-chunk-size">{{ copyChunkSizeLabel }}</label>
-            <select id="job-copy-chunk-size" v-model.number="form.copy_chunk_size_bytes" :disabled="!projectSelected">
-              <option v-if="allowThreadCountDefaultOption" :value="null">{{ threadCountDefaultOptionLabel }}</option>
-              <option v-for="option in copyChunkSizeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-            </select>
-            <p class="muted field-hint">{{ copyChunkSizeHint }}</p>
-          </div>
-
-          <div class="copy-tuning-field">
-            <label for="job-copy-progress-flush">{{ copyProgressFlushLabel }}</label>
-            <select id="job-copy-progress-flush" v-model.number="form.copy_progress_flush_bytes" :disabled="!projectSelected">
-              <option v-if="allowThreadCountDefaultOption" :value="null">{{ threadCountDefaultOptionLabel }}</option>
-              <option v-for="option in copyProgressFlushOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-            </select>
-            <p class="muted field-hint">{{ copyProgressFlushHint }}</p>
-          </div>
-
-          <div class="copy-tuning-field">
-            <label for="job-copy-file-fsync">{{ copyFileFsyncLabel }}</label>
-            <select id="job-copy-file-fsync" v-model="form.copy_file_fsync_enabled" :disabled="!projectSelected">
-              <option v-if="allowThreadCountDefaultOption" :value="null">{{ threadCountDefaultOptionLabel }}</option>
-              <option :value="true">{{ enabledLabel }}</option>
-              <option :value="false">{{ disabledLabel }}</option>
-            </select>
-            <p class="muted field-hint">{{ copyFileFsyncHint }}</p>
           </div>
         </div>
       </fieldset>
@@ -497,28 +502,95 @@ const emit = defineEmits(['close', 'submit', 'toggle-source-browser'])
             </option>
           </select>
         </template>
+      </fieldset>
+      </div>
+      </template>
 
-        <div v-if="showOverflowPanel" class="overflow-panel">
-          <p class="overflow-panel-title">{{ overflowPanelTitle }}</p>
-          <p class="muted field-hint">{{ overflowPanelHelp }}</p>
-          <p v-if="projectSelected && !overflowEligibleDrives.length" class="muted">{{ noEligibleOverflowDrivesLabel }}</p>
-          <div v-else class="overflow-drive-list">
-            <label v-for="drive in overflowEligibleDrives" :key="drive.id" class="checkbox-row overflow-drive-option">
-              <input v-model="form.overflow_drive_ids" type="checkbox" :value="drive.id" :disabled="!projectSelected || !overflowSelectionEnabled" />
-              <span>{{ formatDriveLabel(drive) }}</span>
+      <template #panel-workflow>
+      <div class="dialog-groups dialog-groups--workflow">
+        <fieldset class="dialog-group dialog-group--workflow">
+          <legend>{{ workflowGroupLabel || copyAndJobWorkflowTabLabel }}</legend>
+
+          <p v-if="workflowTabDescription" class="muted dialog-tab-copy">{{ workflowTabDescription }}</p>
+          <p v-if="workflowTabMessage" class="muted dialog-tab-copy">{{ workflowTabMessage }}</p>
+
+          <div class="copy-tuning-grid copy-tuning-grid--workflow">
+            <div class="copy-tuning-field copy-tuning-field--compact">
+              <label for="job-thread-count">
+                {{ threadCountLabel }}
+                <span class="required-indicator" aria-hidden="true">
+                  <svg class="required-indicator-icon" viewBox="0 0 16 16" focusable="false">
+                    <path d="M8 0.75 9.41 5.59 14.25 4.18 10.82 8l3.43 3.82-4.84-1.41L8 15.25l-1.41-4.84-4.84 1.41L5.18 8 1.75 4.18l4.84 1.41L8 0.75Z" />
+                  </svg>
+                </span>
+                <span class="sr-only">required</span>
+              </label>
+              <select
+                id="job-thread-count"
+                class="copy-tuning-select copy-tuning-select--thread-count"
+                v-model.number="form.thread_count"
+                :disabled="!projectSelected"
+                required
+                aria-required="true"
+              >
+                <option v-for="count in threadCountOptions" :key="count" :value="count">{{ count }}</option>
+              </select>
+            </div>
+
+            <div class="copy-tuning-field">
+              <label for="job-copy-chunk-size">{{ copyChunkSizeLabel }}</label>
+              <select id="job-copy-chunk-size" v-model.number="form.copy_chunk_size_bytes" :disabled="!projectSelected">
+                <option v-for="option in copyChunkSizeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+              <p class="muted field-hint">{{ copyChunkSizeHint }}</p>
+            </div>
+
+            <div class="copy-tuning-field copy-tuning-field--compact">
+              <label for="job-copy-progress-flush">{{ copyProgressFlushLabel }}</label>
+              <select
+                id="job-copy-progress-flush"
+                class="copy-tuning-select copy-tuning-select--progress-flush"
+                v-model.number="form.copy_progress_flush_bytes"
+                :disabled="!projectSelected"
+              >
+                <option v-for="option in copyProgressFlushOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+              <p class="muted field-hint">{{ copyProgressFlushHint }}</p>
+            </div>
+
+            <div class="copy-tuning-field">
+              <label for="job-copy-file-fsync">{{ copyFileFsyncLabel }}</label>
+              <select id="job-copy-file-fsync" v-model="form.copy_file_fsync_enabled" :disabled="!projectSelected">
+                <option :value="true">{{ enabledLabel }}</option>
+                <option :value="false">{{ disabledLabel }}</option>
+              </select>
+              <p class="muted field-hint">{{ copyFileFsyncHint }}</p>
+            </div>
+          </div>
+
+          <div v-if="showOverflowPanel" class="overflow-panel overflow-panel--workflow">
+            <p class="overflow-panel-title">{{ overflowPanelTitle }}</p>
+            <p class="muted field-hint">{{ overflowPanelHelp }}</p>
+            <p v-if="projectSelected && !overflowEligibleDrives.length" class="muted">{{ noEligibleOverflowDrivesLabel }}</p>
+            <div v-else class="overflow-drive-list">
+              <label v-for="drive in overflowEligibleDrives" :key="drive.id" class="checkbox-row overflow-drive-option">
+                <input v-model="form.overflow_drive_ids" type="checkbox" :value="drive.id" :disabled="!projectSelected || !overflowSelectionEnabled" />
+                <span>{{ formatDriveLabel(drive) }}</span>
+              </label>
+            </div>
+          </div>
+
+          <div v-if="showExecutionGroup" class="workflow-execution-group">
+            <p class="overflow-panel-title">{{ executionGroupLabel }}</p>
+            <label class="checkbox-row" for="job-run-immediately">
+              <input id="job-run-immediately" v-model="form.run_immediately" type="checkbox" :disabled="!projectSelected" />
+              <span>{{ runImmediatelyLabel }}</span>
             </label>
           </div>
-        </div>
-      </fieldset>
-
-      <fieldset v-if="showExecutionGroup" class="dialog-group dialog-group--execution">
-        <legend>{{ executionGroupLabel }}</legend>
-        <label class="checkbox-row" for="job-run-immediately">
-          <input id="job-run-immediately" v-model="form.run_immediately" type="checkbox" :disabled="!projectSelected" />
-          <span>{{ runImmediatelyLabel }}</span>
-        </label>
-      </fieldset>
-    </div>
+        </fieldset>
+      </div>
+      </template>
+    </TabbedDialog>
   </div>
 
   <div class="dialog-actions dialog-footer">
@@ -589,6 +661,52 @@ const emit = defineEmits(['close', 'submit', 'toggle-source-browser'])
   gap: var(--space-xs);
 }
 
+.copy-tuning-field--compact {
+  gap: var(--space-xs);
+  align-self: start;
+  align-content: start;
+}
+
+.copy-tuning-field--compact > label {
+  margin: 0;
+  display: block;
+}
+
+.copy-tuning-field--compact > label .required-indicator,
+.copy-tuning-field--compact > label .required-indicator-icon {
+  vertical-align: middle;
+  line-height: 1;
+}
+
+.copy-tuning-field--compact > .copy-tuning-select {
+  justify-self: start;
+  width: auto;
+  max-width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 0.85rem) 50%, calc(100% - 0.55rem) 50%;
+  background-size: 0.3rem 0.3rem, 0.3rem 0.3rem;
+  background-repeat: no-repeat;
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: inherit;
+  line-height: 1.1;
+  block-size: 1.6rem;
+  min-block-size: 1.6rem;
+  padding: 0.1rem 1.4rem 0.1rem 0.5rem;
+}
+
+.copy-tuning-select--progress-flush {
+  min-inline-size: 11rem;
+}
+
+.copy-tuning-select--thread-count {
+  min-inline-size: 12.5rem;
+}
+
 input,
 select,
 textarea {
@@ -620,6 +738,19 @@ textarea {
   flex-shrink: 0;
 }
 
+.dialog-tab-copy {
+  margin: 0;
+  line-height: 1.35;
+}
+
+.dialog-group--workflow > .dialog-tab-copy:first-of-type {
+  margin-top: calc(var(--space-xs) * -1);
+}
+
+.dialog-group--workflow > .dialog-tab-copy + .dialog-tab-copy {
+  margin-top: calc(var(--space-xs) * -1);
+}
+
 .dialog-body {
   min-height: 0;
   overflow-y: auto;
@@ -641,6 +772,7 @@ textarea {
 
 .job-create-scroll-region {
   display: grid;
+  gap: var(--space-md);
 }
 
 .dialog-groups {
@@ -648,6 +780,10 @@ textarea {
   gap: var(--space-md);
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
+}
+
+.dialog-groups--workflow {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .dialog-group {
@@ -689,19 +825,6 @@ textarea {
   min-width: 0;
 }
 
-.thread-count-row {
-  display: grid;
-  gap: var(--space-xs);
-  justify-self: start;
-  align-self: start;
-  width: max-content;
-}
-
-.thread-count-row input {
-  width: 100%;
-  min-width: 0;
-}
-
 .required-indicator {
   display: inline-flex;
   align-items: center;
@@ -737,15 +860,17 @@ textarea {
   grid-row: 2;
 }
 
-.dialog-group--execution {
-  grid-column: 1 / span 2;
-  grid-row: 3;
-}
-
 .checkbox-row {
   display: inline-flex;
   align-items: center;
   gap: var(--space-sm);
+}
+
+.workflow-execution-group {
+  display: grid;
+  gap: var(--space-xs);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--color-border);
 }
 
 .dialog-actions {
@@ -775,10 +900,6 @@ textarea {
     grid-template-columns: 1fr;
   }
 
-  .details-secondary-row {
-    grid-template-columns: 1fr;
-  }
-
   .dialog-actions {
     align-items: stretch;
     flex-direction: column;
@@ -790,8 +911,7 @@ textarea {
 
   .dialog-group--details,
   .dialog-group--source,
-  .dialog-group--destination,
-  .dialog-group--execution {
+  .dialog-group--destination {
     grid-column: auto;
     grid-row: auto;
   }

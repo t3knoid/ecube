@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
+import { useCopyTuningDefaultsStore } from '@/stores/copyTuningDefaults.js'
 import { hasArchivedJobs, listJobs, createJob, startJob, pauseJob } from '@/api/jobs.js'
 import { getDrives } from '@/api/drives.js'
 import { getShares } from '@/api/shares.js'
@@ -22,6 +23,7 @@ const router = useRouter()
 const { t } = useI18n()
 const { jobStatusLabel } = useStatusLabels()
 const authStore = useAuthStore()
+const copyTuningDefaults = useCopyTuningDefaultsStore()
 
 const jobs = ref([])
 const drives = ref([])
@@ -59,10 +61,10 @@ const form = ref({
   overflow_drive_ids: [],
   mount_id: null,
   source_path: '/',
-  thread_count: null,
-  copy_chunk_size_bytes: null,
-  copy_progress_flush_bytes: null,
-  copy_file_fsync_enabled: null,
+  thread_count: copyTuningDefaults.threadCount,
+  copy_chunk_size_bytes: copyTuningDefaults.copyChunkSizeBytes,
+  copy_progress_flush_bytes: copyTuningDefaults.copyProgressFlushBytes,
+  copy_file_fsync_enabled: copyTuningDefaults.copyFileFsyncEnabled,
   notes: '',
   callback_url: '',
   run_immediately: false,
@@ -265,10 +267,10 @@ function resetForm() {
     overflow_drive_ids: [],
     mount_id: null,
     source_path: '/',
-    thread_count: null,
-    copy_chunk_size_bytes: null,
-    copy_progress_flush_bytes: null,
-    copy_file_fsync_enabled: null,
+    thread_count: copyTuningDefaults.threadCount,
+    copy_chunk_size_bytes: copyTuningDefaults.copyChunkSizeBytes,
+    copy_progress_flush_bytes: copyTuningDefaults.copyProgressFlushBytes,
+    copy_file_fsync_enabled: copyTuningDefaults.copyFileFsyncEnabled,
     notes: '',
     callback_url: '',
     run_immediately: false,
@@ -646,6 +648,14 @@ async function submitCreateJob() {
 
 function openCreateDialog(event) {
   createDialogTriggerRef.value = event?.currentTarget instanceof HTMLElement ? event.currentTarget : document.activeElement
+  void copyTuningDefaults.ensureLoaded().then(() => {
+    if (showCreateDialog.value) {
+      form.value.thread_count = copyTuningDefaults.threadCount
+      form.value.copy_chunk_size_bytes = copyTuningDefaults.copyChunkSizeBytes
+      form.value.copy_progress_flush_bytes = copyTuningDefaults.copyProgressFlushBytes
+      form.value.copy_file_fsync_enabled = copyTuningDefaults.copyFileFsyncEnabled
+    }
+  })
   resetForm()
   createDialogError.value = ''
   showCreateDialog.value = true
@@ -891,6 +901,12 @@ onBeforeUnmount(() => {
             :notes-hint="t('jobs.notesHint')"
             :callback-url-label="t('jobs.callbackUrl')"
             :callback-url-hint="t('jobs.callbackUrlHint')"
+            :details-tab-label="t('jobs.jobDetailsTab')"
+            :copy-and-job-workflow-tab-label="t('jobs.workflowTab')"
+            :workflow-group-label="t('jobs.workflowGroupTitle')"
+            :workflow-tab-description="t('jobs.workflowTabCreateDescription')"
+            :workflow-tab-default-help="t('jobs.workflowTabCreateHelp')"
+            initial-tab="details"
             :thread-count-label="t('jobs.threadCount')"
             :copy-chunk-size-label="t('configuration.fields.copy_chunk_size_bytes.label')"
             :copy-chunk-size-hint="t('configuration.fields.copy_chunk_size_bytes.help')"
@@ -898,8 +914,6 @@ onBeforeUnmount(() => {
             :copy-progress-flush-hint="t('configuration.fields.copy_progress_flush_bytes.help')"
             :copy-file-fsync-label="t('configuration.fields.copy_file_fsync_enabled.label')"
             :copy-file-fsync-hint="t('configuration.fields.copy_file_fsync_enabled.help')"
-            :allow-thread-count-default-option="true"
-            :thread-count-default-option-label="t('jobs.threadCountUseConfiguredDefault')"
             :job-details-group-label="t('jobs.jobDetailsGroup')"
             :source-group-label="t('jobs.sourceGroup')"
             :select-mount-label="t('jobs.selectMount')"

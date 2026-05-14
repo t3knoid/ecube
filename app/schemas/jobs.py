@@ -199,6 +199,15 @@ class JobDeleteResponse(BaseModel):
     status: str = Field(..., description="Deletion result status")
 
 
+class JobCopyTuningDefaults(BaseModel):
+    """Current configured copy tuning defaults used to seed new jobs."""
+
+    thread_count: int = Field(..., ge=1, le=32, description="Configured default worker thread pool size")
+    copy_chunk_size_bytes: int = Field(..., ge=262_144, le=67_108_864, description="Configured default copy chunk size in bytes")
+    copy_progress_flush_bytes: int = Field(..., ge=1_048_576, le=1_073_741_824, description="Configured default progress flush threshold in bytes")
+    copy_file_fsync_enabled: bool = Field(..., description="Configured default per-file fsync behavior")
+
+
 class ExportFileSchema(BaseModel):
     id: int = Field(..., description="Unique identifier for the file")
     job_id: int = Field(..., description="ID of the parent export job")

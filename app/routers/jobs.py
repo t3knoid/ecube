@@ -21,6 +21,7 @@ from app.schemas.jobs import (
     JobFileRowSchema,
     JobArchiveRequest,
     JobAnalyzeRequest,
+    JobCopyTuningDefaults,
     JobCreate,
     JobDeleteResponse,
     JobFilesResponse,
@@ -314,6 +315,33 @@ def _apply_copy_tuning_snapshot(schema: ExportJobSchema, job: object) -> None:
     schema.copy_progress_flush_source = tuning.copy_progress_flush_source
     schema.effective_copy_file_fsync_enabled = tuning.effective_copy_file_fsync_enabled
     schema.copy_file_fsync_source = tuning.copy_file_fsync_source
+
+
+@router.get(
+    "/copy-tuning-defaults",
+    response_model=JobCopyTuningDefaults,
+    responses={**R_401, **R_403},
+)
+def get_copy_tuning_defaults(
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
+):
+    """Return the currently configured copy tuning defaults.
+
+    Used by the Job Editor to pre-select the values that match the live
+    backend configuration (driven by the ``COPY_DEFAULT_THREAD_COUNT``,
+    ``COPY_CHUNK_SIZE_BYTES``, ``COPY_PROGRESS_FLUSH_BYTES``, and
+    ``COPY_FILE_FSYNC_ENABLED`` settings). Available to roles that can
+    create or edit jobs so the dialog defaults track ``.env`` overrides
+    without exposing the full configuration surface.
+
+    **Roles:** ``admin``, ``manager``, ``processor``
+    """
+    return JobCopyTuningDefaults(
+        thread_count=int(settings.copy_default_thread_count),
+        copy_chunk_size_bytes=int(settings.copy_chunk_size_bytes),
+        copy_progress_flush_bytes=int(settings.copy_progress_flush_bytes),
+        copy_file_fsync_enabled=bool(settings.copy_file_fsync_enabled),
+    )
 
 
 @router.get("", response_model=list[ExportJobSchema], responses={**R_401, **R_403, **R_422})

@@ -65,6 +65,18 @@ vi.mock('@/stores/auth.js', () => ({
   }),
 }))
 
+vi.mock('@/stores/copyTuningDefaults.js', () => ({
+  useCopyTuningDefaultsStore: () => ({
+    threadCount: 12,
+    copyChunkSizeBytes: 4_194_304,
+    copyProgressFlushBytes: 67_108_864,
+    copyFileFsyncEnabled: false,
+    loaded: true,
+    ensureLoaded: () => Promise.resolve(),
+    refresh: () => Promise.resolve(),
+  }),
+}))
+
 vi.mock('@/api/jobs.js', () => ({
   analyzeJob: (...args) => mocks.analyzeJob(...args),
   archiveJob: (...args) => mocks.archiveJob(...args),
@@ -2755,7 +2767,13 @@ describe('JobDetailView start action', () => {
     await editButton.trigger('click')
     await flushPromises()
 
+    const detailsTab = wrapper.find('#job-editor-tab-details')
+    const workflowTab = wrapper.find('#job-editor-tab-workflow')
+
     expect(wrapper.text()).toContain(i18n.global.t('jobs.editDialog'))
+    expect(detailsTab.attributes('aria-selected')).toBe('true')
+    expect(workflowTab.attributes('aria-selected')).toBe('false')
+    expect(wrapper.find('#job-thread-count').isVisible()).toBe(false)
     expect(wrapper.find('#job-source-browse-toggle').exists()).toBe(true)
     expect(wrapper.find('#job-source-path').attributes('readonly')).toBeDefined()
     expect(wrapper.find('#job-evidence').element.value).toBe('EV-006')
@@ -2773,6 +2791,7 @@ describe('JobDetailView start action', () => {
     await flushPromises()
     await wrapper.findComponent('.directory-browser-stub').vm.$emit('update:currentDirectory', '/updated/folder')
     await flushPromises()
+
     await wrapper.find('#job-submit').trigger('click')
     await flushPromises()
 
@@ -2852,12 +2871,18 @@ describe('JobDetailView start action', () => {
     await editButton.trigger('click')
     await flushPromises()
 
+    const detailsTab = wrapper.find('#job-editor-tab-details')
+    const workflowTab = wrapper.find('#job-editor-tab-workflow')
+
+    expect(detailsTab.attributes('aria-selected')).toBe('false')
+    expect(workflowTab.attributes('aria-selected')).toBe('true')
     expect(wrapper.find('#job-evidence').exists()).toBe(true)
     expect(wrapper.find('#job-evidence').attributes('disabled')).toBeDefined()
     expect(wrapper.find('#job-notes').exists()).toBe(false)
     expect(wrapper.find('#job-callback-url').exists()).toBe(false)
     expect(wrapper.find('#job-mount').exists()).toBe(false)
     expect(wrapper.find('#job-drive').exists()).toBe(false)
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.workflowTabLockedHelp'))
     expect(wrapper.find('#job-thread-count').element.value).toBe('4')
     expect(wrapper.find('#job-copy-chunk-size').exists()).toBe(true)
     expect(wrapper.find('#job-copy-progress-flush').exists()).toBe(true)

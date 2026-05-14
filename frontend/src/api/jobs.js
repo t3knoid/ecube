@@ -72,6 +72,10 @@ export function createJob(payload) {
   return toData(apiClient.post(`${API_BASE}/jobs`, payload))
 }
 
+export function getCopyTuningDefaults() {
+  return toData(apiClient.get(`${API_BASE}/jobs/copy-tuning-defaults`))
+}
+
 export function startJob(jobId, payload = {}) {
   const id = normalizeJobId(jobId)
   return toData(apiClient.post(`${API_BASE}/jobs/${id}/start`, payload))

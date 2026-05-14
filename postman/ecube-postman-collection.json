@@ -3249,6 +3249,25 @@
 					"response": []
 				},
 				{
+					"name": "GET /jobs/copy-tuning-defaults",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/copy-tuning-defaults",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"copy-tuning-defaults"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Get Copy Tuning Defaults\n\noperationId: get_copy_tuning_defaults_jobs_copy_tuning_defaults_get"
+					},
+					"response": []
+				},
+				{
 					"name": "DELETE /jobs/{job_id}",
 					"request": {
 						"method": "DELETE",

@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
+import { useCopyTuningDefaultsStore } from '@/stores/copyTuningDefaults.js'
 import { analyzeJob, archiveJob, continueJobOverflow, getJob, getJobChainOfCustody, refreshJobChainOfCustody, getJobFiles, startJob, retryFailedJob, pauseJob, verifyJob, downloadManifest, updateJob, completeJob, deleteJob, clearJobStartupAnalysisCache, confirmJobChainOfCustodyHandoff } from '@/api/jobs.js'
 import { getFileHashes, compareFiles } from '@/api/files.js'
 import { getDrives } from '@/api/drives.js'
@@ -25,6 +26,7 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const authStore = useAuthStore()
+const copyTuningDefaults = useCopyTuningDefaultsStore()
 const COC_PRINT_BODY_CLASS = 'printing-coc-report'
 const THREAD_COUNT_OPTIONS = Array.from({ length: 16 }, (_unused, index) => index + 1)
 
@@ -90,10 +92,10 @@ const editForm = ref({
   source_path: '/',
   drive_id: null,
   overflow_drive_ids: [],
-  thread_count: 4,
-  copy_chunk_size_bytes: null,
-  copy_progress_flush_bytes: null,
-  copy_file_fsync_enabled: null,
+  thread_count: copyTuningDefaults.threadCount,
+  copy_chunk_size_bytes: copyTuningDefaults.copyChunkSizeBytes,
+  copy_progress_flush_bytes: copyTuningDefaults.copyProgressFlushBytes,
+  copy_file_fsync_enabled: copyTuningDefaults.copyFileFsyncEnabled,
   callback_url: '',
 })
 
@@ -1398,7 +1400,7 @@ async function openEditDialog() {
   if (!job.value || !canEdit.value) return
   dialogTriggerRef.value = document.activeElement instanceof HTMLElement ? document.activeElement : null
   error.value = ''
-  await loadSupportingData()
+  await Promise.all([loadSupportingData(), copyTuningDefaults.ensureLoaded()])
   const inferredMount = inferMountForJob(job.value)
   editForm.value = {
     project_id: normalizeProjectId(job.value.project_id) || '',
@@ -1408,10 +1410,10 @@ async function openEditDialog() {
     source_path: buildEditSourcePath(job.value, inferredMount),
     drive_id: job.value.drive?.id ?? null,
     overflow_drive_ids: reservedOverflowAssignments.value.map((assignment) => Number(assignment.drive_id)),
-    thread_count: getJobThreadCountOverride(job.value),
-    copy_chunk_size_bytes: job.value.copy_chunk_size_bytes ?? null,
-    copy_progress_flush_bytes: job.value.copy_progress_flush_bytes ?? null,
-    copy_file_fsync_enabled: job.value.copy_file_fsync_enabled ?? null,
+    thread_count: getJobThreadCountOverride(job.value) ?? (job.value.effective_thread_count != null ? Number(job.value.effective_thread_count) : copyTuningDefaults.threadCount),
+    copy_chunk_size_bytes: job.value.copy_chunk_size_bytes ?? job.value.effective_copy_chunk_size_bytes ?? copyTuningDefaults.copyChunkSizeBytes,
+    copy_progress_flush_bytes: job.value.copy_progress_flush_bytes ?? job.value.effective_copy_progress_flush_bytes ?? copyTuningDefaults.copyProgressFlushBytes,
+    copy_file_fsync_enabled: job.value.copy_file_fsync_enabled ?? job.value.effective_copy_file_fsync_enabled ?? copyTuningDefaults.copyFileFsyncEnabled,
     callback_url: String(job.value.callback_url || ''),
   }
   showEditSourceBrowser.value = false
@@ -1801,7 +1803,8 @@ watch(showEditDialog, async (open) => {
   if (open) {
     document.addEventListener('keydown', handleDialogKeydown)
     await nextTick()
-    const target = editDialogRef.value?.querySelector('#job-evidence')
+    const selector = startedJobEditMode.value ? '#job-thread-count' : '#job-evidence'
+    const target = editDialogRef.value?.querySelector(selector)
     if (target instanceof HTMLElement) {
       target.focus()
     }
@@ -2364,6 +2367,14 @@ onUnmounted(() => {
             :notes-hint="t('jobs.notesHint')"
             :callback-url-label="t('jobs.callbackUrl')"
             :callback-url-hint="t('jobs.callbackUrlHint')"
+            :details-tab-label="t('jobs.jobDetailsTab')"
+            :copy-and-job-workflow-tab-label="t('jobs.workflowTab')"
+            :workflow-group-label="t('jobs.workflowGroupTitle')"
+            :workflow-tab-description="startedJobEditMode ? '' : t('jobs.workflowTabEditHelp')"
+            :workflow-tab-default-help="t('jobs.workflowTabEditHelp')"
+            :workflow-tab-locked-help="t('jobs.workflowTabLockedHelp')"
+            :show-workflow-locked-help="startedJobEditMode"
+            :initial-tab="startedJobEditMode ? 'workflow' : 'details'"
             :thread-count-label="t('jobs.threadCount')"
             :copy-chunk-size-label="t('configuration.fields.copy_chunk_size_bytes.label')"
             :copy-chunk-size-hint="t('configuration.fields.copy_chunk_size_bytes.help')"
@@ -2371,8 +2382,6 @@ onUnmounted(() => {
             :copy-progress-flush-hint="t('configuration.fields.copy_progress_flush_bytes.help')"
             :copy-file-fsync-label="t('configuration.fields.copy_file_fsync_enabled.label')"
             :copy-file-fsync-hint="t('configuration.fields.copy_file_fsync_enabled.help')"
-            :allow-thread-count-default-option="true"
-            :thread-count-default-option-label="t('jobs.threadCountUseConfiguredDefault')"
             :job-details-group-label="t('jobs.jobDetailsGroup')"
             :source-group-label="t('jobs.sourceGroup')"
             :select-mount-label="t('jobs.selectMount')"

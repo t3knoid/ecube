@@ -798,6 +798,19 @@ List the most recent export jobs, ordered by creation time descending.
 - `403 Forbidden` — Insufficient role
 - `422 Validation Error` — `limit` out of range
 
+### `GET /jobs/copy-tuning-defaults`
+
+Return the live copy-tuning defaults the Job Editor uses to pre-select copy-tuning form fields. The values reflect the current backend settings (including `.env` overrides such as `COPY_DEFAULT_THREAD_COUNT`, `COPY_CHUNK_SIZE_BYTES`, `COPY_PROGRESS_FLUSH_BYTES`, and `COPY_FILE_FSYNC_ENABLED`) so Create Job and Edit Job dialog defaults track configuration changes without exposing the broader Configuration API to processors.
+
+**Roles:** `admin`, `manager`, `processor`
+
+**Response:** `200 OK` — JSON object with `thread_count`, `copy_chunk_size_bytes`, `copy_progress_flush_bytes`, and `copy_file_fsync_enabled` populated from the current settings.
+
+**Error responses:**
+
+- `401 Unauthorized` — Missing/invalid credentials
+- `403 Forbidden` — Insufficient role
+
 ### `POST /jobs`
 
 Create a new job.

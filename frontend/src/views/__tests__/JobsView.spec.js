@@ -32,6 +32,18 @@ vi.mock('@/stores/auth.js', () => ({
   }),
 }))
 
+vi.mock('@/stores/copyTuningDefaults.js', () => ({
+  useCopyTuningDefaultsStore: () => ({
+    threadCount: 12,
+    copyChunkSizeBytes: 4_194_304,
+    copyProgressFlushBytes: 67_108_864,
+    copyFileFsyncEnabled: false,
+    loaded: true,
+    ensureLoaded: () => Promise.resolve(),
+    refresh: () => Promise.resolve(),
+  }),
+}))
+
 vi.mock('@/api/jobs.js', () => ({
   listJobs: (...args) => mocks.listJobs(...args),
   hasArchivedJobs: (...args) => mocks.hasArchivedJobs(...args),
@@ -207,6 +219,29 @@ describe('JobsView grouped create dialog', () => {
 
     wrapper.unmount()
     vi.useRealTimers()
+  })
+
+  it('opens the create dialog on Details and lets keyboard navigation switch to Workflow', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const createButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.create'))
+    await createButton.trigger('click')
+    await flushPromises()
+
+    const detailsTab = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.jobDetailsTab'))
+    const workflowTab = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.workflowTab'))
+
+    expect(detailsTab.attributes('aria-selected')).toBe('true')
+    expect(workflowTab.attributes('aria-selected')).toBe('false')
+    expect(wrapper.find('#job-thread-count').isVisible()).toBe(false)
+
+    await detailsTab.trigger('keydown', { key: 'ArrowRight' })
+    await flushPromises()
+
+    expect(workflowTab.attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('#job-thread-count').isVisible()).toBe(true)
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.workflowTabCreateHelp'))
   })
 
   it('excludes archived jobs by default and reloads them when requested', async () => {
@@ -417,10 +452,13 @@ describe('JobsView grouped create dialog', () => {
     await wrapper.find('.directory-browser-path-btn').trigger('click')
     await flushPromises()
     await wrapper.find('#job-drive').setValue('1')
-    await wrapper.findAll('.overflow-drive-option input')[0].setValue(true)
-    await wrapper.find('#job-thread-count').setValue('3')
     await wrapper.find('#job-notes').setValue('Operator note')
     await wrapper.find('#job-callback-url').setValue('https://example.com/ecube/webhook')
+    const workflowTab = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.workflowTab'))
+    await workflowTab.trigger('click')
+    await flushPromises()
+    await wrapper.findAll('.overflow-drive-option input')[0].setValue(true)
+    await wrapper.find('#job-thread-count').setValue('3')
     await wrapper.find('#job-run-immediately').setValue(true)
 
     await wrapper.find('#job-submit').trigger('click')
@@ -434,6 +472,9 @@ describe('JobsView grouped create dialog', () => {
       drive_id: 1,
       overflow_drive_ids: [4],
       thread_count: 3,
+      copy_chunk_size_bytes: 4_194_304,
+      copy_progress_flush_bytes: 67_108_864,
+      copy_file_fsync_enabled: false,
       notes: 'Operator note',
       callback_url: 'https://example.com/ecube/webhook',
     })
@@ -469,6 +510,10 @@ describe('JobsView grouped create dialog', () => {
       source_path: 'folder',
       drive_id: 1,
       overflow_drive_ids: [],
+      thread_count: 12,
+      copy_chunk_size_bytes: 4_194_304,
+      copy_progress_flush_bytes: 67_108_864,
+      copy_file_fsync_enabled: false,
       notes: undefined,
       callback_url: undefined,
     })
@@ -502,7 +547,12 @@ describe('JobsView grouped create dialog', () => {
       source_path: '/folder/subfolder',
       drive_id: 1,
       overflow_drive_ids: [],
+      thread_count: 12,
+      copy_chunk_size_bytes: 4_194_304,
+      copy_progress_flush_bytes: 67_108_864,
+      copy_file_fsync_enabled: false,
       notes: undefined,
+      callback_url: undefined,
     })
   })
 
@@ -562,11 +612,15 @@ describe('JobsView grouped create dialog', () => {
       source_path: '/',
       drive_id: 1,
       overflow_drive_ids: [],
+      thread_count: 12,
+      copy_chunk_size_bytes: 4_194_304,
+      copy_progress_flush_bytes: 67_108_864,
+      copy_file_fsync_enabled: false,
       notes: undefined,
     })
   })
 
-  it('omits thread_count on create until the operator selects an override', async () => {
+  it('sends the configured-default tuning values when the operator does not change them', async () => {
     const wrapper = mountView()
     await flushPromises()
 
@@ -594,6 +648,10 @@ describe('JobsView grouped create dialog', () => {
       source_path: '/folder/default',
       drive_id: 1,
       overflow_drive_ids: [],
+      thread_count: 12,
+      copy_chunk_size_bytes: 4_194_304,
+      copy_progress_flush_bytes: 67_108_864,
+      copy_file_fsync_enabled: false,
       notes: undefined,
       callback_url: undefined,
     })

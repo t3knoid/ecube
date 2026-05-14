@@ -258,15 +258,19 @@ test('jobs create dialog traps keyboard focus and restores the trigger', async (
   const dialog = page.getByRole('dialog', { name: 'Create Job' })
   const projectField = dialog.locator('#job-project')
   const cancelButton = dialog.getByRole('button', { name: 'Cancel' })
+  const detailsTab = dialog.getByRole('tab', { name: 'Details' })
 
   await expect(dialog).toBeVisible()
   await expect(projectField).toBeFocused()
 
   await page.keyboard.press('Shift+Tab')
+  await expect(detailsTab).toBeFocused()
+
+  await page.keyboard.press('Shift+Tab')
   await expect(cancelButton).toBeFocused()
 
   await page.keyboard.press('Tab')
-  await expect(projectField).toBeFocused()
+  await expect(detailsTab).toBeFocused()
 
   await page.keyboard.press('Escape')
   await expect(dialog).toBeHidden()

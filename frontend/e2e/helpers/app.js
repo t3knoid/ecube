@@ -86,5 +86,18 @@ export async function injectAuthToken(page, roles = ['admin']) {
 
 export async function setupAuthenticatedPage(page, roles = ['admin']) {
   await setupPublicPage(page, { initialized: true })
+  await stubCopyTuningDefaultsApi(page)
   await injectAuthToken(page, roles)
+}
+
+export async function stubCopyTuningDefaultsApi(page, overrides = {}) {
+  const body = {
+    thread_count: 12,
+    copy_chunk_size_bytes: 4_194_304,
+    copy_progress_flush_bytes: 67_108_864,
+    copy_file_fsync_enabled: false,
+    ...overrides,
+  }
+  await routeJson(page, '**/api/jobs/copy-tuning-defaults', body)
+  await routeJson(page, '**/jobs/copy-tuning-defaults', body)
 }

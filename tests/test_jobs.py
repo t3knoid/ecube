@@ -6164,3 +6164,30 @@ def test_error_summary_no_error_rows_still_shows_count(client, db):
     data = response.json()
     assert data["error_summary"] is not None
     assert "2 files failed" in data["error_summary"]
+
+
+def test_get_copy_tuning_defaults_returns_configured_values(client):
+    response = client.get("/jobs/copy-tuning-defaults")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["thread_count"] == int(settings.copy_default_thread_count)
+    assert payload["copy_chunk_size_bytes"] == int(settings.copy_chunk_size_bytes)
+    assert payload["copy_progress_flush_bytes"] == int(settings.copy_progress_flush_bytes)
+    assert payload["copy_file_fsync_enabled"] == bool(settings.copy_file_fsync_enabled)
+
+
+def test_get_copy_tuning_defaults_tracks_runtime_overrides(client, monkeypatch):
+    monkeypatch.setattr(settings, "copy_default_thread_count", 7)
+    monkeypatch.setattr(settings, "copy_chunk_size_bytes", 8 * 1024 * 1024)
+    monkeypatch.setattr(settings, "copy_progress_flush_bytes", 32 * 1024 * 1024)
+    monkeypatch.setattr(settings, "copy_file_fsync_enabled", True)
+
+    response = client.get("/jobs/copy-tuning-defaults")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload == {
+        "thread_count": 7,
+        "copy_chunk_size_bytes": 8 * 1024 * 1024,
+        "copy_progress_flush_bytes": 32 * 1024 * 1024,
+        "copy_file_fsync_enabled": True,
+    }
