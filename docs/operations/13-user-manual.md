@@ -213,7 +213,7 @@ The login page includes:
 - Session-expired banner when you were redirected after token expiry
 - Error banner for invalid credentials or connectivity failures
 
-In demo deployments, the login page shows the demo message, the shared demo password, and the configured account descriptions. It does not expose per-account passwords or internal bootstrap metadata.
+In demo deployments, the login page shows the demo message and configured account descriptions. When a shared demo password is configured, the form can prefill it for sign-in without rendering the raw password value in visible content. It does not expose per-account passwords or internal bootstrap metadata.
 
 If your local account password has expired, ECUBE opens a required password-change dialog instead of leaving you on a generic login failure. Re-enter your current password, enter and confirm a new password, and submit the change to continue into the application. If the host rejects the new password, ECUBE keeps the dialog open and shows the policy failure message so you can correct it without restarting the login flow.
 
@@ -1228,7 +1228,7 @@ Important operational notes:
 - Restart actions are never automatic from this page and always require explicit confirmation.
 - Restarting the application service can interrupt active operations. Prefer using a maintenance window or an idle period.
 - The `Password Policy` panel applies to locally managed OS accounts authenticated through PAM. New passwords, password resets, and expired-password recovery all use the active policy immediately.
-- When demo mode is enabled and `DEMO_SHARED_PASSWORD` is left empty, ECUBE also derives the login screen's shared demo password from the active `Password Policy` values. After changing the policy, restart ECUBE or otherwise rerun startup reconciliation before expecting existing demo OS accounts to accept the newly displayed implicit password.
+- When demo mode is enabled and `DEMO_SHARED_PASSWORD` is left empty, ECUBE also derives the effective demo password from the active `Password Policy` values and uses it for login prefill and demo-account reconciliation. After changing the policy, restart ECUBE or otherwise rerun startup reconciliation before expecting existing demo OS accounts to accept the updated implicit password.
 - `enforce_for_root` remains enabled and is not editable from the UI.
 - `Startup Analysis Batch Size` accepts values from `1` to `5000`. Lower values reduce peak memory use during startup analysis; higher values reduce database round trips.
 - Drive formatting and mount timeout controls live on the `Configuration` page, not the `Admin` page.
