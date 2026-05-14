@@ -470,7 +470,7 @@ def _resolve_job_source_path(body: JobCreate, db: Session) -> str:
 
     mount = ShareRepository(db).get(body.mount_id)
     if not mount:
-        raise service_exception(status_code=404, detail="Mount not found")
+        raise service_exception(status_code=404, detail="Share not found")
 
     mount_row = _row(mount)
     mount_project_id = cast(Optional[str], mount_row.project_id)
@@ -478,9 +478,9 @@ def _resolve_job_source_path(body: JobCreate, db: Session) -> str:
     mount_root = cast(Optional[str], mount_row.local_mount_point)
 
     if mount_project_id != body.project_id:
-        raise service_exception(status_code=409, detail="Selected mount is not available for this project")
+        raise service_exception(status_code=409, detail="Selected share is not available for this project")
     if mount_status != MountStatus.MOUNTED or not mount_root:
-        raise service_exception(status_code=409, detail="Selected mount is not mounted")
+        raise service_exception(status_code=409, detail="Selected share is not mounted")
 
     try:
         return resolve_source_path(

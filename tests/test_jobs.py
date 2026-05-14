@@ -367,6 +367,63 @@ def test_create_job_resolves_source_path_from_selected_mount(client, db):
     assert response.json()["source_path"] == "/nfs/project-001/folder/subfolder"
 
 
+def test_create_job_reports_share_not_found_for_missing_share_id(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-MISSING-SHARE-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-001",
+        mount_path="/mnt/ecube/missing-share-001",
+    )
+    db.add(drive)
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-001",
+            "evidence_number": "EV-MISSING-SHARE-001",
+            "source_path": "/folder/subfolder",
+            "mount_id": 999999,
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["message"] == "Share not found"
+
+
+def test_create_job_uses_share_terminology_when_selected_share_not_mounted(client, db):
+    mount = NetworkShare(
+        type=MountType.NFS,
+        remote_path="server:/exports/project-001",
+        project_id="PROJ-001",
+        local_mount_point="/nfs/project-001",
+        status=MountStatus.UNMOUNTED,
+    )
+    drive = UsbDrive(
+        device_identifier="USB-SHARE-NOT-MOUNTED-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-001",
+        mount_path="/mnt/ecube/share-not-mounted-001",
+    )
+    db.add_all([mount, drive])
+    db.commit()
+
+    response = client.post(
+        "/jobs",
+        json={
+            "project_id": "PROJ-001",
+            "evidence_number": "EV-SHARE-NOT-MOUNTED-001",
+            "source_path": "/folder/subfolder",
+            "mount_id": mount.id,
+            "drive_id": drive.id,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["message"] == "Selected share is not mounted"
+
+
 def test_create_job_rejects_traversal_outside_selected_mount(client, db):
     mount = NetworkShare(
         type=MountType.NFS,

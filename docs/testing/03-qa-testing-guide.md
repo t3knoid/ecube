@@ -49,7 +49,16 @@ Add the following manual checks when a release includes routing, role-visibility
 |---|---|---|
 | Auditor and processor can open Shares from direct navigation | Sign in as `auditor`, then browse directly to `/shares`; repeat as `processor` | The Shares page loads successfully for both roles without redirecting to Dashboard or showing a forbidden state |
 | Shares navigation remains consistent after refresh | Sign in as `auditor` or `processor`, open `/shares`, then refresh the browser tab | The SPA route resolves back to Shares and the page remains functional after reload |
+| Share detail navigation remains consistent after refresh | Sign in as `admin`, `manager`, or `processor`, open a specific Share Detail route such as `/shares/123`, then refresh the browser tab | The SPA route resolves back to Share Detail, the page remains functional after reload, and same-origin routing does not fall through to a backend API error |
 | Host mount table fallback still reads Linux proc mounts paths | Run the backend mount-info test file and inspect the namespace fallback assertions | Tests verify the default path `/proc/mounts` and host fallback path `/proc/1/mounts` so mount-table parsing stays aligned with Linux procfs semantics |
+
+## Manual Verification Additions for Job Source Share Validation
+
+Add the following manual checks when a release includes source-share selection or share-backed job create validation changes.
+
+| Scenario | Steps | Expected |
+|---|---|---|
+| Job create surfaces share terminology for source-share validation failures | Open `Jobs`, start the create dialog, select a source share that is unavailable to the chosen project or no longer mounted, then attempt to save | The job is not created, and the validation message refers to the selected `share` consistently rather than `mount`, matching the current Shares workflow language |
 
 ## Manual Verification Additions for Explicit Drive Binding in Jobs
 

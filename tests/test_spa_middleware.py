@@ -174,8 +174,8 @@ def _make_spa_app_with_route_collisions(frontend_dir: pathlib.Path, *, with_stri
         return {"route": "jobs"}
 
     @app.get("/shares")
-    def mounts_index():
-        return {"route": "mounts"}
+    def shares_index():
+        return {"route": "shares"}
 
     @app.get("/drives")
     def drives_index():
@@ -193,9 +193,9 @@ def _make_spa_app_with_route_collisions(frontend_dir: pathlib.Path, *, with_stri
     def job_detail(job_id: int):
         return {"route": "job-detail", "job_id": job_id}
 
-    @app.patch("/shares/{share_id}")
-    def mount_detail(mount_id: int):
-        return {"route": "mount-detail", "mount_id": mount_id}
+    @app.get("/shares/{share_id}")
+    def share_detail(share_id: int):
+        return {"route": "share-detail", "share_id": share_id}
 
     mount_spa_frontend(app, frontend_dir)
 
@@ -347,7 +347,7 @@ class TestSpaFrontendServing:
         [
             ("/audit", 200, {"route": "audit"}),
             ("/jobs", 200, {"route": "jobs"}),
-            ("/shares", 200, {"route": "mounts"}),
+            ("/shares", 200, {"route": "shares"}),
             ("/drives", 200, {"route": "drives"}),
             ("/configuration", 200, {"route": "configuration"}),
             ("/users", 200, {"route": "users"}),
@@ -389,20 +389,29 @@ class TestSpaFrontendServing:
         assert resp.status_code == 200
         assert resp.json() == {"route": "job-detail", "job_id": 123}
 
-    def test_browser_navigation_to_colliding_mount_detail_serves_spa(self, tmp_path):
+    def test_browser_navigation_to_colliding_share_detail_serves_spa(self, tmp_path):
         dist = self._build_dist(tmp_path)
         client = TestClient(_make_spa_app_with_route_collisions(dist))
 
-        resp = client.get("/shares/d+", headers={"accept": "text/html,application/xhtml+xml"})
+        resp = client.get("/shares/123", headers={"accept": "text/html,application/xhtml+xml"})
 
         assert resp.status_code == 200
         assert "SPA" in resp.text
 
-    def test_stripped_api_request_to_mount_detail_returns_404(self, tmp_path):
+    def test_api_request_to_colliding_share_detail_keeps_backend_route(self, tmp_path):
+        dist = self._build_dist(tmp_path)
+        client = TestClient(_make_spa_app_with_route_collisions(dist))
+
+        resp = client.get("/shares/123", headers={"accept": "application/json"})
+
+        assert resp.status_code == 200
+        assert resp.json() == {"route": "share-detail", "share_id": 123}
+
+    def test_stripped_api_request_to_share_detail_returns_404(self, tmp_path):
         dist = self._build_dist(tmp_path)
         client = TestClient(_make_spa_app_with_route_collisions(dist, with_strip=True))
 
-        resp = client.get("/api/shares/d+", headers={"accept": "application/json"})
+        resp = client.get("/api/shares/123", headers={"accept": "application/json"})
 
         assert resp.status_code == 404
 
