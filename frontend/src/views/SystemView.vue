@@ -257,6 +257,16 @@ const cpuDisplay = computed(() => {
   return p != null ? `${p.toFixed(1)}%` : t('common.labels.notAvailable')
 })
 
+const physicalCoresDisplay = computed(() => {
+  const count = health.value?.physical_cores
+  return count != null ? count : t('common.labels.notAvailable')
+})
+
+const logicalCpusDisplay = computed(() => {
+  const count = health.value?.logical_cpus
+  return count != null ? count : t('common.labels.notAvailable')
+})
+
 const memoryDisplay = computed(() => {
   const h = health.value
   if (h?.memory_percent == null) return t('common.labels.notAvailable')
@@ -985,6 +995,8 @@ onBeforeUnmount(() => {
           <span>{{ t('common.labels.db') }}</span><StatusBadge :status="health?.database || 'unknown'" />
           <span>{{ t('jobs.activeJobs') }}</span><strong>{{ health?.active_jobs || 0 }}</strong>
           <span>{{ t('system.cpu') }}</span><strong>{{ cpuDisplay }}</strong>
+          <span>{{ t('system.physicalCores') }}</span><strong>{{ physicalCoresDisplay }}</strong>
+          <span>{{ t('system.logicalCpus') }}</span><strong>{{ logicalCpusDisplay }}</strong>
           <span>{{ t('system.memory') }}</span><strong>{{ memoryDisplay }}</strong>
           <span>{{ t('system.diskIo') }}</span><strong>{{ diskIoDisplay }}</strong>
           <span>{{ t('system.workerQueue') }}</span><strong>{{ workerQueueDisplay }}</strong>

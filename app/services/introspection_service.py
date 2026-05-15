@@ -223,6 +223,8 @@ def get_system_health(
             pass
 
     cpu_percent: float | None = None
+    physical_cores: int | None = None
+    logical_cpus: int | None = None
     memory_percent: float | None = None
     memory_used_bytes: int | None = None
     memory_total_bytes: int | None = None
@@ -232,6 +234,18 @@ def get_system_health(
     if psutil_available and psutil_module is not None:
         try:
             cpu_percent = psutil_module.cpu_percent(interval=None)
+        except Exception:
+            pass
+        try:
+            detected_physical_cores = psutil_module.cpu_count(logical=False)
+            if isinstance(detected_physical_cores, int) and detected_physical_cores > 0:
+                physical_cores = detected_physical_cores
+        except Exception:
+            pass
+        try:
+            detected_logical_cpus = psutil_module.cpu_count(logical=True)
+            if isinstance(detected_logical_cpus, int) and detected_logical_cpus > 0:
+                logical_cpus = detected_logical_cpus
         except Exception:
             pass
         try:
@@ -261,6 +275,8 @@ def get_system_health(
         "database_error": db_error,
         "active_jobs": active_jobs,
         "cpu_percent": cpu_percent,
+        "physical_cores": physical_cores,
+        "logical_cpus": logical_cpus,
         "memory_percent": memory_percent,
         "memory_used_bytes": memory_used_bytes,
         "memory_total_bytes": memory_total_bytes,

@@ -1042,6 +1042,31 @@ Investigating system errors or performance issues via application logs (<code>ad
 </li></ul>
 <p>End users who only perform evidence exports may rarely need this page. Administrators and support personnel are more likely to use it during troubleshooting.</p>
 <p>In the <code>System Health</code> tab, ECUBE separates host metrics from ECUBE-owned process diagnostics. When the backend reports degraded but non-fatal runtime conditions, the same tab shows a <code>Runtime Warnings</code> panel with the sanitized warning summary, remediation guidance, stable warning code, and any explicit operator repair actions that are safe to expose for that warning. <code>GET /introspection/system-health</code> includes repair-action metadata only for <code>admin</code> callers; <code>manager</code>, <code>processor</code>, and <code>auditor</code> users still see the warning details, but they do not receive warning-action metadata from the API and therefore do not see repair-action buttons. For example, when exFAT formatting tools are present but the running kernel has not loaded exFAT runtime support, <code>admin</code> users can trigger the explicit repair action from the warning itself instead of relying on <code>Refresh</code> to mutate host state. The ECUBE process section shows ECUBE CPU and memory usage, the total ECUBE thread count, the number of active copy workers, and a table that correlates each active copy thread to its parent job and project, including status, configured threads, elapsed time, and CPU time. The same section includes a job-grouped copy-thread timeline with one lane per configured or active worker and a rolling time scale that highlights active copy samples, waiting/preparing samples, and inactive periods over the recent polling window.</p>
+<h3 id="host-metrics-fields">Host Metrics Fields</h3>
+<p>The <code>Host Metrics</code> card in the <code>System Health</code> tab shows six fields:</p>
+<ul><li>
+<code>CPU</code>: Host-wide CPU utilization percent from <code>cpu_percent</code> (aggregate across all logical CPUs, shown as a single 0-100 value).
+</li><li>
+<code>Physical Cores</code>: Host physical-core count from <code>physical_cores</code>.
+</li><li>
+<code>Logical CPUs</code>: Host logical-CPU (hardware-thread) count from <code>logical_cpus</code>.
+</li><li>
+<code>Memory</code>: Host memory utilization percent from <code>memory_percent</code>; when available, the card also shows <code>memory_used_bytes / memory_total_bytes</code>.
+</li><li>
+<code>Disk I/O</code>: Cumulative host disk bytes since boot from <code>disk_read_bytes</code> (read) and <code>disk_write_bytes</code> (write).
+</li><li>
+<code>Worker Queue</code>: Pending export-job count from <code>worker_queue_size</code>.
+</li></ul>
+<p>Field-display behavior:</p>
+<ul><li>
+The UI shows <code>N/A</code> when a host metric is unavailable.
+</li><li>
+The <code>CPU</code> value is not a per-core breakdown. It is one aggregate host value for the sampled interval.
+</li><li>
+<code>Worker Queue</code> shows <code>N/A</code> when the backend cannot compute the count, such as during database-unreachable conditions.
+</li><li>
+Byte-based values use automatic unit formatting (<code>B</code>, <code>KB</code>, <code>MB</code>, <code>GB</code>, and higher) in the System page display.
+</li></ul>
 <h3 id="interpreting-copy-thread-timeline-patterns">Interpreting Copy Thread Timeline Patterns</h3>
 <p>Use the timeline as a short-window behavior signal for each job's worker lanes.</p>
 <ul><li>

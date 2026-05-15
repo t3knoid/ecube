@@ -536,6 +536,8 @@
     "options": "Options",
     "download": "Download",
     "cpu": "CPU",
+    "physicalCores": "Physical Cores",
+    "logicalCpus": "Logical CPUs",
     "memory": "Memory",
     "diskIo": "Disk I/O",
     "workerQueue": "Worker Queue",

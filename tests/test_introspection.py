@@ -40,6 +40,8 @@ def test_system_health(client, db):
     assert "worker_queue_size" in data
     # metric fields are present (may be null when psutil unavailable in CI)
     assert "cpu_percent" in data
+    assert "physical_cores" in data
+    assert "logical_cpus" in data
     assert "memory_percent" in data
     assert "memory_used_bytes" in data
     assert "memory_total_bytes" in data
@@ -310,6 +312,7 @@ def test_system_health_psutil_metrics(client, db):
         patch("app.routers.introspection.get_filesystem_runtime_inspector", return_value=_runtime_inspector()),
     ):
         mock_psutil.cpu_percent.return_value = 12.5
+        mock_psutil.cpu_count.side_effect = lambda logical=True: 8 if logical else 4
         mock_psutil.virtual_memory.return_value = fake_vm
         mock_psutil.disk_io_counters.return_value = fake_io
 
@@ -323,6 +326,10 @@ def test_system_health_psutil_metrics(client, db):
     # cpu_percent(interval=1.0) on the same mock if it races with this patch,
     # so we only assert that the endpoint made its expected non-blocking call.
     mock_psutil.cpu_percent.assert_any_call(interval=None)
+    mock_psutil.cpu_count.assert_any_call(logical=False)
+    mock_psutil.cpu_count.assert_any_call(logical=True)
+    assert data["physical_cores"] == 4
+    assert data["logical_cpus"] == 8
     assert data["memory_percent"] == 42.0
     assert data["memory_used_bytes"] == 2_000_000_000
     assert data["memory_total_bytes"] == 8_000_000_000
@@ -341,6 +348,8 @@ def test_system_health_psutil_unavailable(client, db):
     assert response.status_code == 200
     data = response.json()
     assert data["cpu_percent"] is None
+    assert data["physical_cores"] is None
+    assert data["logical_cpus"] is None
     assert data["memory_percent"] is None
     assert data["memory_used_bytes"] is None
     assert data["memory_total_bytes"] is None

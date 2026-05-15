@@ -954,6 +954,24 @@ End users who only perform evidence exports may rarely need this page. Administr
 
 In the `System Health` tab, ECUBE separates host metrics from ECUBE-owned process diagnostics. When the backend reports degraded but non-fatal runtime conditions, the same tab shows a `Runtime Warnings` panel with the sanitized warning summary, remediation guidance, stable warning code, and any explicit operator repair actions that are safe to expose for that warning. `GET /introspection/system-health` includes repair-action metadata only for `admin` callers; `manager`, `processor`, and `auditor` users still see the warning details, but they do not receive warning-action metadata from the API and therefore do not see repair-action buttons. For example, when exFAT formatting tools are present but the running kernel has not loaded exFAT runtime support, `admin` users can trigger the explicit repair action from the warning itself instead of relying on `Refresh` to mutate host state. The ECUBE process section shows ECUBE CPU and memory usage, the total ECUBE thread count, the number of active copy workers, and a table that correlates each active copy thread to its parent job and project, including status, configured threads, elapsed time, and CPU time. The same section includes a job-grouped copy-thread timeline with one lane per configured or active worker and a rolling time scale that highlights active copy samples, waiting/preparing samples, and inactive periods over the recent polling window.
 
+#### Host Metrics Fields
+
+The `Host Metrics` card in the `System Health` tab shows six fields:
+
+- `CPU`: Host-wide CPU utilization percent from `cpu_percent` (aggregate across all logical CPUs, shown as a single 0-100 value).
+- `Physical Cores`: Host physical-core count from `physical_cores`.
+- `Logical CPUs`: Host logical-CPU (hardware-thread) count from `logical_cpus`.
+- `Memory`: Host memory utilization percent from `memory_percent`; when available, the card also shows `memory_used_bytes / memory_total_bytes`.
+- `Disk I/O`: Cumulative host disk bytes since boot from `disk_read_bytes` (read) and `disk_write_bytes` (write).
+- `Worker Queue`: Pending export-job count from `worker_queue_size`.
+
+Field-display behavior:
+
+- The UI shows `N/A` when a host metric is unavailable.
+- The `CPU` value is not a per-core breakdown. It is one aggregate host value for the sampled interval.
+- `Worker Queue` shows `N/A` when the backend cannot compute the count, such as during database-unreachable conditions.
+- Byte-based values use automatic unit formatting (`B`, `KB`, `MB`, `GB`, and higher) in the System page display.
+
 #### Interpreting Copy Thread Timeline Patterns
 
 Use the timeline as a short-window behavior signal for each job's worker lanes.

@@ -216,6 +216,8 @@ class SystemHealthResponse(BaseModel):
     database_error: Optional[str] = Field(default=None, description="Error detail if database is unreachable")
     active_jobs: int = Field(default=0, description="Number of currently running export jobs")
     cpu_percent: Optional[float] = Field(default=None, description="CPU utilisation percent (0–100)")
+    physical_cores: Optional[int] = Field(default=None, description="Physical CPU core count")
+    logical_cpus: Optional[int] = Field(default=None, description="Logical CPU count (hardware threads)")
     memory_percent: Optional[float] = Field(default=None, description="Memory utilisation percent (0–100)")
     memory_used_bytes: Optional[int] = Field(default=None, description="Used physical memory in bytes")
     memory_total_bytes: Optional[int] = Field(default=None, description="Total physical memory in bytes")
