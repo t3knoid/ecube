@@ -1397,7 +1397,7 @@ async function openEditDialog() {
   if (!job.value || !canEdit.value) return
   dialogTriggerRef.value = document.activeElement instanceof HTMLElement ? document.activeElement : null
   error.value = ''
-  await Promise.all([loadSupportingData(), copyTuningDefaults.ensureLoaded()])
+  await Promise.all([loadSupportingData(), copyTuningDefaults.ensureLoaded({ forceRefresh: true })])
   const inferredMount = inferMountForJob(job.value)
   const tuningDefaults = copyTuningDefaults.currentDefaults()
   editForm.value = {

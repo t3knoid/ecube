@@ -1061,7 +1061,7 @@ Optional parameters:
 | `callback_url` | `null` | HTTPS URL that receives a job-status callback when the job reaches `COMPLETED` or `FAILED` |
 | `created_by` | `null` | Optional username attribution override for audit/job metadata |
 
-> **Thread count guidance:** `thread_count` controls parallel copy workers, not a guaranteed throughput multiplier. Copy work is I/O-bound rather than CPU-bound, so the best value depends mostly on the source data shape and the source and destination media rather than on the number of CPUs.
+> **Thread count guidance:** `thread_count` controls parallel copy workers, not a guaranteed throughput multiplier. Copy work is I/O-bound, and the best value depends mostly on the source data shape plus the source and destination media. CPU count is a secondary factor.
 >
 > Typical starting points:
 >

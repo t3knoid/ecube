@@ -650,10 +650,10 @@ async function openCreateDialog(event) {
   // Workflow tab opens with the configured values from the start. The
   // defaults become the per-job starting point at create time and are
   // persisted as overrides on save (see docs/operations/13-user-manual.md).
-  // ensureLoaded() dedupes concurrent callers and resolves immediately
-  // after the first successful fetch.
+  // Force a refresh whenever the dialog opens so Create reflects
+  // configuration changes made in the same SPA session.
   try {
-    await copyTuningDefaults.ensureLoaded()
+    await copyTuningDefaults.ensureLoaded({ forceRefresh: true })
   } catch (_err) {
     // refresh() already handles its own logging; fall through to the
     // fallback defaults rather than blocking dialog open.

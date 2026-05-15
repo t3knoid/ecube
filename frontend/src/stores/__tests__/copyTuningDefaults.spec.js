@@ -102,4 +102,38 @@ describe('copyTuningDefaults store', () => {
     })
     expect(apiMocks.getCopyTuningDefaults).toHaveBeenCalledTimes(2)
   })
+
+  it('refreshes defaults when forceRefresh is requested after an initial load', async () => {
+    const store = useCopyTuningDefaultsStore()
+
+    apiMocks.getCopyTuningDefaults.mockResolvedValueOnce({
+      thread_count: 8,
+      copy_chunk_size_bytes: 4_194_304,
+      copy_progress_flush_bytes: 67_108_864,
+      copy_file_fsync_enabled: false,
+    })
+    apiMocks.getCopyTuningDefaults.mockResolvedValueOnce({
+      thread_count: 16,
+      copy_chunk_size_bytes: 8_388_608,
+      copy_progress_flush_bytes: 134_217_728,
+      copy_file_fsync_enabled: true,
+    })
+
+    await store.ensureLoaded()
+    expect(store.currentDefaults()).toEqual({
+      thread_count: 8,
+      copy_chunk_size_bytes: 4_194_304,
+      copy_progress_flush_bytes: 67_108_864,
+      copy_file_fsync_enabled: false,
+    })
+
+    await store.ensureLoaded({ forceRefresh: true })
+    expect(store.currentDefaults()).toEqual({
+      thread_count: 16,
+      copy_chunk_size_bytes: 8_388_608,
+      copy_progress_flush_bytes: 134_217_728,
+      copy_file_fsync_enabled: true,
+    })
+    expect(apiMocks.getCopyTuningDefaults).toHaveBeenCalledTimes(2)
+  })
 })

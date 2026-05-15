@@ -61,9 +61,10 @@ export const useCopyTuningDefaultsStore = defineStore('copyTuningDefaults', () =
         )
         logger.debug('[copyTuningDefaults] invalid backend defaults payload:', data)
         loaded.value = false
-        return
+        return false
       }
       loaded.value = true
+      return true
     } catch (err) {
       // The Job Editor falls back to FALLBACK_COPY_TUNING_DEFAULTS when the
       // backend defaults cannot be loaded. Surface this at warn level so an
@@ -75,14 +76,16 @@ export const useCopyTuningDefaultsStore = defineStore('copyTuningDefaults', () =
       )
       logger.debug('[copyTuningDefaults] failed to load configured defaults:', err)
       loaded.value = false
+      return false
     } finally {
       loading.value = false
     }
   }
 
-  function ensureLoaded() {
-    if (loaded.value) return Promise.resolve()
+  function ensureLoaded(options = {}) {
+    const { forceRefresh = false } = options
     if (inflight) return inflight
+    if (loaded.value && !forceRefresh) return Promise.resolve(true)
     inflight = refresh().finally(() => {
       inflight = null
     })
