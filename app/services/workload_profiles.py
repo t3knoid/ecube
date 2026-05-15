@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from app.config import settings
+
 SMALL_FILE_MAX_BYTES = 64 * 1024
 LARGE_FILE_MIN_BYTES = 8 * 1024 * 1024
 
@@ -119,3 +121,17 @@ def apply_workload_profile(job: object, profile_key: str) -> bool:
         changed = True
 
     return changed
+
+
+def job_has_explicit_copy_tuning_overrides(job: object) -> bool:
+    thread_count = getattr(job, "thread_count", None)
+    copy_chunk_size_bytes = getattr(job, "copy_chunk_size_bytes", None)
+    copy_progress_flush_bytes = getattr(job, "copy_progress_flush_bytes", None)
+    copy_file_fsync_enabled = getattr(job, "copy_file_fsync_enabled", None)
+
+    return any([
+        thread_count is not None and int(thread_count) != int(settings.copy_default_thread_count),
+        copy_chunk_size_bytes is not None and int(copy_chunk_size_bytes) != int(settings.copy_chunk_size_bytes),
+        copy_progress_flush_bytes is not None and int(copy_progress_flush_bytes) != int(settings.copy_progress_flush_bytes),
+        copy_file_fsync_enabled is not None and bool(copy_file_fsync_enabled) != bool(settings.copy_file_fsync_enabled),
+    ])

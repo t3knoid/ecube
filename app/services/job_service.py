@@ -33,6 +33,7 @@ from app.services.workload_profiles import (
     SMALL_FILE_MAX_BYTES,
     apply_workload_profile,
     build_size_distribution_summary,
+    job_has_explicit_copy_tuning_overrides,
     recommend_workload_profile,
 )
 from app.utils.sanitize import is_encoding_error, resolve_source_path, sanitize_error_message, validate_source_path
@@ -102,19 +103,6 @@ def get_startup_analysis_workload_profile_summary(
     if recommendation is None:
         return None, None
     return summary, recommendation
-
-
-def _job_has_manual_copy_tuning_overrides(job: ExportJob) -> bool:
-    job_row = _row(job)
-    return any(
-        value is not None
-        for value in (
-            cast(Optional[int], job_row.thread_count),
-            cast(Optional[int], job_row.copy_chunk_size_bytes),
-            cast(Optional[int], job_row.copy_progress_flush_bytes),
-            cast(Optional[bool], job_row.copy_file_fsync_enabled),
-        )
-    )
 
 
 def _emit_job_lifecycle_callback(
@@ -2103,7 +2091,7 @@ def apply_recommended_workload_profile(
             detail="Startup analysis recommendation is not available for this job",
         )
 
-    had_manual_overrides = _job_has_manual_copy_tuning_overrides(job)
+    had_manual_overrides = job_has_explicit_copy_tuning_overrides(job)
     changed = apply_workload_profile(job_row, recommendation)
     if changed:
         try:

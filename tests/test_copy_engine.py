@@ -12,6 +12,7 @@ import pytest
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
 from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobStatus, Manifest, StartupAnalysisEntry, StartupAnalysisStatus
+from app.config import settings
 from app.services import copy_engine
 
 
@@ -2730,6 +2731,68 @@ def test_prepare_job_startup_analysis_reuses_ready_cache_when_cached_entries_are
     assert job.startup_analysis_status == StartupAnalysisStatus.READY
     assert job.file_count == 1
     assert job.total_bytes == len(b"content")
+
+
+def test_prepare_job_startup_analysis_auto_applies_recommended_profile_when_default_tuning_is_seeded(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    for index in range(3):
+        (source_dir / f"large-{index}.bin").write_bytes(b"x" * (32 * 1024 * 1024))
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    job.thread_count = settings.copy_default_thread_count
+    job.copy_chunk_size_bytes = settings.copy_chunk_size_bytes
+    job.copy_progress_flush_bytes = settings.copy_progress_flush_bytes
+    job.copy_file_fsync_enabled = settings.copy_file_fsync_enabled
+    job.startup_analysis_auto_apply_recommended_profile = True
+    db.commit()
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        result = copy_engine.prepare_job_startup_analysis(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+
+    assert result["recommended_profile"] == "large_files"
+    assert result["auto_profile_applied"] is True
+    assert job.thread_count == 6
+    assert job.copy_chunk_size_bytes == 8_388_608
+    assert job.copy_progress_flush_bytes == 134_217_728
+    assert job.copy_file_fsync_enabled is False
+
+
+def test_prepare_job_startup_analysis_skips_auto_apply_when_explicit_tuning_overrides_exist(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    for index in range(3):
+        (source_dir / f"large-{index}.bin").write_bytes(b"x" * (32 * 1024 * 1024))
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    job.thread_count = settings.copy_default_thread_count + 1
+    job.copy_chunk_size_bytes = settings.copy_chunk_size_bytes
+    job.copy_progress_flush_bytes = settings.copy_progress_flush_bytes
+    job.copy_file_fsync_enabled = settings.copy_file_fsync_enabled
+    job.startup_analysis_auto_apply_recommended_profile = True
+    db.commit()
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        result = copy_engine.prepare_job_startup_analysis(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+
+    assert result["recommended_profile"] == "large_files"
+    assert result["auto_profile_applied"] is False
+    assert job.thread_count == settings.copy_default_thread_count + 1
+    assert job.copy_chunk_size_bytes == settings.copy_chunk_size_bytes
+    assert job.copy_progress_flush_bytes == settings.copy_progress_flush_bytes
+    assert job.copy_file_fsync_enabled is settings.copy_file_fsync_enabled
 
 
 def test_prepare_job_startup_analysis_invalidates_ready_cache_when_file_changes_in_place(db, tmp_path, caplog):

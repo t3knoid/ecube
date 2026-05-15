@@ -35,6 +35,7 @@ from app.services.workload_profiles import (
     SMALL_FILE_MAX_BYTES,
     apply_workload_profile,
     build_size_distribution_summary,
+    job_has_explicit_copy_tuning_overrides,
     recommend_workload_profile,
 )
 from app.utils.sanitize import describe_relative_paths, sanitize_error_message, validate_source_path
@@ -731,18 +732,6 @@ def _clear_startup_analysis_cache(job: Any) -> None:
 def _clear_startup_analysis_entries(job: Any) -> None:
     job.startup_analysis_cache_present = False
     job.startup_analysis_entries = None
-
-
-def _job_has_manual_copy_tuning_overrides(job: Any) -> bool:
-    return any(
-        value is not None
-        for value in (
-            getattr(job, "thread_count", None),
-            getattr(job, "copy_chunk_size_bytes", None),
-            getattr(job, "copy_progress_flush_bytes", None),
-            getattr(job, "copy_file_fsync_enabled", None),
-        )
-    )
 
 
 def _startup_analysis_cache_details(job: Any) -> dict[str, int]:
@@ -1723,7 +1712,7 @@ def prepare_job_startup_analysis(
         size_distribution = build_size_distribution_summary(**distribution_counts)
         recommended_profile = recommend_workload_profile(size_distribution)
         auto_profile_applied = False
-        if getattr(job, "startup_analysis_auto_apply_recommended_profile", False) and recommended_profile and not _job_has_manual_copy_tuning_overrides(job):
+        if getattr(job, "startup_analysis_auto_apply_recommended_profile", False) and recommended_profile and not job_has_explicit_copy_tuning_overrides(job):
             auto_profile_applied = apply_workload_profile(job, recommended_profile)
             if auto_profile_applied:
                 assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
