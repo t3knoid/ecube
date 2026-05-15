@@ -2265,17 +2265,18 @@ Contributor note: when adding or renumbering QA test cases in this guide, run `p
 | 2 | CPU metric present | Inspect response body | `cpu_percent` is a number between 0 and 100 |
 | 3 | CPU topology metrics present | Inspect response body on a host where `psutil` reports CPU topology | `physical_cores` and `logical_cpus` are positive integers; `logical_cpus` ≥ `physical_cores` |
 | 4 | CPU topology metrics unavailable path | Exercise endpoint where `psutil` is unavailable | `physical_cores` and `logical_cpus` are `null` |
-| 5 | Memory metrics present | Inspect response body | `memory_percent` is a number; `memory_used_bytes` and `memory_total_bytes` are positive integers; `memory_used_bytes` ≤ `memory_total_bytes` |
-| 6 | Disk I/O metrics present | Inspect response body | `disk_read_bytes` and `disk_write_bytes` are non-negative integers |
-| 7 | Active jobs count | Start an export job, call endpoint | `active_jobs` ≥ 1 |
-| 8 | Worker queue size | Create a PENDING job (created but not started), call endpoint | `worker_queue_size` ≥ 1 |
-| 9 | Worker queue size decrements | Start the pending job, call endpoint again | `worker_queue_size` decreases by 1 (is 0 if no other PENDING jobs exist; job moved out of `PENDING` and can still be in `PREPARING` before it reaches `RUNNING`) |
-| 10 | ECUBE process metrics present | Inspect response body | `ecube_process` object exists with `cpu_percent`, `cpu_time_seconds`, `memory_rss_bytes`, `memory_vms_bytes`, `thread_count`, `active_copy_thread_count`, and `active_copy_threads` |
-| 11 | Active copy-thread correlation | Run an export job with active copy workers, call endpoint during the run | Each returned `active_copy_threads` row includes `job_id`, `project_id`, `job_status`, `configured_thread_count`, `worker_label`, `elapsed_seconds`, and `cpu_time_seconds` |
-| 12 | ECUBE process metrics degrade safely | Exercise the endpoint where process/thread metrics cannot be sampled reliably | `ecube_process` still exists; unavailable per-thread values remain `null` or the list is empty rather than returning unsafe host details |
-| 13 | Degraded when DB down | Stop PostgreSQL, call endpoint with valid token | 200, `status: "degraded"`, `database: "error"`, `database_error` is non-null |
-| 14 | Unauthenticated rejected | `GET /introspection/system-health` without token | 401 |
-| 15 | Processor role allowed | `GET /introspection/system-health` with processor token | 200 |
+| 5 | System page CPU topology fallback rendering | Open `System` -> `System Health` when backend returns `physical_cores: null` and `logical_cpus: null` | `Physical Cores` and `Logical CPUs` display `N/A`; other host metrics continue rendering normally |
+| 6 | Memory metrics present | Inspect response body | `memory_percent` is a number; `memory_used_bytes` and `memory_total_bytes` are positive integers; `memory_used_bytes` ≤ `memory_total_bytes` |
+| 7 | Disk I/O metrics present | Inspect response body | `disk_read_bytes` and `disk_write_bytes` are non-negative integers |
+| 8 | Active jobs count | Start an export job, call endpoint | `active_jobs` ≥ 1 |
+| 9 | Worker queue size | Create a PENDING job (created but not started), call endpoint | `worker_queue_size` ≥ 1 |
+| 10 | Worker queue size decrements | Start the pending job, call endpoint again | `worker_queue_size` decreases by 1 (is 0 if no other PENDING jobs exist; job moved out of `PENDING` and can still be in `PREPARING` before it reaches `RUNNING`) |
+| 11 | ECUBE process metrics present | Inspect response body | `ecube_process` object exists with `cpu_percent`, `cpu_time_seconds`, `memory_rss_bytes`, `memory_vms_bytes`, `thread_count`, `active_copy_thread_count`, and `active_copy_threads` |
+| 12 | Active copy-thread correlation | Run an export job with active copy workers, call endpoint during the run | Each returned `active_copy_threads` row includes `job_id`, `project_id`, `job_status`, `configured_thread_count`, `worker_label`, `elapsed_seconds`, and `cpu_time_seconds` |
+| 13 | ECUBE process metrics degrade safely | Exercise the endpoint where process/thread metrics cannot be sampled reliably | `ecube_process` still exists; unavailable per-thread values remain `null` or the list is empty rather than returning unsafe host details |
+| 14 | Degraded when DB down | Stop PostgreSQL, call endpoint with valid token | 200, `status: "degraded"`, `database: "error"`, `database_error` is non-null |
+| 15 | Unauthenticated rejected | `GET /introspection/system-health` without token | 401 |
+| 16 | Processor role allowed | `GET /introspection/system-health` with processor token | 200 |
 
 ### 12.15.1 Liveness, Readiness, and Version
 

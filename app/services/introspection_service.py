@@ -241,13 +241,21 @@ def get_system_health(
             if isinstance(detected_physical_cores, int) and detected_physical_cores > 0:
                 physical_cores = detected_physical_cores
         except Exception:
-            pass
+            logger.info(
+                "System health metric unavailable",
+                extra={"failure_class": "cpu_topology_metric_unavailable", "metric": "physical_cores"},
+            )
+            logger.debug("Physical core count sampling failed", exc_info=True)
         try:
             detected_logical_cpus = psutil_module.cpu_count(logical=True)
             if isinstance(detected_logical_cpus, int) and detected_logical_cpus > 0:
                 logical_cpus = detected_logical_cpus
         except Exception:
-            pass
+            logger.info(
+                "System health metric unavailable",
+                extra={"failure_class": "cpu_topology_metric_unavailable", "metric": "logical_cpus"},
+            )
+            logger.debug("Logical CPU count sampling failed", exc_info=True)
         try:
             vm = psutil_module.virtual_memory()
             memory_percent = vm.percent
