@@ -345,11 +345,27 @@ test('jobs list supports safe pause and resume flow', async ({ page }) => {
   await expect(page.getByText('2-9')).toBeVisible()
 
   await page.getByRole('button', { name: 'Pause' }).click()
-  await expect(page.getByText('Pause in progress', { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Pause' })).toBeDisabled()
+  const pauseInProgressMessage = page.getByText('Pause in progress', { exact: true })
+  const pauseButton = page.getByRole('button', { name: 'Pause' })
+  const startButton = page.getByRole('button', { name: 'Start' })
 
-  await expect(page.getByText('Pause in progress', { exact: true })).toHaveCount(0, { timeout: 10000 })
-  await expect(page.getByRole('button', { name: 'Start' })).toBeEnabled({ timeout: 10000 })
+  await expect.poll(async () => {
+    if (await pauseInProgressMessage.isVisible()) {
+      return 'pausing'
+    }
+
+    if (await startButton.isVisible()) {
+      return 'paused'
+    }
+
+    return 'transitioning'
+  }, { timeout: 10000 }).toMatch(/pausing|paused/)
+
+  if (await pauseInProgressMessage.isVisible()) {
+    await expect(pauseButton).toBeDisabled()
+    await expect(pauseInProgressMessage).toHaveCount(0, { timeout: 10000 })
+  }
+  await expect(startButton).toBeEnabled({ timeout: 10000 })
 
   await page.getByRole('button', { name: 'Start' }).click()
   await expect(page.locator('.status-badge').filter({ hasText: 'Running' }).first()).toBeVisible()

@@ -3265,22 +3265,7 @@
 						},
 						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Get Copy Tuning Defaults\n\noperationId: get_copy_tuning_defaults_jobs_copy_tuning_defaults_get"
 					},
-					"response": [
-						{
-							"name": "200 OK - copy tuning defaults",
-							"status": "OK",
-							"code": 200,
-							"_postman_previewlanguage": "json",
-							"header": [
-								{
-									"key": "Content-Type",
-									"value": "application/json"
-								}
-							],
-							"cookie": [],
-							"body": "{\n  \"thread_count\": 12,\n  \"copy_chunk_size_bytes\": 4194304,\n  \"copy_progress_flush_bytes\": 67108864,\n  \"copy_file_fsync_enabled\": false\n}"
-						}
-					]
+					"response": []
 				},
 				{
 					"name": "DELETE /jobs/{job_id}",
@@ -3599,6 +3584,27 @@
 							]
 						},
 						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Start Job\n\noperationId: start_job_jobs__job_id__start_post"
+					},
+					"response": []
+				},
+				{
+					"name": "POST /jobs/{job_id}/startup-analysis/apply-recommended-profile",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/jobs/{{job_id}}/startup-analysis/apply-recommended-profile",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"jobs",
+								"{{job_id}}",
+								"startup-analysis",
+								"apply-recommended-profile"
+							]
+						},
+						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Apply Recommended Startup Analysis Profile\n\noperationId: apply_recommended_startup_analysis_profile_jobs__job_id__startup_analysis_apply_recommended_profile_post"
 					},
 					"response": []
 				},

@@ -136,6 +136,7 @@ Table export_jobs {
   copy_chunk_size_bytes int
   copy_progress_flush_bytes bigint
   copy_file_fsync_enabled boolean
+  startup_analysis_auto_apply_recommended_profile boolean [not null, default: false]
   max_file_retries int [default: 3]
   retry_delay_seconds int [default: 1]
   active_duration_seconds int [not null, default: 0]
