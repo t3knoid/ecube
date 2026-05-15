@@ -3265,7 +3265,22 @@
 						},
 						"description": "Auto-generated from the ECUBE OpenAPI schema.\n\nSummary: Get Copy Tuning Defaults\n\noperationId: get_copy_tuning_defaults_jobs_copy_tuning_defaults_get"
 					},
-					"response": []
+					"response": [
+						{
+							"name": "200 OK - copy tuning defaults",
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"thread_count\": 12,\n  \"copy_chunk_size_bytes\": 4194304,\n  \"copy_progress_flush_bytes\": 67108864,\n  \"copy_file_fsync_enabled\": false\n}"
+						}
+					]
 				},
 				{
 					"name": "DELETE /jobs/{job_id}",

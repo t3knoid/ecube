@@ -183,6 +183,8 @@ describe('SystemView USB topology tab', () => {
       database: 'connected',
       active_jobs: 1,
       cpu_percent: 18.5,
+      physical_cores: 4,
+      logical_cpus: 8,
       memory_percent: 41.2,
       memory_used_bytes: 4096,
       memory_total_bytes: 8192,
@@ -214,6 +216,10 @@ describe('SystemView USB topology tab', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain(i18n.global.t('system.hostMetrics'))
+    expect(wrapper.text()).toContain(i18n.global.t('system.physicalCores'))
+    expect(wrapper.text()).toContain(i18n.global.t('system.logicalCpus'))
+    expect(wrapper.text()).toContain('4')
+    expect(wrapper.text()).toContain('8')
     expect(wrapper.text()).toContain(i18n.global.t('system.ecubeProcessTitle'))
     expect(wrapper.text()).toContain('copy-job-42_0')
     expect(wrapper.text()).toContain('PROJ-42')
