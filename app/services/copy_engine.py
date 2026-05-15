@@ -2363,11 +2363,11 @@ def run_copy_job(job_id: int) -> None:
                         return False
 
                     while True:
-                        if _handle_worker_completion():
-                            if stale_run_detected:
-                                return
-                            if pause_requested or stop_for_target_full:
-                                break
+                        _handle_worker_completion()
+                        if stale_run_detected:
+                            return
+                        if pause_requested or stop_for_target_full:
+                            break
 
                         tuning_snapshot = _read_copy_job_runtime_tuning_snapshot(db, job_id)
                         if tuning_snapshot is None:

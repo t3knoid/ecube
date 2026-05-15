@@ -8,6 +8,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
+from sqlalchemy import update as sql_update
+from sqlalchemy.orm import Session
 
 from app.models.audit import AuditLog
 from app.models.hardware import DriveState, UsbDrive
@@ -3473,6 +3475,88 @@ def test_run_copy_job_applies_runtime_tuning_updates_at_batch_boundaries(db, tmp
 
     update_records = [record for record in caplog.records if record.getMessage() == "Applied runtime copy tuning update" and record.job_id == job.id]
     assert update_records
+
+
+def test_run_copy_job_reads_persisted_runtime_tuning_updates_between_batches(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    for index in range(3):
+        (source_dir / f"file-{index}.bin").write_bytes((b"payload-" + str(index).encode("ascii")) * 256)
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    job.thread_count = 1
+    job.copy_chunk_size_bytes = 1024
+    job.copy_progress_flush_bytes = 1024
+    job.copy_file_fsync_enabled = False
+    db.commit()
+    db.refresh(job)
+
+    batch_index = 0
+
+    def _as_completed_with_persisted_update(futures):
+        nonlocal batch_index
+        batch_index += 1
+        if batch_index == 1:
+            update_db = Session(bind=db.get_bind())
+            try:
+                update_db.execute(
+                    sql_update(ExportJob)
+                    .where(ExportJob.id == job.id)
+                    .values(
+                        thread_count=2,
+                        copy_chunk_size_bytes=2048,
+                        copy_progress_flush_bytes=4096,
+                        copy_file_fsync_enabled=True,
+                    )
+                )
+                update_db.commit()
+            finally:
+                update_db.close()
+        for future in list(futures):
+            yield future
+
+    observed_copy_settings: list[tuple[int, bool]] = []
+    original_copy_file = copy_engine.copy_file
+    original_list_pending = copy_engine.FileRepository.list_pending_by_job_after_id
+
+    def _one_file_batch(self, job_id, after_id=None, limit=None):
+        pending = original_list_pending(self, job_id, after_id=after_id, limit=1)
+        return pending[:1]
+
+    def _recording_copy_file(
+        src,
+        dst,
+        checksum_algorithm="sha256",
+        progress_callback=None,
+        timeout_seconds=0,
+        chunk_size=None,
+        fsync_enabled=None,
+    ):
+        observed_copy_settings.append((int(chunk_size or 0), bool(fsync_enabled)))
+        return original_copy_file(
+            src,
+            dst,
+            checksum_algorithm=checksum_algorithm,
+            progress_callback=progress_callback,
+            timeout_seconds=timeout_seconds,
+            chunk_size=chunk_size,
+            fsync_enabled=fsync_enabled,
+        )
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine.as_completed", side_effect=_as_completed_with_persisted_update):
+            with patch("app.services.copy_engine.copy_file", side_effect=_recording_copy_file):
+                with patch.object(copy_engine.FileRepository, "list_pending_by_job_after_id", _one_file_batch):
+                    copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+    assert job.status == JobStatus.COMPLETED
+    assert (1024, False) in observed_copy_settings
+    assert (2048, True) in observed_copy_settings
 
 
 def test_run_copy_job_emits_job_completed_audit_for_partial_success(db, tmp_path):
