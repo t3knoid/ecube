@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth.js'
 import { useCopyTuningDefaultsStore } from '@/stores/copyTuningDefaults.js'
-import { analyzeJob, archiveJob, continueJobOverflow, getJob, getJobChainOfCustody, refreshJobChainOfCustody, getJobFiles, startJob, retryFailedJob, pauseJob, verifyJob, downloadManifest, updateJob, completeJob, deleteJob, clearJobStartupAnalysisCache, confirmJobChainOfCustodyHandoff } from '@/api/jobs.js'
+import { analyzeJob, applyRecommendedStartupAnalysisProfile, archiveJob, continueJobOverflow, getJob, getJobChainOfCustody, refreshJobChainOfCustody, getJobFiles, startJob, retryFailedJob, pauseJob, verifyJob, downloadManifest, updateJob, completeJob, deleteJob, clearJobStartupAnalysisCache, confirmJobChainOfCustodyHandoff } from '@/api/jobs.js'
 import { getFileHashes, compareFiles } from '@/api/files.js'
 import { getDrives } from '@/api/drives.js'
 import { getShares } from '@/api/shares.js'
@@ -243,6 +243,32 @@ const canAnalyze = computed(() => {
     jobStatus: currentStatus.value,
     startupAnalysisStatus: currentStartupAnalysisStatus.value,
   })
+})
+const startupAnalysisRecommendedProfileKey = computed(() => String(job.value?.startup_analysis_recommended_workload_profile || '').trim())
+const startupAnalysisDistribution = computed(() => {
+  const value = job.value?.startup_analysis_size_distribution
+  if (!value || typeof value !== 'object') return null
+  return value
+})
+const startupAnalysisDistributionLabel = computed(() => {
+  const distribution = startupAnalysisDistribution.value
+  if (!distribution) return t('common.labels.notAvailable')
+  return t('jobs.analysisSizeDistributionValue', {
+    small: Number(distribution.small_files_percent || 0).toFixed(1),
+    medium: Number(distribution.medium_files_percent || 0).toFixed(1),
+    large: Number(distribution.large_files_percent || 0).toFixed(1),
+  })
+})
+const startupAnalysisRecommendedProfileLabel = computed(() => {
+  const key = startupAnalysisRecommendedProfileKey.value
+  if (!key) return t('common.labels.notAvailable')
+  return t(`jobs.workloadProfiles.${key}`)
+})
+const canApplyRecommendedProfile = computed(() => {
+  const status = currentStatus.value
+  if (!canOperate.value || !startupAnalysisRecommendedProfileKey.value) return false
+  if (currentStartupAnalysisStatus.value === 'ANALYZING') return false
+  return !['PREPARING', 'RUNNING', 'PAUSING', 'VERIFYING'].includes(status)
 })
 const showClearStartupAnalysisCache = computed(() => {
   return canManageStartupAnalysis.value && !!job.value?.startup_analysis_cached
@@ -554,6 +580,13 @@ const actionItems = computed(() => {
       disabled: !canAnalyze.value || acting.value,
       run: () => runAnalyze(),
       visible: true,
+    },
+    {
+      key: 'apply-recommended-profile',
+      label: t('jobs.applyRecommendedProfile'),
+      disabled: !canApplyRecommendedProfile.value || acting.value,
+      run: () => runApplyRecommendedProfile(),
+      visible: !!startupAnalysisRecommendedProfileKey.value,
     },
     {
       key: 'lifecycle-toggle',
@@ -1526,6 +1559,22 @@ async function runAnalyze() {
   }
 }
 
+async function runApplyRecommendedProfile() {
+  if (!job.value || !canApplyRecommendedProfile.value) return
+  acting.value = true
+  error.value = ''
+  infoMessage.value = ''
+  try {
+    job.value = normalizeProjectRecord(await applyRecommendedStartupAnalysisProfile(job.value.id), ['project_id'])
+    infoMessage.value = t('jobs.recommendedProfileApplied')
+    await refreshAll()
+  } catch (err) {
+    error.value = buildJobError(err)
+  } finally {
+    acting.value = false
+  }
+}
+
 async function confirmDelete() {
   if (!job.value || !canDelete.value) return
   acting.value = true
@@ -2087,6 +2136,14 @@ onUnmounted(() => {
                 <span>{{ t('jobs.analysisReadyToStart') }}</span>
                 <strong>{{ startupAnalysisSummary.readyToStart ? t('jobs.analysisReadyYes') : t('jobs.analysisReadyNo') }}</strong>
               </div>
+              <div class="detail-grid-item">
+                <span>{{ t('jobs.analysisRecommendedProfile') }}</span>
+                <strong>{{ startupAnalysisRecommendedProfileLabel }}</strong>
+              </div>
+              <div class="detail-grid-item detail-grid-item--wide">
+                <span>{{ t('jobs.analysisSizeDistribution') }}</span>
+                <strong>{{ startupAnalysisDistributionLabel }}</strong>
+              </div>
             </div>
             <p v-if="startupAnalysisSummary?.failureReason" class="error-text">{{ t('jobs.analysisFailureReason') }}: {{ startupAnalysisSummary.failureReason }}</p>
           </section>
@@ -2381,6 +2438,9 @@ onUnmounted(() => {
             :copy-progress-flush-hint="t('configuration.fields.copy_progress_flush_bytes.help')"
             :copy-file-fsync-label="t('configuration.fields.copy_file_fsync_enabled.label')"
             :copy-file-fsync-hint="t('configuration.fields.copy_file_fsync_enabled.help')"
+            :show-auto-apply-recommended-profile="false"
+            :auto-apply-recommended-profile-label="t('jobs.autoApplyRecommendedProfile')"
+            :auto-apply-recommended-profile-hint="t('jobs.autoApplyRecommendedProfileHint')"
             :job-details-group-label="t('jobs.jobDetailsGroup')"
             :source-group-label="t('jobs.sourceGroup')"
             :select-mount-label="t('jobs.selectMount')"

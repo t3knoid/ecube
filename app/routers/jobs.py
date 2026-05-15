@@ -28,6 +28,7 @@ from app.schemas.jobs import (
     JobOverflowDriveSchema,
     JobOverflowAssignmentSchema,
     JobOverflowContinueRequest,
+    JobStartupAnalysisSizeDistributionSchema,
     JobStart,
     JobStartupAnalysisClearRequest,
     JobUpdate,
@@ -192,6 +193,7 @@ def _redact_ip(job, user: CurrentUser, db: Session) -> ExportJobSchema:
     """
     schema = ExportJobSchema.model_validate(job)
     _apply_copy_tuning_snapshot(schema, job)
+    _apply_startup_analysis_recommendation(schema, job.id, db)
     if not _IP_VISIBLE_ROLES.intersection(user.roles):
         schema.client_ip = None
 
@@ -315,6 +317,18 @@ def _apply_copy_tuning_snapshot(schema: ExportJobSchema, job: object) -> None:
     schema.copy_progress_flush_source = tuning.copy_progress_flush_source
     schema.effective_copy_file_fsync_enabled = tuning.effective_copy_file_fsync_enabled
     schema.copy_file_fsync_source = tuning.copy_file_fsync_source
+
+
+def _apply_startup_analysis_recommendation(
+    schema: ExportJobSchema,
+    job_id: int,
+    db: Session,
+) -> None:
+    summary, recommendation = job_service.get_startup_analysis_workload_profile_summary(job_id, db)
+    schema.startup_analysis_recommended_workload_profile = recommendation
+    schema.startup_analysis_size_distribution = (
+        JobStartupAnalysisSizeDistributionSchema(**summary) if summary else None
+    )
 
 
 @router.get(
@@ -657,6 +671,27 @@ def analyze_job(
     """
     _ = body
     job = job_service.analyze_job(job_id, background_tasks, db, actor=current_user.username, client_ip=get_client_ip(request))
+    return _redact_ip(job, current_user, db)
+
+
+@router.post("/{job_id}/startup-analysis/apply-recommended-profile", response_model=ExportJobSchema, responses={**R_400, **R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
+def apply_recommended_startup_analysis_profile(
+    job_id: int,
+    *,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(_ADMIN_MANAGER_PROCESSOR),
+    request: Request,
+):
+    """Apply the startup-analysis recommended workload profile to this job.
+
+    **Roles:** ``admin``, ``manager``, ``processor``
+    """
+    job = job_service.apply_recommended_workload_profile(
+        job_id,
+        db=db,
+        actor=current_user.username,
+        client_ip=get_client_ip(request),
+    )
     return _redact_ip(job, current_user, db)
 
 

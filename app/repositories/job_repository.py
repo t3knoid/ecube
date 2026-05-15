@@ -802,6 +802,72 @@ class StartupAnalysisEntryRepository:
             self.db.rollback()
             raise
 
+    def summarize_file_size_distribution(
+        self,
+        job_id: int,
+        *,
+        small_file_max_bytes: int,
+        large_file_min_bytes: int,
+    ) -> Dict[str, int]:
+        row = (
+            self.db.query(
+                func.count(StartupAnalysisEntry.id),
+                func.coalesce(func.sum(StartupAnalysisEntry.size_bytes), 0),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                StartupAnalysisEntry.size_bytes <= int(small_file_max_bytes),
+                                1,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                and_(
+                                    StartupAnalysisEntry.size_bytes > int(small_file_max_bytes),
+                                    StartupAnalysisEntry.size_bytes < int(large_file_min_bytes),
+                                ),
+                                1,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                StartupAnalysisEntry.size_bytes >= int(large_file_min_bytes),
+                                1,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+            )
+            .filter(
+                StartupAnalysisEntry.job_id == job_id,
+                StartupAnalysisEntry.entry_type == "file",
+            )
+            .one()
+        )
+
+        return {
+            "total_files": int(row[0] or 0),
+            "total_bytes": int(row[1] or 0),
+            "small_files": int(row[2] or 0),
+            "medium_files": int(row[3] or 0),
+            "large_files": int(row[4] or 0),
+        }
+
 
 class DriveAssignmentRepository:
     """Data-access layer for :class:`~app.models.jobs.DriveAssignment`."""

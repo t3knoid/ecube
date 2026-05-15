@@ -61,6 +61,7 @@ class ExportJob(Base):
     copy_chunk_size_bytes = Column(Integer, nullable=True)
     copy_progress_flush_bytes = Column(BigInteger, nullable=True)
     copy_file_fsync_enabled = Column(Boolean, nullable=True)
+    startup_analysis_auto_apply_recommended_profile = Column(Boolean, nullable=False, default=False, server_default="0")
     max_file_retries = Column(Integer, default=3)
     retry_delay_seconds = Column(Integer, default=1)
     active_duration_seconds = Column(Integer, default=0, nullable=False)

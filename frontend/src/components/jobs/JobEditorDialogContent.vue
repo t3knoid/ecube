@@ -75,6 +75,10 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  showAutoApplyRecommendedProfile: {
+    type: Boolean,
+    default: false,
+  },
   showSourceGroup: {
     type: Boolean,
     default: true,
@@ -313,6 +317,14 @@ const props = defineProps({
     required: true,
   },
   runImmediatelyLabel: {
+    type: String,
+    required: true,
+  },
+  autoApplyRecommendedProfileLabel: {
+    type: String,
+    required: true,
+  },
+  autoApplyRecommendedProfileHint: {
     type: String,
     required: true,
   },
@@ -599,6 +611,15 @@ watch(
               <input id="job-run-immediately" v-model="form.run_immediately" type="checkbox" :disabled="!projectSelected" />
               <span>{{ runImmediatelyLabel }}</span>
             </label>
+          </div>
+
+          <div v-if="showAutoApplyRecommendedProfile" class="workflow-execution-group">
+            <p class="overflow-panel-title">{{ copyAndJobWorkflowTabLabel }}</p>
+            <label class="checkbox-row" for="job-startup-analysis-auto-apply-recommended-profile">
+              <input id="job-startup-analysis-auto-apply-recommended-profile" v-model="form.startup_analysis_auto_apply_recommended_profile" type="checkbox" :disabled="!projectSelected" />
+              <span>{{ autoApplyRecommendedProfileLabel }}</span>
+            </label>
+            <p class="muted field-hint">{{ autoApplyRecommendedProfileHint }}</p>
           </div>
         </fieldset>
       </div>

@@ -174,6 +174,13 @@ def _export_jobs_has_startup_analysis_cache_present(inspector: sa.Inspector) -> 
     return any(column.get("name") == "startup_analysis_cache_present" for column in inspector.get_columns("export_jobs"))
 
 
+def _export_jobs_has_startup_analysis_auto_apply_recommended_profile(inspector: sa.Inspector) -> bool:
+    return any(
+        column.get("name") == "startup_analysis_auto_apply_recommended_profile"
+        for column in inspector.get_columns("export_jobs")
+    )
+
+
 def _export_jobs_has_startup_analysis_revision(inspector: sa.Inspector) -> bool:
     return any(column.get("name") == "startup_analysis_revision" for column in inspector.get_columns("export_jobs"))
 
@@ -484,6 +491,9 @@ def _upgrade_startup_analysis_schema(inspector: sa.Inspector) -> None:
     if not _export_jobs_has_startup_analysis_cache_present(inspector):
         with op.batch_alter_table("export_jobs") as batch_op:
             batch_op.add_column(sa.Column("startup_analysis_cache_present", sa.Boolean(), nullable=False, server_default="0"))
+    if not _export_jobs_has_startup_analysis_auto_apply_recommended_profile(inspector):
+        with op.batch_alter_table("export_jobs") as batch_op:
+            batch_op.add_column(sa.Column("startup_analysis_auto_apply_recommended_profile", sa.Boolean(), nullable=False, server_default="0"))
     if not _export_jobs_has_startup_analysis_revision(inspector):
         with op.batch_alter_table("export_jobs") as batch_op:
             batch_op.add_column(sa.Column("startup_analysis_revision", sa.Integer(), nullable=False, server_default="0"))
@@ -669,6 +679,7 @@ def upgrade() -> None:
         sa.Column("copy_progress_flush_bytes", sa.BigInteger(), nullable=True),
         sa.Column("copy_file_fsync_enabled", sa.Boolean(), nullable=True),
         sa.Column("max_file_retries", sa.Integer(), nullable=True, server_default="3"),
+        sa.Column("startup_analysis_auto_apply_recommended_profile", sa.Boolean(), nullable=False, server_default="0"),
         sa.Column("retry_delay_seconds", sa.Integer(), nullable=True, server_default="1"),
         sa.Column("active_duration_seconds", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),

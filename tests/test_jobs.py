@@ -9,7 +9,7 @@ from app.config import settings
 from app.routers import jobs as jobs_router
 from app.models.audit import AuditLog
 from app.models.hardware import UsbDrive, DriveState, UsbHub, UsbPort
-from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobChainOfCustodySnapshot, JobStatus, Manifest, StartupAnalysisStatus
+from app.models.jobs import DriveAssignment, ExportFile, ExportJob, FileStatus, JobChainOfCustodySnapshot, JobStatus, Manifest, StartupAnalysisEntry, StartupAnalysisStatus
 from app.models.network import MountStatus, MountType, NetworkShare
 from app.services import audit_service
 from app.services.reconciliation_service import reconcile_jobs
@@ -55,6 +55,7 @@ def test_create_job(client, db):
             "evidence_number": "EV-001",
             "source_path": "/data/evidence",
             "thread_count": 4,
+            "startup_analysis_auto_apply_recommended_profile": True,
             "created_by": "investigator",
         },
     )
@@ -63,6 +64,11 @@ def test_create_job(client, db):
     assert data["project_id"] == "PROJ-001"
     assert data["status"] == "PENDING"
     assert data["target_mount_path"] == "/mnt/ecube/create-001"
+    assert data["startup_analysis_auto_apply_recommended_profile"] is True
+
+    created_job = db.query(ExportJob).order_by(ExportJob.id.desc()).first()
+    assert created_job is not None
+    assert created_job.startup_analysis_auto_apply_recommended_profile is True
 
 
 def test_create_job_reserves_overflow_drives(client, db):
@@ -2565,6 +2571,82 @@ def test_analyze_job_allowed_after_startup_reconciliation_clears_stale_analysis(
     assert response.status_code == 200
     assert response.json()["startup_analysis_status"] == "ANALYZING"
     mock_analyze.assert_called_once_with(job.id, actor="test-user", client_ip="unknown")
+
+
+def test_get_job_includes_startup_analysis_distribution_and_profile_recommendation(client, db):
+    job = ExportJob(
+        project_id="PROJ-ANALYZE-SUMMARY-001",
+        evidence_number="EV-ANALYZE-SUMMARY-001",
+        source_path="/data/evidence",
+        status=JobStatus.PENDING,
+        startup_analysis_status=StartupAnalysisStatus.READY,
+        startup_analysis_cache_present=True,
+    )
+    db.add(job)
+    db.flush()
+    entries = [
+        StartupAnalysisEntry(job_id=job.id, entry_type="file", relative_path=f"small/{index}.txt", size_bytes=4 * 1024)
+        for index in range(6)
+    ]
+    entries.extend(
+        [
+            StartupAnalysisEntry(job_id=job.id, entry_type="file", relative_path=f"medium/{index}.txt", size_bytes=512 * 1024)
+            for index in range(3)
+        ]
+    )
+    entries.append(
+        StartupAnalysisEntry(job_id=job.id, entry_type="file", relative_path="large/a.bin", size_bytes=32 * 1024 * 1024)
+    )
+    db.add_all(entries)
+    db.commit()
+
+    response = client.get(f"/jobs/{job.id}")
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["startup_analysis_recommended_workload_profile"] == "small_files"
+    distribution = payload["startup_analysis_size_distribution"]
+    assert distribution is not None
+    assert distribution["total_files"] == 10
+    assert distribution["small_files"] == 6
+    assert distribution["medium_files"] == 3
+    assert distribution["large_files"] == 1
+    assert distribution["small_files_percent"] == 60.0
+
+
+def test_apply_recommended_startup_analysis_profile_updates_job_tuning(client, db):
+    job = ExportJob(
+        project_id="PROJ-ANALYZE-APPLY-001",
+        evidence_number="EV-ANALYZE-APPLY-001",
+        source_path="/data/evidence",
+        status=JobStatus.PENDING,
+        startup_analysis_status=StartupAnalysisStatus.READY,
+        startup_analysis_cache_present=True,
+    )
+    db.add(job)
+    db.flush()
+    db.add_all(
+        [
+            StartupAnalysisEntry(job_id=job.id, entry_type="file", relative_path=f"large/{index}.bin", size_bytes=32 * 1024 * 1024)
+            for index in range(3)
+        ]
+    )
+    db.commit()
+
+    response = client.post(f"/jobs/{job.id}/startup-analysis/apply-recommended-profile")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["startup_analysis_recommended_workload_profile"] == "large_files"
+    assert payload["thread_count"] == 6
+    assert payload["copy_chunk_size_bytes"] == 8_388_608
+    assert payload["copy_progress_flush_bytes"] == 134_217_728
+    assert payload["copy_file_fsync_enabled"] is False
+
+    db.refresh(job)
+    assert job.thread_count == 6
+    assert job.copy_chunk_size_bytes == 8_388_608
+    assert job.copy_progress_flush_bytes == 134_217_728
+    assert job.copy_file_fsync_enabled is False
 
 
 def test_analyze_job_auditor_forbidden(auditor_client, db):

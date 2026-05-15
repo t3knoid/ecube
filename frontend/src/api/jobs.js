@@ -126,6 +126,11 @@ export function clearJobStartupAnalysisCache(jobId, payload = { confirm: true })
   return toData(apiClient.post(`${API_BASE}/jobs/${id}/startup-analysis/clear`, payload))
 }
 
+export function applyRecommendedStartupAnalysisProfile(jobId) {
+  const id = normalizeJobId(jobId)
+  return toData(apiClient.post(`${API_BASE}/jobs/${id}/startup-analysis/apply-recommended-profile`))
+}
+
 export function getJob(jobId) {
   const id = normalizeJobId(jobId)
   return toData(apiClient.get(`${API_BASE}/jobs/${id}`))

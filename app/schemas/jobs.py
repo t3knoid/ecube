@@ -61,6 +61,7 @@ class JobCreate(StrictIntMixin, BaseModel):
     copy_chunk_size_bytes: Optional[StrictInt] = Field(default=None, ge=262_144, le=67_108_864, description="Optional per-job copy chunk size override in bytes")
     copy_progress_flush_bytes: Optional[StrictInt] = Field(default=None, ge=1_048_576, le=1_073_741_824, description="Optional per-job progress flush threshold override in bytes")
     copy_file_fsync_enabled: Optional[bool] = Field(default=None, description="Optional per-job per-file fsync override")
+    startup_analysis_auto_apply_recommended_profile: Optional[bool] = Field(default=False, description="Whether startup analysis should auto-apply the recommended workload profile for this job")
     max_file_retries: StrictInt = Field(default=3, ge=0, le=100, description="Maximum number of retries for failed files (0-100)")
     retry_delay_seconds: StrictInt = Field(default=1, ge=0, le=3600, description="Delay between retries in seconds (0-3600)")
     notes: Optional[SafeStr] = Field(default=None, description="Optional processor notes supplied during job creation")
@@ -310,6 +311,18 @@ class JobOverflowAssignmentSchema(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class JobStartupAnalysisSizeDistributionSchema(BaseModel):
+    small_files: int = Field(default=0, ge=0, description="Count of discovered files with size <= 64 KiB")
+    medium_files: int = Field(default=0, ge=0, description="Count of discovered files with size > 64 KiB and < 8 MiB")
+    large_files: int = Field(default=0, ge=0, description="Count of discovered files with size >= 8 MiB")
+    small_files_percent: float = Field(default=0.0, ge=0.0, le=100.0, description="Percentage of discovered files in the small bucket")
+    medium_files_percent: float = Field(default=0.0, ge=0.0, le=100.0, description="Percentage of discovered files in the medium bucket")
+    large_files_percent: float = Field(default=0.0, ge=0.0, le=100.0, description="Percentage of discovered files in the large bucket")
+    average_file_size_bytes: int = Field(default=0, ge=0, description="Average discovered file size in bytes")
+    total_files: int = Field(default=0, ge=0, description="Total number of discovered files used to compute this summary")
+    total_bytes: int = Field(default=0, ge=0, description="Total discovered bytes used to compute this summary")
+
+
 class ExportJobSchema(BaseModel):
     id: int = Field(..., description="Unique identifier for the job")
     project_id: str = Field(..., description="Project ID for audit and isolation")
@@ -336,6 +349,7 @@ class ExportJobSchema(BaseModel):
     copy_file_fsync_enabled: Optional[bool] = Field(default=None, description="Stored per-job per-file fsync override (null when the job uses the configuration default)")
     effective_copy_file_fsync_enabled: Optional[bool] = Field(default=None, description="Resolved per-file fsync behavior used at runtime")
     copy_file_fsync_source: Optional[str] = Field(default=None, description="Whether the effective per-file fsync behavior came from the job override or the global configuration default")
+    startup_analysis_auto_apply_recommended_profile: bool = Field(default=False, description="Whether this job will auto-apply its startup-analysis recommendation when one is available")
     max_file_retries: int = Field(default=3, ge=0, description="Maximum number of retries for failed files (0+)")
     retry_delay_seconds: int = Field(default=1, ge=0, description="Delay between retries in seconds (0+)")
     active_duration_seconds: int = Field(default=0, ge=0, description="Total active copy duration across all run/resume cycles in seconds")
@@ -362,6 +376,8 @@ class ExportJobSchema(BaseModel):
     startup_analysis_estimated_duration_seconds: Optional[int] = Field(default=None, description="Estimated copy duration in seconds based on startup-analysis throughput measurements")
     startup_analysis_cached: bool = Field(default=False, description="Whether a persisted startup-analysis cache is available for restart reuse")
     startup_analysis_ready: bool = Field(default=False, description="Whether a persisted startup-analysis result is ready for Start to reuse")
+    startup_analysis_size_distribution: Optional[JobStartupAnalysisSizeDistributionSchema] = Field(default=None, description="Derived file-size distribution summary from persisted startup-analysis entries")
+    startup_analysis_recommended_workload_profile: Optional[str] = Field(default=None, description="Deterministic startup-analysis recommendation (small_files, mixed, large_files, or greedy)")
     client_ip: Optional[str] = Field(default=None, description="IP address of the client that created the job (null for background tasks or when redacted; 'unknown' when the client address could not be resolved)")
     overflow_assignments: list[JobOverflowAssignmentSchema] = Field(default_factory=list, description="Overflow drive assignments for this job, excluding the primary destination assignment")
 

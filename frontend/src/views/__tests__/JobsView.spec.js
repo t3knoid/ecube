@@ -463,6 +463,8 @@ describe('JobsView grouped create dialog', () => {
     const workflowTab = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.workflowTab'))
     await workflowTab.trigger('click')
     await flushPromises()
+    expect(wrapper.find('#job-startup-analysis-auto-apply-recommended-profile').exists()).toBe(true)
+    await wrapper.find('#job-startup-analysis-auto-apply-recommended-profile').setValue(true)
     await wrapper.findAll('.overflow-drive-option input')[0].setValue(true)
     await wrapper.find('#job-thread-count').setValue('3')
     await wrapper.find('#job-run-immediately').setValue(true)
@@ -481,6 +483,7 @@ describe('JobsView grouped create dialog', () => {
       copy_chunk_size_bytes: 4_194_304,
       copy_progress_flush_bytes: 67_108_864,
       copy_file_fsync_enabled: false,
+      startup_analysis_auto_apply_recommended_profile: true,
       notes: 'Operator note',
       callback_url: 'https://example.com/ecube/webhook',
     })

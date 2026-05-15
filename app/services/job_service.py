@@ -21,12 +21,20 @@ from app.repositories.job_repository import (
     FileRepository,
     JobRepository,
     ManifestRepository,
+    StartupAnalysisEntryRepository,
 )
 from app.repositories.share_repository import ShareRepository
 from app.schemas.jobs import JobCreate, JobOverflowContinueRequest, JobStart, JobUpdate
 from app.services import copy_engine
 from app.services.callback_service import deliver_callback
 from app.services.copy_tuning import resolve_job_copy_tuning
+from app.services.workload_profiles import (
+    LARGE_FILE_MIN_BYTES,
+    SMALL_FILE_MAX_BYTES,
+    apply_workload_profile,
+    build_size_distribution_summary,
+    recommend_workload_profile,
+)
 from app.utils.sanitize import is_encoding_error, resolve_source_path, sanitize_error_message, validate_source_path
 from app.utils.path_overlap import classify_source_path_overlap
 
@@ -78,6 +86,35 @@ _STARTED_JOB_EDITABLE_STATUSES = (
 def _row(instance: object) -> Any:
     """Expose SQLAlchemy model instances using their runtime attribute types."""
     return cast(Any, instance)
+
+
+def get_startup_analysis_workload_profile_summary(
+    job_id: int,
+    db: Session,
+) -> tuple[Optional[dict[str, int | float]], Optional[str]]:
+    summary_counts = StartupAnalysisEntryRepository(db).summarize_file_size_distribution(
+        job_id,
+        small_file_max_bytes=SMALL_FILE_MAX_BYTES,
+        large_file_min_bytes=LARGE_FILE_MIN_BYTES,
+    )
+    summary = build_size_distribution_summary(**summary_counts)
+    recommendation = recommend_workload_profile(summary)
+    if recommendation is None:
+        return None, None
+    return summary, recommendation
+
+
+def _job_has_manual_copy_tuning_overrides(job: ExportJob) -> bool:
+    job_row = _row(job)
+    return any(
+        value is not None
+        for value in (
+            cast(Optional[int], job_row.thread_count),
+            cast(Optional[int], job_row.copy_chunk_size_bytes),
+            cast(Optional[int], job_row.copy_progress_flush_bytes),
+            cast(Optional[bool], job_row.copy_file_fsync_enabled),
+        )
+    )
 
 
 def _emit_job_lifecycle_callback(
@@ -756,6 +793,7 @@ def create_job(
         copy_chunk_size_bytes=_optional_int(body.copy_chunk_size_bytes),
         copy_progress_flush_bytes=_optional_int(body.copy_progress_flush_bytes),
         copy_file_fsync_enabled=_optional_bool(body.copy_file_fsync_enabled),
+        startup_analysis_auto_apply_recommended_profile=bool(body.startup_analysis_auto_apply_recommended_profile),
         max_file_retries=body.max_file_retries,
         retry_delay_seconds=body.retry_delay_seconds,
         created_by=actor,
@@ -979,6 +1017,7 @@ def create_job(
             audit_details["copy_progress_flush_bytes"] = tuning.effective_copy_progress_flush_bytes
         if body.copy_file_fsync_enabled is not None:
             audit_details["copy_file_fsync_enabled"] = tuning.effective_copy_file_fsync_enabled
+        audit_details["startup_analysis_auto_apply_recommended_profile"] = bool(body.startup_analysis_auto_apply_recommended_profile)
         if body.notes:
             audit_details["processor_notes"] = body.notes
         if body.overflow_drive_ids:
@@ -2029,6 +2068,85 @@ def clear_job_startup_analysis_cache(
                 reason="Audit log write failed after startup analysis cache clear",
                 exc=exc,
             )
+
+    db.refresh(job)
+    return job
+
+
+def apply_recommended_workload_profile(
+    job_id: int,
+    *,
+    db: Session,
+    actor: Optional[str] = None,
+    client_ip: Optional[str] = None,
+) -> ExportJob:
+    job_repo = JobRepository(db)
+    audit_repo = AuditRepository(db)
+
+    job = job_repo.get_for_update(job_id)
+    if not job:
+        raise service_exception(status_code=404, detail="Job not found")
+
+    job_row = _row(job)
+    _reject_when_startup_analysis_running(job, action="apply the recommended workload profile")
+    status = cast(JobStatus, job_row.status)
+    if status in (JobStatus.PREPARING, JobStatus.RUNNING, JobStatus.PAUSING, JobStatus.VERIFYING):
+        raise service_exception(
+            status_code=409,
+            detail="Workload profile cannot be updated while copy work is active",
+        )
+
+    summary, recommendation = get_startup_analysis_workload_profile_summary(job_id, db)
+    if not recommendation or not summary:
+        raise service_exception(
+            status_code=409,
+            detail="Startup analysis recommendation is not available for this job",
+        )
+
+    had_manual_overrides = _job_has_manual_copy_tuning_overrides(job)
+    changed = apply_workload_profile(job_row, recommendation)
+    if changed:
+        try:
+            job_repo.save(job)
+        except Exception as exc:
+            _log_startup_analysis_service_failure(
+                "DB commit failed while applying recommended workload profile",
+                job_id=job_id,
+                reason=sanitize_error_message(exc, "Database error while applying recommended workload profile"),
+                exc=exc,
+            )
+            raise service_exception(
+                status_code=500,
+                detail="Database error while applying recommended workload profile",
+            )
+
+    assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
+    assignment_row = _row(assignment) if assignment is not None else None
+    active_drive_id = cast(Optional[int], assignment_row.drive_id) if assignment_row is not None else None
+
+    try:
+        audit_repo.add(
+            action="JOB_WORKLOAD_PROFILE_APPLIED",
+            user=actor,
+            project_id=cast(Optional[str], job_row.project_id),
+            drive_id=active_drive_id,
+            job_id=job_id,
+            details={
+                "profile": recommendation,
+                "applied": bool(changed),
+                "had_manual_overrides": had_manual_overrides,
+                "reason": "manual_apply_recommendation",
+                "small_files": int(summary["small_files"]),
+                "medium_files": int(summary["medium_files"]),
+                "large_files": int(summary["large_files"]),
+                "small_files_percent": float(summary["small_files_percent"]),
+                "medium_files_percent": float(summary["medium_files_percent"]),
+                "large_files_percent": float(summary["large_files_percent"]),
+            },
+            client_ip=client_ip,
+        )
+    except Exception:
+        logger.exception("Failed to write audit log for JOB_WORKLOAD_PROFILE_APPLIED")
 
     db.refresh(job)
     return job

@@ -5,6 +5,7 @@ import JobDetailView from '@/views/JobDetailView.vue'
 
 const mocks = vi.hoisted(() => ({
   analyzeJob: vi.fn(),
+  applyRecommendedStartupAnalysisProfile: vi.fn(),
   archiveJob: vi.fn(),
   continueJobOverflow: vi.fn(),
   getJob: vi.fn(),
@@ -85,6 +86,7 @@ vi.mock('@/stores/copyTuningDefaults.js', () => ({
 
 vi.mock('@/api/jobs.js', () => ({
   analyzeJob: (...args) => mocks.analyzeJob(...args),
+  applyRecommendedStartupAnalysisProfile: (...args) => mocks.applyRecommendedStartupAnalysisProfile(...args),
   archiveJob: (...args) => mocks.archiveJob(...args),
   continueJobOverflow: (...args) => mocks.continueJobOverflow(...args),
   getJob: (...args) => mocks.getJob(...args),
@@ -208,6 +210,7 @@ describe('JobDetailView start action', () => {
     mocks.getJobChainOfCustody.mockReset()
     mocks.refreshJobChainOfCustody.mockReset()
     mocks.analyzeJob.mockReset()
+    mocks.applyRecommendedStartupAnalysisProfile.mockReset()
     mocks.archiveJob.mockReset()
     mocks.continueJobOverflow.mockReset()
     mocks.getJobFiles.mockReset()
@@ -265,6 +268,32 @@ describe('JobDetailView start action', () => {
       target_mount_path: '/mnt/ecube/1',
       drive: { id: 1, available_bytes: 2048 },
     })
+    mocks.applyRecommendedStartupAnalysisProfile.mockResolvedValue({
+      id: 6,
+      status: 'PENDING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      thread_count: 6,
+      copied_bytes: 0,
+      total_bytes: 0,
+      startup_analysis_status: 'READY',
+      startup_analysis_ready: true,
+      startup_analysis_recommended_workload_profile: 'large_files',
+      startup_analysis_size_distribution: {
+        total_files: 3,
+        small_files: 0,
+        medium_files: 0,
+        large_files: 3,
+        small_files_percent: 0.0,
+        medium_files_percent: 0.0,
+        large_files_percent: 100.0,
+        average_file_size_bytes: 33554432,
+        total_bytes: 100663296,
+      },
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      drive: { id: 1, available_bytes: 2048 },
+    })
     mocks.getJobFiles.mockResolvedValue({ files: [], total_files: 0, returned_files: 0, page: 1, page_size: 40 })
     mocks.getDrives.mockResolvedValue([
       { id: 1, device_identifier: 'USB-001', port_system_path: '2-1', current_project_id: 'PROJ-001', current_state: 'AVAILABLE', mount_path: '/mnt/ecube/1' },
@@ -318,6 +347,47 @@ describe('JobDetailView start action', () => {
     expect(mocks.startJob).toHaveBeenCalledWith(6, { thread_count: 4 })
     expect(wrapper.text()).toContain('body: Field required')
     expect(wrapper.text()).not.toContain(i18n.global.t('common.errors.requestConflict'))
+  })
+
+  it('applies the startup-analysis recommended profile when action is clicked', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'PENDING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      thread_count: 4,
+      copied_bytes: 0,
+      total_bytes: 0,
+      startup_analysis_status: 'READY',
+      startup_analysis_ready: true,
+      startup_analysis_recommended_workload_profile: 'large_files',
+      startup_analysis_size_distribution: {
+        total_files: 3,
+        small_files: 0,
+        medium_files: 0,
+        large_files: 3,
+        small_files_percent: 0.0,
+        medium_files_percent: 0.0,
+        large_files_percent: 100.0,
+        average_file_size_bytes: 33554432,
+        total_bytes: 100663296,
+      },
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      drive: { id: 1, available_bytes: 2048 },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const applyButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.applyRecommendedProfile'))
+    expect(applyButton).toBeTruthy()
+
+    await applyButton.trigger('click')
+    await flushPromises()
+
+    expect(mocks.applyRecommendedStartupAnalysisProfile).toHaveBeenCalledWith(6)
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.recommendedProfileApplied'))
   })
 
   it('shows the drive-capacity shortfall guidance returned by start', async () => {

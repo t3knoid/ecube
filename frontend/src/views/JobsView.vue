@@ -62,6 +62,7 @@ const form = ref({
   mount_id: null,
   source_path: '/',
   ...copyTuningDefaults.currentDefaults(),
+  startup_analysis_auto_apply_recommended_profile: false,
   notes: '',
   callback_url: '',
   run_immediately: false,
@@ -269,6 +270,7 @@ function resetForm() {
     copy_chunk_size_bytes: tuning.copy_chunk_size_bytes,
     copy_progress_flush_bytes: tuning.copy_progress_flush_bytes,
     copy_file_fsync_enabled: tuning.copy_file_fsync_enabled,
+    startup_analysis_auto_apply_recommended_profile: false,
     notes: '',
     callback_url: '',
     run_immediately: false,
@@ -601,7 +603,15 @@ async function submitCreateJob() {
       drive_id: Number(form.value.drive_id),
       overflow_drive_ids: selectedOverflowDriveIds.value,
       notes: form.value.notes.trim() || undefined,
-      callback_url: form.value.callback_url.trim() || undefined,
+    }
+
+    const callbackUrl = form.value.callback_url.trim()
+    if (callbackUrl) {
+      payload.callback_url = callbackUrl
+    }
+
+    if (form.value.startup_analysis_auto_apply_recommended_profile) {
+      payload.startup_analysis_auto_apply_recommended_profile = true
     }
 
     if (form.value.thread_count != null && form.value.thread_count !== '') {
@@ -920,6 +930,9 @@ onBeforeUnmount(() => {
             :copy-progress-flush-hint="t('configuration.fields.copy_progress_flush_bytes.help')"
             :copy-file-fsync-label="t('configuration.fields.copy_file_fsync_enabled.label')"
             :copy-file-fsync-hint="t('configuration.fields.copy_file_fsync_enabled.help')"
+            :show-auto-apply-recommended-profile="true"
+            :auto-apply-recommended-profile-label="t('jobs.autoApplyRecommendedProfile')"
+            :auto-apply-recommended-profile-hint="t('jobs.autoApplyRecommendedProfileHint')"
             :job-details-group-label="t('jobs.jobDetailsGroup')"
             :source-group-label="t('jobs.sourceGroup')"
             :select-mount-label="t('jobs.selectMount')"

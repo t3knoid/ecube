@@ -30,6 +30,13 @@ from app.services.copy_worker_runtime import (
     register_active_copy_worker,
     unregister_active_copy_worker,
 )
+from app.services.workload_profiles import (
+    LARGE_FILE_MIN_BYTES,
+    SMALL_FILE_MAX_BYTES,
+    apply_workload_profile,
+    build_size_distribution_summary,
+    recommend_workload_profile,
+)
 from app.utils.sanitize import describe_relative_paths, sanitize_error_message, validate_source_path
 
 logger = logging.getLogger(__name__)
@@ -724,6 +731,18 @@ def _clear_startup_analysis_cache(job: Any) -> None:
 def _clear_startup_analysis_entries(job: Any) -> None:
     job.startup_analysis_cache_present = False
     job.startup_analysis_entries = None
+
+
+def _job_has_manual_copy_tuning_overrides(job: Any) -> bool:
+    return any(
+        value is not None
+        for value in (
+            getattr(job, "thread_count", None),
+            getattr(job, "copy_chunk_size_bytes", None),
+            getattr(job, "copy_progress_flush_bytes", None),
+            getattr(job, "copy_file_fsync_enabled", None),
+        )
+    )
 
 
 def _startup_analysis_cache_details(job: Any) -> dict[str, int]:
@@ -1696,6 +1715,41 @@ def prepare_job_startup_analysis(
             db.rollback()
             raise
 
+        distribution_counts = startup_entry_repo.summarize_file_size_distribution(
+            job_id,
+            small_file_max_bytes=SMALL_FILE_MAX_BYTES,
+            large_file_min_bytes=LARGE_FILE_MIN_BYTES,
+        )
+        size_distribution = build_size_distribution_summary(**distribution_counts)
+        recommended_profile = recommend_workload_profile(size_distribution)
+        auto_profile_applied = False
+        if getattr(job, "startup_analysis_auto_apply_recommended_profile", False) and recommended_profile and not _job_has_manual_copy_tuning_overrides(job):
+            auto_profile_applied = apply_workload_profile(job, recommended_profile)
+            if auto_profile_applied:
+                assignment = DriveAssignmentRepository(db).get_active_for_job(job_id)
+                active_drive_id = getattr(assignment, "drive_id", None)
+                try:
+                    audit_repo.add(
+                        action="JOB_WORKLOAD_PROFILE_AUTO_APPLIED",
+                        user=actor,
+                        project_id=job.project_id,
+                        drive_id=active_drive_id,
+                        job_id=job_id,
+                        details={
+                            "profile": recommended_profile,
+                            "reason": "startup_analysis_auto_apply",
+                            "small_files": int(size_distribution["small_files"]),
+                            "medium_files": int(size_distribution["medium_files"]),
+                            "large_files": int(size_distribution["large_files"]),
+                            "small_files_percent": float(size_distribution["small_files_percent"]),
+                            "medium_files_percent": float(size_distribution["medium_files_percent"]),
+                            "large_files_percent": float(size_distribution["large_files_percent"]),
+                        },
+                        client_ip=client_ip,
+                    )
+                except Exception:
+                    logger.exception("Failed to write audit log for JOB_WORKLOAD_PROFILE_AUTO_APPLIED")
+
         job.file_count = cached_file_count
         job.total_bytes = cached_total_bytes
         done_file_count, done_bytes = file_repo.summarize_done_progress(job_id)
@@ -1728,6 +1782,8 @@ def prepare_job_startup_analysis(
             "share_read_mbps": benchmark_details["share_read_mbps"],
             "drive_write_mbps": benchmark_details["drive_write_mbps"],
             "estimated_duration_seconds": benchmark_details["estimated_duration_seconds"],
+            "recommended_profile": recommended_profile,
+            "auto_profile_applied": auto_profile_applied,
         }
         if manual:
             logger.info(
@@ -1769,6 +1825,8 @@ def prepare_job_startup_analysis(
             "file_count": cached_file_count,
             "total_bytes": cached_total_bytes,
             "reused_cached_analysis": reused_cached_analysis,
+            "recommended_profile": recommended_profile,
+            "auto_profile_applied": auto_profile_applied,
         }
     except Exception as exc:
         db.rollback()
