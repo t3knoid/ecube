@@ -3374,6 +3374,107 @@ def test_run_copy_job_logs_effective_runtime_parameters_at_debug(db, tmp_path, c
     assert record.pending_batch_multiplier == copy_engine.COPY_PENDING_BATCH_MULTIPLIER
 
 
+def test_run_copy_job_applies_runtime_tuning_updates_at_batch_boundaries(db, tmp_path, caplog):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    for index in range(5):
+        (source_dir / f"file-{index}.bin").write_bytes((b"data-" + str(index).encode("ascii")) * 256)
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    job.thread_count = 1
+    job.copy_chunk_size_bytes = 1024
+    job.copy_progress_flush_bytes = 1024
+    job.copy_file_fsync_enabled = False
+    db.commit()
+    db.refresh(job)
+
+    batch_index = 0
+    retune_enabled = False
+
+    def _as_completed_with_runtime_update(futures):
+        nonlocal batch_index, retune_enabled
+        batch_index += 1
+        if batch_index == 1:
+            retune_enabled = True
+        for future in list(futures):
+            yield future
+
+    observed_copy_settings: list[tuple[int, bool]] = []
+    original_copy_file = copy_engine.copy_file
+    original_list_pending = copy_engine.FileRepository.list_pending_by_job_after_id
+    original_read_tuning_snapshot = copy_engine._read_copy_job_runtime_tuning_snapshot
+
+    def _one_file_batch(self, job_id, after_id=None, limit=None):
+        pending = original_list_pending(self, job_id, after_id=after_id, limit=1)
+        return pending[:1]
+
+    def _runtime_tuning_snapshot(db_session, snapshot_job_id):
+        snapshot = original_read_tuning_snapshot(db_session, snapshot_job_id)
+        if snapshot is None:
+            return None
+        if retune_enabled:
+            snapshot["max_workers"] = 2
+            snapshot["thread_count_source"] = "job"
+            snapshot["copy_chunk_size_bytes"] = 2048
+            snapshot["copy_chunk_size_source"] = "job"
+            snapshot["copy_progress_flush_threshold_bytes"] = 4096
+            snapshot["copy_progress_flush_source"] = "job"
+            snapshot["copy_file_fsync_enabled"] = True
+            snapshot["copy_file_fsync_source"] = "job"
+        return snapshot
+
+    def _recording_copy_file(
+        src,
+        dst,
+        checksum_algorithm="sha256",
+        progress_callback=None,
+        timeout_seconds=0,
+        chunk_size=None,
+        fsync_enabled=None,
+    ):
+        observed_copy_settings.append((int(chunk_size or 0), bool(fsync_enabled)))
+        return original_copy_file(
+            src,
+            dst,
+            checksum_algorithm=checksum_algorithm,
+            progress_callback=progress_callback,
+            timeout_seconds=timeout_seconds,
+            chunk_size=chunk_size,
+            fsync_enabled=fsync_enabled,
+        )
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine.as_completed", side_effect=_as_completed_with_runtime_update):
+            with patch("app.services.copy_engine.copy_file", side_effect=_recording_copy_file):
+                with patch.object(copy_engine.FileRepository, "list_pending_by_job_after_id", _one_file_batch):
+                    with patch("app.services.copy_engine._read_copy_job_runtime_tuning_snapshot", side_effect=_runtime_tuning_snapshot):
+                        with caplog.at_level("DEBUG"):
+                            copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+    assert job.status == JobStatus.COMPLETED
+    assert (1024, False) in observed_copy_settings
+    assert (2048, True) in observed_copy_settings
+
+    parameter_records = [record for record in caplog.records if record.getMessage() == "Copy job runtime parameters" and record.job_id == job.id]
+    assert parameter_records
+    observed_thread_counts = {record.thread_count for record in parameter_records}
+    observed_chunk_sizes = {record.copy_chunk_size_bytes for record in parameter_records}
+    observed_flush_thresholds = {record.copy_progress_flush_threshold_bytes for record in parameter_records}
+    observed_fsync_values = {record.copy_file_fsync_enabled for record in parameter_records}
+    assert observed_thread_counts == {1, 2}
+    assert observed_chunk_sizes == {1024, 2048}
+    assert observed_flush_thresholds == {1024, 4096}
+    assert observed_fsync_values == {False, True}
+
+    update_records = [record for record in caplog.records if record.getMessage() == "Applied runtime copy tuning update" and record.job_id == job.id]
+    assert update_records
+
+
 def test_run_copy_job_emits_job_completed_audit_for_partial_success(db, tmp_path):
     """A job with file errors still emits JOB_COMPLETED with error counts."""
     source_dir = tmp_path / "source"

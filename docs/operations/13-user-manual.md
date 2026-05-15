@@ -705,6 +705,7 @@ Use them when appropriate:
 
 When the edit dialog contains more content than fits on screen, ECUBE keeps the header and footer pinned and scrolls only the dialog body so the title, required-field legend, and save/cancel actions stay visible.
 - After a job has started, ECUBE keeps the existing evidence number, project, source path, mount, primary destination drive, notes, and callback URL fixed. The restricted edit dialog leaves those fields read-only or hidden and saves only the allowed runtime-tuning values.
+- For an active copy run, runtime-tuning edits are applied between dispatch batches after in-flight file work finishes, so ECUBE does not interrupt the currently copying file to apply the new values.
 - The lifecycle toggle to show `Start` when a job can begin or resume, `Pause` when an active job can safely stop after its current copy work finishes, and a disabled `Pause` while the job is still entering active copy work during `PREPARING` or draining in-flight work during `PAUSING`
 - `Continue on Another Drive` to choose a different mounted destination drive and continue the remaining work for an eligible `PENDING`, `PAUSED`, `FAILED`, or partial-success `COMPLETED` job
 - `Retry Failed Files` to re-queue only `ERROR` and `TIMEOUT` file rows on a `COMPLETED` job that finished with partial-success results
