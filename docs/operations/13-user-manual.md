@@ -675,7 +675,7 @@ Typical functions include:
 
 - Run manual startup analysis before copy starts so the operator can review discovered files and estimated bytes
 - Edit a pending job before copy work has started, including after startup analysis completes while the job remains pending
-- Adjust thread count and reserved overflow-drive selections after a job has started without redefining the source, project, or primary destination
+- Adjust the per-job copy-tuning values (thread count, copy chunk size, progress flush threshold, force per-file disk sync) and reserved overflow-drive selections after a job has started without redefining the source, project, or primary destination
 - Use the lifecycle toggle to start a pending job, resume a paused one, or pause an active job; start, retry, and continuation requests first move through `PREPARING` before copy threads resume in `RUNNING`
 - Continue remaining work on another mounted destination drive when the original destination fills or a partial-success run must move to new media
 - Retry only the failed or timed-out files from a partial-success completed job
@@ -697,7 +697,7 @@ Action buttons are shown after the `Job Completion Summary` panel.
 Use them when appropriate:
 
 - `Analyze` to run startup analysis for an eligible job without starting copy
-- `Edit` to reopen the grouped job dialog from Job Detail. For a `PENDING` job, the dialog supports the pre-start edit flow for the mutable copy-definition fields. For a started job, the dialog switches to a restricted runtime-tuning view that allows only `Thread count` and reserved overflow-drive selection changes.
+- `Edit` to reopen the grouped job dialog from Job Detail. For a `PENDING` job, the dialog supports the pre-start edit flow for the mutable copy-definition fields. For a started job, the dialog switches to a restricted runtime-tuning view that allows only the per-job copy-tuning values (`Thread count`, `Copy Chunk Size`, `Progress Flush Threshold`, `Force per-file disk sync`) and reserved overflow-drive selection changes.
 
 When the edit dialog contains more content than fits on screen, ECUBE keeps the header and footer pinned and scrolls only the dialog body so the title, required-field legend, and save/cancel actions stay visible.
 - After a job has started, ECUBE keeps the existing evidence number, project, source path, mount, primary destination drive, notes, and callback URL fixed. The restricted edit dialog leaves those fields read-only or hidden and saves only the allowed runtime-tuning values.

@@ -4311,8 +4311,8 @@ def test_update_job_rejects_started_job_states(client, db):
 
         assert response.status_code == 409
         payload = response.json()
-        assert payload.get("detail") == "Started jobs can only update copy tuning overrides and overflow drive selections" \
-            or payload.get("message") == "Started jobs can only update copy tuning overrides and overflow drive selections"
+        assert payload.get("detail") == "Started jobs can only update copy tuning values and overflow drive selections" \
+            or payload.get("message") == "Started jobs can only update copy tuning values and overflow drive selections"
 
         assignment = db.query(DriveAssignment).filter(DriveAssignment.job_id == job.id).one()
         db.delete(assignment)
@@ -4402,6 +4402,72 @@ def test_update_started_job_allows_thread_count_and_overflow_drive_changes(clien
         DriveAssignment.released_at.is_(None),
     ).one_or_none()
     assert reserved_assignment is not None
+
+
+def test_update_pending_job_preserves_null_tuning_when_unchanged(client, db):
+    """Editing a legacy job that has NULL per-job tuning columns must not
+    silently materialize them into explicit snapshot values when the
+    operator does not change those fields."""
+    mount = NetworkShare(
+        type=MountType.NFS,
+        remote_path="server:/exports/project-null-tuning",
+        project_id="PROJ-NULL-TUNING-001",
+        local_mount_point="/nfs/project-null-tuning-001",
+        status=MountStatus.MOUNTED,
+    )
+    drive = UsbDrive(
+        device_identifier="USB-NULL-TUNING-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-NULL-TUNING-001",
+        mount_path="/mnt/ecube/null-tuning-001",
+    )
+    db.add_all([mount, drive])
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-NULL-TUNING-001",
+        evidence_number="EV-NULL-TUNING-001",
+        source_path="/nfs/project-null-tuning-001/evidence",
+        target_mount_path=drive.mount_path,
+        status=JobStatus.PENDING,
+        thread_count=None,
+        copy_chunk_size_bytes=None,
+        copy_progress_flush_bytes=None,
+        copy_file_fsync_enabled=None,
+        max_file_retries=3,
+        retry_delay_seconds=1,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.commit()
+
+    # Re-save the job without touching tuning fields. The PUT body echoes
+    # the effective values currently surfaced by GET (settings defaults),
+    # which differ from the stored NULLs. The service must compare against
+    # the stored value and skip the write so the per-job columns remain
+    # NULL.
+    response = client.put(
+        f"/jobs/{job.id}",
+        json={
+            "project_id": "PROJ-NULL-TUNING-001",
+            "evidence_number": "EV-NULL-TUNING-001-EDITED",
+            "source_path": "/nfs/project-null-tuning-001/evidence",
+            "mount_id": mount.id,
+            "drive_id": drive.id,
+            "overflow_drive_ids": [],
+            "max_file_retries": 3,
+            "retry_delay_seconds": 1,
+            "callback_url": None,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    db.refresh(job)
+    assert job.thread_count is None
+    assert job.copy_chunk_size_bytes is None
+    assert job.copy_progress_flush_bytes is None
+    assert job.copy_file_fsync_enabled is None
 
 
 def test_update_started_job_releases_removed_reserved_overflow_drive(client, db):

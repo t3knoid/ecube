@@ -334,6 +334,10 @@ def get_copy_tuning_defaults(
     create or edit jobs so the dialog defaults track ``.env`` overrides
     without exposing the full configuration surface.
 
+    These values seed the Workflow tab as a snapshot taken at job-create
+    time. Existing jobs keep the values they were created with and do not
+    retroactively pick up later changes to these defaults.
+
     **Roles:** ``admin``, ``manager``, ``processor``
     """
     return JobCopyTuningDefaults(

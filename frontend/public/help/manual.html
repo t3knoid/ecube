@@ -728,7 +728,7 @@ Run manual startup analysis before copy starts so the operator can review discov
 </li><li>
 Edit a pending job before copy work has started, including after startup analysis completes while the job remains pending
 </li><li>
-Adjust thread count and reserved overflow-drive selections after a job has started without redefining the source, project, or primary destination
+Adjust the per-job copy-tuning values (thread count, copy chunk size, progress flush threshold, force per-file disk sync) and reserved overflow-drive selections after a job has started without redefining the source, project, or primary destination
 </li><li>
 Use the lifecycle toggle to start a pending job, resume a paused one, or pause an active job; start, retry, and continuation requests first move through <code>PREPARING</code> before copy threads resume in <code>RUNNING</code>
 </li><li>
@@ -759,7 +759,7 @@ Compare a file's source version against its copied destination version
 <ul><li>
 <code>Analyze</code> to run startup analysis for an eligible job without starting copy
 </li><li>
-<code>Edit</code> to reopen the grouped job dialog from Job Detail. For a <code>PENDING</code> job, the dialog supports the pre-start edit flow for the mutable copy-definition fields. For a started job, the dialog switches to a restricted runtime-tuning view that allows only <code>Thread count</code> and reserved overflow-drive selection changes.
+<code>Edit</code> to reopen the grouped job dialog from Job Detail. For a <code>PENDING</code> job, the dialog supports the pre-start edit flow for the mutable copy-definition fields. For a started job, the dialog switches to a restricted runtime-tuning view that allows only the per-job copy-tuning values (<code>Thread count</code>, <code>Copy Chunk Size</code>, <code>Progress Flush Threshold</code>, <code>Force per-file disk sync</code>) and reserved overflow-drive selection changes.
 </li></ul>
 <p>When the edit dialog contains more content than fits on screen, ECUBE keeps the header and footer pinned and scrolls only the dialog body so the title, required-field legend, and save/cancel actions stay visible.</p>
 <ul><li>

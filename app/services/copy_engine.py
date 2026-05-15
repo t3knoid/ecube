@@ -1923,10 +1923,13 @@ def _process_file(
         success = False
         checksum: Optional[str] = None
         bytes_reported = 0
-        progress_flush_threshold = int(
-            copy_progress_flush_threshold_bytes
-            if copy_progress_flush_threshold_bytes is not None
-            else settings.copy_progress_flush_bytes
+        progress_flush_threshold = max(
+            1,
+            int(
+                copy_progress_flush_threshold_bytes
+                if copy_progress_flush_threshold_bytes is not None
+                else settings.copy_progress_flush_bytes
+            ),
         )
         timed_out = False
         timeout_elapsed_seconds = 0.0

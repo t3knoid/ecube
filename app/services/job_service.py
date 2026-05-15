@@ -1282,7 +1282,7 @@ def _started_job_update_only_allows_runtime_fields(
     if immutable_changes:
         raise service_exception(
             status_code=409,
-            detail="Started jobs can only update copy tuning overrides and overflow drive selections",
+            detail="Started jobs can only update copy tuning values and overflow drive selections",
         )
 
 
@@ -1598,7 +1598,7 @@ def update_job(
         if update_is_limited_to_runtime_fields:
             raise service_exception(
                 status_code=409,
-                detail="Started jobs can only update copy tuning overrides and overflow drive selections",
+                detail="Started jobs can only update copy tuning values and overflow drive selections",
             )
         raise service_exception(
             status_code=409,
@@ -1802,10 +1802,18 @@ def update_job(
     drive_row.current_state = DriveState.IN_USE
     source_path_changed = cast(Optional[str], job_row.source_path) != validated_source_path
 
-    job_row.thread_count = _optional_int(body.thread_count)
-    job_row.copy_chunk_size_bytes = _optional_int(body.copy_chunk_size_bytes)
-    job_row.copy_progress_flush_bytes = _optional_int(body.copy_progress_flush_bytes)
-    job_row.copy_file_fsync_enabled = _optional_bool(body.copy_file_fsync_enabled)
+    # Only assign tuning values when they actually changed. This avoids
+    # silently materializing legacy NULL per-job columns into explicit
+    # snapshot values when an operator opens Edit and clicks Save without
+    # touching the Workflow tab.
+    if "thread_count" in changed_fields:
+        job_row.thread_count = _optional_int(body.thread_count)
+    if "copy_chunk_size_bytes" in changed_fields:
+        job_row.copy_chunk_size_bytes = _optional_int(body.copy_chunk_size_bytes)
+    if "copy_progress_flush_bytes" in changed_fields:
+        job_row.copy_progress_flush_bytes = _optional_int(body.copy_progress_flush_bytes)
+    if "copy_file_fsync_enabled" in changed_fields:
+        job_row.copy_file_fsync_enabled = _optional_bool(body.copy_file_fsync_enabled)
     if not update_is_limited_to_runtime_fields:
         job_row.evidence_number = body.evidence_number
         job_row.source_path = validated_source_path
