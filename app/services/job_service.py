@@ -1802,10 +1802,10 @@ def update_job(
     drive_row.current_state = DriveState.IN_USE
     source_path_changed = cast(Optional[str], job_row.source_path) != validated_source_path
 
-    # Only assign tuning values when they actually changed. This avoids
-    # silently materializing legacy NULL per-job columns into explicit
-    # snapshot values when an operator opens Edit and clicks Save without
-    # touching the Workflow tab.
+    # Only assign tuning values when they actually changed. API callers that
+    # omit optional tuning fields keep legacy NULL values untouched; the
+    # standard UI edit flow pre-populates Workflow fields and therefore
+    # intentionally re-snapshots those values on save.
     if "thread_count" in changed_fields:
         job_row.thread_count = _optional_int(body.thread_count)
     if "copy_chunk_size_bytes" in changed_fields:

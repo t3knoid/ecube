@@ -13,6 +13,17 @@ export const FALLBACK_COPY_TUNING_DEFAULTS = Object.freeze({
   copy_file_fsync_enabled: false,
 })
 
+const THREAD_COUNT_MIN = 1
+const THREAD_COUNT_MAX = 32
+const COPY_CHUNK_SIZE_MIN = 262_144
+const COPY_CHUNK_SIZE_MAX = 67_108_864
+const COPY_PROGRESS_FLUSH_MIN = 1_048_576
+const COPY_PROGRESS_FLUSH_MAX = 1_073_741_824
+
+function isIntegerInRange(value, min, max) {
+  return Number.isInteger(value) && value >= min && value <= max
+}
+
 export const useCopyTuningDefaultsStore = defineStore('copyTuningDefaults', () => {
   const threadCount = ref(FALLBACK_COPY_TUNING_DEFAULTS.thread_count)
   const copyChunkSizeBytes = ref(FALLBACK_COPY_TUNING_DEFAULTS.copy_chunk_size_bytes)
@@ -23,26 +34,35 @@ export const useCopyTuningDefaultsStore = defineStore('copyTuningDefaults', () =
   let inflight = null
 
   function applyDefaults(payload) {
-    if (!payload || typeof payload !== 'object') return
-    if (Number.isInteger(payload.thread_count) && payload.thread_count >= 1) {
-      threadCount.value = payload.thread_count
-    }
-    if (Number.isInteger(payload.copy_chunk_size_bytes) && payload.copy_chunk_size_bytes >= 1) {
-      copyChunkSizeBytes.value = payload.copy_chunk_size_bytes
-    }
-    if (Number.isInteger(payload.copy_progress_flush_bytes) && payload.copy_progress_flush_bytes >= 1) {
-      copyProgressFlushBytes.value = payload.copy_progress_flush_bytes
-    }
-    if (typeof payload.copy_file_fsync_enabled === 'boolean') {
-      copyFileFsyncEnabled.value = payload.copy_file_fsync_enabled
-    }
+    if (!payload || typeof payload !== 'object') return false
+
+    const validPayload = isIntegerInRange(payload.thread_count, THREAD_COUNT_MIN, THREAD_COUNT_MAX)
+      && isIntegerInRange(payload.copy_chunk_size_bytes, COPY_CHUNK_SIZE_MIN, COPY_CHUNK_SIZE_MAX)
+      && isIntegerInRange(payload.copy_progress_flush_bytes, COPY_PROGRESS_FLUSH_MIN, COPY_PROGRESS_FLUSH_MAX)
+      && typeof payload.copy_file_fsync_enabled === 'boolean'
+
+    if (!validPayload) return false
+
+    threadCount.value = payload.thread_count
+    copyChunkSizeBytes.value = payload.copy_chunk_size_bytes
+    copyProgressFlushBytes.value = payload.copy_progress_flush_bytes
+    copyFileFsyncEnabled.value = payload.copy_file_fsync_enabled
+    return true
   }
 
   async function refresh() {
     loading.value = true
     try {
       const data = await getCopyTuningDefaults()
-      applyDefaults(data)
+      const applied = applyDefaults(data)
+      if (!applied) {
+        logger.warn(
+          '[copyTuningDefaults] using hardcoded fallback defaults; backend defaults payload was invalid',
+        )
+        logger.debug('[copyTuningDefaults] invalid backend defaults payload:', data)
+        loaded.value = false
+        return
+      }
       loaded.value = true
     } catch (err) {
       // The Job Editor falls back to FALLBACK_COPY_TUNING_DEFAULTS when the
@@ -54,6 +74,7 @@ export const useCopyTuningDefaultsStore = defineStore('copyTuningDefaults', () =
         '[copyTuningDefaults] using hardcoded fallback defaults; backend defaults could not be loaded',
       )
       logger.debug('[copyTuningDefaults] failed to load configured defaults:', err)
+      loaded.value = false
     } finally {
       loading.value = false
     }

@@ -2367,6 +2367,7 @@ onUnmounted(() => {
             :callback-url-hint="t('jobs.callbackUrlHint')"
             :details-tab-label="t('jobs.jobDetailsTab')"
             :copy-and-job-workflow-tab-label="t('jobs.workflowTab')"
+            :tab-list-aria-label="t('jobs.jobEditorSectionsLabel')"
             :workflow-group-label="t('jobs.workflowGroupTitle')"
             :workflow-tab-description="startedJobEditMode ? '' : t('jobs.workflowTabEditHelp')"
             :workflow-tab-default-help="t('jobs.workflowTabEditHelp')"

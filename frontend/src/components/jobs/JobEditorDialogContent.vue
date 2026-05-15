@@ -227,6 +227,10 @@ const props = defineProps({
     type: String,
     required: true,
   },
+  tabListAriaLabel: {
+    type: String,
+    default: '',
+  },
   workflowGroupLabel: {
     type: String,
     default: '',
@@ -353,6 +357,10 @@ const workflowTabMessage = computed(() => {
   return props.workflowTabDefaultHelp
 })
 
+const resolvedTabListAriaLabel = computed(() => (
+  props.tabListAriaLabel || props.copyAndJobWorkflowTabLabel
+))
+
 watch(
   () => props.initialTab,
   (value) => {
@@ -372,7 +380,12 @@ watch(
   </div>
 
   <div class="dialog-body job-create-scroll-region">
-    <TabbedDialog v-model:active-tab="activeTab" :tabs="tabs" id-prefix="job-editor" aria-label="Job editor sections">
+    <TabbedDialog
+      v-model:active-tab="activeTab"
+      :tabs="tabs"
+      id-prefix="job-editor"
+      :aria-label="resolvedTabListAriaLabel"
+    >
       <template #panel-details>
       <div class="dialog-groups dialog-groups--details">
       <fieldset class="dialog-group dialog-group--details">
