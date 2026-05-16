@@ -2020,8 +2020,8 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).toContain('Duration')
     expect(wrapper.text()).toContain('1m 0s')
     expect(wrapper.text()).toContain('Copy rate')
-    expect(wrapper.text()).not.toContain('1.0 MB/s')
-    expect(wrapper.text()).toContain('2.0 MB/s')
+    expect(wrapper.text()).not.toContain('8.0 Mb/s')
+    expect(wrapper.text()).toContain('16.0 Mb/s')
     expect(wrapper.text()).toContain('Time remaining')
     expect(wrapper.text()).toContain('Estimated completion')
     expect(wrapper.text()).toContain(new Date('2026-04-24T15:01:30Z').toLocaleString())
@@ -2304,7 +2304,7 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).toContain('Duration')
     expect(wrapper.text()).toContain('2s')
     expect(wrapper.text()).toContain('Copy rate')
-    expect(wrapper.text()).toContain('5.0 MB/s')
+    expect(wrapper.text()).toContain('40.0 Mb/s')
     expect(wrapper.find('.completion-summary').classes()).not.toContain('completion-summary--danger')
   })
 
@@ -2336,7 +2336,7 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).toContain('Duration')
     expect(wrapper.text()).toContain('1m 0s')
     expect(wrapper.text()).toContain('Copy rate')
-    expect(wrapper.text()).toContain('3.0 MB/s')
+    expect(wrapper.text()).toContain('24.0 Mb/s')
   })
 
   it('uses a danger background for the completion summary when file copy failures are present', async () => {
@@ -2813,7 +2813,7 @@ describe('JobDetailView start action', () => {
 
     expect(wrapper.text()).toContain('Job Completion Summary')
     expect(wrapper.text()).toContain('2m 5s')
-    expect(wrapper.text()).toContain('0.1 MB/s')
+    expect(wrapper.text()).toContain('0.6 Mb/s')
   })
 
   it('opens an edit form with pre-populated job values and submits updates', async () => {

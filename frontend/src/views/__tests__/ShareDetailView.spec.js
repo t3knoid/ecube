@@ -176,7 +176,7 @@ describe('ShareDetailView', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain(i18n.global.t('shares.latestReadSpeed'))
-    expect(wrapper.text()).toContain('64.2 MB/s')
+    expect(wrapper.text()).toContain('64.2 Mb/s')
 
     const testButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('shares.testThroughput'))
     expect(testButton).toBeTruthy()
@@ -186,7 +186,7 @@ describe('ShareDetailView', () => {
 
     expect(mocks.testShareThroughput).toHaveBeenCalledWith(11, { timeout: 0 })
     expect(wrapper.text()).toContain(i18n.global.t('shares.throughputTestSuccess'))
-    expect(wrapper.text()).toContain('87.4 MB/s')
+    expect(wrapper.text()).toContain('87.4 Mb/s')
   })
 
   it('opens the edit dialog prefilled and submits updates through validateShare and updateShare', async () => {

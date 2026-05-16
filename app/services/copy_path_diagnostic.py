@@ -228,7 +228,7 @@ def run_copy_path_diagnostic(
     end_to_end_copy_mbps = None
     sample_copy_files_per_second = None
     if copied_bytes > 0 and copy_elapsed_seconds > 0:
-        end_to_end_copy_mbps = round((copied_bytes / (1024 * 1024)) / copy_elapsed_seconds, 2)
+        end_to_end_copy_mbps = round(((copied_bytes * 8) / (1024 * 1024)) / copy_elapsed_seconds, 2)
     if sample_files and copy_elapsed_seconds > 0:
         sample_copy_files_per_second = round(len(sample_files) / copy_elapsed_seconds, 2)
 

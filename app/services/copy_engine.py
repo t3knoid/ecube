@@ -248,11 +248,11 @@ def _checksum_only(
         return False, None, str(exc)
 
 
-def _calculate_copy_rate_mb_s(copied_bytes: int, elapsed_seconds: float) -> float:
-    """Return the average completed copy rate in MB/s."""
+def _calculate_copy_rate_mbps(copied_bytes: int, elapsed_seconds: float) -> float:
+    """Return the average completed copy rate in Mb/s for UI-facing displays."""
     if copied_bytes <= 0 or elapsed_seconds <= 0:
         return 0.0
-    return round((copied_bytes / (1024 * 1024)) / elapsed_seconds, 2)
+    return round(((copied_bytes * 8) / (1024 * 1024)) / elapsed_seconds, 2)
 
 
 def _sanitize_job_failure_reason(
@@ -800,7 +800,7 @@ def _log_startup_analysis_failure(
 def _calculate_transfer_rate_mbps(transferred_bytes: int, elapsed_seconds: float) -> Optional[float]:
     if transferred_bytes <= 0 or elapsed_seconds <= 0:
         return None
-    rate_mbps = (transferred_bytes / (1024 * 1024)) / elapsed_seconds
+    rate_mbps = ((transferred_bytes * 8) / (1024 * 1024)) / elapsed_seconds
     if rate_mbps <= 0:
         return None
     return max(0.01, round(rate_mbps, 2))
@@ -818,7 +818,7 @@ def _estimate_startup_analysis_duration_seconds(
         return None
     if effective_copy_rate_mbps <= 0:
         return None
-    transfer_seconds = (total_bytes / (1024 * 1024)) / effective_copy_rate_mbps
+    transfer_seconds = ((total_bytes * 8) / (1024 * 1024)) / effective_copy_rate_mbps
     fixed_overhead_seconds = max(0.0, per_file_overhead_seconds) * max(0, file_count)
     return max(1, math.ceil(transfer_seconds + fixed_overhead_seconds))
 
@@ -2598,7 +2598,7 @@ def run_copy_job(job_id: int) -> None:
                         else:
                             audit_action = "JOB_COMPLETED" if job.status == JobStatus.COMPLETED else "JOB_FAILED"
                             elapsed_seconds = round(total_active_seconds, 2)
-                            copy_rate_mb_s = _calculate_copy_rate_mb_s(job.copied_bytes or 0, elapsed_seconds)
+                            copy_rate_mbps = _calculate_copy_rate_mbps(job.copied_bytes or 0, elapsed_seconds)
                             logger.info(
                                 "Copy job phase durations finalized",
                                 extra={
@@ -2627,7 +2627,7 @@ def run_copy_job(job_id: int) -> None:
                                 logger.error(
                                     f"JOB_FAILED job_id={job_id} project_id={job.project_id} "
                                     f"status={job.status.value} started_at={job.started_at.isoformat() if job.started_at else None} failed_at={job.completed_at.isoformat() if job.completed_at else None} "
-                                    f"thread_count={job.thread_count} files_copied={done_count} file_count={job.file_count} error_count={error_count} timeout_count={timeout_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} reason={job.failure_reason or 'Job failed'} preparing_seconds={preparing_seconds} elapsed_seconds={elapsed_seconds} copy_rate_mb_s={copy_rate_mb_s}",
+                                    f"thread_count={job.thread_count} files_copied={done_count} file_count={job.file_count} error_count={error_count} timeout_count={timeout_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} reason={job.failure_reason or 'Job failed'} preparing_seconds={preparing_seconds} elapsed_seconds={elapsed_seconds} copy_rate_mbps={copy_rate_mbps}",
                                     extra={
                                         "job_id": job_id,
                                         "project_id": job.project_id,
@@ -2643,14 +2643,14 @@ def run_copy_job(job_id: int) -> None:
                                         "reason": job.failure_reason or "Job failed",
                                         "preparing_duration_seconds": preparing_seconds,
                                         "elapsed_seconds": elapsed_seconds,
-                                        "copy_rate_mb_s": copy_rate_mb_s,
+                                        "copy_rate_mbps": copy_rate_mbps,
                                     },
                                 )
                             else:
                                 logger.info(
                                     f"JOB_COMPLETED job_id={job_id} project_id={job.project_id} "
                                     f"status={job.status.value} started_at={job.started_at.isoformat() if job.started_at else None} completed_at={job.completed_at.isoformat() if job.completed_at else None} "
-                                    f"thread_count={job.thread_count} files_copied={done_count} file_count={job.file_count} error_count={error_count} timeout_count={timeout_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} preparing_seconds={preparing_seconds} elapsed_seconds={elapsed_seconds} copy_rate_mb_s={copy_rate_mb_s}",
+                                    f"thread_count={job.thread_count} files_copied={done_count} file_count={job.file_count} error_count={error_count} timeout_count={timeout_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} preparing_seconds={preparing_seconds} elapsed_seconds={elapsed_seconds} copy_rate_mbps={copy_rate_mbps}",
                                     extra={
                                         "job_id": job_id,
                                         "project_id": job.project_id,
@@ -2665,7 +2665,7 @@ def run_copy_job(job_id: int) -> None:
                                         "total_bytes": job.total_bytes or 0,
                                         "preparing_duration_seconds": preparing_seconds,
                                         "elapsed_seconds": elapsed_seconds,
-                                        "copy_rate_mb_s": copy_rate_mb_s,
+                                        "copy_rate_mbps": copy_rate_mbps,
                                     },
                                 )
                         try:
@@ -2685,7 +2685,7 @@ def run_copy_job(job_id: int) -> None:
                                     "total_bytes": job.total_bytes or 0,
                                     **({"reason": job.failure_reason} if job.failure_reason else {}),
                                     "elapsed_seconds": elapsed_seconds,
-                                    "copy_rate_mb_s": copy_rate_mb_s,
+                                    "copy_rate_mbps": copy_rate_mbps,
                                 },
                             )
                         except Exception:
@@ -2755,13 +2755,13 @@ def run_copy_job(job_id: int) -> None:
                         logger.error("Failed to write audit log for JOB_STATUS_PERSIST_FAILED")
                 else:
                     elapsed_seconds = round(job.active_duration_seconds or 0, 2)
-                    copy_rate_mb_s = _calculate_copy_rate_mb_s(job.copied_bytes or 0, elapsed_seconds)
+                    copy_rate_mbps = _calculate_copy_rate_mbps(job.copied_bytes or 0, elapsed_seconds)
                     _log_job_path_context(job_id, job.source_path, job.target_mount_path, "copy-exception")
                     logger.error(
                         f"JOB_FAILED job_id={job_id} project_id={job.project_id} "
                         f"status={JobStatus.FAILED.value} started_at={job.started_at.isoformat() if job.started_at else None} failed_at={job.completed_at.isoformat() if job.completed_at else None} "
                         f"thread_count={job.thread_count} files_copied={done_count} file_count={job.file_count} copied_bytes={job.copied_bytes or 0} total_bytes={job.total_bytes or 0} "
-                        f"reason={safe_reason} preparing_seconds={preparing_seconds} elapsed_seconds={elapsed_seconds} copy_rate_mb_s={copy_rate_mb_s}",
+                        f"reason={safe_reason} preparing_seconds={preparing_seconds} elapsed_seconds={elapsed_seconds} copy_rate_mbps={copy_rate_mbps}",
                         extra={
                             "job_id": job_id,
                             "project_id": job.project_id,
@@ -2776,7 +2776,7 @@ def run_copy_job(job_id: int) -> None:
                             "phase": "copy",
                             "preparing_duration_seconds": preparing_seconds,
                             "elapsed_seconds": elapsed_seconds,
-                            "copy_rate_mb_s": copy_rate_mb_s,
+                            "copy_rate_mbps": copy_rate_mbps,
                         },
                     )
                     try:
@@ -2795,7 +2795,7 @@ def run_copy_job(job_id: int) -> None:
                                 "phase": "copy",
                                 "preparing_duration_seconds": preparing_seconds,
                                 "elapsed_seconds": elapsed_seconds,
-                                "copy_rate_mb_s": copy_rate_mb_s,
+                                "copy_rate_mbps": copy_rate_mbps,
                             },
                         )
                     except Exception:

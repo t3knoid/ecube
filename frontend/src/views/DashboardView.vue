@@ -236,10 +236,10 @@ function formatCopyRate(bytesValue, totalSeconds) {
   if (typeof bytesValue !== 'number' || bytesValue < 0 || typeof totalSeconds !== 'number') {
     return t('common.labels.notAvailable')
   }
-  if (totalSeconds <= 0 || bytesValue === 0) return '0.0 MB/s'
+  if (totalSeconds <= 0 || bytesValue === 0) return '0.0 Mb/s'
 
-  const mbPerSecond = bytesValue / (1024 * 1024) / totalSeconds
-  return `${mbPerSecond.toFixed(1)} MB/s`
+  const mbPerSecond = (bytesValue * 8) / (1024 * 1024) / totalSeconds
+  return `${mbPerSecond.toFixed(1)} Mb/s`
 }
 
 function calculateDurationSeconds(job) {

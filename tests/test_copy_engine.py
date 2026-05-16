@@ -2287,7 +2287,7 @@ def test_estimate_startup_analysis_duration_accounts_for_per_file_overhead():
         file_count=4,
     )
 
-    assert estimated_seconds == 4
+    assert estimated_seconds == 18
 
 
 def test_measure_startup_analysis_transfer_rates_reports_speeds_and_estimated_duration(tmp_path):

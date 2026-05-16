@@ -959,15 +959,15 @@ function formatDuration(totalSeconds) {
 
 function formatTransferRate(value) {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return '-'
-  return `${value.toFixed(1)} MB/s`
+  return `${value.toFixed(1)} Mb/s`
 }
 
 function formatCopyRate(bytesValue, totalSeconds) {
   if (typeof bytesValue !== 'number' || bytesValue < 0 || typeof totalSeconds !== 'number') return '-'
-  if (totalSeconds <= 0 || bytesValue === 0) return '0.0 MB/s'
+  if (totalSeconds <= 0 || bytesValue === 0) return '0.0 Mb/s'
 
-  const mbPerSecond = bytesValue / (1024 * 1024) / totalSeconds
-  return `${mbPerSecond.toFixed(1)} MB/s`
+  const mbPerSecond = (bytesValue * 8) / (1024 * 1024) / totalSeconds
+  return `${mbPerSecond.toFixed(1)} Mb/s`
 }
 
 function formatDriveLabel(drive) {

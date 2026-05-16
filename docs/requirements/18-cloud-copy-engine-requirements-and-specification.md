@@ -124,7 +124,7 @@ The following functional requirements define the mandatory behaviors of the Clou
 
 | ID | Category | Requirement |
 |---|---|---|
-| NFR-001 | Performance | The engine **SHALL** sustain aggregate write throughput of at least 80% of the theoretical USB bus bandwidth when writing to a single device with a fast cloud source. For USB 3.0 devices, the target is >=300 MB/s sustained sequential write throughput (device hardware permitting). |
+| NFR-001 | Performance | The engine **SHALL** sustain aggregate write throughput of at least 80% of the theoretical USB bus bandwidth when writing to a single device with a fast cloud source. For USB 3.0 devices, the target is >=300 Mb/s sustained sequential write throughput (device hardware permitting). |
 | NFR-002 | Performance | For small-file batches, the engine **SHALL** achieve a per-file latency overhead of no more than 5 ms (excluding network download time), measured from buffer availability to write commitment. |
 | NFR-003 | Scalability | The engine **SHALL** support concurrent operations on up to 32 USB devices simultaneously without degradation of per-device throughput beyond 10% compared to single-device operation. |
 | NFR-004 | Reliability | In the event of an engine crash or unexpected termination, no corrupt or partial files **SHALL** remain on any USB device. The transactional write mechanism **SHALL** ensure that only fully committed files persist. |

@@ -67,7 +67,7 @@ class NetworkShareSchema(BaseModel):
     local_mount_point: str = Field(..., description="Local filesystem path where the share is attached")
     status: MountStatus = Field(..., description="Current share status (MOUNTED, UNMOUNTED, ERROR)")
     last_checked_at: Optional[datetime] = Field(default=None, description="Timestamp of last connectivity check")
-    throughput_read_mbps: Optional[float] = Field(default=None, description="Most recent measured manual share read speed in MB/s when available")
+    throughput_read_mbps: Optional[float] = Field(default=None, description="Most recent measured manual share read speed as a bit-based Mb/s value when available")
     throughput_tested_at: Optional[datetime] = Field(default=None, description="Timestamp of the most recent manual throughput test for this share")
     related_job: Optional[ShareRelatedJobSchema] = Field(
         default=None,

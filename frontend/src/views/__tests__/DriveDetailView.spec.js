@@ -201,7 +201,7 @@ describe('DriveDetailView mount workflow', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain(i18n.global.t('drives.latestWriteSpeed'))
-    expect(wrapper.text()).toContain('101.1 MB/s')
+    expect(wrapper.text()).toContain('101.1 Mb/s')
 
     const testButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.testThroughput'))
     expect(testButton).toBeTruthy()
@@ -211,7 +211,7 @@ describe('DriveDetailView mount workflow', () => {
 
     expect(mocks.testDriveThroughput).toHaveBeenCalledWith(7, { timeout: 0 })
     expect(wrapper.text()).toContain(i18n.global.t('drives.throughputTestSuccess'))
-    expect(wrapper.text()).toContain('143.2 MB/s')
+    expect(wrapper.text()).toContain('143.2 Mb/s')
   })
 
   it('shows the Mount action for managers and updates the mount point after success', async () => {

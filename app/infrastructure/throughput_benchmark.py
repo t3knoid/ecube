@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 def _calculate_transfer_rate_mbps(transferred_bytes: int, elapsed_seconds: float) -> Optional[float]:
     if transferred_bytes <= 0 or elapsed_seconds <= 0:
         return None
-    rate_mbps = (transferred_bytes / (1024 * 1024)) / elapsed_seconds
+    rate_mbps = ((transferred_bytes * 8) / (1024 * 1024)) / elapsed_seconds
     if rate_mbps <= 0:
         return None
     return max(0.01, round(rate_mbps, 2))
