@@ -310,7 +310,7 @@ The following SLIs are recommended for ECUBE:
 | **Availability** | Percentage of time `/health/ready` returns 200 | 99.5% |
 | **Copy Job Success Rate** | Percentage of jobs that complete successfully | 99% |
 | **API Response Time (p95)** | 95th percentile latency for API requests | < 1 second |
-| **Job Copy Throughput** | Average bytes copied per second during job | > 50 Mb/s on typical hardware |
+| **Job Copy Throughput** | Average bytes copied per second during job | > 400 Mb/s on typical hardware |
 | **Mean Time to Recovery (MTTR)** | Average time to restore service after failure | < 15 minutes |
 
 ---
@@ -330,9 +330,9 @@ The following SLIs are recommended for ECUBE:
 
 #### Copy Performance
 
-- **Single-file copy (1 GB file):** ~100 Mb/s
-- **Multi-file copy (1000 small files, 1 GB total):** ~80 Mb/s
-- **Full 32 GB drive (8-thread copy):** ~90 Mb/s sustained
+- **Single-file copy (1 GB file):** ~800 Mb/s
+- **Multi-file copy (1000 small files, 1 GB total):** ~640 Mb/s
+- **Full 32 GB drive (8-thread copy):** ~720 Mb/s sustained
 - **Thread overhead:** Diminishing returns beyond 8 threads on reference hardware
 
 #### API Response Times

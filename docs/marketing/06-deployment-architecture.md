@@ -317,7 +317,7 @@ ECUBE is offered in three hardware tiers based on the number of concurrent USB e
 - **CPU:** One core per active copy session for SHA-256 hashing, plus overhead for the API, database, and OS. The Professional and Enterprise tiers add cores proportionally.
 - **RAM:** Each copy thread's buffer is small (~64 KB), but PostgreSQL, the OS page cache, and multiple Uvicorn workers benefit from additional memory at higher concurrency. 32 GB at the Enterprise tier allows PostgreSQL `shared_buffers` of 512 MB+ with ample headroom.
 - **Storage:** Larger tiers produce more audit log volume and manifest data. SSD is non-negotiable — spinning disks create I/O contention.
-- **Network:** All tiers recommend 10 Gbps. At the Enterprise tier (12 drives × 150–350 Mb/s each = 1.8–4.2 GB/s aggregate demand), a single 10G link may saturate; dual-NIC bonding or a 25 Gbps NIC provides additional headroom.
+- **Network:** All tiers recommend 10 Gbps. At the Enterprise tier (12 drives x 1,200-2,800 Mb/s each = 14,400-33,600 Mb/s aggregate demand), a single 10G link may saturate; dual-NIC bonding or a 25 Gbps NIC provides additional headroom.
 
 ### Sizing by Deployment Profile
 
@@ -349,33 +349,33 @@ These numbers are **the same regardless of hardware tier**. The tier determines 
 | Parameter | Value |
 |---|---|
 | Data set size | 10 TB (10,000 GB) |
-| USB 3.0 drive sustained write | 200 Mb/s (see note below) |
+| USB 3.0 drive sustained write | 1,600 Mb/s (see note below) |
 | NFS protocol efficiency | ~93% of wire speed |
 | SMB protocol efficiency | ~85% of wire speed |
-| 1 Gbps NIC practical throughput | ~115 Mb/s |
-| 10 Gbps NIC practical throughput | ~1,150 Mb/s |
+| 1 Gbps NIC practical throughput | ~920 Mb/s |
+| 10 Gbps NIC practical throughput | ~9,200 Mb/s |
 
-**Drive write speed (200 Mb/s) explained:**
+**Drive write speed (1,600 Mb/s) explained:**
 
-The USB 3.0 bus signals at 5 Gbps and delivers roughly 400–450 Mb/s after protocol overhead — but the bus is not the limiting factor. The bottleneck is the drive's internal media:
+The USB 3.0 bus signals at 5 Gbps and delivers roughly 3,200-3,600 Mb/s after protocol overhead - but the bus is not the limiting factor. The bottleneck is the drive's internal media:
 
 | Drive Type | Typical Sustained Write | Limiting Factor |
 |---|---|---|
-| USB 3.0 portable HDD (5400 RPM) | 100–130 Mb/s | Spindle speed, platter density |
-| USB 3.0 portable HDD (7200 RPM) | 130–180 Mb/s | Spindle speed |
-| USB 3.0 external SSD (SATA-based) | 200–400 Mb/s | SATA bridge or NAND write speed |
-| USB 3.0 external SSD (NVMe-based) | 350–450 Mb/s | USB 3.0 bus ceiling |
+| USB 3.0 portable HDD (5400 RPM) | 800-1,040 Mb/s | Spindle speed, platter density |
+| USB 3.0 portable HDD (7200 RPM) | 1,040-1,440 Mb/s | Spindle speed |
+| USB 3.0 external SSD (SATA-based) | 1,600-3,200 Mb/s | SATA bridge or NAND write speed |
+| USB 3.0 external SSD (NVMe-based) | 2,800-3,600 Mb/s | USB 3.0 bus ceiling |
 
-The 200 Mb/s figure used throughout this section represents a **conservative estimate for a SATA-based USB 3.0 external SSD** — the most common class of drive used for evidence export. Actual throughput varies by drive model, capacity utilization, and thermal conditions. For planning purposes, 200 Mb/s provides a realistic baseline; faster drives will complete sooner, slower HDDs will take proportionally longer.
+The 1,600 Mb/s figure used throughout this section represents a **conservative estimate for a SATA-based USB 3.0 external SSD** - the most common class of drive used for evidence export. Actual throughput varies by drive model, capacity utilization, and thermal conditions. For planning purposes, 1,600 Mb/s provides a realistic baseline; faster drives will complete sooner, slower HDDs will take proportionally longer.
 
 #### Single-Drive Copy Time — 10 TB
 
 | NIC Speed | Protocol | Effective Network Throughput | Drive Write Speed | Bottleneck | Copy Time |
 |---|---|---|---|---|---|
-| 1 Gbps | NFS | ~107 Mb/s | 200 Mb/s | **Network** | ~26 hours |
-| 1 Gbps | SMB | ~98 Mb/s | 200 Mb/s | **Network** | ~28 hours |
-| 10 Gbps | NFS | ~1,070 Mb/s | 200 Mb/s | **USB drive** | ~13 h 53 min |
-| 10 Gbps | SMB | ~978 Mb/s | 200 Mb/s | **USB drive** | ~13 h 53 min |
+| 1 Gbps | NFS | ~856 Mb/s | 1,600 Mb/s | **Network** | ~26 hours |
+| 1 Gbps | SMB | ~782 Mb/s | 1,600 Mb/s | **Network** | ~28 hours |
+| 10 Gbps | NFS | ~8,560 Mb/s | 1,600 Mb/s | **USB drive** | ~13 h 53 min |
+| 10 Gbps | SMB | ~7,824 Mb/s | 1,600 Mb/s | **USB drive** | ~13 h 53 min |
 
 #### Effect of Copy Threads on a Single-Drive Copy
 
@@ -385,27 +385,27 @@ The table below shows the effective throughput of a single 10 TB copy to one USB
 
 | Copy Threads | Behavior | Effective Throughput | Copy Time (10 TB) |
 |---|---|---|---|
-| 1 | One file at a time. Drive idles during network reads. | ~120–150 Mb/s | ~18–23 hours |
-| 2 | One thread reads while the other writes. Reduces idle gaps. | ~160–190 Mb/s | ~14–17 hours |
-| 4 | Read pipeline stays full; drive write queue rarely starves. Approaches drive's sustained write ceiling. | ~190–200 Mb/s | ~13–14 hours |
-| 8 | Marginal gain — drive is already saturated. Small benefit for directories with many small files. | ~195–200 Mb/s | ~13–14 hours |
-| 16+ | No additional throughput. Extra threads add context-switch overhead and memory usage with negligible benefit. | ~195–200 Mb/s | ~13–14 hours |
+| 1 | One file at a time. Drive idles during network reads. | ~960-1,200 Mb/s | ~18–23 hours |
+| 2 | One thread reads while the other writes. Reduces idle gaps. | ~1,280-1,520 Mb/s | ~14–17 hours |
+| 4 | Read pipeline stays full; drive write queue rarely starves. Approaches drive's sustained write ceiling. | ~1,520-1,600 Mb/s | ~13–14 hours |
+| 8 | Marginal gain - drive is already saturated. Small benefit for directories with many small files. | ~1,560-1,600 Mb/s | ~13–14 hours |
+| 16+ | No additional throughput. Extra threads add context-switch overhead and memory usage with negligible benefit. | ~1,560-1,600 Mb/s | ~13–14 hours |
 
 **Why threads help — and where they stop:**
 
 - **Network latency masking:** A single thread must wait for each network read to complete before starting the next. Multiple threads overlap reads and writes, keeping the USB drive busy.
 - **Small-file acceleration:** Directories with thousands of small files benefit most from additional threads because per-file metadata operations (open, stat, close) dominate. With 4+ threads, multiple files are in-flight simultaneously.
-- **Diminishing returns at the drive:** Once the read pipeline delivers data faster than the drive can write (~200 Mb/s for USB 3.0 SSD), adding more threads cannot improve throughput. The drive's write speed is the hard ceiling.
+- **Diminishing returns at the drive:** Once the read pipeline delivers data faster than the drive can write (~1,600 Mb/s for USB 3.0 SSD), adding more threads cannot improve throughput. The drive's write speed is the hard ceiling.
 - **Recommended default:** 4 threads per copy job provides the best balance of throughput and resource efficiency for most workloads. This is configurable in ECUBE's job settings.
 
-On a **1 Gbps NIC**, the network is the bottleneck at every thread count. Additional threads still help slightly (latency masking fills the pipe more efficiently), but the ceiling drops to ~107 Mb/s (NFS) or ~98 Mb/s (SMB) instead of the drive's 200 Mb/s.
+On a **1 Gbps NIC**, the network is the bottleneck at every thread count. Additional threads still help slightly (latency masking fills the pipe more efficiently), but the ceiling drops to ~856 Mb/s (NFS) or ~782 Mb/s (SMB) instead of the drive's 1,600 Mb/s.
 
 #### Key Takeaways
 
-- **A 1 Gbps NIC is the bottleneck even for a single drive.** At ~107 Mb/s (NFS), the network is slower than the USB drive's 200 Mb/s write speed, so the drive sits partially idle.
-- **10 Gbps eliminates the network bottleneck for per-drive throughput.** Each copy runs at the USB drive's native write speed (~200 Mb/s).
-- **NFS outperforms SMB** at identical wire speeds. On a 1 Gbps link, the difference is ~3 Mb/s (~2 hours over 10 TB). On 10 Gbps, both protocols exceed the drive's write speed, so the difference vanishes.
-- **Higher tiers don't make individual copies faster — they make more copies simultaneous.** The value of the Professional and Enterprise tiers is producing multiple identical exports at once.
+- **A 1 Gbps NIC is the bottleneck even for a single drive.** At ~856 Mb/s (NFS), the network is slower than the USB drive's 1,600 Mb/s write speed, so the drive sits partially idle.
+- **10 Gbps eliminates the network bottleneck for per-drive throughput.** Each copy runs at the USB drive's native write speed (~1,600 Mb/s).
+- **NFS outperforms SMB** at identical wire speeds. On a 1 Gbps link, the difference is ~74 Mb/s (~2 hours over 10 TB). On 10 Gbps, both protocols exceed the drive's write speed, so the difference vanishes.
+- **Higher tiers don't make individual copies faster - they make more copies simultaneous.** The value of the Professional and Enterprise tiers is producing multiple identical exports at once.
 - **Post-copy verification** (SHA-256 hash comparison of source vs. destination) requires reading all data back from the USB drive. This adds roughly the same duration as the copy itself when performed as a separate pass, or ~50% overhead when hashing inline during copy.
 
 ---
@@ -485,15 +485,15 @@ ECUBE is designed to run multiple copy threads and concurrent export sessions. T
 
 ### Network Demand by Tier
 
-A single USB 3.0 drive sustains roughly 150–350 Mb/s sequential writes depending on the drive.
+A single USB 3.0 drive sustains roughly 1,200-2,800 Mb/s sequential writes depending on the drive.
 
-| Tier | Ports | Aggregate Write Demand | 1 Gbps NIC (~115 Mb/s) | 10 Gbps NIC (~1,150 Mb/s) | 25 Gbps NIC (~2,800 Mb/s) |
+| Tier | Ports | Aggregate Write Demand | 1 Gbps NIC (~920 Mb/s) | 10 Gbps NIC (~9,200 Mb/s) | 25 Gbps NIC (~22,400 Mb/s) |
 |---|---|---|---|---|---|
-| **Standard** (4 ports) | 4 | 600–1,400 Mb/s | Bottleneck | Adequate | Headroom |
-| **Professional** (8 ports) | 8 | 1,200–2,800 Mb/s | Severe bottleneck | May saturate at peak | Adequate |
-| **Enterprise** (12 ports) | 12 | 1,800–4,200 Mb/s | Unusable | Bottleneck at peak | Adequate |
+| **Standard** (4 ports) | 4 | 4,800-11,200 Mb/s | Bottleneck | Adequate | Headroom |
+| **Professional** (8 ports) | 8 | 9,600-22,400 Mb/s | Severe bottleneck | May saturate at peak | Adequate |
+| **Enterprise** (12 ports) | 12 | 14,400-33,600 Mb/s | Unusable | Bottleneck at peak | Adequate |
 
-A 1 Gbps NIC caps at ~115 Mb/s — below even a single fast USB drive's sustained write rate. At the Standard tier with four ports, a 10 Gbps NIC provides comfortable headroom. At Professional and Enterprise tiers, a single 10 Gbps link may saturate when all ports are active with fast drives; dual-NIC bonding (LACP) or a 25 Gbps NIC is recommended.
+A 1 Gbps NIC caps at ~920 Mb/s - below even a single fast USB drive's sustained write rate. At the Standard tier with four ports, a 10 Gbps NIC provides comfortable headroom. At Professional and Enterprise tiers, a single 10 Gbps link may saturate when all ports are active with fast drives; dual-NIC bonding (LACP) or a 25 Gbps NIC is recommended.
 
 ### Recommendations by Tier
 
