@@ -461,7 +461,7 @@ Filter by drive state
 Sort results
 </li></ul>
 <p>When ECUBE can correlate a drive to a related job, the <code>Job ID</code> value on the Drives page acts as a direct link into that job's detail view. Drives without a related job keep the current placeholder behavior instead of showing a stale or guessed job ID.</p>
-<p>The <code>Drive ID</code> value on the Drives page also acts as the direct navigation entry point into Drive Detail. When a drive has a managed mount path, the visible <code>Device</code> identifier acts as the browse entry point into that mounted content instead of a separate <code>Browse</code> row action. The browse panel title uses that same visible drive identifier, and the directory browser starts at the USB root without exposing the host mount path in the breadcrumb.</p>
+<p>The <code>Drive ID</code> value on the Drives page also acts as the direct navigation entry point into Drive Detail. When a drive has an active managed mount and is in the <code>AVAILABLE</code> or <code>IN_USE</code> state, the visible <code>Device</code> identifier acts as the browse entry point into that mounted content instead of a separate <code>Browse</code> row action. The browse panel title uses that same visible drive identifier, and the directory browser starts at the USB root without exposing the host mount path in the breadcrumb.</p>
 <h2 id="4-3-drive-detail-page">4.3 Drive Detail Page</h2>
 <p>Selecting a drive opens a detail view showing:</p>
 <ul><li>
