@@ -1487,7 +1487,9 @@ Response: returns a `shares` array of sanitized remote paths and display names s
 ### Remove Share
 
 Deletes a share configuration. Any in-progress jobs using this share as a
-source path may fail.
+source path may fail. If the local mount point is still active, ECUBE attempts
+to unmount it before deleting the share record. If the host reports that the
+target is already unmounted, the delete still succeeds.
 
 ```bash
 # Requires admin or manager role

@@ -128,7 +128,7 @@ After `POST /drives/{drive_id}/mount` succeeds, ECUBE immediately requests a per
 | POST | `/shares/{share_id}/throughput-test` | admin/manager | Measure mounted-share read throughput from Share Detail and persist the latest bit-based `throughput_read_mbps` (`Mb/s`) and `throughput_tested_at` values on the share record |
 | POST | `/shares/{share_id}/validate` | admin/manager | Validate share connectivity |
 | POST | `/shares/validate` | admin/manager | Validate all shares |
-| DELETE | `/shares/{share_id}` | admin/manager | Remove share |
+| DELETE | `/shares/{share_id}` | admin/manager | Remove share and unmount the active OS mount first when needed |
 
 Project identifiers are canonicalized by trimming surrounding whitespace and converting the value to uppercase before storage and comparison. The share-create endpoint also rejects exact duplicate remote sources and cross-project parent or child overlaps with `409 Conflict`; same-project nested sources remain allowed. A temporary `409 Conflict` can also be returned when another share update is already in progress and holds the serialization lock.
 
@@ -137,6 +137,8 @@ Project identifiers are canonicalized by trimming surrounding whitespace and con
 `POST /shares/discover` is a trusted helper for the Add Share dialog. It accepts the selected share type plus the entered server seed and optional credentials, returns sanitized remote paths suitable for populating the dialog even in demo mode, and can return actionable `500` guidance when the ECUBE host is missing required discovery tools such as `smbclient` or `showmount`.
 
 `POST /shares/{share_id}/throughput-test` requires the selected share to be currently `MOUNTED` with readable content. On success it stores the latest measured read speed and test timestamp so Share Detail can keep showing the last known result to all roles. The persisted `throughput_read_mbps` value is a bit-based throughput measurement in `Mb/s`, not a byte-based `MB/s` value. Connectivity testing inside the Add/Edit dialogs remains separate from this persisted throughput measurement workflow.
+
+`DELETE /shares/{share_id}` removes the persisted share record only after ECUBE checks whether the local mount point is still active and attempts an OS unmount when needed. If the host reports that the target is already unmounted, ECUBE treats the delete as a successful cleanup instead of blocking record removal.
 
 `GET /shares` now returns `related_job.status` together with `related_job.custody_status` when trusted related-job context is available. The custody field uses `HANDOFF_RECORDED`, `PENDING_HANDOFF`, `STATUS_UNAVAILABLE`, or `NO_RELATED_JOB` so operator-facing surfaces can distinguish copy completion from final custody handoff completion.
 
