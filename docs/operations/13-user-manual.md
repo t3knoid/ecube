@@ -554,6 +554,7 @@ The directory browser allows users to explore the contents of active mount point
 
 **Accessing the browser:**
 
+- **From Drives:** Click the visible device label on the Drives page when the drive is mounted and in an active `AVAILABLE` or `IN_USE` state to open the directory browser rooted at that managed ECUBE drive mount.
 - **From Drive Detail:** Click the `Browse` button on any mounted drive to open the directory browser rooted at that drive's mount point.
 - **From Shares:** Click the mounted share's `Project` value to open browse directly from the list. The browse panel title uses the same project value in the form `Browse share <project> contents`.
 - **Mounted share root display:** Mounted-share browsing starts at `/`. The breadcrumb must not expose the share name, local mount point, or a doubled leading slash such as `//folder`.
@@ -567,7 +568,7 @@ The directory browser allows users to explore the contents of active mount point
 
 **Roles:** All authenticated roles (`admin`, `manager`, `processor`, `auditor`) can browse directories.
 
-> **Note:** Only active, registered mount points can be browsed. Arbitrary filesystem paths are not accessible through this feature.
+> **Note:** Only active, registered ECUBE mount points can be browsed. A pre-existing host mount outside the managed ECUBE USB mount root does not create a drive browse entry point until the drive is mounted into its managed ECUBE slot.
 
 ---
 

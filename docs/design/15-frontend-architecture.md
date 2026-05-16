@@ -445,7 +445,7 @@ Vue I18n 9.x provides the localization infrastructure. All user-visible strings 
 | `SetupWizardView.vue` | Screen 1 | UC-1.1 – UC-1.6 | Multi-step wizard (DB test → provision → reverse-proxy settings → create admin), requires matching admin password and confirmation values before setup completion, submits `trust_proxy_headers`, and handles informational `already_initialized` setup responses; renders outside AppShell |
 | `LoginView.vue` | Screen 2 | UC-2.1 – UC-2.2 | Username/password form; error display; renders outside AppShell |
 | `DashboardView.vue` | Screen 3 | UC-8.1 – UC-8.2 | Summary cards for system health plus role-gated drive/activity summary; auditors see only the system-health summary while other roles also see drive counts and active jobs; polls introspection |
-| `DrivesView.vue` | Screen 4a | UC-4.1 – UC-4.3 | Drive list table with status badges; refresh/rescan button |
+| `DrivesView.vue` | Screen 4a | UC-4.1 – UC-4.3 | Drive list table with status badges, refresh/rescan button, and inline browse entry from the visible device label for mounted active drives |
 | `DriveDetailView.vue` | Screen 4b | UC-4.4 – UC-4.7 | Drive properties; format, initialize, eject action panels; role-gated actions |
 | `MountsView.vue` | Screen 5 | UC-5.1 – UC-5.6 | Mount list with ID-driven detail navigation, project-driven browse for `admin`/`manager`/`processor`, add dialog for `admin`/`manager`, and redacted list presentation for read-only roles |
 | `MountDetailView.vue` | Screen 5b | UC-5.2 – UC-5.5 | Mount metadata view with browse gated to `admin`/`manager`/`processor`, edit/remove restricted to `admin`/`manager`, and an inline edit dialog with credential-preservation and clear-credentials flows |

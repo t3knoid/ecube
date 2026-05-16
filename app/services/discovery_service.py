@@ -46,6 +46,7 @@ from sqlalchemy.orm import Session
 
 from app.infrastructure.usb_discovery import DiscoveredTopology
 from app.infrastructure import FilesystemDetector
+from app.infrastructure.mount_info import is_managed_usb_mount_slot
 from app.models.hardware import DriveState, UsbDrive, UsbPort
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.drive_repository import DriveRepository
@@ -130,6 +131,20 @@ def _build_drive_discovered_audit_details(drive: UsbDrive, *, actor: Optional[st
         "discovery_actor": actor or "system",
         "discovered_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+def _persisted_usb_mount_path(
+    discovered_mount_path: Optional[str],
+    *,
+    drive_id: Optional[int],
+    current_state: Optional[DriveState] = None,
+    existing_mount_path: Optional[str] = None,
+) -> Optional[str]:
+    if drive_id is not None and discovered_mount_path and is_managed_usb_mount_slot(discovered_mount_path, drive_id):
+        return discovered_mount_path
+    if current_state == DriveState.IN_USE and drive_id is not None and existing_mount_path and is_managed_usb_mount_slot(existing_mount_path, drive_id):
+        return existing_mount_path
+    return None
 
 
 def discover_usb_topology() -> DiscoveredTopology:
@@ -305,12 +320,10 @@ def run_discovery_sync(
         if existing is None:
             # New drive — physically present drives on disabled ports are
             # DISABLED, enabled ports yield AVAILABLE/IN_USE, and only absent
-            # hardware is DISCONNECTED.
+            # hardware is DISCONNECTED. Discovery only trusts already-managed
+            # USB mount slots once a persisted drive row exists.
             port_enabled = _port_is_enabled(port_id)
-            persisted_mount_path = discovered_drive.mount_path if port_enabled else None
-            if port_enabled and discovered_drive.mount_path:
-                initial_state = DriveState.IN_USE
-            elif port_enabled:
+            if port_enabled:
                 initial_state = DriveState.AVAILABLE
             else:
                 initial_state = DriveState.DISABLED
@@ -322,7 +335,7 @@ def run_discovery_sync(
                 filesystem_path=discovered_drive.filesystem_path,
                 capacity_bytes=discovered_drive.capacity_bytes,
                 current_state=initial_state,
-                mount_path=persisted_mount_path,
+                mount_path=None,
             )
             # Detect filesystem type for newly discovered drives.
             if discovered_drive.filesystem_path:
@@ -411,9 +424,12 @@ def run_discovery_sync(
             port_enabled = _port_is_enabled(port_id or existing.port_id)
 
             has_project_binding = bool(normalize_project_id(existing.current_project_id))
-            persisted_mount_path = discovered_drive.mount_path
-            if not port_enabled and not has_project_binding:
-                persisted_mount_path = None
+            persisted_mount_path = _persisted_usb_mount_path(
+                discovered_drive.mount_path,
+                drive_id=existing.id,
+                current_state=existing.current_state,
+                existing_mount_path=existing.mount_path,
+            )
             if existing.mount_path != persisted_mount_path:
                 existing.mount_path = persisted_mount_path
                 changed = True

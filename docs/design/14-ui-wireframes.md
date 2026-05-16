@@ -516,6 +516,8 @@ The active-jobs table on this screen treats valid `Job ID` values as the navigat
 │              │  └────┴────────┴──────────┴────────┴────────┴────────┘│
 │              │                                                               │
 │              │  Click a row to view drive details and available actions.      │
+│              │  Mounted active drives also expose browse from the device      │
+│              │  label without surfacing the host mount path.                  │
 │              │                                                               │
 │              │  [ Manage Ports ]  [ Manage Hubs ]  (admin/manager — 4c/4d)   │
 │              │                                                               │

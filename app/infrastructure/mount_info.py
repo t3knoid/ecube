@@ -150,3 +150,26 @@ def find_device_mount_point(device_path: str) -> Optional[str]:
         if real_dev == real_device:
             return mnt
     return None
+
+
+def is_managed_usb_mount_slot(mount_point: str, drive_id: int) -> bool:
+    """Return whether *mount_point* matches the managed USB slot for *drive_id*."""
+    if drive_id < 1 or not mount_point:
+        return False
+
+    expected = _normalize_mount_path(os.path.join(settings.usb_mount_base_path, str(drive_id)))
+    target = _normalize_mount_path(mount_point)
+    if target == expected:
+        return True
+
+    try:
+        real_expected = os.path.realpath(expected)
+    except (OSError, ValueError):
+        real_expected = expected
+
+    try:
+        real_target = os.path.realpath(target)
+    except (OSError, ValueError):
+        real_target = target
+
+    return real_target == real_expected

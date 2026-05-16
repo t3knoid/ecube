@@ -70,6 +70,17 @@ Add the following manual checks when a release includes explicit destination-dri
 | Create job rejects an explicitly selected unassigned overflow drive | Open the create dialog for a project that already has one eligible primary drive, add an unassigned mounted drive as overflow, and submit | The job is not created, and the dialog shows the same initialize-and-bind instruction instead of silently rebinding the overflow drive |
 | Edit job rejects an explicitly selected unassigned drive | Open a pending job in Job Detail, enter `Edit`, switch the primary or overflow selection to an unassigned mounted drive, and save | The edit is rejected, the existing job definition stays unchanged, and the dialog instructs the operator to initialize and bind the drive before selecting it |
 
+## Manual Verification Additions for Drive Browse Eligibility
+
+Add the following manual checks when a release includes drive browse gating or USB discovery mount-state reconciliation changes.
+
+| Scenario | Steps | Expected |
+|---|---|---|
+| Disabled drive with stale host mount does not expose browse in Drives list | Leave a USB drive host-mounted outside the ECUBE managed USB root, keep its port disabled, open `Drives`, and refresh discovery | The device label remains plain text, no browse panel opens from the list, and the row stays in `DISABLED` |
+| Disabled drive with stale host mount does not expose browse in Drive Detail | Open the same disabled drive in Drive Detail | `Browse` is not shown, and the page still offers `Enable Drive` when the hardware is physically present on a known port |
+| Re-enabled drive does not recover an unmanaged host mount path | Start with the same pre-existing host mount outside the managed ECUBE USB root, enable the port, and refresh discovery | The drive becomes `AVAILABLE` without a browse affordance tied to that unmanaged host mount, and the operator must use the normal ECUBE mount workflow before browsing |
+| Re-enabled drive regains browse after mounting into its managed ECUBE slot | With the same drive enabled, use ECUBE `Mount`, return to `Drives`, and open Drive Detail | The drive shows the browse entry point from the visible device label in the list and the `Browse` button in Drive Detail because the mount path is now the managed ECUBE slot |
+
 ## Manual Verification Additions for Archived Jobs
 
 Add the following manual checks when a release includes the archived-job workflow on the Jobs page and Job Detail page.

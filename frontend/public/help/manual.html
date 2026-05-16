@@ -602,6 +602,8 @@ Use <code>Clear saved credentials</code> if you need to remove previously stored
 <p>The directory browser allows users to explore the contents of active mount points (USB drives and network shares) before creating an export job.</p>
 <p><strong>Accessing the browser:</strong></p>
 <ul><li>
+<strong>From Drives:</strong> Click the visible device label on the Drives page when the drive is mounted and in an active <code>AVAILABLE</code> or <code>IN_USE</code> state to open the directory browser rooted at that managed ECUBE drive mount.
+</li><li>
 <strong>From Drive Detail:</strong> Click the <code>Browse</code> button on any mounted drive to open the directory browser rooted at that drive's mount point.
 </li><li>
 <strong>From Shares:</strong> Click the mounted share's <code>Project</code> value to open browse directly from the list. The browse panel title uses the same project value in the form <code>Browse share &lt;project&gt; contents</code>.
@@ -619,7 +621,7 @@ Symlinks appear with a link icon and are not navigable.
 Results are paginated; use the page controls at the bottom to navigate large directories.
 </li></ul>
 <p><strong>Roles:</strong> All authenticated roles (<code>admin</code>, <code>manager</code>, <code>processor</code>, <code>auditor</code>) can browse directories.</p>
-<blockquote><p><strong>Note:</strong> Only active, registered mount points can be browsed. Arbitrary filesystem paths are not accessible through this feature.</p></blockquote>
+<blockquote><p><strong>Note:</strong> Only active, registered ECUBE mount points can be browsed. A pre-existing host mount outside the managed ECUBE USB mount root does not create a drive browse entry point until the drive is mounted into its managed ECUBE slot.</p></blockquote>
 <p class="help-back-to-top"><a href="#help-toc-title">Back to top</a></p>
 <hr />
 <h1 id="6-jobs">6. Jobs</h1>
