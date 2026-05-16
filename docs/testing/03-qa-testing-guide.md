@@ -1571,6 +1571,7 @@ Recommended QA sink: https://webhook.site/
 | 2 | `GET /jobs/99999/files` | 404, `NOT_FOUND` |
 | 3 | `DELETE /shares/99999` | 404, `NOT_FOUND` |
 | 3b | Delete a share whose DB status is stale but whose OS mount is still active | Mark a share `UNMOUNTED` in the DB while leaving the real mount active, then `DELETE /shares/{share_id}` | 204, the share record is removed, and the host mount is no longer present |
+| 3c | Delete a share when the live mount-state probe is indeterminate | Force the mount check to time out or error while the host mount is still active, then `DELETE /shares/{share_id}` | 204, ECUBE still attempts OS unmount, and the host mount is no longer present unless the unmount itself fails |
 | 3a | Legacy share-management endpoint path is rejected | `POST /mounts` or `DELETE /mounts/99999` | 404 `NOT_FOUND` or 405 `Method Not Allowed`, and no share data is created, deleted, or modified |
 | 4 | Start an already-running job | 409, `CONFLICT` |
 | 5 | Pause a running job | 200, job status transitions to `PAUSING` |

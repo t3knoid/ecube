@@ -1361,6 +1361,28 @@ def test_delete_share_unmounts_when_live_mount_state_disagrees_with_record(manag
     assert db.get(NetworkShare, mount.id) is None
 
 
+def test_delete_share_unmounts_when_live_mount_state_is_indeterminate(manager_client, db):
+    mount = NetworkShare(
+        type=MountType.NFS,
+        remote_path="192.168.1.1:/share",
+        local_mount_point="/mnt/share",
+        status=MountStatus.UNMOUNTED,
+    )
+    db.add(mount)
+    db.commit()
+
+    provider = MagicMock()
+    provider.check_mounted.return_value = None
+    provider.os_unmount.return_value = (True, None)
+
+    with patch("app.services.share_service._default_provider", return_value=provider):
+        response = manager_client.delete(f"/shares/{mount.id}")
+
+    assert response.status_code == 204
+    provider.os_unmount.assert_called_once_with("/mnt/share")
+    assert db.get(NetworkShare, mount.id) is None
+
+
 def test_delete_share_treats_not_mounted_error_as_success(manager_client, db):
     mount = NetworkShare(
         type=MountType.NFS,

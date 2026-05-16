@@ -2071,7 +2071,7 @@ def remove_share(mount_id: int, db: Session, actor: Optional[str] = None,
             timeout_seconds=_network_mount_timeout_seconds(),
         )
     should_attempt_unmount = bool(local_mount_point) and (
-        mount.status == MountStatus.MOUNTED or live_mount_state is True
+        mount.status == MountStatus.MOUNTED or live_mount_state is not False
     )
 
     if live_mount_state is True and mount.status != MountStatus.MOUNTED:
@@ -2084,6 +2084,13 @@ def remove_share(mount_id: int, db: Session, actor: Optional[str] = None,
     elif live_mount_state is False and mount.status == MountStatus.MOUNTED:
         logger.info(
             "Removing share with stale mounted record but inactive OS mount: mount_id=%s mount_label=%s status=%s",
+            mount_id,
+            _redacted_mount_label(local_mount_point),
+            mount.status.value,
+        )
+    elif live_mount_state is None and mount.status != MountStatus.MOUNTED:
+        logger.info(
+            "Removing share with indeterminate mount check and stale unmounted record: mount_id=%s mount_label=%s status=%s",
             mount_id,
             _redacted_mount_label(local_mount_point),
             mount.status.value,
