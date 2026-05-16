@@ -307,6 +307,7 @@ def run_discovery_sync(
             # DISABLED, enabled ports yield AVAILABLE/IN_USE, and only absent
             # hardware is DISCONNECTED.
             port_enabled = _port_is_enabled(port_id)
+            persisted_mount_path = discovered_drive.mount_path if port_enabled else None
             if port_enabled and discovered_drive.mount_path:
                 initial_state = DriveState.IN_USE
             elif port_enabled:
@@ -321,7 +322,7 @@ def run_discovery_sync(
                 filesystem_path=discovered_drive.filesystem_path,
                 capacity_bytes=discovered_drive.capacity_bytes,
                 current_state=initial_state,
-                mount_path=discovered_drive.mount_path,
+                mount_path=persisted_mount_path,
             )
             # Detect filesystem type for newly discovered drives.
             if discovered_drive.filesystem_path:
@@ -391,10 +392,6 @@ def run_discovery_sync(
             if discovered_drive.product_name is not None and existing.product_name != discovered_drive.product_name:
                 existing.product_name = discovered_drive.product_name
                 changed = True
-            if existing.mount_path != discovered_drive.mount_path:
-                existing.mount_path = discovered_drive.mount_path
-                changed = True
-
             # Detect filesystem type on every refresh cycle.
             if discovered_drive.filesystem_path:
                 try:
@@ -414,6 +411,12 @@ def run_discovery_sync(
             port_enabled = _port_is_enabled(port_id or existing.port_id)
 
             has_project_binding = bool(normalize_project_id(existing.current_project_id))
+            persisted_mount_path = discovered_drive.mount_path
+            if not port_enabled and not has_project_binding:
+                persisted_mount_path = None
+            if existing.mount_path != persisted_mount_path:
+                existing.mount_path = persisted_mount_path
+                changed = True
 
             # Mounted drives become IN_USE on rediscovery only when they are
             # still bound to a project. Mounted but uninitialized drives must

@@ -37,10 +37,17 @@ let mobileViewportQuery = null
 /** Drive ID currently being browsed (null = none open). */
 const browsingDriveId = ref(null)
 
+function isDriveBrowsable(drive) {
+  return !!drive?.mount_path && ['AVAILABLE', 'IN_USE'].includes(String(drive?.current_state || '').toUpperCase())
+}
+
 /** The currently-browsed drive object. */
 const activeBrowsedDrive = computed(() =>
   browsingDriveId.value !== null
-    ? drives.value.find((d) => d.id === browsingDriveId.value) || null
+    ? (() => {
+        const drive = drives.value.find((d) => d.id === browsingDriveId.value) || null
+        return isDriveBrowsable(drive) ? drive : null
+      })()
     : null
 )
 const canManageDrives = computed(() => authStore.hasAnyRole(['admin', 'manager']))
@@ -281,6 +288,14 @@ function openDriveById(driveId) {
 const browsePanelRef = ref(null)
 
 async function toggleBrowse(driveId) {
+  const drive = drives.value.find((row) => row.id === driveId) || null
+  if (!isDriveBrowsable(drive)) {
+    if (browsingDriveId.value === driveId) {
+      browsingDriveId.value = null
+    }
+    return
+  }
+
   browsingDriveId.value = browsingDriveId.value === driveId ? null : driveId
   if (browsingDriveId.value !== null) {
     await nextTick()
@@ -354,7 +369,7 @@ onBeforeUnmount(() => {
       </template>
       <template #cell-display_device_label="{ row }">
         <button
-          v-if="row.mount_path"
+          v-if="isDriveBrowsable(row)"
           class="cell-link drive-device-link"
           type="button"
           @click="toggleBrowse(row.id)"
@@ -393,7 +408,7 @@ onBeforeUnmount(() => {
     </DataTable>
 
     <section
-      v-if="activeBrowsedDrive?.mount_path"
+      v-if="activeBrowsedDrive"
       ref="browsePanelRef"
       class="browse-panel"
     >

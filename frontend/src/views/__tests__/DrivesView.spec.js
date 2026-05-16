@@ -339,6 +339,19 @@ describe('DrivesView rescan and filter loading', () => {
     expect(wrapper.find('.directory-browser-stub').text()).toBe('|/mnt/ecube/1')
   })
 
+  it('does not expose drive browsing for a disabled drive carrying a stale mount path', async () => {
+    mocks.getDrives.mockResolvedValue([
+      buildDrive({ current_state: 'DISABLED', mount_path: '/media/legacy-evidence' }),
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('.drive-device-link').exists()).toBe(false)
+    expect(wrapper.text()).toContain('SanDisk Ultra - Port 1')
+    expect(wrapper.find('.directory-browser-stub').exists()).toBe(false)
+  })
+
   it('links the drive ID value to the drive detail page', async () => {
     mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/1' })])
 

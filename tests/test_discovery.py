@@ -622,6 +622,82 @@ def test_new_drive_on_disabled_port_inserted_as_disabled(db):
     assert drive.filesystem_path == "/dev/sdb"
 
 
+def test_new_drive_on_disabled_port_drops_discovered_mount_path_until_reenabled(db):
+    topology = DiscoveredTopology(
+        hubs=[DiscoveredHub(system_identifier="usb1", name="Test Hub", vendor_id="1d6b", product_id="0002")],
+        ports=[DiscoveredPort(
+            hub_system_identifier="usb1",
+            port_number=1,
+            system_path="1-1",
+            vendor_id="0781",
+            product_id="5583",
+            speed="5000",
+        )],
+        drives=[DiscoveredDrive(
+            device_identifier="SN-DISABLED-MOUNT",
+            port_system_path="1-1",
+            filesystem_path="/dev/sdb",
+            mount_path="/media/ecube/preexisting",
+            capacity_bytes=64_000_000_000,
+            manufacturer="SanDisk",
+            product_name="Ultra",
+            speed="5000",
+        )],
+    )
+
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+
+    drive = db.query(UsbDrive).filter(UsbDrive.device_identifier == "SN-DISABLED-MOUNT").one()
+    assert drive.current_state == DriveState.DISABLED
+    assert drive.mount_path is None
+
+    port = db.query(UsbPort).one()
+    port.enabled = True
+    db.commit()
+
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+
+    db.refresh(drive)
+    assert drive.current_state == DriveState.AVAILABLE
+    assert drive.mount_path == "/media/ecube/preexisting"
+
+
+def test_existing_disabled_drive_clears_stale_mount_path_when_port_remains_disabled(db):
+    topology = DiscoveredTopology(
+        hubs=[DiscoveredHub(system_identifier="usb1", name="Test Hub", vendor_id="1d6b", product_id="0002")],
+        ports=[DiscoveredPort(
+            hub_system_identifier="usb1",
+            port_number=1,
+            system_path="1-1",
+            vendor_id="0781",
+            product_id="5583",
+            speed="5000",
+        )],
+        drives=[DiscoveredDrive(
+            device_identifier="SN-LEGACY-STUCK-MOUNT",
+            port_system_path="1-1",
+            filesystem_path="/dev/sdb",
+            mount_path="/media/ecube/preexisting",
+            capacity_bytes=64_000_000_000,
+            manufacturer="SanDisk",
+            product_name="Ultra",
+            speed="5000",
+        )],
+    )
+
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+
+    drive = db.query(UsbDrive).filter(UsbDrive.device_identifier == "SN-LEGACY-STUCK-MOUNT").one()
+    drive.mount_path = "/media/ecube/legacy-host-mount"
+    db.commit()
+
+    run_discovery_sync(db, topology_source=lambda: topology, filesystem_detector=_NULL_DETECTOR)
+
+    db.refresh(drive)
+    assert drive.current_state == DriveState.DISABLED
+    assert drive.mount_path is None
+
+
 def test_new_drive_on_enabled_port_inserted_as_available(db):
     """A newly discovered drive on an enabled port should be AVAILABLE."""
     topology = _simple_topology()
