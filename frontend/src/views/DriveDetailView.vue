@@ -148,7 +148,11 @@ const canEject = computed(
       || (drive.value?.current_state === 'AVAILABLE' && !!drive.value?.mount_path)
     ),
 )
-const canBrowse = computed(() => !!drive.value?.mount_path && canBrowseContents.value)
+const canBrowse = computed(
+  () => !!drive.value?.mount_path
+    && ['AVAILABLE', 'IN_USE'].includes(drive.value?.current_state)
+    && canBrowseContents.value,
+)
 const canTestThroughput = computed(
   () => !formatInProgress.value
     && canManage.value

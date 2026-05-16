@@ -281,6 +281,19 @@ describe('DriveDetailView mount workflow', () => {
     expect(labels).not.toContain(i18n.global.t('drives.mount'))
   })
 
+  it('hides browse drive content for disabled drives carrying a stale mount path', async () => {
+    mocks.getDrives.mockResolvedValue([
+      buildDrive({ current_state: 'DISABLED', mount_path: '/media/legacy-evidence', port_id: 1 }),
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const labels = wrapper.findAll('button').map((node) => node.text())
+    expect(labels).not.toContain(i18n.global.t('drives.browse'))
+    expect(wrapper.find('.directory-browser-stub').exists()).toBe(false)
+  })
+
   it('hides browse drive content for auditors', async () => {
     mocks.hasAnyRole.mockImplementation((roles) => roles.includes('auditor'))
     mocks.getDrives.mockResolvedValue([buildDrive({ mount_path: '/mnt/ecube/7' })])
