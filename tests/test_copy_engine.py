@@ -3258,8 +3258,8 @@ def test_run_copy_job_emits_job_completed_audit(db, tmp_path):
     assert log.details["copied_bytes"] == 4
     assert log.details["total_bytes"] == 4
     assert log.details["elapsed_seconds"] >= 0
-    assert "copy_rate_mb_s" in log.details
-    assert log.details["copy_rate_mb_s"] >= 0
+    assert "copy_rate_mbps" in log.details
+    assert log.details["copy_rate_mbps"] >= 0
 
 
 def test_run_copy_job_uses_copy_phase_duration_for_rate_and_logs_phase_split(db, tmp_path, caplog):
@@ -3305,7 +3305,7 @@ def test_run_copy_job_uses_copy_phase_duration_for_rate_and_logs_phase_split(db,
     assert log is not None
     assert log.details["elapsed_seconds"] == 20
     assert log.details["preparing_duration_seconds"] == 40.0
-    assert log.details["copy_rate_mb_s"] == 0.0
+    assert log.details["copy_rate_mbps"] == 0.0
 
     phase_messages = [record for record in caplog.records if record.getMessage() == "Copy job phase durations finalized"]
     assert phase_messages
@@ -3671,7 +3671,7 @@ def test_run_copy_job_logs_job_completed_with_job_id(db, tmp_path, caplog):
         and "total_bytes=9" in message
         and "preparing_seconds=" in message
         and "elapsed_seconds=" in message
-        and "copy_rate_mb_s=" in message
+        and "copy_rate_mbps=" in message
         for message in completed_messages
     )
     assert all("source_path=" not in message for message in completed_messages)
