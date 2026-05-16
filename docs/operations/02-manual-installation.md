@@ -736,6 +736,54 @@ Backend `.env` requirements when behind an external reverse proxy:
 - `API_ROOT_PATH=/api`
 - `SERVE_FRONTEND_PATH=` (leave empty — the external server handles frontend serving)
 
+### 8.1 Example: nginx Serving the UI and Proxying `/api/`
+
+The following example serves `frontend/dist` from nginx, falls back to `index.html` for SPA routes, and proxies `/api/` to an ECUBE backend listening on `127.0.0.1:8000`.
+
+```nginx
+server {
+  listen 443 ssl http2;
+  server_name ecube.example.com;
+
+  ssl_certificate     /etc/letsencrypt/live/ecube.example.com/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/ecube.example.com/privkey.pem;
+  ssl_protocols       TLSv1.2 TLSv1.3;
+  ssl_ciphers         HIGH:!aNULL:!MD5;
+
+  root /opt/ecube/frontend/dist;
+  index index.html;
+
+  location = /api {
+    return 301 /api/;
+  }
+
+  location /api/ {
+    proxy_http_version 1.1;
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_pass http://127.0.0.1:8000/;
+  }
+
+  location / {
+    try_files $uri $uri/ /index.html;
+  }
+}
+
+server {
+  listen 80;
+  server_name ecube.example.com;
+  return 301 https://$host$request_uri;
+}
+```
+
+Notes:
+
+- The trailing slash on `proxy_pass http://127.0.0.1:8000/;` causes nginx to remove the `/api/` prefix before forwarding the request to ECUBE.
+- This example matches the backend settings above: `TRUST_PROXY_HEADERS=true`, `API_ROOT_PATH=/api`, and `SERVE_FRONTEND_PATH=`.
+- If the backend runs on another host over HTTPS, change the upstream URL to `https://...` and enable upstream certificate verification in nginx.
+
 Validation checklist:
 
 - UI loads at `https://<ui-host>/`

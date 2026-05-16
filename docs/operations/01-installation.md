@@ -230,6 +230,27 @@ Same as the default install but skips TLS certificate generation. Uvicorn listen
 
 Use `--no-tls` only for lab/testing or when TLS termination is handled by an external load balancer.
 
+### Reverse Proxy Install
+
+```bash
+sudo ./install.sh --no-tls --api-port 8000
+```
+
+Use this mode when nginx, HAProxy, Caddy, or another trusted reverse proxy terminates TLS in front of ECUBE. The installer still deploys the backend service and the pre-built frontend, but uvicorn listens on a private plain-HTTP port intended to be reachable only from the reverse proxy.
+
+Recommended flow:
+
+1. Run `install.sh` with `--no-tls` and a non-public backend port such as `8000`.
+2. Configure the reverse proxy to forward `Host`, `X-Forwarded-For`, and `X-Forwarded-Proto` headers.
+3. Complete the setup wizard through the reverse proxy URL (for example `https://<proxy-host>/setup`). During rollout, you can instead use `http://<backend-host>:8000/setup` over a trusted network path before the proxy is in place.
+4. In the setup wizard, enable trusted reverse-proxy client IP headers for deployments behind a trusted proxy.
+
+Notes:
+
+- This mode is appropriate only when the reverse proxy and ECUBE communicate over localhost or another trusted private network segment.
+- If the reverse proxy simply forwards all requests to ECUBE, leave the installer-managed frontend in place.
+- If nginx serves the SPA itself and proxies only `/api/` to ECUBE, leave `SERVE_FRONTEND_PATH` empty and set `API_ROOT_PATH=/api` after installation. See the nginx example in [docs/operations/02-manual-installation.md](02-manual-installation.md#81-example-nginx-serving-the-ui-and-proxying-api).
+
 ---
 
 ## Prepare PostgreSQL
