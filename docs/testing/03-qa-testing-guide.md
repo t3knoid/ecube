@@ -1543,7 +1543,7 @@ Recommended QA sink: https://webhook.site/
 
 | # | Test | How | Expected |
 |---|------|-----|----------|
-| 0 | HTTPS private callback toggle persists from Admin UI | Open Admin, enable `Allow Private Callback IPs`, save, then reload Admin | Save succeeds and the checkbox reloads as enabled |
+| 0 | Private callback toggle persists from Admin UI | Open Admin, enable `Allow Private Callback IPs`, save, then reload Admin | Save succeeds and the checkbox reloads as enabled |
 | 0 | System-wide callback default can be set from Admin UI | Open `https://webhook.site/`, copy the generated HTTPS URL, enter it in Default Callback URL, save, then reload Admin | Configuration saves successfully and the field reloads with the saved value |
 | 0a | HTTP system-wide callback default requires explicit confirmation | Enter `http://example.com/default-webhook` in Default Callback URL and try to save before selecting the insecure callback checkbox, then select the checkbox and save again | The first save is rejected with the testing-only confirmation message. After the checkbox is selected, save succeeds and the field reloads with the saved HTTP value |
 | 0aa | Outbound callback proxy URL can be set from Admin UI | Open Admin, enter a valid HTTP or HTTPS URL in Outbound Callback Proxy URL, save, then reload Admin | Configuration saves successfully and the proxy URL reloads with the saved value |
@@ -1556,6 +1556,8 @@ Recommended QA sink: https://webhook.site/
 | 1 | HTTPS callback URL accepted on job create | `POST /jobs` with `"callback_url": "https://example.com/webhook"` | 200, job response echoes `callback_url` |
 | 2 | HTTP callback URL rejected without confirmation | `POST /jobs` with `"callback_url": "http://example.com/webhook"` and no confirmation flag | 422, validation error mentions HTTPS or the insecure callback confirmation flag |
 | 2a | HTTP callback URL accepted with confirmation | `POST /jobs` with `"callback_url": "http://example.com/webhook"` and `"allow_insecure_callback_url": true` | 200, job response echoes `callback_url` |
+| 2b | Private callback target blocked when admin toggle is off | Configure a job or system callback to `http://callback.lab.local/hook` or `https://callback.lab.local/hook` while `Allow Private Callback IPs` is disabled, then trigger delivery | Callback delivery fails with the SSRF protection reason and no request reaches the private target |
+| 2c | Private callback target allowed only when admin toggle is on | Enable `Allow Private Callback IPs`, configure a private lab callback target, then trigger delivery | Callback delivery reaches the private lab target after the admin toggle is enabled |
 | 3 | Callback URL with embedded credentials rejected | `POST /jobs` with `"callback_url": "https://user:pass@example.com/hook"` | 422, validation error rejects URL credentials |
 | 4 | Callback URL with no hostname rejected | `POST /jobs` with malformed HTTPS URL such as `"https:///path-only"` | 422 |
 | 5 | Terminal-state callback delivered | Create a job with a `webhook.site` HTTPS URL, run job to completion, then inspect the received request in `webhook.site` | `webhook.site` receives the terminal-state payload and the job completes normally |

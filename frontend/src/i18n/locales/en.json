@@ -795,7 +795,7 @@
       },
       "callback_allow_private_ips": {
         "label": "Allow Private Callback IPs",
-        "help": "When enabled, HTTPS callback delivery may target private or loopback addresses. Leave disabled for production. Test-only HTTP callbacks already target lab hosts without using the HTTPS SSRF gate."
+        "help": "When enabled, callback delivery may target private or loopback addresses for controlled lab workflows. Leave disabled for production so HTTP and HTTPS callbacks stay limited to publicly routable destinations."
       },
       "callback_default_url": {
         "label": "Default Callback URL",

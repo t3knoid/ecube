@@ -812,7 +812,7 @@ Add the `callback_url` field to your `POST /jobs` request:
 **Requirements:**
 
 - The URL uses `https://` for normal deployments. Test-only `http://` URLs are accepted when the request also sets the explicit insecure-callback confirmation flag.
-- HTTPS callback URLs must resolve to a **publicly routable** IP address by default. Private/loopback addresses (`10.x`, `172.16–31.x`, `192.168.x`, `127.x`, `::1`) are blocked to prevent SSRF attacks unless `CALLBACK_ALLOW_PRIVATE_IPS=true`. Test-only HTTP callbacks skip that private-address SSRF gate and should remain limited to trusted lab environments.
+- Callback URLs must resolve to a **publicly routable** IP address by default. Private/loopback addresses (`10.x`, `172.16–31.x`, `192.168.x`, `127.x`, `::1`) are blocked to prevent SSRF attacks unless `CALLBACK_ALLOW_PRIVATE_IPS=true`. Test-only HTTP callbacks still require the explicit insecure-callback confirmation flag, and private lab destinations remain admin-gated through `CALLBACK_ALLOW_PRIVATE_IPS`.
 
 ### 7.2 Callback Payload
 
@@ -977,7 +977,7 @@ With that configuration, ECUBE sends:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CALLBACK_TIMEOUT_SECONDS` | `30` | Per-attempt HTTP timeout in seconds. |
-| `CALLBACK_ALLOW_PRIVATE_IPS` | `false` | Allow HTTPS callbacks to RFC 1918 / loopback addresses. Test-only HTTP callbacks skip the private-address SSRF gate. |
+| `CALLBACK_ALLOW_PRIVATE_IPS` | `false` | Allow HTTP and HTTPS callbacks to RFC 1918 / loopback addresses for controlled lab workflows. |
 | `CALLBACK_MAX_WORKERS` | `4` | Maximum concurrent callback delivery threads. |
 | `CALLBACK_MAX_PENDING` | `100` | Maximum outstanding deliveries (queued + in-flight). Excess deliveries are dropped. |
 | `CALLBACK_DEFAULT_URL` | unset | Optional callback URL used when a job does not define `callback_url`. HTTPS is the normal production path. Test-only `http://` values require the explicit insecure-callback confirmation flag. |

@@ -4,9 +4,10 @@ Sends an HTTP or HTTPS POST with a JSON payload for terminal job outcomes and
 selected persisted lifecycle actions such as creation, start, retry,
 pause, manifest generation, chain-of-custody updates, archive, and
 restart reconciliation. Retries up to 4 times with exponential backoff
-on transient errors (5xx, network failures). HTTPS callbacks block
-private/reserved IP addresses by default (SSRF protection), while the
-test-only HTTP path skips DNS pinning and private-address checks.
+on transient errors (5xx, network failures). Callback delivery blocks
+private/reserved IP addresses by default (SSRF protection) unless the
+admin-controlled callback_allow_private_ips setting explicitly allows
+private or loopback destinations.
 
 Delivery runs on a bounded ``ThreadPoolExecutor`` (sized by
 ``settings.callback_max_workers``, default 4) with its own short-lived
@@ -656,7 +657,7 @@ def _do_deliver(
 
     # --- DNS resolution + SSRF validation (single resolution, pinned) ---
     pinned_ip: Optional[str] = None
-    if parsed.scheme.lower() == "https" and not settings.callback_allow_private_ips:
+    if not settings.callback_allow_private_ips:
         try:
             pinned_ip = _resolve_safe(hostname)
         except ValueError as exc:
@@ -688,7 +689,8 @@ def _do_deliver(
     # preventing DNS rebinding between our safety check and the
     # actual TCP connection (TOCTOU elimination).
     if pinned_ip is not None:
-        port = parsed.port or 443
+        default_port = 443 if parsed.scheme.lower() == "https" else 80
+        port = parsed.port or default_port
         ip_host = f"[{pinned_ip}]" if ":" in pinned_ip else pinned_ip
         pinned_netloc = f"{ip_host}:{port}"
         pinned_url = urlunparse((
@@ -715,9 +717,10 @@ def _do_deliver(
                 # Override Host header and TLS SNI so the server sees the
                 # original hostname despite connecting to the resolved IP.
                 post_kwargs["headers"]["Host"] = host_header
-                post_kwargs["extensions"] = {
-                    "sni_hostname": hostname.encode("idna"),
-                }
+                if parsed.scheme.lower() == "https":
+                    post_kwargs["extensions"] = {
+                        "sni_hostname": hostname.encode("idna"),
+                    }
 
             client_kwargs: Dict[str, Any] = {
                 "timeout": timeout,

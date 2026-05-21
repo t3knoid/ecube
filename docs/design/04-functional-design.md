@@ -272,12 +272,12 @@ The callback body is a JSON object containing:
 ### SSRF Protection
 
 - The callback URL's hostname is resolved via DNS before the request is sent.
-- If any resolved address is private, loopback, link-local, or reserved, delivery is **blocked** (configurable via `CALLBACK_ALLOW_PRIVATE_IPS`).
+- If any resolved address is private, loopback, link-local, or reserved, delivery is **blocked** for both HTTP and HTTPS unless `CALLBACK_ALLOW_PRIVATE_IPS` explicitly allows private or loopback targets.
 - Unresolvable hostnames are also blocked.
 
 ### Schema Enforcement
 
-- Only `https://` URLs are accepted. HTTP URLs are rejected with 422 at job creation time.
+- `https://` is the standard callback scheme. `http://` is accepted only for test and lab workflows when the caller explicitly confirms insecure callback use, and private or loopback targets remain gated by `CALLBACK_ALLOW_PRIVATE_IPS`.
 
 ### Audit Events
 

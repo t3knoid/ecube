@@ -1256,7 +1256,7 @@ Important operational notes:
 - `enforce_for_root` remains enabled and is not editable from the UI.
 - `Startup Analysis Batch Size` accepts values from `1` to `5000`. Lower values reduce peak memory use during startup analysis; higher values reduce database round trips.
 - Drive formatting and mount timeout controls live on the `Configuration` page, not the `Admin` page.
-- The `Allow Private Callback IPs` checkbox controls whether HTTPS callbacks may target private or loopback destinations. Leave it disabled for production deployments.
+- The `Allow Private Callback IPs` checkbox controls whether callback delivery may target private or loopback destinations. Leave it disabled for production deployments.
 - The `Default Callback URL` accepts `https://` by default. An `http://` value is available for test and lab workflows only after you select the explicit insecure callback confirmation checkbox. Any job-specific `Webhook callback URL` entered on the Jobs page or Job Detail edit dialog still overrides the system-wide default.
 - The `Outbound Callback Proxy URL` must be a valid `http://` or `https://` URL and must not contain embedded credentials.
 - The `Webhook Signing Secret` field is write-only. Leave it blank to keep the current secret, enter a new value to rotate it, or use the clear checkbox to remove it.
@@ -1289,7 +1289,7 @@ How precedence works:
 Important rules:
 
 - Callback URLs use `https://` for normal deployments. `http://` is available only for testing after you select the explicit insecure callback confirmation checkbox.
-- HTTPS callbacks block private and loopback destinations unless an administrator explicitly allows them. Test-only `http://` callbacks skip that private-address SSRF check and should stay in lab environments.
+- Callback delivery blocks private and loopback destinations unless an administrator explicitly allows them. Test-only `http://` callbacks still require the insecure-callback confirmation checkbox, and private lab destinations remain gated by `Allow Private Callback IPs`.
 - Callback URLs with embedded credentials are rejected
 - If an administrator configures a signing secret, ECUBE adds an `X-ECUBE-Signature` header to outbound callbacks
 - The callback is sent for supported persisted lifecycle events such as `JOB_CREATED`, `JOB_STARTED`, `JOB_RETRY_FAILED_FILES_STARTED`, `JOB_PAUSE_REQUESTED`, `JOB_VERIFY_STARTED`, `JOB_COMPLETED`, `JOB_FAILED`, `JOB_COMPLETED_MANUALLY`, `MANIFEST_CREATED`, `COC_SNAPSHOT_STORED`, `COC_HANDOFF_CONFIRMED`, `JOB_ARCHIVED`, and `JOB_RECONCILED`
@@ -1302,7 +1302,7 @@ To configure a system-wide callback as an administrator:
 
 1. Open `Admin`.
 2. Scroll to the `Webhooks` panel.
-3. Enable `Allow Private Callback IPs` only when HTTPS callbacks must reach private or loopback lab destinations.
+3. Enable `Allow Private Callback IPs` only when callback delivery must reach private or loopback lab destinations.
 4. Enter the `Default Callback URL` if jobs without a per-job callback should still notify a downstream system.
 5. If that URL starts with `http://`, select the testing-only insecure callback checkbox.
 6. Optionally enter an `Outbound Callback Proxy URL` if your environment requires webhook delivery through an HTTP or HTTPS forward proxy.
@@ -1318,7 +1318,7 @@ To configure a per-job callback:
 
 Operational notes:
 
-- Use `https://` for normal deployments. Test-only `http://` callbacks require the insecure-callback confirmation checkbox and can target internal lab hosts.
+- Use `https://` for normal deployments. Test-only `http://` callbacks require the insecure-callback confirmation checkbox, and internal lab hosts still require `Allow Private Callback IPs`.
 - Embedded credentials in callback or proxy URLs are rejected.
 - Leaving the job-level callback blank causes ECUBE to fall back to the configured system default, if one exists.
 - Leaving both values blank disables callback delivery for that job.

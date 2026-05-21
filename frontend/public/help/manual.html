@@ -1414,7 +1414,7 @@ When demo mode is enabled and <code>DEMO_SHARED_PASSWORD</code> is left empty, E
 </li><li>
 Drive formatting and mount timeout controls live on the <code>Configuration</code> page, not the <code>Admin</code> page.
 </li><li>
-The <code>Allow Private Callback IPs</code> checkbox controls whether HTTPS callbacks may target private or loopback destinations. Leave it disabled for production deployments.
+The <code>Allow Private Callback IPs</code> checkbox controls whether callback delivery may target private or loopback destinations. Leave it disabled for production deployments.
 </li><li>
 The <code>Default Callback URL</code> accepts <code>https://</code> by default. An <code>http://</code> value is available for test and lab workflows only after you select the explicit insecure callback confirmation checkbox. Any job-specific <code>Webhook callback URL</code> entered on the Jobs page or Job Detail edit dialog still overrides the system-wide default.
 </li><li>
@@ -1453,7 +1453,7 @@ If neither value is set, ECUBE does not send a webhook callback
 <ul><li>
 Callback URLs use <code>https://</code> for normal deployments. <code>http://</code> is available only for testing after you select the explicit insecure callback confirmation checkbox.
 </li><li>
-HTTPS callbacks block private and loopback destinations unless an administrator explicitly allows them. Test-only <code>http://</code> callbacks skip that private-address SSRF check and should stay in lab environments.
+Callback delivery blocks private and loopback destinations unless an administrator explicitly allows them. Test-only <code>http://</code> callbacks still require the insecure-callback confirmation checkbox, and private lab destinations remain gated by <code>Allow Private Callback IPs</code>.
 </li><li>
 Callback URLs with embedded credentials are rejected
 </li><li>
@@ -1469,7 +1469,7 @@ Open <code>Admin</code>.
 </li><li>
 Scroll to the <code>Webhooks</code> panel.
 </li><li>
-Enable <code>Allow Private Callback IPs</code> only when HTTPS callbacks must reach private or loopback lab destinations.
+Enable <code>Allow Private Callback IPs</code> only when callback delivery must reach private or loopback lab destinations.
 </li><li>
 Enter the <code>Default Callback URL</code> if jobs without a per-job callback should still notify a downstream system.
 </li><li>
@@ -1493,7 +1493,7 @@ Save the job.
 </li></ol>
 <p>Operational notes:</p>
 <ul><li>
-Use <code>https://</code> for normal deployments. Test-only <code>http://</code> callbacks require the insecure-callback confirmation checkbox and can target internal lab hosts.
+Use <code>https://</code> for normal deployments. Test-only <code>http://</code> callbacks require the insecure-callback confirmation checkbox, and internal lab hosts still require <code>Allow Private Callback IPs</code>.
 </li><li>
 Embedded credentials in callback or proxy URLs are rejected.
 </li><li>

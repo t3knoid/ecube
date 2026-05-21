@@ -1218,10 +1218,40 @@ class TestDeliverCallback:
             assert len(logs) == 1
 
     @patch("app.services.callback_service.settings")
-    def test_http_callback_skips_ssrf_private_ip_block(self, mock_settings, db):
-        """Test-only HTTP callbacks skip DNS pinning and private-IP blocking
-        even when CALLBACK_ALLOW_PRIVATE_IPS remains false."""
+    def test_http_callback_private_ip_blocked_when_private_ips_disabled(self, mock_settings, db):
+        """Test-only HTTP callbacks still honor the admin-controlled
+        private-IP SSRF gate when CALLBACK_ALLOW_PRIVATE_IPS is false."""
         mock_settings.callback_allow_private_ips = False
+        mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = None
+
+        with patch(
+            "app.services.callback_service._resolve_safe",
+            side_effect=ValueError("Resolved to non-globally-routable address: 192.168.10.84"),
+        ) as mock_resolve, patch("app.services.callback_service.httpx.Client") as mock_client_cls:
+            mock_client_instance = MagicMock()
+            mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
+            mock_client_instance.__exit__ = MagicMock(return_value=False)
+            mock_client_cls.return_value = mock_client_instance
+
+            job = self._make_db_job(db, callback_url="http://callback.lab.local:8000/hook")
+            deliver_callback(job, db)
+
+            mock_resolve.assert_called_once_with("callback.lab.local")
+            mock_client_instance.post.assert_not_called()
+            logs = db.query(AuditLog).filter(
+                AuditLog.job_id == job.id,
+                AuditLog.action == "CALLBACK_DELIVERY_FAILED",
+            ).all()
+            assert len(logs) == 1
+            assert "SSRF protection" in logs[0].details["reason"]
+
+    @patch("app.services.callback_service.settings")
+    def test_http_callback_private_ip_allowed_when_configured(self, mock_settings, db):
+        """When CALLBACK_ALLOW_PRIVATE_IPS is enabled, test-only HTTP
+        callbacks may target private lab endpoints."""
+        mock_settings.callback_allow_private_ips = True
         mock_settings.callback_timeout_seconds = 5
         mock_settings.callback_hmac_secret = None
         mock_settings.callback_proxy_url = None
