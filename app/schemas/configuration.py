@@ -27,6 +27,26 @@ class ConfigurationGetResponse(BaseModel):
     settings: List[ConfigurationField] = Field(default_factory=list)
 
 
+class ManagerConfigurationUpdateRequest(StrictIntMixin, BaseModel):
+    """Documented request body for manager-accessible configuration updates."""
+
+    model_config = {"extra": "forbid", "json_schema_extra": {"minProperties": 1}}
+
+    log_level: Optional[Literal["DEBUG", "INFO", "WARNING", "ERROR"]] = Field(default=None)
+    mkfs_exfat_cluster_size: Optional[Literal["4K", "64K", "128K", "256K"]] = Field(default=None)
+    drive_format_timeout_seconds: Optional[StrictInt] = Field(default=None, ge=1)
+    drive_mount_timeout_seconds: Optional[StrictInt] = Field(default=None, ge=1)
+    network_mount_timeout_seconds: Optional[StrictInt] = Field(default=None, ge=1)
+    mount_share_discovery_timeout_seconds: Optional[StrictInt] = Field(default=None, ge=1)
+    copy_job_timeout: Optional[StrictInt] = Field(default=None, ge=0)
+    copy_chunk_size_bytes: Optional[StrictInt] = Field(default=None, ge=262_144, le=67_108_864)
+    copy_progress_flush_bytes: Optional[StrictInt] = Field(default=None, ge=1_048_576, le=1_073_741_824)
+    copy_default_thread_count: Optional[StrictInt] = Field(default=None, ge=1, le=32)
+    copy_file_fsync_enabled: Optional[StrictBool] = Field(default=None)
+    usb_discovery_interval: Optional[StrictInt] = Field(default=None, ge=0)
+    job_detail_files_page_size: Optional[StrictInt] = Field(default=None, ge=20, le=100)
+
+
 class ConfigurationUpdateRequest(StrictIntMixin, BaseModel):
     """Request body for configuration update endpoints.
 

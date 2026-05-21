@@ -15,6 +15,7 @@ from app.schemas.configuration import (
     ConfigurationGetResponse,
     ConfigurationRestartRequest,
     ConfigurationRestartResponse,
+    ManagerConfigurationUpdateRequest,
     ConfigurationUpdateRequest,
     ConfigurationUpdateResponse,
 )
@@ -27,6 +28,16 @@ logger = logging.getLogger(__name__)
 
 _SECRET_CONFIGURATION_FIELDS = frozenset({"callback_hmac_secret"})
 _REQUEST_ONLY_CONFIGURATION_FIELDS = frozenset({"allow_insecure_callback_default_url"})
+_MANAGER_CONFIGURATION_OPENAPI_EXTRA = {
+    "requestBody": {
+        "required": True,
+        "content": {
+            "application/json": {
+                "schema": ManagerConfigurationUpdateRequest.model_json_schema()
+            }
+        },
+    }
+}
 
 router = APIRouter(tags=["configuration"])
 _CONFIGURATION_ACCESS = require_roles("admin", "manager")
@@ -126,6 +137,7 @@ def get_configuration(
     "/configuration",
     response_model=ConfigurationUpdateResponse,
     responses={**R_401, **R_403, **R_422, **R_500, **R_503},
+    openapi_extra=_MANAGER_CONFIGURATION_OPENAPI_EXTRA,
 )
 async def update_configuration(
     request: Request,

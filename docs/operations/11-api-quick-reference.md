@@ -357,7 +357,7 @@ Admin-only fields exposed through this surface include:
 
 - Logging infrastructure: `log_format`, `log_file`, `log_file_max_bytes`, `log_file_backup_count`
 - Database runtime: `db_pool_size`, `db_pool_max_overflow`, `db_pool_recycle_seconds`
-- Webhooks: `callback_default_url`, `callback_proxy_url`, `callback_payload_fields`, `callback_payload_field_map`, `callback_hmac_secret`
+- Webhooks: `callback_allow_private_ips`, `callback_default_url`, `callback_proxy_url`, `callback_payload_fields`, `callback_payload_field_map`, `callback_hmac_secret`
 - Platform integration: `nfs_client_version`, `startup_analysis_batch_size`
 
 Notes:

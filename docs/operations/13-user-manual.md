@@ -1267,7 +1267,7 @@ Important operational notes:
 
 If your role does not include access to either page, the navigation item will not appear.
 
-![Configuration page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/configuration-default-chromium-linux.png)
+![Admin page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/configuration-default-chromium-linux.png)
 
 ---
 

@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from app.config import settings
 from app.logging_config import configure_logging
 from app.models.audit import AuditLog
-from app.schemas.configuration import ConfigurationUpdateRequest
+from app.schemas.configuration import ConfigurationUpdateRequest, ManagerConfigurationUpdateRequest
 
 
 class TestConfigurationSchemaValidation:
@@ -64,6 +64,10 @@ class TestConfigurationSchemaValidation:
     def test_update_accepts_callback_allow_private_ips(self):
         req = ConfigurationUpdateRequest(callback_allow_private_ips=True)
         assert req.callback_allow_private_ips is True
+
+    def test_manager_update_schema_rejects_callback_allow_private_ips(self):
+        with pytest.raises(ValidationError):
+            ManagerConfigurationUpdateRequest(callback_allow_private_ips=True)
 
     def test_update_accepts_callback_default_url(self):
         req = ConfigurationUpdateRequest(callback_default_url="https://example.com/default-webhook")
@@ -395,6 +399,27 @@ class TestConfigurationEndpoints:
             json={"clear_callback_hmac_secret": True},
         )
         assert resp.status_code == 403, resp.json()
+
+    def test_manager_update_configuration_rejects_callback_allow_private_ips(self, manager_client):
+        resp = manager_client.put(
+            "/configuration",
+            json={"callback_allow_private_ips": True},
+        )
+        assert resp.status_code == 403, resp.json()
+
+    def test_manager_update_configuration_openapi_omits_admin_only_callback_fields(self, client):
+        resp = client.get("/openapi.json")
+        assert resp.status_code == 200
+
+        request_schema = (
+            resp.json()["paths"]["/configuration"]["put"]["requestBody"]["content"]["application/json"]["schema"]
+        )
+        properties = request_schema["properties"]
+
+        assert "log_level" in properties
+        assert "callback_allow_private_ips" not in properties
+        assert "callback_default_url" not in properties
+        assert "db_pool_size" not in properties
 
     def test_update_configuration_rejects_startup_analysis_batch_size_above_maximum(self, admin_client):
         resp = admin_client.put(
