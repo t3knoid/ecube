@@ -1288,6 +1288,7 @@ How precedence works:
 Important rules:
 
 - Callback URLs use `https://` for normal deployments. `http://` is available only for testing after you select the explicit insecure callback confirmation checkbox.
+- HTTPS callbacks block private and loopback destinations unless an administrator explicitly allows them. Test-only `http://` callbacks skip that private-address SSRF check and should stay in lab environments.
 - Callback URLs with embedded credentials are rejected
 - If an administrator configures a signing secret, ECUBE adds an `X-ECUBE-Signature` header to outbound callbacks
 - The callback is sent for supported persisted lifecycle events such as `JOB_CREATED`, `JOB_STARTED`, `JOB_RETRY_FAILED_FILES_STARTED`, `JOB_PAUSE_REQUESTED`, `JOB_VERIFY_STARTED`, `JOB_COMPLETED`, `JOB_FAILED`, `JOB_COMPLETED_MANUALLY`, `MANIFEST_CREATED`, `COC_SNAPSHOT_STORED`, `COC_HANDOFF_CONFIRMED`, `JOB_ARCHIVED`, and `JOB_RECONCILED`
@@ -1315,7 +1316,7 @@ To configure a per-job callback:
 
 Operational notes:
 
-- The callback URL must use `https://`.
+- Use `https://` for normal deployments. Test-only `http://` callbacks require the insecure-callback confirmation checkbox and can target internal lab hosts.
 - Embedded credentials in callback or proxy URLs are rejected.
 - Leaving the job-level callback blank causes ECUBE to fall back to the configured system default, if one exists.
 - Leaving both values blank disables callback delivery for that job.

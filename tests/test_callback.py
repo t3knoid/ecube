@@ -888,10 +888,41 @@ class TestDeliverCallback:
         assert len(logs) == 1
         assert "empty hostname" in logs[0].details["reason"].lower()
 
-    def test_non_https_blocked_at_runtime(self, db):
-        """A plain-HTTP callback URL stored in the DB is rejected at delivery
-        time (defense-in-depth behind the schema validator)."""
+    @patch("app.services.callback_service._resolve_safe", return_value="93.184.216.34")
+    @patch("app.services.callback_service.httpx.Client")
+    def test_http_callback_allowed_at_runtime(self, mock_client_cls, _mock_resolve, db):
+        """A plain-HTTP callback URL that passed request validation is delivered
+        at runtime instead of being rejected by a stale HTTPS-only gate."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_client_instance = MagicMock()
+        mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
+        mock_client_instance.__exit__ = MagicMock(return_value=False)
+        mock_client_instance.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client_instance
+
         job = self._make_db_job(db, callback_url="http://example.com/hook")
+
+        with patch("app.services.callback_service.settings.callback_allow_private_ips", False), \
+             patch("app.services.callback_service.settings.callback_timeout_seconds", 5):
+            deliver_callback(job, db)
+
+        call_args = mock_client_instance.post.call_args
+        posted_url = call_args[0][0]
+        headers = call_args[1]["headers"]
+        assert posted_url.startswith("http://93.184.216.34")
+        assert headers["Host"] == "example.com"
+
+        logs = db.query(AuditLog).filter(
+            AuditLog.job_id == job.id,
+            AuditLog.action == "CALLBACK_DELIVERY_FAILED",
+        ).all()
+        assert logs == []
+
+    def test_unsupported_scheme_blocked_at_runtime(self, db):
+        """Schemes outside HTTP and HTTPS remain blocked at delivery time as a
+        defense-in-depth check for stale or hand-edited data."""
+        job = self._make_db_job(db, callback_url="ftp://example.com/hook")
 
         deliver_callback(job, db)
 
@@ -1180,6 +1211,38 @@ class TestDeliverCallback:
             call_args = mock_client_instance.post.call_args
             posted_url = call_args[0][0]
             assert "example.com" in posted_url
+            logs = db.query(AuditLog).filter(
+                AuditLog.job_id == job.id,
+                AuditLog.action == "CALLBACK_SENT",
+            ).all()
+            assert len(logs) == 1
+
+    @patch("app.services.callback_service.settings")
+    def test_http_callback_skips_ssrf_private_ip_block(self, mock_settings, db):
+        """Test-only HTTP callbacks skip DNS pinning and private-IP blocking
+        even when CALLBACK_ALLOW_PRIVATE_IPS remains false."""
+        mock_settings.callback_allow_private_ips = False
+        mock_settings.callback_timeout_seconds = 5
+        mock_settings.callback_hmac_secret = None
+        mock_settings.callback_proxy_url = None
+
+        with patch("app.services.callback_service.httpx.Client") as mock_client_cls, \
+             patch("app.services.callback_service._resolve_safe") as mock_resolve:
+            resp_200 = MagicMock()
+            resp_200.status_code = 200
+            mock_client_instance = MagicMock()
+            mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
+            mock_client_instance.__exit__ = MagicMock(return_value=False)
+            mock_client_instance.post.return_value = resp_200
+            mock_client_cls.return_value = mock_client_instance
+
+            job = self._make_db_job(db, callback_url="http://callback.lab.local:8000/hook")
+            deliver_callback(job, db)
+
+            mock_resolve.assert_not_called()
+            call_args = mock_client_instance.post.call_args
+            posted_url = call_args[0][0]
+            assert posted_url == "http://callback.lab.local:8000/hook"
             logs = db.query(AuditLog).filter(
                 AuditLog.job_id == job.id,
                 AuditLog.action == "CALLBACK_SENT",

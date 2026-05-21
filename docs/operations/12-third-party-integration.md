@@ -811,8 +811,8 @@ Add the `callback_url` field to your `POST /jobs` request:
 
 **Requirements:**
 
-- The URL **must** use the `https://` scheme. Non-HTTPS URLs are rejected with `422 Unprocessable Entity`.
-- The URL must resolve to a **publicly routable** IP address by default. Private/loopback addresses (`10.x`, `172.16–31.x`, `192.168.x`, `127.x`, `::1`) are blocked to prevent SSRF attacks. Set `CALLBACK_ALLOW_PRIVATE_IPS=true` only in trusted lab environments.
+- The URL uses `https://` for normal deployments. Test-only `http://` URLs are accepted when the request also sets the explicit insecure-callback confirmation flag.
+- HTTPS callback URLs must resolve to a **publicly routable** IP address by default. Private/loopback addresses (`10.x`, `172.16–31.x`, `192.168.x`, `127.x`, `::1`) are blocked to prevent SSRF attacks unless `CALLBACK_ALLOW_PRIVATE_IPS=true`. Test-only HTTP callbacks skip that private-address SSRF gate and should remain limited to trusted lab environments.
 
 ### 7.2 Callback Payload
 
@@ -977,10 +977,10 @@ With that configuration, ECUBE sends:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CALLBACK_TIMEOUT_SECONDS` | `30` | Per-attempt HTTP timeout in seconds. |
-| `CALLBACK_ALLOW_PRIVATE_IPS` | `false` | Allow callbacks to RFC 1918 / loopback addresses. |
+| `CALLBACK_ALLOW_PRIVATE_IPS` | `false` | Allow HTTPS callbacks to RFC 1918 / loopback addresses. Test-only HTTP callbacks skip the private-address SSRF gate. |
 | `CALLBACK_MAX_WORKERS` | `4` | Maximum concurrent callback delivery threads. |
 | `CALLBACK_MAX_PENDING` | `100` | Maximum outstanding deliveries (queued + in-flight). Excess deliveries are dropped. |
-| `CALLBACK_DEFAULT_URL` | unset | Optional HTTPS callback URL used when a job does not define `callback_url`. |
+| `CALLBACK_DEFAULT_URL` | unset | Optional callback URL used when a job does not define `callback_url`. HTTPS is the normal production path. Test-only `http://` values require the explicit insecure-callback confirmation flag. |
 | `CALLBACK_PROXY_URL` | unset | Optional `http://` or `https://` forward-proxy URL used for outbound callback delivery. |
 | `CALLBACK_HMAC_SECRET` | unset | Optional shared secret used to generate the `X-ECUBE-Signature` header. |
 | `CALLBACK_PAYLOAD_FIELDS` | unset | Optional JSON array of allowlisted source field names to include in callback payloads. |

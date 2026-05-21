@@ -1,11 +1,12 @@
 """Webhook callback delivery for job lifecycle events.
 
-Sends an HTTPS POST with a JSON payload for terminal job outcomes and
+Sends an HTTP or HTTPS POST with a JSON payload for terminal job outcomes and
 selected persisted lifecycle actions such as creation, start, retry,
 pause, manifest generation, chain-of-custody updates, archive, and
 restart reconciliation. Retries up to 4 times with exponential backoff
-on transient errors (5xx, network failures). Blocks private/reserved IP
-addresses by default (SSRF protection).
+on transient errors (5xx, network failures). HTTPS callbacks block
+private/reserved IP addresses by default (SSRF protection), while the
+test-only HTTP path skips DNS pinning and private-address checks.
 
 Delivery runs on a bounded ``ThreadPoolExecutor`` (sized by
 ``settings.callback_max_workers``, default 4) with its own short-lived
@@ -602,7 +603,7 @@ def _do_deliver(
             logger.exception("Failed to write audit log for CALLBACK_DELIVERY_FAILED (malformed URL)")
         return
 
-    if parsed.scheme.lower() != "https":
+    if parsed.scheme.lower() not in {"https", "http"}:
         logger.warning("Callback URL for job %s uses disallowed scheme: %s", job_id, parsed.scheme)
         try:
             audit_repo.add(
@@ -655,7 +656,7 @@ def _do_deliver(
 
     # --- DNS resolution + SSRF validation (single resolution, pinned) ---
     pinned_ip: Optional[str] = None
-    if not settings.callback_allow_private_ips:
+    if parsed.scheme.lower() == "https" and not settings.callback_allow_private_ips:
         try:
             pinned_ip = _resolve_safe(hostname)
         except ValueError as exc:
