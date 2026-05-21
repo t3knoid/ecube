@@ -37,6 +37,11 @@ PREPARE_EJECT_BLOCKING_JOB_STATUSES = (
     JobStatus.VERIFYING,
 )
 
+PREPARE_EJECT_CALLBACK_JOB_STATUSES = (
+    JobStatus.COMPLETED,
+    JobStatus.FAILED,
+)
+
 
 def normalize_unreleased_drive_states(db: Session) -> int:
     legacy_state_rows = db.execute(
@@ -106,6 +111,23 @@ def _redacted_audit_path(path: Optional[str]) -> Optional[str]:
     if not path:
         return None
     return "[redacted]"
+
+
+def _get_latest_unreleased_assigned_job(db: Session, drive_id: int) -> Optional[ExportJob]:
+    return (
+        db.query(ExportJob)
+        .populate_existing()
+        .join(
+            DriveAssignment,
+            DriveAssignment.job_id == ExportJob.id,
+        )
+        .filter(
+            DriveAssignment.drive_id == drive_id,
+            DriveAssignment.released_at.is_(None),
+        )
+        .order_by(DriveAssignment.assigned_at.desc(), DriveAssignment.id.desc())
+        .first()
+    )
 
 
 def _reject_pending_drive_format(drive: Optional[UsbDrive], *, action: str) -> None:
@@ -932,14 +954,6 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
             ),
         )
 
-    assigned_job = db.query(ExportJob).join(
-        DriveAssignment,
-        DriveAssignment.job_id == ExportJob.id,
-    ).filter(
-        DriveAssignment.drive_id == drive_id,
-        DriveAssignment.released_at.is_(None),
-    ).order_by(DriveAssignment.assigned_at.desc()).first()
-
     # Check if the drive has any jobs with incomplete files (timeouts or errors).
     # Warn the operator before allowing eject.
     try:
@@ -1059,6 +1073,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                 status_code=500,
                 detail="Drive ejected at OS level but database update failed; manual intervention may be required",
             )
+        assigned_job = _get_latest_unreleased_assigned_job(db, drive_id)
         eject_audit = None
         try:
             audit_details = {
@@ -1072,6 +1087,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                     {
                         "job_id": assigned_job.id,
                         "job_evidence_number": assigned_job.evidence_number,
+                        "job_status": assigned_job.status.value,
                         "message": (
                             f"Drive prepared for eject from attached job {assigned_job.id}"
                         ),
@@ -1088,7 +1104,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
             )
         except Exception:
             logger.exception("Failed to write audit log for DRIVE_EJECT_PREPARED")
-        if assigned_job is not None:
+        if assigned_job is not None and assigned_job.status in PREPARE_EJECT_CALLBACK_JOB_STATUSES:
             try:
                 deliver_callback(
                     assigned_job,
