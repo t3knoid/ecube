@@ -837,6 +837,45 @@ class TestDeliverCallback:
         assert sent_payload["event_actor"] == "processor"
         assert sent_payload["event_details"] == {"thread_count": 4}
 
+    @patch("app.services.callback_service._resolve_safe", return_value="93.184.216.34")
+    @patch("app.services.callback_service.httpx.Client")
+    def test_prepare_eject_event_is_delivered_with_explicit_event_details(
+        self,
+        mock_client_cls,
+        _mock_resolve,
+        db,
+    ):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_client_instance = MagicMock()
+        mock_client_instance.__enter__ = MagicMock(return_value=mock_client_instance)
+        mock_client_instance.__exit__ = MagicMock(return_value=False)
+        mock_client_instance.post.return_value = mock_response
+        mock_client_cls.return_value = mock_client_instance
+
+        job = self._make_db_job(db)
+
+        with patch("app.services.callback_service.settings.callback_allow_private_ips", False), \
+             patch("app.services.callback_service.settings.callback_timeout_seconds", 5):
+            deliver_callback(
+                job,
+                db,
+                event="DRIVE_EJECT_PREPARED",
+                event_actor="manager",
+                event_at=datetime(2026, 5, 21, 12, 0, tzinfo=timezone.utc),
+                event_details={"drive_id": 17, "flush_ok": True, "unmount_ok": True},
+            )
+
+        sent_payload = json.loads(mock_client_instance.post.call_args.kwargs["content"].decode("utf-8"))
+        assert sent_payload["event"] == "DRIVE_EJECT_PREPARED"
+        assert sent_payload["event_actor"] == "manager"
+        assert sent_payload["event_at"] == "2026-05-21T12:00:00+00:00"
+        assert sent_payload["event_details"] == {
+            "drive_id": 17,
+            "flush_ok": True,
+            "unmount_ok": True,
+        }
+
     def test_malformed_url_audit_record(self, db):
         """A malformed callback_url that cannot be parsed must produce a
         CALLBACK_DELIVERY_FAILED audit record."""

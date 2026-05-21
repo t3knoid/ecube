@@ -519,6 +519,7 @@ If you need to assign the drive to a <em>different</em> project, format it first
 </li></ul>
 <h2 id="4-6-prepare-eject">4.6 Prepare Eject</h2>
 <p>Use <code>Prepare Eject</code> before physically removing a mounted drive. The action is available for <code>IN_USE</code> drives and for <code>AVAILABLE</code> drives that still have an active mount. ECUBE flushes pending writes, unmounts the filesystem, and transitions the drive to <code>AVAILABLE</code>.</p>
+<p>If the drive still has an unreleased <code>COMPLETED</code> or <code>FAILED</code> job assignment and that job has callback delivery configured, a successful prepare-eject sends a <code>DRIVE_EJECT_PREPARED</code> callback for that job and stores the audit row with the attached job context.</p>
 <p>After a successful prepare-eject:</p>
 <ul><li>
 The drive state returns to <code>AVAILABLE</code>.
@@ -1459,7 +1460,7 @@ Callback URLs with embedded credentials are rejected
 </li><li>
 If an administrator configures a signing secret, ECUBE adds an <code>X-ECUBE-Signature</code> header to outbound callbacks
 </li><li>
-The callback is sent for supported persisted lifecycle events such as <code>JOB_CREATED</code>, <code>JOB_STARTED</code>, <code>JOB_RETRY_FAILED_FILES_STARTED</code>, <code>JOB_PAUSE_REQUESTED</code>, <code>JOB_VERIFY_STARTED</code>, <code>JOB_COMPLETED</code>, <code>JOB_FAILED</code>, <code>JOB_COMPLETED_MANUALLY</code>, <code>MANIFEST_CREATED</code>, <code>COC_SNAPSHOT_STORED</code>, <code>COC_HANDOFF_CONFIRMED</code>, <code>JOB_ARCHIVED</code>, and <code>JOB_RECONCILED</code>
+The callback is sent for supported persisted lifecycle events such as <code>JOB_CREATED</code>, <code>JOB_STARTED</code>, <code>JOB_RETRY_FAILED_FILES_STARTED</code>, <code>JOB_PAUSE_REQUESTED</code>, <code>JOB_VERIFY_STARTED</code>, <code>JOB_COMPLETED</code>, <code>JOB_FAILED</code>, <code>JOB_COMPLETED_MANUALLY</code>, <code>MANIFEST_CREATED</code>, <code>COC_SNAPSHOT_STORED</code>, <code>COC_HANDOFF_CONFIRMED</code>, <code>JOB_ARCHIVED</code>, <code>JOB_RECONCILED</code>, and <code>DRIVE_EJECT_PREPARED</code> when an attached completed or failed drive assignment is prepared for eject
 </li></ul>
 <p>Use a job-specific callback URL when one export must notify a different downstream system than the rest of the deployment.</p>
 <h2 id="11-1-configure-callback-delivery">11.1 Configure Callback Delivery</h2>

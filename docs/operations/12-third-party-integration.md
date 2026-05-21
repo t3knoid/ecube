@@ -793,7 +793,7 @@ Write-Host "  Drive:    $driveId"
 
 ## 7. Webhook Callbacks
 
-Instead of polling `GET /jobs/{job_id}` for every lifecycle change, you can supply a `callback_url` when creating or updating a job. ECUBE will `POST` a JSON payload to that URL whenever one of the supported persisted job lifecycle events occurs: `JOB_CREATED`, `JOB_STARTED`, `JOB_RETRY_FAILED_FILES_STARTED`, `JOB_PAUSE_REQUESTED`, `JOB_VERIFY_STARTED`, `JOB_COMPLETED`, `JOB_FAILED`, `JOB_COMPLETED_MANUALLY`, `MANIFEST_CREATED`, `COC_SNAPSHOT_STORED`, `COC_HANDOFF_CONFIRMED`, `JOB_ARCHIVED`, or `JOB_RECONCILED`.
+Instead of polling `GET /jobs/{job_id}` for every lifecycle change, you can supply a `callback_url` when creating or updating a job. ECUBE will `POST` a JSON payload to that URL whenever one of the supported persisted job or attached-drive events occurs: `JOB_CREATED`, `JOB_STARTED`, `JOB_RETRY_FAILED_FILES_STARTED`, `JOB_PAUSE_REQUESTED`, `JOB_VERIFY_STARTED`, `JOB_COMPLETED`, `JOB_FAILED`, `JOB_COMPLETED_MANUALLY`, `MANIFEST_CREATED`, `COC_SNAPSHOT_STORED`, `COC_HANDOFF_CONFIRMED`, `JOB_ARCHIVED`, `JOB_RECONCILED`, or `DRIVE_EJECT_PREPARED`.
 
 ### 7.1 Enabling Webhooks
 
@@ -820,7 +820,7 @@ When a supported job lifecycle event is persisted, ECUBE delivers a `POST` reque
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `event` | `string` | Lifecycle event code such as `JOB_CREATED`, `JOB_STARTED`, `JOB_VERIFY_STARTED`, `JOB_COMPLETED`, `JOB_FAILED`, `MANIFEST_CREATED`, `COC_SNAPSHOT_STORED`, `COC_HANDOFF_CONFIRMED`, `JOB_ARCHIVED`, or `JOB_RECONCILED`. |
+| `event` | `string` | Lifecycle event code such as `JOB_CREATED`, `JOB_STARTED`, `JOB_VERIFY_STARTED`, `JOB_COMPLETED`, `JOB_FAILED`, `MANIFEST_CREATED`, `COC_SNAPSHOT_STORED`, `COC_HANDOFF_CONFIRMED`, `JOB_ARCHIVED`, `JOB_RECONCILED`, or `DRIVE_EJECT_PREPARED`. |
 | `job_id` | `integer` | The export job ID. |
 | `project_id` | `string` | Bound project ID. |
 | `evidence_number` | `string` | Evidence case number. |
@@ -846,7 +846,7 @@ When a supported job lifecycle event is persisted, ECUBE delivers a `POST` reque
 | `completed_at` | `string` or absent | ISO 8601 timestamp. Present only when the job recorded a completion time. |
 | `event_actor` | `string` or absent | Username or system identity that triggered the lifecycle event when recorded. |
 | `event_at` | `string` | ISO 8601 timestamp for the persisted lifecycle event. |
-| `event_details` | `object` or absent | Optional event-specific metadata such as retry counts, manifest details, chain-of-custody details, or reconciliation reason. |
+| `event_details` | `object` or absent | Optional event-specific metadata such as retry counts, manifest details, chain-of-custody details, reconciliation reason, or prepare-eject result flags for an attached drive. |
 
 **Example payload:**
 
@@ -878,6 +878,8 @@ When a supported job lifecycle event is persisted, ECUBE delivers a `POST` reque
 ```
 
 For partial-success runs that still end in `JOB_COMPLETED`, rely on `completion_result`, `files_failed`, and `files_timed_out` rather than the event name alone.
+
+When an operator successfully prepares eject for a drive that still has an unreleased `COMPLETED` or `FAILED` job assignment, ECUBE emits `DRIVE_EJECT_PREPARED` to that job's effective callback URL. The payload keeps the job identifiers in the standard top-level fields and adds prepare-eject specifics such as `drive_id`, `flush_ok`, and `unmount_ok` under `event_details`.
 
 Use `started_at` when your integration needs the full active run lifecycle, including startup preparation. Use `copy_started_at` together with `active_duration_seconds` when your integration needs copy-only rate, copy-only elapsed time, or ETA calculations.
 

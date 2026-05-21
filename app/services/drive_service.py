@@ -21,6 +21,7 @@ from app.repositories.drive_repository import DriveRepository
 from app.repositories.share_repository import ShareRepository
 from app.schemas.hardware import DriveRelatedJobSchema
 from app.services.audit_service import get_job_drive_custody_summary, log_and_audit
+from app.services.callback_service import deliver_callback
 from app.services.drive_space_service import request_available_space_refresh_for_drive
 from app.utils.drive_identity import mask_serial_number
 from app.utils.sanitize import normalize_project_id, sanitize_error_message
@@ -931,6 +932,14 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
             ),
         )
 
+    assigned_job = db.query(ExportJob).join(
+        DriveAssignment,
+        DriveAssignment.job_id == ExportJob.id,
+    ).filter(
+        DriveAssignment.drive_id == drive_id,
+        DriveAssignment.released_at.is_(None),
+    ).order_by(DriveAssignment.assigned_at.desc()).first()
+
     # Check if the drive has any jobs with incomplete files (timeouts or errors).
     # Warn the operator before allowing eject.
     try:
@@ -1050,22 +1059,57 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                 status_code=500,
                 detail="Drive ejected at OS level but database update failed; manual intervention may be required",
             )
+        eject_audit = None
         try:
-            audit_repo.add(
+            audit_details = {
+                "drive_id": drive_id,
+                "device_name": _redacted_device_name(initial_device_path),
+                "flush_ok": result.flush_ok,
+                "unmount_ok": result.unmount_ok,
+            }
+            if assigned_job is not None:
+                audit_details.update(
+                    {
+                        "job_id": assigned_job.id,
+                        "job_evidence_number": assigned_job.evidence_number,
+                        "message": (
+                            f"Drive prepared for eject from attached job {assigned_job.id}"
+                        ),
+                    }
+                )
+            eject_audit = audit_repo.add(
                 action="DRIVE_EJECT_PREPARED",
                 user=actor,
                 project_id=drive.current_project_id,
                 drive_id=drive_id,
-                details={
-                    "drive_id": drive_id,
-                    "device_name": _redacted_device_name(initial_device_path),
-                    "flush_ok": result.flush_ok,
-                    "unmount_ok": result.unmount_ok,
-                },
+                job_id=assigned_job.id if assigned_job is not None else None,
+                details=audit_details,
                 client_ip=client_ip,
             )
         except Exception:
             logger.exception("Failed to write audit log for DRIVE_EJECT_PREPARED")
+        if assigned_job is not None:
+            try:
+                deliver_callback(
+                    assigned_job,
+                    event="DRIVE_EJECT_PREPARED",
+                    event_actor=actor,
+                    event_at=(
+                        getattr(eject_audit, "timestamp", None)
+                        if eject_audit is not None
+                        else datetime.now(timezone.utc)
+                    ),
+                    event_details={
+                        "drive_id": drive_id,
+                        "flush_ok": result.flush_ok,
+                        "unmount_ok": result.unmount_ok,
+                    },
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to dispatch lifecycle callback",
+                    extra={"job_id": assigned_job.id, "event": "DRIVE_EJECT_PREPARED"},
+                )
     else:
         if not result.unmount_ok:
             try:

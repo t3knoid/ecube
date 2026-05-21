@@ -452,6 +452,8 @@ Before initializing a drive:
 
 Use `Prepare Eject` before physically removing a mounted drive. The action is available for `IN_USE` drives and for `AVAILABLE` drives that still have an active mount. ECUBE flushes pending writes, unmounts the filesystem, and transitions the drive to `AVAILABLE`.
 
+If the drive still has an unreleased `COMPLETED` or `FAILED` job assignment and that job has callback delivery configured, a successful prepare-eject sends a `DRIVE_EJECT_PREPARED` callback for that job and stores the audit row with the attached job context.
+
 After a successful prepare-eject:
 
 - The drive state returns to `AVAILABLE`.
@@ -1292,7 +1294,7 @@ Important rules:
 - Callback delivery blocks private and loopback destinations unless an administrator explicitly allows them. Test-only `http://` callbacks still require the insecure-callback confirmation checkbox, and private lab destinations remain gated by `Allow Private Callback IPs`.
 - Callback URLs with embedded credentials are rejected
 - If an administrator configures a signing secret, ECUBE adds an `X-ECUBE-Signature` header to outbound callbacks
-- The callback is sent for supported persisted lifecycle events such as `JOB_CREATED`, `JOB_STARTED`, `JOB_RETRY_FAILED_FILES_STARTED`, `JOB_PAUSE_REQUESTED`, `JOB_VERIFY_STARTED`, `JOB_COMPLETED`, `JOB_FAILED`, `JOB_COMPLETED_MANUALLY`, `MANIFEST_CREATED`, `COC_SNAPSHOT_STORED`, `COC_HANDOFF_CONFIRMED`, `JOB_ARCHIVED`, and `JOB_RECONCILED`
+- The callback is sent for supported persisted lifecycle events such as `JOB_CREATED`, `JOB_STARTED`, `JOB_RETRY_FAILED_FILES_STARTED`, `JOB_PAUSE_REQUESTED`, `JOB_VERIFY_STARTED`, `JOB_COMPLETED`, `JOB_FAILED`, `JOB_COMPLETED_MANUALLY`, `MANIFEST_CREATED`, `COC_SNAPSHOT_STORED`, `COC_HANDOFF_CONFIRMED`, `JOB_ARCHIVED`, `JOB_RECONCILED`, and `DRIVE_EJECT_PREPARED` when an attached completed or failed drive assignment is prepared for eject
 
 Use a job-specific callback URL when one export must notify a different downstream system than the rest of the deployment.
 

@@ -1468,6 +1468,57 @@ def test_prepare_eject_allows_completed_assigned_job(manager_client, db):
     provider.prepare_eject.assert_called_once_with("/dev/sdb")
 
 
+def test_prepare_eject_emits_callback_and_job_linked_audit_for_assigned_job(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB005-CALLBACK",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        filesystem_path="/dev/sdb",
+        mount_path="/mnt/ecube/usb005-callback",
+    )
+    db.add(drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-001",
+        evidence_number="EV-EJECT-CALLBACK",
+        source_path="/data",
+        status=JobStatus.COMPLETED,
+        callback_url="https://example.com/hooks/eject",
+    )
+    db.add(job)
+    db.flush()
+
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.commit()
+
+    provider = _fake_eject()
+    with patch("app.routers.drives.get_drive_eject", return_value=provider), \
+         patch("app.services.drive_service.deliver_callback") as mock_deliver_callback:
+        response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+
+    assert response.status_code == 200
+    provider.prepare_eject.assert_called_once_with("/dev/sdb")
+    mock_deliver_callback.assert_called_once()
+    callback_job = mock_deliver_callback.call_args.args[0]
+    assert callback_job.id == job.id
+    assert mock_deliver_callback.call_args.kwargs["event"] == "DRIVE_EJECT_PREPARED"
+    assert mock_deliver_callback.call_args.kwargs["event_details"] == {
+        "drive_id": drive.id,
+        "flush_ok": True,
+        "unmount_ok": True,
+    }
+    assert mock_deliver_callback.call_args.kwargs["event_at"] is not None
+
+    log = db.query(AuditLog).filter(AuditLog.action == "DRIVE_EJECT_PREPARED").first()
+    assert log is not None
+    assert log.drive_id == drive.id
+    assert log.job_id == job.id
+    assert log.details["job_id"] == job.id
+    assert log.details["job_evidence_number"] == job.evidence_number
+    assert log.details["message"] == f"Drive prepared for eject from attached job {job.id}"
+
+
 def test_reinitialize_same_project_after_eject(manager_client, db):
     """A drive can be re-initialized for the same project after eject (adds more data)."""
     drive = UsbDrive(
@@ -1540,13 +1591,15 @@ def test_prepare_eject_with_filesystem_path(manager_client, db):
     db.commit()
 
     provider = _fake_eject()
-    with patch("app.routers.drives.get_drive_eject", return_value=provider):
+    with patch("app.routers.drives.get_drive_eject", return_value=provider), \
+         patch("app.services.drive_service.deliver_callback") as mock_deliver_callback:
         response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
 
     assert response.status_code == 200
     assert response.json()["current_state"] == "AVAILABLE"
     assert response.json()["mount_path"] is None
     provider.prepare_eject.assert_called_once_with("/dev/sdb")
+    mock_deliver_callback.assert_not_called()
 
     log = db.query(AuditLog).filter(AuditLog.action == "DRIVE_EJECT_PREPARED").first()
     assert log is not None
