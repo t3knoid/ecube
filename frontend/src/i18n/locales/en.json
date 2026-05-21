@@ -793,6 +793,10 @@
         "label": "Job Detail Files Per Page",
         "help": "Default number of file rows shown per Job Detail page. Minimum 20, maximum 100."
       },
+      "callback_allow_private_ips": {
+        "label": "Allow Private Callback IPs",
+        "help": "When enabled, HTTPS callback delivery may target private or loopback addresses. Leave disabled for production. Test-only HTTP callbacks already target lab hosts without using the HTTPS SSRF gate."
+      },
       "callback_default_url": {
         "label": "Default Callback URL",
         "placeholder": "https://example.com/default-webhook",

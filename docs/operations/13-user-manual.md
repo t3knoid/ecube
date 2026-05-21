@@ -1256,6 +1256,7 @@ Important operational notes:
 - `enforce_for_root` remains enabled and is not editable from the UI.
 - `Startup Analysis Batch Size` accepts values from `1` to `5000`. Lower values reduce peak memory use during startup analysis; higher values reduce database round trips.
 - Drive formatting and mount timeout controls live on the `Configuration` page, not the `Admin` page.
+- The `Allow Private Callback IPs` checkbox controls whether HTTPS callbacks may target private or loopback destinations. Leave it disabled for production deployments.
 - The `Default Callback URL` accepts `https://` by default. An `http://` value is available for test and lab workflows only after you select the explicit insecure callback confirmation checkbox. Any job-specific `Webhook callback URL` entered on the Jobs page or Job Detail edit dialog still overrides the system-wide default.
 - The `Outbound Callback Proxy URL` must be a valid `http://` or `https://` URL and must not contain embedded credentials.
 - The `Webhook Signing Secret` field is write-only. Leave it blank to keep the current secret, enter a new value to rotate it, or use the clear checkbox to remove it.
@@ -1301,11 +1302,12 @@ To configure a system-wide callback as an administrator:
 
 1. Open `Admin`.
 2. Scroll to the `Webhooks` panel.
-3. Enter the `Default Callback URL` if jobs without a per-job callback should still notify a downstream system.
-4. If that URL starts with `http://`, select the testing-only insecure callback checkbox.
-5. Optionally enter an `Outbound Callback Proxy URL` if your environment requires webhook delivery through an HTTP or HTTPS forward proxy.
-6. Optionally enter a `Webhook Signing Secret` if the receiver should validate `X-ECUBE-Signature` against the raw request body.
-7. Click `Save`.
+3. Enable `Allow Private Callback IPs` only when HTTPS callbacks must reach private or loopback lab destinations.
+4. Enter the `Default Callback URL` if jobs without a per-job callback should still notify a downstream system.
+5. If that URL starts with `http://`, select the testing-only insecure callback checkbox.
+6. Optionally enter an `Outbound Callback Proxy URL` if your environment requires webhook delivery through an HTTP or HTTPS forward proxy.
+7. Optionally enter a `Webhook Signing Secret` if the receiver should validate `X-ECUBE-Signature` against the raw request body.
+8. Click `Save`.
 
 To configure a per-job callback:
 

@@ -1543,6 +1543,7 @@ Recommended QA sink: https://webhook.site/
 
 | # | Test | How | Expected |
 |---|------|-----|----------|
+| 0 | HTTPS private callback toggle persists from Configuration UI | Open Admin, enable `Allow Private Callback IPs`, save, then reload Admin | Save succeeds and the checkbox reloads as enabled |
 | 0 | System-wide callback default can be set from Configuration UI | Open `https://webhook.site/`, copy the generated HTTPS URL, enter it in Default Callback URL, save, then reload Configuration | Configuration saves successfully and the field reloads with the saved value |
 | 0a | HTTP system-wide callback default requires explicit confirmation | Enter `http://example.com/default-webhook` in Default Callback URL and try to save before selecting the insecure callback checkbox, then select the checkbox and save again | The first save is rejected with the testing-only confirmation message. After the checkbox is selected, save succeeds and the field reloads with the saved HTTP value |
 | 0aa | Outbound callback proxy URL can be set from Configuration UI | Open Configuration, enter a valid HTTP or HTTPS URL in Outbound Callback Proxy URL, save, then reload Configuration | Configuration saves successfully and the proxy URL reloads with the saved value |

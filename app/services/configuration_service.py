@@ -90,6 +90,7 @@ _EDITABLE_FIELDS: Dict[str, _FieldSpec] = {
     "copy_file_fsync_enabled": _FieldSpec("COPY_FILE_FSYNC_ENABLED", False, _serialize_plain),
     "usb_discovery_interval": _FieldSpec("USB_DISCOVERY_INTERVAL", False, _serialize_plain),
     "job_detail_files_page_size": _FieldSpec("JOB_DETAIL_FILES_PAGE_SIZE", False, _serialize_plain),
+    "callback_allow_private_ips": _FieldSpec("CALLBACK_ALLOW_PRIVATE_IPS", False, _serialize_plain),
     "callback_default_url": _FieldSpec("CALLBACK_DEFAULT_URL", False, _serialize_callback_default_url),
     "callback_proxy_url": _FieldSpec("CALLBACK_PROXY_URL", False, _serialize_callback_proxy_url),
     "callback_hmac_secret": _FieldSpec(
@@ -143,6 +144,7 @@ _ADMIN_CONFIGURATION_FIELDS = (
     "db_pool_size",
     "db_pool_max_overflow",
     "db_pool_recycle_seconds",
+    "callback_allow_private_ips",
     "callback_default_url",
     "callback_proxy_url",
     "callback_hmac_secret",

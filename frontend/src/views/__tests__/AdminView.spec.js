@@ -43,6 +43,7 @@ function buildAdminResponse(overrides = {}) {
     db_pool_size: 5,
     db_pool_max_overflow: 10,
     db_pool_recycle_seconds: -1,
+    callback_allow_private_ips: false,
     callback_default_url: null,
     callback_proxy_url: null,
     callback_payload_fields: null,
@@ -218,6 +219,30 @@ describe('AdminView', () => {
     expect(mocks.updateAdminConfiguration).toHaveBeenCalledWith({
       callback_default_url: 'http://example.com/default-webhook',
       allow_insecure_callback_default_url: true,
+    })
+  })
+
+  it('saves callback_allow_private_ips from the admin webhook panel', async () => {
+    mocks.getAdminConfiguration.mockResolvedValue(buildAdminResponse())
+    mocks.updateAdminConfiguration.mockResolvedValue({
+      restart_required: false,
+      restart_required_settings: [],
+      applied_immediately: ['callback_allow_private_ips'],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const checkbox = wrapper.find('#cfg-callback-allow-private-ips')
+    expect(checkbox.exists()).toBe(true)
+    expect(checkbox.element.checked).toBe(false)
+
+    await checkbox.setValue(true)
+    await wrapper.find('.action-row .btn.btn-primary').trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateAdminConfiguration).toHaveBeenCalledWith({
+      callback_allow_private_ips: true,
     })
   })
 

@@ -61,6 +61,10 @@ class TestConfigurationSchemaValidation:
         req = ConfigurationUpdateRequest(job_detail_files_page_size=60)
         assert req.job_detail_files_page_size == 60
 
+    def test_update_accepts_callback_allow_private_ips(self):
+        req = ConfigurationUpdateRequest(callback_allow_private_ips=True)
+        assert req.callback_allow_private_ips is True
+
     def test_update_accepts_callback_default_url(self):
         req = ConfigurationUpdateRequest(callback_default_url="https://example.com/default-webhook")
         assert req.callback_default_url == "https://example.com/default-webhook"
@@ -193,6 +197,7 @@ class TestConfigurationEndpoints:
         "db_pool_size",
         "db_pool_max_overflow",
         "db_pool_recycle_seconds",
+        "callback_allow_private_ips",
         "callback_default_url",
         "callback_proxy_url",
         "callback_payload_fields",
@@ -240,6 +245,7 @@ class TestConfigurationEndpoints:
         assert keys == self._ADMIN_CONFIGURATION_KEYS
         assert "nfs_client_version" in keys
         assert "db_pool_recycle_seconds" in keys
+        assert "callback_allow_private_ips" in keys
         assert "startup_analysis_batch_size" in keys
         assert "callback_default_url" in keys
         assert "callback_proxy_url" in keys
@@ -261,6 +267,18 @@ class TestConfigurationEndpoints:
 
         settings_map = {item["key"]: item["value"] for item in resp.json()["settings"]}
         assert settings_map["callback_default_url"] is None
+
+    def test_get_configuration_returns_callback_allow_private_ips_value(self, admin_client):
+        original_value = settings.callback_allow_private_ips
+        settings.callback_allow_private_ips = True
+        try:
+            resp = admin_client.get("/admin/configuration")
+            assert resp.status_code == 200
+
+            settings_map = {item["key"]: item["value"] for item in resp.json()["settings"]}
+            assert settings_map["callback_allow_private_ips"] is True
+        finally:
+            settings.callback_allow_private_ips = original_value
 
     def test_get_configuration_returns_callback_payload_contract(self, admin_client):
         original_fields = settings.callback_payload_fields
@@ -594,6 +612,29 @@ class TestConfigurationEndpoints:
             assert written.get("CALLBACK_DEFAULT_URL") == "https://example.com/default-webhook"
         finally:
             settings.callback_default_url = original_value
+
+    @patch("app.services.configuration_service.database_service._write_env_settings")
+    def test_update_configuration_persists_callback_allow_private_ips(
+        self,
+        mock_write_env,
+        admin_client,
+    ):
+        original_value = settings.callback_allow_private_ips
+        try:
+            resp = admin_client.put(
+                "/admin/configuration",
+                json={"callback_allow_private_ips": True},
+            )
+            assert resp.status_code == 200, resp.json()
+
+            payload = resp.json()
+            assert "callback_allow_private_ips" in payload["changed_settings"]
+            assert payload["restart_required"] is False
+
+            written = mock_write_env.call_args.args[0]
+            assert written.get("CALLBACK_ALLOW_PRIVATE_IPS") == "True"
+        finally:
+            settings.callback_allow_private_ips = original_value
 
     @patch("app.services.configuration_service.database_service._write_env_settings")
     def test_update_configuration_persists_http_callback_default_url_with_explicit_confirmation(

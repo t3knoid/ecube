@@ -73,6 +73,7 @@ const adminFieldOrder = [
   'db_pool_size',
   'db_pool_max_overflow',
   'db_pool_recycle_seconds',
+  'callback_allow_private_ips',
   'callback_default_url',
   'callback_proxy_url',
   'callback_payload_fields',
@@ -116,6 +117,7 @@ const form = ref({
   copy_file_fsync_enabled: false,
   usb_discovery_interval: 30,
   job_detail_files_page_size: 40,
+  callback_allow_private_ips: false,
   allow_insecure_callback_default_url: false,
   callback_default_url: '',
   callback_proxy_url: '',
@@ -799,6 +801,16 @@ onMounted(loadConfiguration)
           <p v-if="isInsecureHttpCallbackUrl(form.callback_default_url)" class="field-help callback-http-warning">
             {{ t('configuration.fields.callback_default_url.insecureHelp') }}
           </p>
+
+          <label class="checkbox-row" for="cfg-callback-allow-private-ips">
+            <input
+              id="cfg-callback-allow-private-ips"
+              v-model="form.callback_allow_private_ips"
+              type="checkbox"
+            />
+            <span>{{ t('configuration.fields.callback_allow_private_ips.label') }}</span>
+          </label>
+          <p class="field-help">{{ t('configuration.fields.callback_allow_private_ips.help') }}</p>
 
           <label for="cfg-callback-proxy-url">{{ t('configuration.fields.callback_proxy_url.label') }}</label>
           <input

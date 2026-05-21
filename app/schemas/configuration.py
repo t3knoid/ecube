@@ -58,6 +58,7 @@ class ConfigurationUpdateRequest(StrictIntMixin, BaseModel):
     copy_file_fsync_enabled: Optional[StrictBool] = Field(default=None)
     usb_discovery_interval: Optional[StrictInt] = Field(default=None, ge=0)
     job_detail_files_page_size: Optional[StrictInt] = Field(default=None, ge=20, le=100)
+    callback_allow_private_ips: Optional[StrictBool] = Field(default=None)
     allow_insecure_callback_default_url: Optional[StrictBool] = Field(
         default=None,
         description="Must be true to allow an http:// callback_default_url for testing only",

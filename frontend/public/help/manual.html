@@ -1414,6 +1414,8 @@ When demo mode is enabled and <code>DEMO_SHARED_PASSWORD</code> is left empty, E
 </li><li>
 Drive formatting and mount timeout controls live on the <code>Configuration</code> page, not the <code>Admin</code> page.
 </li><li>
+The <code>Allow Private Callback IPs</code> checkbox controls whether HTTPS callbacks may target private or loopback destinations. Leave it disabled for production deployments.
+</li><li>
 The <code>Default Callback URL</code> accepts <code>https://</code> by default. An <code>http://</code> value is available for test and lab workflows only after you select the explicit insecure callback confirmation checkbox. Any job-specific <code>Webhook callback URL</code> entered on the Jobs page or Job Detail edit dialog still overrides the system-wide default.
 </li><li>
 The <code>Outbound Callback Proxy URL</code> must be a valid <code>http://</code> or <code>https://</code> URL and must not contain embedded credentials.
@@ -1466,6 +1468,8 @@ The callback is sent for supported persisted lifecycle events such as <code>JOB_
 Open <code>Admin</code>.
 </li><li>
 Scroll to the <code>Webhooks</code> panel.
+</li><li>
+Enable <code>Allow Private Callback IPs</code> only when HTTPS callbacks must reach private or loopback lab destinations.
 </li><li>
 Enter the <code>Default Callback URL</code> if jobs without a per-job callback should still notify a downstream system.
 </li><li>
