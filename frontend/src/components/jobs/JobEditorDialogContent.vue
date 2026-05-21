@@ -199,6 +199,14 @@ const props = defineProps({
     type: String,
     required: true,
   },
+  insecureCallbackConfirmLabel: {
+    type: String,
+    required: true,
+  },
+  insecureCallbackConfirmHelp: {
+    type: String,
+    required: true,
+  },
   threadCountLabel: {
     type: String,
     required: true,
@@ -350,6 +358,23 @@ const emit = defineEmits(['close', 'submit', 'toggle-source-browser'])
 
 const activeTab = ref(props.initialTab)
 
+function isInsecureHttpCallbackUrl(value) {
+  return String(value || '').trim().toLowerCase().startsWith('http://')
+}
+
+const showInsecureCallbackConfirmation = computed(() => (
+  props.showCallbackUrlField && isInsecureHttpCallbackUrl(props.form?.callback_url)
+))
+
+watch(() => props.form?.callback_url, (value) => {
+  if (isInsecureHttpCallbackUrl(value)) {
+    return
+  }
+  if (props.form && Object.prototype.hasOwnProperty.call(props.form, 'allow_insecure_callback_url')) {
+    props.form.allow_insecure_callback_url = false
+  }
+})
+
 const tabs = computed(() => [
   {
     key: 'details',
@@ -450,6 +475,18 @@ watch(
               :disabled="!projectSelected || !callbackUrlEditable"
               :placeholder="callbackUrlHint"
             />
+            <label v-if="showInsecureCallbackConfirmation" class="checkbox-row" for="job-allow-insecure-callback-url">
+              <input
+                id="job-allow-insecure-callback-url"
+                v-model="form.allow_insecure_callback_url"
+                type="checkbox"
+                :disabled="!projectSelected || !callbackUrlEditable"
+              />
+              <span>{{ insecureCallbackConfirmLabel }}</span>
+            </label>
+            <p v-if="showInsecureCallbackConfirmation" class="callback-http-warning">
+              {{ insecureCallbackConfirmHelp }}
+            </p>
           </div>
         </div>
       </fieldset>
@@ -898,6 +935,11 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: var(--space-sm);
+}
+
+.callback-http-warning {
+  margin: 0;
+  color: var(--color-alert-danger-text);
 }
 
 .workflow-execution-group {

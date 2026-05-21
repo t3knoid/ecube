@@ -64,9 +64,14 @@ const form = ref({
   ...copyTuningDefaults.currentDefaults(),
   startup_analysis_auto_apply_recommended_profile: false,
   notes: '',
+  allow_insecure_callback_url: false,
   callback_url: '',
   run_immediately: false,
 })
+
+function isInsecureHttpCallbackUrl(value) {
+  return String(value || '').trim().toLowerCase().startsWith('http://')
+}
 
 const canOperate = computed(() => authStore.hasAnyRole(['admin', 'manager', 'processor']))
 const ACTIVE_OVERLAP_STATUSES = new Set(['PENDING', 'PREPARING', 'RUNNING', 'PAUSING', 'PAUSED', 'VERIFYING'])
@@ -272,6 +277,7 @@ function resetForm() {
     copy_file_fsync_enabled: tuning.copy_file_fsync_enabled,
     startup_analysis_auto_apply_recommended_profile: false,
     notes: '',
+    allow_insecure_callback_url: false,
     callback_url: '',
     run_immediately: false,
   }
@@ -607,7 +613,14 @@ async function submitCreateJob() {
 
     const callbackUrl = form.value.callback_url.trim()
     if (callbackUrl) {
+      if (isInsecureHttpCallbackUrl(callbackUrl) && !form.value.allow_insecure_callback_url) {
+        createDialogError.value = t('jobs.insecureCallbackConfirmationRequired')
+        return
+      }
       payload.callback_url = callbackUrl
+      if (isInsecureHttpCallbackUrl(callbackUrl)) {
+        payload.allow_insecure_callback_url = true
+      }
     }
 
     if (form.value.startup_analysis_auto_apply_recommended_profile) {
@@ -706,6 +719,13 @@ watch(
 
 watch(() => form.value.mount_id, () => {
   showSourceBrowser.value = false
+})
+
+watch(() => form.value.callback_url, (value) => {
+  if (isInsecureHttpCallbackUrl(value)) {
+    return
+  }
+  form.value.allow_insecure_callback_url = false
 })
 
 watch(showArchivedJobs, async (nextValue) => {
@@ -916,6 +936,8 @@ onBeforeUnmount(() => {
             :notes-hint="t('jobs.notesHint')"
             :callback-url-label="t('jobs.callbackUrl')"
             :callback-url-hint="t('jobs.callbackUrlHint')"
+            :insecure-callback-confirm-label="t('jobs.insecureCallbackConfirmLabel')"
+            :insecure-callback-confirm-help="t('jobs.insecureCallbackConfirmHelp')"
             :details-tab-label="t('jobs.jobDetailsTab')"
             :copy-and-job-workflow-tab-label="t('jobs.workflowTab')"
             :tab-list-aria-label="t('jobs.jobEditorSectionsLabel')"

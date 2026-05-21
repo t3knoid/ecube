@@ -191,6 +191,36 @@ describe('AdminView', () => {
     expect(secretInput.element.value).toBe('')
   })
 
+  it('requires explicit confirmation before saving an HTTP default callback URL', async () => {
+    mocks.getAdminConfiguration.mockResolvedValue(buildAdminResponse())
+    mocks.updateAdminConfiguration.mockResolvedValue({
+      restart_required: false,
+      restart_required_settings: [],
+      applied_immediately: ['callback_default_url'],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.find('#cfg-callback-default-url').setValue('http://example.com/default-webhook')
+    expect(wrapper.find('#cfg-allow-insecure-callback-default-url').exists()).toBe(true)
+
+    await wrapper.find('.action-row .btn.btn-primary').trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateAdminConfiguration).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain(i18n.global.t('configuration.fields.callback_default_url.insecureConfirmationRequired'))
+
+    await wrapper.find('#cfg-allow-insecure-callback-default-url').setValue(true)
+    await wrapper.find('.action-row .btn.btn-primary').trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateAdminConfiguration).toHaveBeenCalledWith({
+      callback_default_url: 'http://example.com/default-webhook',
+      allow_insecure_callback_default_url: true,
+    })
+  })
+
   it('keeps restart confirmation and restart action on Admin only', async () => {
     mocks.getAdminConfiguration.mockResolvedValue(buildAdminResponse())
     mocks.updateAdminConfiguration.mockResolvedValue({

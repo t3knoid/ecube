@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import {
@@ -116,6 +116,7 @@ const form = ref({
   copy_file_fsync_enabled: false,
   usb_discovery_interval: 30,
   job_detail_files_page_size: 40,
+  allow_insecure_callback_default_url: false,
   callback_default_url: '',
   callback_proxy_url: '',
   callback_payload_fields: '',
@@ -297,6 +298,7 @@ function normalizeForm(data) {
   logFileEnabled.value = hasBackendLogFile
   originalLogFileEnabled.value = hasBackendLogFile
   next.log_file = hasBackendLogFile ? backendLogFileValue : DEFAULT_LOG_FILE_PATH
+  next.allow_insecure_callback_default_url = String(next.callback_default_url || '').trim().toLowerCase().startsWith('http://')
   next.callback_hmac_secret = ''
   next.clear_callback_hmac_secret = false
   next.callback_hmac_secret_configured = Boolean(next.callback_hmac_secret_configured)
@@ -353,6 +355,10 @@ function effectiveLogFileValue(currentEnabled, currentValue) {
   return expandDisplayedLogFilePath(trimmed)
 }
 
+function isInsecureHttpCallbackUrl(value) {
+  return String(value || '').trim().toLowerCase().startsWith('http://')
+}
+
 function buildPatchPayload() {
   const payload = {}
   for (const key of fieldOrder.value) {
@@ -369,10 +375,20 @@ function buildPatchPayload() {
         payload[key] = parseJsonConfigurationField(form.value[key], key, 'array')
       } else if (key === 'callback_payload_field_map') {
         payload[key] = parseJsonConfigurationField(form.value[key], key, 'object')
+      } else if (key === 'callback_default_url') {
+        const callbackDefaultUrl = String(form.value.callback_default_url || '').trim()
+        if (isInsecureHttpCallbackUrl(callbackDefaultUrl) && !form.value.allow_insecure_callback_default_url) {
+          throw new Error(t('configuration.fields.callback_default_url.insecureConfirmationRequired'))
+        }
+        payload[key] = callbackDefaultUrl || null
       } else {
         payload[key] = form.value[key]
       }
     }
+  }
+
+  if (isInsecureHttpCallbackUrl(payload.callback_default_url)) {
+    payload.allow_insecure_callback_default_url = true
   }
 
   if (!isAdminMode.value) {
@@ -420,6 +436,13 @@ function resetForm() {
     passwordPolicyForm.value = { ...originalPasswordPolicyForm.value }
   }
 }
+
+watch(() => form.value.callback_default_url, (value) => {
+  if (isInsecureHttpCallbackUrl(value)) {
+    return
+  }
+  form.value.allow_insecure_callback_default_url = false
+})
 
 function buildPasswordPolicyPayload() {
   const payload = {}
@@ -765,6 +788,17 @@ onMounted(loadConfiguration)
             :placeholder="t('configuration.fields.callback_default_url.placeholder')"
           />
           <p class="field-help">{{ t('configuration.fields.callback_default_url.help') }}</p>
+          <label v-if="isInsecureHttpCallbackUrl(form.callback_default_url)" class="checkbox-row" for="cfg-allow-insecure-callback-default-url">
+            <input
+              id="cfg-allow-insecure-callback-default-url"
+              v-model="form.allow_insecure_callback_default_url"
+              type="checkbox"
+            />
+            <span>{{ t('configuration.fields.callback_default_url.insecureConfirmLabel') }}</span>
+          </label>
+          <p v-if="isInsecureHttpCallbackUrl(form.callback_default_url)" class="field-help callback-http-warning">
+            {{ t('configuration.fields.callback_default_url.insecureHelp') }}
+          </p>
 
           <label for="cfg-callback-proxy-url">{{ t('configuration.fields.callback_proxy_url.label') }}</label>
           <input
@@ -964,6 +998,10 @@ textarea {
 .restart-chip {
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
+}
+
+.callback-http-warning {
+  color: var(--color-alert-danger-text);
 }
 
 .restart-chip {

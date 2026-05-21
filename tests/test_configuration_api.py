@@ -65,6 +65,14 @@ class TestConfigurationSchemaValidation:
         req = ConfigurationUpdateRequest(callback_default_url="https://example.com/default-webhook")
         assert req.callback_default_url == "https://example.com/default-webhook"
 
+    def test_update_accepts_http_callback_default_url_with_explicit_confirmation(self):
+        req = ConfigurationUpdateRequest(
+            allow_insecure_callback_default_url=True,
+            callback_default_url="http://example.com/default-webhook",
+        )
+        assert req.callback_default_url == "http://example.com/default-webhook"
+        assert req.allow_insecure_callback_default_url is True
+
     def test_update_accepts_callback_proxy_url(self):
         req = ConfigurationUpdateRequest(callback_proxy_url="http://proxy.example.com:8080")
         assert req.callback_proxy_url == "http://proxy.example.com:8080"
@@ -98,6 +106,10 @@ class TestConfigurationSchemaValidation:
     def test_update_rejects_callback_proxy_url_with_credentials(self):
         with pytest.raises(ValidationError):
             ConfigurationUpdateRequest(callback_proxy_url="http://user:pass@proxy.example.com:8080")
+
+    def test_update_accepts_request_only_http_confirmation_flag_in_schema(self):
+        req = ConfigurationUpdateRequest(allow_insecure_callback_default_url=True)
+        assert req.allow_insecure_callback_default_url is True
 
     def test_update_rejects_setting_and_clearing_callback_hmac_secret_together(self):
         with pytest.raises(ValidationError):
@@ -582,6 +594,43 @@ class TestConfigurationEndpoints:
             assert written.get("CALLBACK_DEFAULT_URL") == "https://example.com/default-webhook"
         finally:
             settings.callback_default_url = original_value
+
+    @patch("app.services.configuration_service.database_service._write_env_settings")
+    def test_update_configuration_persists_http_callback_default_url_with_explicit_confirmation(
+        self,
+        mock_write_env,
+        admin_client,
+    ):
+        original_value = settings.callback_default_url
+        try:
+            resp = admin_client.put(
+                "/admin/configuration",
+                json={
+                    "callback_default_url": "http://example.com/default-webhook",
+                    "allow_insecure_callback_default_url": True,
+                },
+            )
+            assert resp.status_code == 200, resp.json()
+
+            payload = resp.json()
+            assert "callback_default_url" in payload["changed_settings"]
+            assert payload["restart_required"] is False
+
+            written = mock_write_env.call_args.args[0]
+            assert written.get("CALLBACK_DEFAULT_URL") == "http://example.com/default-webhook"
+        finally:
+            settings.callback_default_url = original_value
+
+    def test_update_configuration_rejects_request_with_only_http_confirmation_flag(
+        self,
+        admin_client,
+    ):
+        resp = admin_client.put(
+            "/admin/configuration",
+            json={"allow_insecure_callback_default_url": True},
+        )
+        assert resp.status_code == 422
+        assert "At least one setting" in str(resp.json())
 
     @patch("app.services.configuration_service.database_service._write_env_settings")
     def test_update_configuration_persists_callback_proxy_url(

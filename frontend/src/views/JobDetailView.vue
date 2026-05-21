@@ -93,8 +93,13 @@ const editForm = ref({
   drive_id: null,
   overflow_drive_ids: [],
   ...copyTuningDefaults.currentDefaults(),
+  allow_insecure_callback_url: false,
   callback_url: '',
 })
+
+function isInsecureHttpCallbackUrl(value) {
+  return String(value || '').trim().toLowerCase().startsWith('http://')
+}
 
 const overflowForm = ref({
   drive_id: null,
@@ -1445,6 +1450,7 @@ async function openEditDialog() {
     copy_chunk_size_bytes: job.value.copy_chunk_size_bytes ?? job.value.effective_copy_chunk_size_bytes ?? tuningDefaults.copy_chunk_size_bytes,
     copy_progress_flush_bytes: job.value.copy_progress_flush_bytes ?? job.value.effective_copy_progress_flush_bytes ?? tuningDefaults.copy_progress_flush_bytes,
     copy_file_fsync_enabled: job.value.copy_file_fsync_enabled ?? job.value.effective_copy_file_fsync_enabled ?? tuningDefaults.copy_file_fsync_enabled,
+    allow_insecure_callback_url: isInsecureHttpCallbackUrl(job.value.callback_url),
     callback_url: String(job.value.callback_url || ''),
   }
   showEditSourceBrowser.value = false
@@ -1500,6 +1506,11 @@ async function submitEditJob() {
   error.value = ''
   try {
     const mountId = editForm.value.mount_id == null ? null : Number(editForm.value.mount_id)
+    const callbackUrl = String(editForm.value.callback_url || '').trim()
+    if (isInsecureHttpCallbackUrl(callbackUrl) && !editForm.value.allow_insecure_callback_url) {
+      error.value = t('jobs.insecureCallbackConfirmationRequired')
+      return
+    }
     const updated = await updateJob(job.value.id, {
       project_id: normalizeProjectId(editForm.value.project_id),
       evidence_number: String(editForm.value.evidence_number || '').trim(),
@@ -1515,7 +1526,8 @@ async function submitEditJob() {
       copy_file_fsync_enabled: editForm.value.copy_file_fsync_enabled,
       max_file_retries: Number(job.value.max_file_retries || 3),
       retry_delay_seconds: Number(job.value.retry_delay_seconds || 1),
-      callback_url: String(editForm.value.callback_url || '').trim() || null,
+      callback_url: callbackUrl || null,
+      allow_insecure_callback_url: isInsecureHttpCallbackUrl(callbackUrl) ? Boolean(editForm.value.allow_insecure_callback_url) : false,
     })
     job.value = normalizeProjectRecord(updated, ['project_id'])
     closeEditDialog()
@@ -1526,6 +1538,13 @@ async function submitEditJob() {
     acting.value = false
   }
 }
+
+watch(() => editForm.value.callback_url, (value) => {
+  if (isInsecureHttpCallbackUrl(value)) {
+    return
+  }
+  editForm.value.allow_insecure_callback_url = false
+})
 
 async function runComplete() {
   if (!job.value || !canComplete.value) return
@@ -2422,6 +2441,8 @@ onUnmounted(() => {
             :notes-hint="t('jobs.notesHint')"
             :callback-url-label="t('jobs.callbackUrl')"
             :callback-url-hint="t('jobs.callbackUrlHint')"
+            :insecure-callback-confirm-label="t('jobs.insecureCallbackConfirmLabel')"
+            :insecure-callback-confirm-help="t('jobs.insecureCallbackConfirmHelp')"
             :details-tab-label="t('jobs.jobDetailsTab')"
             :copy-and-job-workflow-tab-label="t('jobs.workflowTab')"
             :tab-list-aria-label="t('jobs.jobEditorSectionsLabel')"

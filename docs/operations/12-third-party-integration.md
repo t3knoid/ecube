@@ -1007,7 +1007,7 @@ async def ecube_callback(request: Request):
 
 ### 7.6 Security Recommendations
 
-- **HTTPS only:** Always use an HTTPS endpoint so payloads are encrypted in transit.
+- **Prefer HTTPS:** Use an HTTPS endpoint so payloads are encrypted in transit. ECUBE also supports `http://` callback targets for test and lab workflows when the sender explicitly confirms insecure callback use.
 - **Validate `X-ECUBE-Signature`:** When `CALLBACK_HMAC_SECRET` is configured, verify the `X-ECUBE-Signature` HMAC against the raw request body before accepting the callback.
 - **Keep payload mappings deterministic:** Restrict `CALLBACK_PAYLOAD_FIELD_MAP` values to exact field names or simple `${field}` substitution templates. Expressions, code, and unrestricted templating are intentionally unsupported.
 - **Keep secrets out of URLs:** ECUBE rejects callback and proxy URLs with embedded credentials. Use a managed proxy or receiver-side secret store instead.

@@ -26,6 +26,7 @@ from app.utils.sanitize import sanitize_error_message
 logger = logging.getLogger(__name__)
 
 _SECRET_CONFIGURATION_FIELDS = frozenset({"callback_hmac_secret"})
+_REQUEST_ONLY_CONFIGURATION_FIELDS = frozenset({"allow_insecure_callback_default_url"})
 
 router = APIRouter(tags=["configuration"])
 _CONFIGURATION_ACCESS = require_roles("admin", "manager")
@@ -62,7 +63,20 @@ def _validated_request_values(
     raw_values: dict[str, object],
 ) -> dict[str, object]:
     validated_values = body.model_dump()
-    return {key: validated_values[key] for key in raw_values}
+    return {
+        key: validated_values[key]
+        for key in raw_values
+        if key not in _REQUEST_ONLY_CONFIGURATION_FIELDS
+    }
+
+
+def _assert_non_empty_configuration_values(values: dict[str, object]) -> None:
+    if values:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail="At least one setting must be provided",
+    )
 
 
 def _safe_configuration_reason(err: Exception, default_message: str) -> str:
@@ -126,7 +140,10 @@ async def update_configuration(
     """
     raw_values = await request.json()
     values = _validated_request_values(body, raw_values)
-    requested_settings = sorted(raw_values.keys())
+    _assert_non_empty_configuration_values(values)
+    requested_settings = sorted(
+        key for key in raw_values.keys() if key not in _REQUEST_ONLY_CONFIGURATION_FIELDS
+    )
     requested_values = _sanitize_configuration_values(
         {key: values[key] for key in requested_settings}
     )
@@ -265,7 +282,10 @@ async def update_admin_configuration(
     """
     raw_values = await request.json()
     values = _validated_request_values(body, raw_values)
-    requested_settings = sorted(raw_values.keys())
+    _assert_non_empty_configuration_values(values)
+    requested_settings = sorted(
+        key for key in raw_values.keys() if key not in _REQUEST_ONLY_CONFIGURATION_FIELDS
+    )
     requested_values = _sanitize_configuration_values(
         {key: values[key] for key in requested_settings}
     )

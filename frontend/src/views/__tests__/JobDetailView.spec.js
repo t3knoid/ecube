@@ -3086,6 +3086,50 @@ describe('JobDetailView start action', () => {
     }))
   })
 
+  it('requires explicit confirmation before saving an HTTP callback URL from job edit', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'PENDING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 0,
+      total_bytes: 0,
+      callback_url: 'https://example.com/current-webhook',
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const editButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.edit'))
+    expect(editButton).toBeTruthy()
+    await editButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#job-mount').setValue('4')
+    await wrapper.find('#job-drive').setValue('1')
+    await wrapper.find('#job-callback-url').setValue('http://example.com/current-webhook')
+
+    expect(wrapper.find('#job-allow-insecure-callback-url').exists()).toBe(true)
+
+    await wrapper.find('#job-submit').trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateJob).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.insecureCallbackConfirmationRequired'))
+
+    await wrapper.find('#job-allow-insecure-callback-url').setValue(true)
+    await wrapper.find('#job-submit').trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateJob).toHaveBeenCalledWith(6, expect.objectContaining({
+      callback_url: 'http://example.com/current-webhook',
+      allow_insecure_callback_url: true,
+    }))
+  })
+
   it('shows a tailored edit-dialog message when the selected drive is not bound to the job project', async () => {
     mocks.getJob.mockResolvedValue({
       id: 6,

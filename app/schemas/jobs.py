@@ -1,12 +1,12 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field, StrictInt, field_validator
+from pydantic import BaseModel, Field, StrictBool, StrictInt, ValidationInfo, field_validator
 from typing import Optional
-from urllib.parse import urlparse
 
 from app.models.hardware import DriveState
 from app.models.jobs import FileStatus, JobStatus, StartupAnalysisStatus
 from app.schemas.types import StrictIntMixin
+from app.utils.callback_url_validation import validate_callback_url_value
 from app.utils.sanitize import ProjectIdStr, SafeStr, StrictSafeStr
 
 
@@ -65,7 +65,8 @@ class JobCreate(StrictIntMixin, BaseModel):
     max_file_retries: StrictInt = Field(default=3, ge=0, le=100, description="Maximum number of retries for failed files (0-100)")
     retry_delay_seconds: StrictInt = Field(default=1, ge=0, le=3600, description="Delay between retries in seconds (0-3600)")
     notes: Optional[SafeStr] = Field(default=None, description="Optional processor notes supplied during job creation")
-    callback_url: Optional[SafeStr] = Field(default=None, json_schema_extra={"pattern": "^https://[a-zA-Z0-9]"}, description="HTTPS URL to receive POST callbacks for persisted job lifecycle events such as creation, start, pause, completion, archive, and reconciliation")
+    allow_insecure_callback_url: Optional[StrictBool] = Field(default=False, description="Must be true to allow an http:// callback_url for testing only")
+    callback_url: Optional[SafeStr] = Field(default=None, json_schema_extra={"pattern": "^https?://[a-zA-Z0-9]"}, description="Callback URL to receive POST callbacks for persisted job lifecycle events such as creation, start, pause, completion, archive, and reconciliation. HTTPS is required unless allow_insecure_callback_url is explicitly true for testing.")
 
     @field_validator("source_path")
     @classmethod
@@ -87,23 +88,13 @@ class JobCreate(StrictIntMixin, BaseModel):
 
     @field_validator("callback_url")
     @classmethod
-    def _callback_url_must_be_valid_https(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return v
-        v = v.strip()
-        if not v:
-            raise ValueError("callback_url must not be empty")
-        try:
-            parsed = urlparse(v)
-        except Exception:
-            raise ValueError("callback_url is not a valid URL")
-        if parsed.scheme.lower() != "https":
-            raise ValueError("callback_url must use HTTPS")
-        if not parsed.hostname:
-            raise ValueError("callback_url must include a hostname")
-        if parsed.username or parsed.password:
-            raise ValueError("callback_url must not contain embedded credentials")
-        return v
+    def _validate_callback_fields(cls, value: Optional[str], info: ValidationInfo) -> Optional[str]:
+        return validate_callback_url_value(
+            field_name="callback_url",
+            value=value,
+            allow_insecure_http=bool(info.data.get("allow_insecure_callback_url")),
+            confirmation_field_name="allow_insecure_callback_url",
+        )
 
     @field_validator("overflow_drive_ids")
     @classmethod
@@ -156,7 +147,8 @@ class JobUpdate(StrictIntMixin, BaseModel):
     copy_file_fsync_enabled: Optional[bool] = Field(default=None, description="Optional per-job per-file fsync override")
     max_file_retries: StrictInt = Field(default=3, ge=0, le=100, description="Maximum number of retries for failed files (0-100)")
     retry_delay_seconds: StrictInt = Field(default=1, ge=0, le=3600, description="Delay between retries in seconds (0-3600)")
-    callback_url: Optional[SafeStr] = Field(default=None, json_schema_extra={"pattern": "^https://[a-zA-Z0-9]"}, description="HTTPS URL to receive POST callbacks for persisted job lifecycle events such as creation, start, pause, completion, archive, and reconciliation")
+    allow_insecure_callback_url: Optional[StrictBool] = Field(default=False, description="Must be true to allow an http:// callback_url for testing only")
+    callback_url: Optional[SafeStr] = Field(default=None, json_schema_extra={"pattern": "^https?://[a-zA-Z0-9]"}, description="Callback URL to receive POST callbacks for persisted job lifecycle events such as creation, start, pause, completion, archive, and reconciliation. HTTPS is required unless allow_insecure_callback_url is explicitly true for testing.")
 
     @field_validator("source_path")
     @classmethod
@@ -176,23 +168,13 @@ class JobUpdate(StrictIntMixin, BaseModel):
 
     @field_validator("callback_url")
     @classmethod
-    def _callback_url_must_be_valid_https(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return v
-        v = v.strip()
-        if not v:
-            raise ValueError("callback_url must not be empty")
-        try:
-            parsed = urlparse(v)
-        except Exception:
-            raise ValueError("callback_url is not a valid URL")
-        if parsed.scheme.lower() != "https":
-            raise ValueError("callback_url must use HTTPS")
-        if not parsed.hostname:
-            raise ValueError("callback_url must include a hostname")
-        if parsed.username or parsed.password:
-            raise ValueError("callback_url must not contain embedded credentials")
-        return v
+    def _validate_callback_fields(cls, value: Optional[str], info: ValidationInfo) -> Optional[str]:
+        return validate_callback_url_value(
+            field_name="callback_url",
+            value=value,
+            allow_insecure_http=bool(info.data.get("allow_insecure_callback_url")),
+            confirmation_field_name="allow_insecure_callback_url",
+        )
 
 
 class JobDeleteResponse(BaseModel):
@@ -356,7 +338,7 @@ class ExportJobSchema(BaseModel):
     created_by: Optional[str] = Field(default=None, description="Username of the job creator")
     started_by: Optional[str] = Field(default=None, description="Username of the user who started the job")
     notes: Optional[str] = Field(default=None, description="Optional operator notes captured when the job was created")
-    callback_url: Optional[str] = Field(default=None, description="HTTPS callback URL (null if none was provided)")
+    callback_url: Optional[str] = Field(default=None, description="Configured callback URL (HTTPS recommended; HTTP is used only for test-only callbacks)")
     created_at: Optional[datetime] = Field(default=None, description="When the job was created")
     started_at: Optional[datetime] = Field(default=None, description="When the copy was started")
     copy_started_at: Optional[datetime] = Field(default=None, description="When the current active copy phase entered RUNNING")

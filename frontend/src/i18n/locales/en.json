@@ -149,6 +149,9 @@
     "notesHint": "Optional operator notes for this job",
     "callbackUrl": "Callback URL",
     "callbackUrlHint": "https://example.com/ecube/webhook",
+    "insecureCallbackConfirmLabel": "Allow an insecure HTTP callback URL for testing only",
+    "insecureCallbackConfirmHelp": "HTTP callback URLs are for test and lab workflows only. Leave this unchecked for normal HTTPS webhook delivery.",
+    "insecureCallbackConfirmationRequired": "Select the testing-only confirmation checkbox before saving an HTTP callback URL.",
     "runImmediately": "Run job immediately after creation",
     "noProjectsAvailable": "No mounted projects are available. Add and mount a project share first.",
     "noEligibleDrives": "No eligible mounted USB drives are available for the selected project.",
@@ -793,7 +796,10 @@
       "callback_default_url": {
         "label": "Default Callback URL",
         "placeholder": "https://example.com/default-webhook",
-        "help": "Optional HTTPS webhook URL used when a job does not define its own callback URL. A job-specific callback URL always overrides this system-wide default."
+        "help": "Optional webhook URL used when a job does not define its own callback URL. HTTPS is the recommended default. A job-specific callback URL always overrides this system-wide default.",
+        "insecureConfirmLabel": "Allow an insecure HTTP default callback URL for testing only",
+        "insecureHelp": "HTTP default callback URLs are for test and lab workflows only. Use HTTPS for normal deployments.",
+        "insecureConfirmationRequired": "Select the testing-only confirmation checkbox before saving an HTTP default callback URL."
       },
       "callback_proxy_url": {
         "label": "Outbound Callback Proxy URL",

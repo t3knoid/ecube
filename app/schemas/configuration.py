@@ -5,9 +5,10 @@ from __future__ import annotations
 from typing import Any, Dict, List, Literal, Optional
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field, StrictBool, StrictInt, model_validator
+from pydantic import BaseModel, Field, StrictBool, StrictInt, ValidationInfo, field_validator, model_validator
 
 from app.schemas.types import StrictIntMixin
+from app.utils.callback_url_validation import validate_callback_url_value
 from app.utils.callback_payload_contract import validate_callback_payload_contract
 from app.utils.sanitize import StrictSafeStr
 
@@ -57,9 +58,13 @@ class ConfigurationUpdateRequest(StrictIntMixin, BaseModel):
     copy_file_fsync_enabled: Optional[StrictBool] = Field(default=None)
     usb_discovery_interval: Optional[StrictInt] = Field(default=None, ge=0)
     job_detail_files_page_size: Optional[StrictInt] = Field(default=None, ge=20, le=100)
+    allow_insecure_callback_default_url: Optional[StrictBool] = Field(
+        default=None,
+        description="Must be true to allow an http:// callback_default_url for testing only",
+    )
     callback_default_url: Optional[StrictSafeStr] = Field(
         default=None,
-        json_schema_extra={"pattern": "^https://[a-zA-Z0-9]"},
+        json_schema_extra={"pattern": "^https?://[a-zA-Z0-9]"},
     )
     callback_proxy_url: Optional[StrictSafeStr] = Field(
         default=None,
@@ -117,13 +122,22 @@ class ConfigurationUpdateRequest(StrictIntMixin, BaseModel):
         values = cls._normalize_optional_string(values, "callback_proxy_url")
         return values
 
+    @field_validator("callback_default_url")
+    @classmethod
+    def validate_callback_default_url(
+        cls,
+        value: Optional[str],
+        info: ValidationInfo,
+    ) -> Optional[str]:
+        return validate_callback_url_value(
+            field_name="callback_default_url",
+            value=value,
+            allow_insecure_http=bool(info.data.get("allow_insecure_callback_default_url")),
+            confirmation_field_name="allow_insecure_callback_default_url",
+        )
+
     @model_validator(mode="after")
     def validate_callback_fields(self) -> "ConfigurationUpdateRequest":
-        self.callback_default_url = self._validate_url_value(
-            field_name="callback_default_url",
-            value=self.callback_default_url,
-            allowed_schemes=("https",),
-        )
         self.callback_proxy_url = self._validate_url_value(
             field_name="callback_proxy_url",
             value=self.callback_proxy_url,

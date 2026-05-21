@@ -491,6 +491,43 @@ describe('JobsView grouped create dialog', () => {
     expect(mocks.push).toHaveBeenCalledWith({ name: 'job-detail', params: { id: 44 } })
   })
 
+  it('requires explicit confirmation before creating a job with an HTTP callback URL', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const createButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.create'))
+    await createButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#job-project').setValue('PROJ-001')
+    await flushPromises()
+    await wrapper.find('#job-evidence').setValue('EVID-HTTP')
+    await wrapper.find('#job-mount').setValue('11')
+    await wrapper.find('#job-source-browse-toggle').trigger('click')
+    await flushPromises()
+    await wrapper.findComponent('.directory-browser-stub').vm.$emit('update:currentDirectory', 'folder')
+    await flushPromises()
+    await wrapper.find('#job-drive').setValue('1')
+    await wrapper.find('#job-callback-url').setValue('http://example.com/ecube/webhook')
+
+    expect(wrapper.find('#job-allow-insecure-callback-url').exists()).toBe(true)
+
+    await wrapper.find('#job-submit').trigger('click')
+    await flushPromises()
+
+    expect(mocks.createJob).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.insecureCallbackConfirmationRequired'))
+
+    await wrapper.find('#job-allow-insecure-callback-url').setValue(true)
+    await wrapper.find('#job-submit').trigger('click')
+    await flushPromises()
+
+    expect(mocks.createJob).toHaveBeenCalledWith(expect.objectContaining({
+      callback_url: 'http://example.com/ecube/webhook',
+      allow_insecure_callback_url: true,
+    }))
+  })
+
   it('omits callback_url when no webhook endpoint is entered', async () => {
     const wrapper = mountView()
     await flushPromises()

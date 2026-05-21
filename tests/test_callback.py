@@ -1,7 +1,7 @@
 """Tests for webhook callback feature (Issue #104).
 
 Covers:
-- Schema validation: HTTPS-only enforcement, optional field
+- Schema validation: HTTPS-by-default enforcement with explicit test-only HTTP opt-in, optional field
 - Callback delivery: success, retry on 5xx, all retries exhausted
 - SSRF protection: private IP rejection, DNS-pinned connections
 - No-op when callback_url is None
@@ -67,6 +67,17 @@ class TestCallbackUrlSchemaValidation:
         errors = exc_info.value.errors()
         assert any(e["loc"] == ("callback_url",) for e in errors)
         assert "HTTPS" in str(exc_info.value)
+
+    def test_http_url_accepted_with_explicit_confirmation(self):
+        body = JobCreate(
+            project_id="P1",
+            evidence_number="EV1",
+            source_path="/data/source",
+            allow_insecure_callback_url=True,
+            callback_url="http://example.com/webhook",
+        )
+        assert body.callback_url == "http://example.com/webhook"
+        assert body.allow_insecure_callback_url is True
 
     def test_none_accepted(self):
         body = JobCreate(
@@ -166,6 +177,24 @@ class TestCallbackUrlSchemaValidation:
         })
         assert resp.status_code == 200
         assert resp.json()["callback_url"] == "https://example.com/webhook"
+
+    def test_http_accepted_via_api_with_explicit_confirmation(self, client, db):
+        db.add(UsbDrive(
+            device_identifier="USB-CB-003",
+            current_state=DriveState.AVAILABLE,
+            current_project_id="PROJ-CB3",
+            mount_path="/mnt/ecube/callback-003",
+        ))
+        db.commit()
+        resp = client.post("/jobs", json={
+            "project_id": "PROJ-CB3",
+            "evidence_number": "EV-CB3",
+            "source_path": "/data/source",
+            "allow_insecure_callback_url": True,
+            "callback_url": "http://example.com/webhook",
+        })
+        assert resp.status_code == 200
+        assert resp.json()["callback_url"] == "http://example.com/webhook"
 
 
 # ---------------------------------------------------------------------------

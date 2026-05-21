@@ -1256,7 +1256,7 @@ Important operational notes:
 - `enforce_for_root` remains enabled and is not editable from the UI.
 - `Startup Analysis Batch Size` accepts values from `1` to `5000`. Lower values reduce peak memory use during startup analysis; higher values reduce database round trips.
 - Drive formatting and mount timeout controls live on the `Configuration` page, not the `Admin` page.
-- The `Default Callback URL` must be a valid `https://` URL and is overridden by any job-specific `Webhook callback URL` entered on the Jobs page or Job Detail edit dialog.
+- The `Default Callback URL` accepts `https://` by default. An `http://` value is available for test and lab workflows only after you select the explicit insecure callback confirmation checkbox. Any job-specific `Webhook callback URL` entered on the Jobs page or Job Detail edit dialog still overrides the system-wide default.
 - The `Outbound Callback Proxy URL` must be a valid `http://` or `https://` URL and must not contain embedded credentials.
 - The `Webhook Signing Secret` field is write-only. Leave it blank to keep the current secret, enter a new value to rotate it, or use the clear checkbox to remove it.
 - `Callback Payload Source Fields` expects a JSON array of allowlisted source fields. Leave it blank to keep the default ECUBE payload.
@@ -1287,7 +1287,7 @@ How precedence works:
 
 Important rules:
 
-- Callback URLs must use `https://`
+- Callback URLs use `https://` for normal deployments. `http://` is available only for testing after you select the explicit insecure callback confirmation checkbox.
 - Callback URLs with embedded credentials are rejected
 - If an administrator configures a signing secret, ECUBE adds an `X-ECUBE-Signature` header to outbound callbacks
 - The callback is sent for supported persisted lifecycle events such as `JOB_CREATED`, `JOB_STARTED`, `JOB_RETRY_FAILED_FILES_STARTED`, `JOB_PAUSE_REQUESTED`, `JOB_VERIFY_STARTED`, `JOB_COMPLETED`, `JOB_FAILED`, `JOB_COMPLETED_MANUALLY`, `MANIFEST_CREATED`, `COC_SNAPSHOT_STORED`, `COC_HANDOFF_CONFIRMED`, `JOB_ARCHIVED`, and `JOB_RECONCILED`
@@ -1301,15 +1301,17 @@ To configure a system-wide callback as an administrator:
 1. Open `Admin`.
 2. Scroll to the `Webhooks` panel.
 3. Enter the `Default Callback URL` if jobs without a per-job callback should still notify a downstream system.
-4. Optionally enter an `Outbound Callback Proxy URL` if your environment requires webhook delivery through an HTTP or HTTPS forward proxy.
-5. Optionally enter a `Webhook Signing Secret` if the receiver should validate `X-ECUBE-Signature` against the raw request body.
-6. Click `Save`.
+4. If that URL starts with `http://`, select the testing-only insecure callback checkbox.
+5. Optionally enter an `Outbound Callback Proxy URL` if your environment requires webhook delivery through an HTTP or HTTPS forward proxy.
+6. Optionally enter a `Webhook Signing Secret` if the receiver should validate `X-ECUBE-Signature` against the raw request body.
+7. Click `Save`.
 
 To configure a per-job callback:
 
 1. Open `Jobs` and create a new job, or open `Job Detail` and use `Edit` on an eligible job.
 2. Enter the job-specific `Webhook callback URL`.
-3. Save the job.
+3. If that URL starts with `http://`, select the testing-only insecure callback checkbox.
+4. Save the job.
 
 Operational notes:
 
