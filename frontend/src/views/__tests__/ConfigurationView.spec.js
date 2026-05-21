@@ -105,6 +105,7 @@ describe('ConfigurationView', () => {
     expect(logFileInput.element.value).toBe('app.log')
     expect(logFileInput.attributes('readonly')).toBeDefined()
     expect(wrapper.find('#cfg-log-file-enabled').exists()).toBe(false)
+    expect(wrapper.find('#cfg-callback-allow-private-ips').exists()).toBe(false)
     expect(wrapper.find('#cfg-policy-minlen').exists()).toBe(false)
     expect(mocks.getPasswordPolicy).not.toHaveBeenCalled()
   })
