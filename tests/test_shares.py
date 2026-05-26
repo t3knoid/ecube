@@ -264,12 +264,10 @@ def test_add_share_uses_nfs_v4_1_to_avoid_slow_negotiation(manager_client, db):
     assert response.status_code == 200
     first_call = mock_run.call_args_list[0]
     command = first_call.args[0]
-    assert command[:7] == [
+    assert command[:5] == [
         "sudo",
         "-n",
         settings.mount_binary_path,
-        "-N",
-        "/proc/1/ns/mnt",
         "-t",
         "nfs",
     ]
@@ -1635,7 +1633,7 @@ def test_validate_share_candidate_timeout_returns_conflict(manager_client, db, c
          patch(
              "subprocess.run",
              side_effect=subprocess.TimeoutExpired(
-                 cmd=["sudo", "-n", "/bin/mount", "-N", "/proc/1/ns/mnt", "-t", "nfs"],
+                 cmd=["sudo", "-n", "/bin/mount", "-t", "nfs"],
                  timeout=30,
              ),
          ):
@@ -2191,8 +2189,7 @@ def test_linux_mount_provider_uses_temporary_credentials_file_for_direct_smb_cre
         assert f"credentials={captured['credentials_path']}" in rendered_cmd
         return MagicMock(returncode=0, stderr="", stdout="")
 
-    with patch("app.services.share_service._in_host_mount_namespace", return_value=True), \
-         patch("subprocess.run", side_effect=fake_run) as mock_run, \
+    with patch("subprocess.run", side_effect=fake_run) as mock_run, \
          patch.object(provider, "check_mounted", return_value=True):
         ok, err = provider.os_mount(
             MountType.SMB,
@@ -2227,8 +2224,7 @@ def test_linux_mount_provider_cleans_up_temporary_credentials_file_and_keeps_pas
             return MagicMock(returncode=0, stderr="", stdout="")
         return MagicMock(returncode=13, stderr="share error(13): Permission denied", stdout="")
 
-    with patch("app.services.share_service._in_host_mount_namespace", return_value=True), \
-         patch("subprocess.run", side_effect=fake_run):
+    with patch("subprocess.run", side_effect=fake_run):
         with caplog.at_level("DEBUG"):
             ok, err = provider.os_mount(
                 MountType.SMB,
@@ -2270,7 +2266,7 @@ def test_linux_mount_provider_treats_returncode_zero_with_inactive_mountpoint_as
     )
 
 
-def test_linux_mount_provider_uses_mount_namespace_flag_when_mount_namespace_differs(monkeypatch):
+def test_linux_mount_provider_uses_plain_mount_command_when_mount_namespace_differs(monkeypatch):
     provider = LinuxShareProvider()
 
     monkeypatch.setattr("app.services.share_service.settings.use_sudo", True)
@@ -2290,36 +2286,33 @@ def test_linux_mount_provider_uses_mount_namespace_flag_when_mount_namespace_dif
     assert ok is True
     assert err is None
     cmd = mock_run.call_args_list[0].args[0]
-    assert cmd[:5] == ["sudo", "-n", "/bin/mount", "-N", "/proc/1/ns/mnt"]
+    assert cmd[:3] == ["sudo", "-n", "/bin/mount"]
+    assert "-N" not in cmd
 
 
-def test_check_mounted_uses_mount_namespace_flag_when_mount_namespace_differs(monkeypatch):
+def test_check_mounted_uses_mountpoint_check_when_mount_namespace_differs(monkeypatch):
     provider = LinuxShareProvider()
 
     monkeypatch.setattr("app.services.share_service.settings.use_sudo", True)
     monkeypatch.setattr("app.services.share_service.os.geteuid", lambda: 1000)
 
-    mount_output = "server:/export on /nfs/music type nfs4 (rw,relatime)\n"
-
-    with patch("app.services.share_service.os.readlink", side_effect=["mnt:[2]", "mnt:[1]"]), \
-         patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(returncode=0, stdout=mount_output, stderr="")
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
 
         mounted = provider.check_mounted("/nfs/music")
 
     assert mounted is True
     cmd = mock_run.call_args.args[0]
-    assert cmd[:5] == ["sudo", "-n", "/bin/mount", "-N", "/proc/1/ns/mnt"]
+    assert cmd[:5] == ["sudo", "-n", settings.mountpoint_binary_path, "-q", "/nfs/music"]
 
 
-def test_linux_mount_provider_uses_mount_namespace_flag_when_host_namespace_read_fails(monkeypatch):
+def test_linux_mount_provider_uses_plain_mount_command_when_host_namespace_read_fails(monkeypatch):
     provider = LinuxShareProvider()
 
     monkeypatch.setattr("app.services.share_service.settings.use_sudo", True)
     monkeypatch.setattr("app.services.share_service.os.geteuid", lambda: 1000)
 
-    with patch("app.services.share_service.os.readlink", side_effect=["mnt:[2]", PermissionError("denied")]), \
-         patch("app.services.share_service.shutil.which", return_value=None), \
+    with patch("app.services.share_service.shutil.which", return_value=None), \
          patch("subprocess.run") as mock_run, \
          patch.object(provider, "check_mounted", return_value=True):
         mock_run.return_value = MagicMock(returncode=0, stderr="", stdout="")
@@ -2333,17 +2326,17 @@ def test_linux_mount_provider_uses_mount_namespace_flag_when_host_namespace_read
     assert ok is True
     assert err is None
     cmd = mock_run.call_args_list[0].args[0]
-    assert cmd[:5] == ["sudo", "-n", "/bin/mount", "-N", "/proc/1/ns/mnt"]
+    assert cmd[:3] == ["sudo", "-n", "/bin/mount"]
+    assert "-N" not in cmd
 
 
-def test_linux_mount_provider_uses_mount_namespace_flag_when_host_namespace_differs(monkeypatch):
+def test_linux_mount_provider_uses_plain_mount_command_when_host_namespace_differs(monkeypatch):
     provider = LinuxShareProvider()
 
     monkeypatch.setattr("app.services.share_service.settings.use_sudo", True)
     monkeypatch.setattr("app.services.share_service.os.geteuid", lambda: 1000)
 
-    with patch("app.services.share_service.os.readlink", side_effect=["mnt:[2]", PermissionError("denied")]), \
-         patch("subprocess.run") as mock_run, \
+    with patch("subprocess.run") as mock_run, \
          patch.object(provider, "check_mounted", return_value=True):
         mock_run.return_value = MagicMock(returncode=0, stderr="", stdout="")
 
@@ -2356,7 +2349,8 @@ def test_linux_mount_provider_uses_mount_namespace_flag_when_host_namespace_diff
     assert ok is True
     assert err is None
     cmd = mock_run.call_args_list[0].args[0]
-    assert cmd[:5] == ["sudo", "-n", "/bin/mount", "-N", "/proc/1/ns/mnt"]
+    assert cmd[:3] == ["sudo", "-n", "/bin/mount"]
+    assert "-N" not in cmd
 
 
 def test_linux_mount_provider_uses_direct_helper_on_fstab_option_failure():
@@ -2380,6 +2374,30 @@ def test_linux_mount_provider_uses_direct_helper_on_fstab_option_failure():
     assert mock_run.call_count == 2
     direct_cmd = mock_run.call_args_list[1].args[0]
     assert "/sbin/mount.nfs" in direct_cmd
+    assert "vers=4.1" in direct_cmd
+
+
+def test_linux_mount_provider_retries_direct_helper_when_namespace_flag_breaks_nfs_helper():
+    provider = LinuxShareProvider()
+
+    first = MagicMock(returncode=1, stderr="/sbin/mount.nfs: invalid option -- 'N'", stdout="")
+    second = MagicMock(returncode=0, stderr="", stdout="")
+
+    with patch("app.services.share_service._resolve_mount_nfs_binary", return_value="/sbin/mount.nfs"), \
+         patch("subprocess.run", side_effect=[first, second]) as mock_run:
+        ok, err = provider.os_mount(
+            MountType.NFS,
+            "192.168.2.250:/mnt/Data/music",
+            "/mnt/music",
+        )
+
+    assert ok is True
+    assert err is None
+    assert mock_run.call_count == 2
+    direct_cmd = mock_run.call_args_list[1].args[0]
+    assert direct_cmd[:4] == ["sudo", "-n", "/sbin/mount.nfs", "-o"]
+    assert "vers=4.1" in direct_cmd
+    assert "-N" not in direct_cmd
 
 
 def test_linux_mount_provider_returns_retry_error_when_fstab_retry_fails():
