@@ -17,7 +17,7 @@ Focus areas:
 - Architectural behavior
 - Validation rules and error messages
 - Role-based permissions visible in the UI
-- Drive, job, mount, browse, audit, evidence export, and directory-browser workflows
+- Drive, job, mount, browse, audit, controlled export, and directory-browser workflows
 - New or changed buttons, dialogs, menus, navigation paths, loading states, empty states, and error states
 - Setup, configuration, deployment, or operational guidance
 

@@ -400,7 +400,7 @@ sudo chown -R ecube:ecube /opt/ecube/www
 ```bash
 sudo tee /etc/systemd/system/ecube.service > /dev/null <<'EOF_UNIT'
 [Unit]
-Description=ECUBE Evidence Export Service
+Description=ECUBE Controlled Export Service
 After=network-online.target
 Wants=network-online.target
 
@@ -437,7 +437,7 @@ For plain HTTP on port 80, omit the TLS flags and add `AmbientCapabilities` for 
 ```bash
 sudo tee /etc/systemd/system/ecube.service > /dev/null <<'EOF_UNIT'
 [Unit]
-Description=ECUBE Evidence Export Service
+Description=ECUBE Controlled Export Service
 After=network-online.target
 Wants=network-online.target
 

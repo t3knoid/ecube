@@ -20,11 +20,11 @@
 
 ## Introduction
 
-ECUBE (Evidence Copying & USB Based Export) is a secure, audited platform for exporting eDiscovery data to encrypted USB drives. This document is the central entry point for all ECUBE operational documentation. It provides a high-level overview of the system and directs readers to the detailed companion documents for specific topics.
+ECUBE is a secure, audited platform for exporting approved datasets to USB drives through a controlled workflow. This document is the central entry point for all ECUBE operational documentation. It provides a high-level overview of the system and directs readers to the detailed companion documents for specific topics.
 
 **Key Characteristics:**
 
-- Secure, single-purpose evidence export appliance
+- Secure, controlled data export appliance
 - Centralized audit logging of all operations
 - Hardware-aware USB drive and mount management
 - Role-based access control (admin, manager, processor, auditor)
@@ -166,7 +166,7 @@ Comprehensive guide for production readiness covering health checks and readines
 
 **Audience:** Legal Teams, Compliance Officers, Evidence Managers, IT Security, Operations
 
-Compliance and regulatory guidance for evidence handling, including mappings to FRCP, HIPAA, GDPR, GLBA and other jurisdictional requirements. Covers chain-of-custody procedures, forensic hashing, evidence integrity preservation, data retention and security, audit and accountability requirements, and incident response/breach notification procedures. **Critical for legal admissibility and audit defensibility.**
+Compliance and regulatory guidance for high-trust handling workflows, including mappings to FRCP, HIPAA, GDPR, GLBA and other jurisdictional requirements. Covers chain-of-custody procedures, forensic hashing, integrity preservation, data retention and security, audit and accountability requirements, and incident response/breach notification procedures. **Critical for regulated delivery and audit defensibility.**
 
 ### [10 — Production Support Procedures](10-production-support-procedures.md)
 

@@ -26,7 +26,7 @@
 
 ## 1. Introduction
 
-ECUBE (Evidence Copying & USB Based Export) is a secure evidence export platform that copies eDiscovery data onto encrypted USB drives. It is designed to fit a range of operational environments — from a single air-gapped machine in a locked room to a multi-host enterprise deployment with network segmentation.
+ECUBE is a secure controlled-export platform that copies approved datasets onto USB drives. It is designed to fit a range of operational environments — from a single air-gapped machine in a locked room to a multi-host enterprise deployment with network segmentation.
 
 This document describes the available deployment profiles, explains the trade-offs of each, and helps administrators select the model that best matches their security posture, infrastructure, and operational requirements.
 
@@ -366,7 +366,7 @@ The USB 3.0 bus signals at 5 Gbps and delivers roughly 3,200-3,600 Mb/s after pr
 | USB 3.0 external SSD (SATA-based) | 1,600-3,200 Mb/s | SATA bridge or NAND write speed |
 | USB 3.0 external SSD (NVMe-based) | 2,800-3,600 Mb/s | USB 3.0 bus ceiling |
 
-The 1,600 Mb/s figure used throughout this section represents a **conservative estimate for a SATA-based USB 3.0 external SSD** - the most common class of drive used for evidence export. Actual throughput varies by drive model, capacity utilization, and thermal conditions. For planning purposes, 1,600 Mb/s provides a realistic baseline; faster drives will complete sooner, slower HDDs will take proportionally longer.
+The 1,600 Mb/s figure used throughout this section represents a **conservative estimate for a SATA-based USB 3.0 external SSD** - the most common class of drive used for controlled export workloads. Actual throughput varies by drive model, capacity utilization, and thermal conditions. For planning purposes, 1,600 Mb/s provides a realistic baseline; faster drives will complete sooner, slower HDDs will take proportionally longer.
 
 #### Single-Drive Copy Time — 10 TB
 

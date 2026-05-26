@@ -5,12 +5,12 @@
 | Title | ECUBE One-Page Product Cutsheet |
 | Purpose | Provides a concise one-page overview of ECUBE for customer discussions, website collateral, and PDF handouts. |
 | Updated on | 04/18/26 |
-| Audience | Prospects, legal operations leaders, IT teams, compliance reviewers, and partners. |
+| Audience | Prospects, operations leaders, IT teams, compliance reviewers, and partners. |
 
 ## ECUBE
-### Secure Evidence Export Software and Turnkey Appliance
+### Secure Controlled Export Software and Turnkey Appliance
 
-ECUBE is a secure, browser-based platform and turnkey appliance for exporting evidence from approved network shares to encrypted USB drives with auditability, role separation, and operational control built in across desktop, tablet, and mobile devices.
+ECUBE is a secure, browser-based platform and turnkey appliance for exporting approved data from managed network shares to USB drives with auditability, role separation, and operational control built in across desktop, tablet, and mobile devices.
 
 ---
 
@@ -30,7 +30,7 @@ ECUBE replaces that process with a controlled workflow that helps teams:
 
 ## Key Product Highlights
 
-### Controlled evidence export
+### Controlled data export
 - Export from approved NFS and SMB sources through a governed workflow
 - Enforce project isolation before any write begins
 - Support verification and manifest generation as part of the job lifecycle
@@ -38,13 +38,13 @@ ECUBE replaces that process with a controlled workflow that helps teams:
 ### Auditability and compliance
 - Structured logging for user actions, job activity, and drive lifecycle events
 - Full audit trail for review and reporting
-- Designed to support defensible evidence handling practices
+- Designed to support defensible handling practices for regulated and high-trust workflows
 
 ### Role-based operations
 - Admins manage deployment and configuration
 - Supervisors and managers prepare projects and resources
 - Processors run export jobs without unnecessary system access
-- Auditors review activity and evidence integrity data
+- Auditors review activity and integrity verification data
 
 ### Intuitive browser interface
 - Simple, role-focused screens that keep each user on the task at hand
@@ -66,11 +66,11 @@ ECUBE replaces that process with a controlled workflow that helps teams:
 
 ## Ideal Use Cases
 
-- eDiscovery and litigation response
+- legal and litigation response
 - internal investigations
 - compliance-driven data production
 - service bureau export operations
-- controlled multi-party USB evidence delivery
+- controlled multi-party USB data delivery
 
 ---
 
@@ -103,6 +103,6 @@ ECUBE replaces that process with a controlled workflow that helps teams:
 
 ## Summary
 
-ECUBE helps organizations export evidence with more control, more visibility, and less operational risk than manual operator-driven copying.
+ECUBE helps organizations export sensitive data with more control, more visibility, and less operational risk than manual operator-driven copying.
 
-**ECUBE — secure evidence export, built for defensibility and scale.**
+**ECUBE — secure controlled export, built for accountability and scale.**

@@ -414,7 +414,7 @@ Leave this terminal open. Open a second terminal for testing.
 ```bash
 sudo tee /etc/systemd/system/ecube.service > /dev/null << 'EOF'
 [Unit]
-Description=ECUBE Evidence Export Service
+Description=ECUBE Controlled Export Service
 After=network-online.target postgresql.service
 Wants=network-online.target
 

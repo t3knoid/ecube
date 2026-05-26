@@ -48,7 +48,7 @@ Do not:
 
 ## 3. Core Invariants (Global)
 
-ECUBE is a secure evidence export platform. All changes must preserve:
+ECUBE is a secure controlled-export platform. All changes must preserve:
 
 - strict project isolation  
 - hardware safety  

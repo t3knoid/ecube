@@ -68,7 +68,7 @@ ECUBE consists of three components:
 
 ### Key Characteristics
 
-- Secure, single-purpose evidence export appliance
+- Secure, single-purpose controlled-export appliance
 - Centralized audit logging of all operations
 - Hardware-aware USB drive and mount management
 - Role-based access control (admin, manager, processor, auditor)
@@ -716,7 +716,7 @@ curl -k -X POST https://localhost:8443/drives/refresh \
 USB ports default to **disabled** when first discovered. Drives on disabled
 ports remain in `DISCONNECTED` state and cannot transition to `AVAILABLE` until the
 port is explicitly enabled by an admin or manager. This allows operators to
-control which physical ports are active for evidence export.
+control which physical ports are active for controlled export.
 
 #### List Ports
 
@@ -1348,7 +1348,7 @@ Example response:
 
 ### Typical Job Workflow
 
-A complete evidence export follows this sequence:
+A complete controlled export follows this sequence:
 
 1. **Mount source** — add a network mount pointing to the evidence share
 2. **Enable ports** — enable the USB ports you want to use (`PATCH /admin/ports/{port_id}`)

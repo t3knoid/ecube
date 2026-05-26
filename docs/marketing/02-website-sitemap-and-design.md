@@ -24,7 +24,7 @@
 │ Home | Software | Appliances | Security & Compliance | Demo | Contact       │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │ HERO                                                                        │
-│ Secure evidence export without giving operators direct filesystem control.   │
+│ Secure controlled export without giving operators direct filesystem control. │
 │ [ Request a Demo ]   [ View Appliance Options ]                             │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │ WHY ECUBE                                                                   │
@@ -53,11 +53,11 @@
 
 Suggested headline:
 
-Secure evidence export without giving operators direct filesystem control.
+Secure controlled export without giving operators direct filesystem control.
 
 Suggested subheading:
 
-ECUBE moves approved case data from network shares to encrypted USB drives through a governed, audited, browser-based workflow built for legal, forensic, and compliance teams across desktop, tablet, and mobile devices.
+ECUBE moves approved case data from network shares to USB drives through a governed, audited, browser-based workflow built for legal, forensic, and compliance teams across desktop, tablet, and mobile devices.
 
 Primary CTA: Request a Demo
 Secondary CTA: View Appliance Options
@@ -100,7 +100,7 @@ Suggested bullets:
 
 ## 3. Software Page
 
-Purpose: explain ECUBE as a secure evidence export platform.
+Purpose: explain ECUBE as a secure controlled-export platform.
 
 Recommended sections:
 

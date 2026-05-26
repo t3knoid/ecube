@@ -210,7 +210,7 @@ Shown when `GET /setup/status` returns `{"initialized": false}`. Replaces the en
 │                              ┌──────────┐                                    │
 │                              │  ECUBE   │                                    │
 │                              └──────────┘                                    │
-│                    Evidence Copying & USB Based Export                       │
+│                    Enterprise Content USB Backup & Export                    │
 │                                                                              │
 │                 ┌──────────────────────────────────────┐                     │
 │                 │                                      │                     │

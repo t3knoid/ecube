@@ -1,15 +1,15 @@
-# ECUBE — Secure Evidence Export Appliance
+# ECUBE — Secure Controlled Export Appliance
 
 | Field | Value |
 |---|---|
-| Title | ECUBE Secure Evidence Export Appliance |
-| Purpose | Provides an appliance-focused overview of ECUBE covering its hardware-led value proposition, core capabilities, and deployment fit for eDiscovery teams. |
+| Title | ECUBE Secure Controlled Export Appliance |
+| Purpose | Provides an appliance-focused overview of ECUBE covering its hardware-led value proposition, core capabilities, and deployment fit for teams that need governed export workflows. |
 | Updated on | 04/18/26 |
-| Audience | Legal teams, IT decision-makers, compliance officers, evaluators. |
+| Audience | Operations leaders, IT decision-makers, compliance officers, evaluators. |
 
 ## What Is ECUBE?
 
-ECUBE is a turnkey appliance and software platform that copies litigation and investigation data from network shares (NFS/SMB) to encrypted USB drives under strict chain-of-custody controls. Every file, every drive, and every operator action is logged in an immutable audit trail — purpose-built for legal hold compliance and forensic defensibility.
+ECUBE is a turnkey appliance and software platform that copies approved datasets from network shares (NFS/SMB) to USB drives under strict custody and accountability controls. Every file, every drive, and every operator action is logged in an immutable audit trail so teams can support regulated delivery, internal investigations, compliance response, and legal production from the same governed workflow.
 
 The turnkey appliance story is central to the product: ECUBE is designed to run on validated hardware with dedicated USB 3.1 controller architecture so export performance stays predictable, scalable, and operationally safe.
 
@@ -19,7 +19,7 @@ The turnkey appliance story is central to the product: ECUBE is designed to run 
 
 ### Multi-Drive Parallel Export
 
-Copy data to **4, 8, or 12 USB drives simultaneously** using dedicated USB 3.1 controller hardware engineered for sustained export throughput. Each controller path is selected to minimize contention so one active drive does not unnecessarily slow another. The result is faster, more predictable delivery of identical evidence sets for multiple parties in a single pass.
+Copy data to **4, 8, or 12 USB drives simultaneously** using dedicated USB 3.1 controller hardware engineered for sustained export throughput. Each controller path is selected to minimize contention so one active drive does not unnecessarily slow another. The result is faster, more predictable delivery of identical export sets for multiple recipients in a single pass.
 
 ### Project Isolation — Enforced by Design
 
@@ -27,7 +27,7 @@ Each USB drive is cryptographically bound to a single project at initialization.
 
 ### Immutable Audit Trail
 
-Every operation — authentication, drive initialization, file copy, hash verification, eject — is recorded as a structured JSON event with an immutable timestamp. Audit logs are append-only and cannot be modified after the fact. Export them alongside evidence for independent chain-of-custody verification.
+Every operation — authentication, drive initialization, file copy, hash verification, eject — is recorded as a structured JSON event with an immutable timestamp. Audit logs are append-only and cannot be modified after the fact. Export them alongside delivered data for independent verification and review.
 
 ### Multi-Threaded Copy Engine with Resume
 
@@ -57,7 +57,7 @@ A modern browser-based UI provides real-time visibility into drive status, job p
 That means:
 
 - IT administrators can focus on deployment, configuration, and infrastructure readiness;
-- supervisors can set up projects and prepare the environment for evidence handling;
+- supervisors can set up projects and prepare the environment for controlled data handling;
 - processors can run export jobs without broad system access;
 - managers and auditors can review logs, status, and compliance activity without operational clutter.
 
@@ -67,7 +67,7 @@ Role-aware navigation shows each operator only what they need.
 
 ## Why the Turnkey Appliance Matters
 
-ECUBE is not just software dropped onto a generic workstation. The turnkey appliance combines the application with carefully chosen platform hardware so legal and forensic teams get repeatable export performance without trial-and-error tuning.
+ECUBE is not just software dropped onto a generic workstation. The turnkey appliance combines the application with carefully chosen platform hardware so operations, compliance, and investigation teams get repeatable export performance without trial-and-error tuning.
 
 Key appliance advantages:
 
@@ -103,7 +103,7 @@ The same appliance image deploys in all three models — only the infrastructure
 
 ---
 
-## Evidence Integrity at Every Step
+## Data Integrity at Every Step
 
 ```text
 Source Share (NFS/SMB)
@@ -141,7 +141,7 @@ Source Share (NFS/SMB)
 
 ---
 
-<p align="center"><em>ECUBE — Because evidence integrity is not optional.</em></p>
+<p align="center"><em>ECUBE — Because controlled data delivery demands integrity.</em></p>
 
 ## References
 

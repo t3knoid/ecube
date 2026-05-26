@@ -2,7 +2,7 @@
 
 ## 1. Global Principles
 
-- ECUBE is a secure evidence export platform. All generated code must preserve:
+- ECUBE is a secure controlled-export platform. All generated code must preserve:
   - strict project isolation
   - hardware safety
   - auditability

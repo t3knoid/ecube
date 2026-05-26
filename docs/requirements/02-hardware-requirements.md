@@ -18,7 +18,7 @@
 
 ### 2.1.2 Scope
 
-- Define required hardware capabilities to support secure evidence export operations.
+- Define required hardware capabilities to support secure controlled-export operations.
 - Define constraints that hardware environments must satisfy for compliance-safe operation.
 - Define performance outcomes required for operational viability.
 - Define lifecycle outcomes for hardware availability, replacement, and long-term maintainability.
@@ -33,7 +33,7 @@
 
 ## 2.2 Capability Requirements
 
-The hardware environment must enable ECUBE to perform controlled, auditable evidence export operations without direct dependency on undocumented manual handling.
+The hardware environment must enable ECUBE to perform controlled, auditable export operations without direct dependency on undocumented manual handling.
 
 The hardware environment must support:
 

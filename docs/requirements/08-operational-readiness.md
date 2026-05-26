@@ -64,7 +64,7 @@ Deployments must establish measurable performance expectations before go-live.
 A release may be promoted to production only when readiness checks pass.
 
 - Health, readiness, metrics, logging, alerting, and backup dependencies must pass verification in pre-production.
-- Security controls required for production operation must be validated before first live evidence export.
+- Security controls required for production operation must be validated before first live controlled export.
 - A documented go-live checklist and sign-off record must exist for each environment.
 
 ## 8.9 Acceptance Criteria

@@ -74,7 +74,7 @@ Documentation focus areas:
 - architectural behavior
 - validation rules and error messages
 - role-based permissions visible in the UI
-- drive, job, mount, browse, audit, evidence export, and directory-browser workflows
+- drive, job, mount, browse, audit, controlled export, and directory-browser workflows
 - new or changed buttons, dialogs, menus, navigation paths, loading states, empty states, and error states
 - setup, configuration, deployment, or operational guidance
 

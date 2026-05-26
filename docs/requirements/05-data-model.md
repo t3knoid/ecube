@@ -55,7 +55,7 @@ Acceptance criteria:
 
 ## 5.3 Drive Representation Requirements
 
-Drive data must represent all information necessary to manage evidence export media safely and audibly.
+Drive data must represent all information necessary to manage export media safely and audibly.
 
 The data must represent:
 

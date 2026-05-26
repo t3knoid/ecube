@@ -1017,7 +1017,7 @@ curl http://localhost:8000/drives | jq '.[] | {id, state, project_id}'
 
 ### Tier 3: USB Drives Lost / Inaccessible
 
-**Use case:** Physical loss of USB drives containing evidence exports.
+**Use case:** Physical loss of USB drives containing exported datasets.
 
 **Impact:** Evidence copies are lost; source data still exists in NFS/SMB mounts.
 

@@ -388,7 +388,7 @@ Vue I18n 9.x provides the localization infrastructure. All user-visible strings 
 {
   "app": {
     "name": "ECUBE",
-    "title": "Evidence Copying & USB Based Export"
+    "title": "Enterprise Content USB Backup & Export"
   },
   "nav": {
     "dashboard": "Dashboard",

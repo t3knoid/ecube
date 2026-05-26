@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "ECUBE",
-    "title": "Evidence Copying & USB Based Export"
+    "title": "Enterprise Content USB Backup & Export"
   },
   "table": {
     "sortAsc": "Sort ascending",

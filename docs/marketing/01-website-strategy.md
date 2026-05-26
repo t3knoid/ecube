@@ -29,7 +29,7 @@ Primary goals:
 
 ## 3. Positioning Statement
 
-ECUBE is a secure evidence export platform and turnkey appliance that moves data from approved shares to encrypted USB drives with auditability, role separation, and automation built in from the start.
+ECUBE is a secure controlled-export platform and turnkey appliance that moves data from approved shares to USB drives with auditability, role separation, and automation built in from the start.
 
 ## 4. Why ECUBE Is Better Than Manual Copying
 

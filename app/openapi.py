@@ -174,7 +174,7 @@ def _register_schema_only_routes(app: FastAPI) -> None:
 def create_openapi_app() -> FastAPI:
     app = FastAPI(
         title="ECUBE",
-        description="Evidence Copying & USB Based Export Platform — Secure evidence export solution for encrypted USB drives.",
+        description="Enterprise Content USB Backup & Export Platform — Secure controlled export solution for USB drives.",
         version=__version__,
         contact={
             "name": settings.api_contact_name,

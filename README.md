@@ -6,9 +6,9 @@
 [![Schemathesis API Fuzz](https://github.com/t3knoid/ecube/actions/workflows/schemathesis-fuzz.yml/badge.svg)](https://github.com/t3knoid/ecube/actions/workflows/schemathesis-fuzz.yml)
 [![Newman API Smoke](https://github.com/t3knoid/ecube/actions/workflows/newman-smoke.yml/badge.svg)](https://github.com/t3knoid/ecube/actions/workflows/newman-smoke.yml)
 
-Evidence Copying &amp; USB Based Export
+Enterprise Content USB Backup &amp; Export
 
-ECUBE is a secure evidence export platform designed to copy eDiscovery data onto encrypted USB drives from a Linux-based copy machine, with strict project isolation, full audit logging, hardware-aware drive management, and a trusted system-layer API that isolates the public UI from direct hardware and database access.
+ECUBE is a secure, audited export platform for copying approved datasets onto USB drives from a Linux-based copy machine, with strict project isolation, full audit logging, hardware-aware drive management, and a trusted system-layer API that isolates the public UI from direct hardware and database access. It fits workflows that need governed multi-drive export, verification, and operator accountability, including investigations, compliance response, regulated data delivery, and legal production.
 
 ## Application Stack
 

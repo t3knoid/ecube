@@ -15,7 +15,7 @@ ECUBE is designed as a controlled export system where all privileged operations 
 
 - A Linux-hosted service orchestrates mounts, USB state, and export jobs.
 - A REST API provides controlled actions for UI and integrations.
-- Evidence export flows are modeled as auditable, stateful jobs.
+- Controlled export flows are modeled as auditable, stateful jobs.
 
 ## Non-Functional Design Goals
 
