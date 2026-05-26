@@ -13,11 +13,32 @@ import re
 from typing import Optional
 
 from app.config import settings
+from app.infrastructure.mount_namespace import shares_host_mount_namespace
 logger = logging.getLogger(__name__)
 
+_DEFAULT_PROCFS_MOUNTS_PATH = "/proc/mounts"
+_HOST_PROCFS_MOUNTS_PATH = "/proc/1/mounts"
+_host_namespace_probe_warning_emitted = False
+
+
+def _log_host_namespace_probe_failure_once(_exc: OSError) -> None:
+    global _host_namespace_probe_warning_emitted
+    if _host_namespace_probe_warning_emitted:
+        logger.debug("Unable to read host mount namespace; continuing with host mount table fallback")
+        return
+    _host_namespace_probe_warning_emitted = True
+    logger.warning("Unable to read host mount namespace; assuming namespace differs")
+
 def _mounts_path_for_current_context() -> str:
-    """Return the configured authoritative mount table path for the current runtime."""
-    return settings.procfs_mounts_path
+    """Return the authoritative mount table path for the current runtime."""
+    mounts_path = settings.procfs_mounts_path
+    if mounts_path == _DEFAULT_PROCFS_MOUNTS_PATH and not shares_host_mount_namespace(
+        on_self_read_error=True,
+        on_host_read_error=False,
+        on_host_read_error_callback=_log_host_namespace_probe_failure_once,
+    ):
+        return _HOST_PROCFS_MOUNTS_PATH
+    return mounts_path
 
 
 def _normalize_mount_path(path: str) -> str:

@@ -1,5 +1,7 @@
 import time
 from copy import deepcopy
+from pathlib import Path
+from unittest.mock import patch
 
 import jwt
 import pytest
@@ -28,6 +30,18 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 _app_database.SessionLocal = TestingSessionLocal
 
 from app.main import app  # noqa: E402  — must come after SessionLocal override
+
+
+async def _noop_usb_discovery_runtime_loop() -> None:
+    """Disable the background USB runtime loop for ordinary tests.
+
+    The unit-test suite uses a shared in-memory SQLite connection. Leaving the
+    runtime USB discovery loop active allows lifespan startup to spawn a
+    concurrent writer against that same connection while request tests are
+    executing, which makes unrelated API tests flaky.
+    """
+
+    return None
 
 
 _DEFAULT_MUTABLE_SETTINGS = {
@@ -92,6 +106,23 @@ def _reset_runtime_demo_settings():
     settings._generated_demo_shared_password_source = None
     for key, value in _DEFAULT_MUTABLE_SETTINGS.items():
         setattr(settings, key, deepcopy(value))
+
+
+@pytest.fixture(autouse=True)
+def _disable_background_usb_runtime_loop_for_tests(request):
+    """Keep background USB discovery from racing request tests.
+
+    Tests that exercise ``app.main._usb_discovery_runtime_loop`` directly keep
+    the real function so they can validate the runtime mode switch behavior.
+    """
+
+    test_path = Path(str(request.fspath))
+    if test_path.name == "test_usb_discovery_runtime.py":
+        yield
+        return
+
+    with patch("app.main._usb_discovery_runtime_loop", _noop_usb_discovery_runtime_loop):
+        yield
 
 
 @pytest.fixture(scope="function")

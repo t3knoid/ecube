@@ -755,22 +755,29 @@ class TestUnmountDevice:
             "timeout": settings.subprocess_timeout_seconds,
         }
 
-    def test_unmount_uses_plain_umount_command_when_namespace_differs(self):
-        """Unmount should use the normal umount command when the service namespace differs."""
+    def test_unmount_uses_host_mount_namespace_flag_when_namespace_differs(self):
+        """Unmount should target the host mount namespace when the service namespace differs."""
         proc_mounts_content = """/dev/sdb /media/usb ext4 rw 0 0
 """
 
+        def mock_readlink(path):
+            if path == "/proc/self/ns/mnt":
+                return "mnt:[2]"
+            if path == "/proc/1/ns/mnt":
+                return "mnt:[1]"
+            raise OSError(f"unexpected path: {path}")
+
         with patch("builtins.open", mock_open(read_data=proc_mounts_content)):
-            with patch("app.infrastructure.drive_eject.os.geteuid", return_value=1000):
-                with patch("app.infrastructure.drive_eject.settings.use_sudo", True):
-                    with patch("subprocess.run") as mock_run:
-                        success, error = unmount_device("/dev/sdb")
+            with patch("os.readlink", side_effect=mock_readlink):
+                with patch("app.infrastructure.drive_eject.os.geteuid", return_value=1000):
+                    with patch("app.infrastructure.drive_eject.settings.use_sudo", True):
+                        with patch("subprocess.run") as mock_run:
+                            success, error = unmount_device("/dev/sdb")
 
         assert success is True
         assert error is None
         called_cmd = mock_run.call_args.args[0]
-        assert called_cmd[:3] == ["sudo", "-n", settings.umount_binary_path]
-        assert "-N" not in called_cmd
+        assert called_cmd[:5] == ["sudo", "-n", settings.umount_binary_path, "-N", "/proc/1/ns/mnt"]
 
     def test_unmount_not_mounted_race_is_success(self):
         """CalledProcessError with 'not mounted' stderr is treated as success.
@@ -836,14 +843,22 @@ class TestUnmountDevice:
 
 
 class TestHostAwareMountDiscovery:
-    def test_find_device_mountpoints_reads_configured_mount_table_when_namespace_differs(self):
+    def test_find_device_mountpoints_reads_host_mount_table_when_namespace_differs(self):
         proc_mounts_content = """/dev/sdb /media/usb ext4 rw 0 0
 """
 
+        def mock_readlink(path):
+            if path == "/proc/self/ns/mnt":
+                return "mnt:[2]"
+            if path == "/proc/1/ns/mnt":
+                return "mnt:[1]"
+            raise OSError(f"unexpected path: {path}")
+
         with patch("builtins.open", mock_open(read_data=proc_mounts_content)) as mocked_open:
-            result, error = _find_device_mountpoints("sdb")
+            with patch("os.readlink", side_effect=mock_readlink):
+                result, error = _find_device_mountpoints("sdb")
 
         assert error is None
         assert result == ["/media/usb"]
-        mocked_open.assert_called_with(settings.procfs_mounts_path, encoding="utf-8", errors="replace")
+        mocked_open.assert_called_with("/proc/1/mounts", encoding="utf-8", errors="replace")
 

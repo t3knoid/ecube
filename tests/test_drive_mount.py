@@ -128,7 +128,7 @@ def test_mount_drive_uses_service_uid_gid_options_for_exfat_media():
     assert "umask=022" in options
 
 
-def test_mount_drive_uses_plain_mount_command_when_mount_namespace_differs():
+def test_mount_drive_uses_mount_namespace_flag_when_mount_namespace_differs():
     dm = LinuxDriveMount()
     with patch("app.infrastructure.drive_mount.settings") as mock_settings:
         mock_settings.usb_mount_base_path = _BASE
@@ -151,11 +151,10 @@ def test_mount_drive_uses_plain_mount_command_when_mount_namespace_differs():
     assert ok is True
     assert err is None
     mount_call = mock_run.call_args_list[0].args[0]
-    assert mount_call[:3] == ["sudo", "-n", "/bin/mount"]
-    assert "-N" not in mount_call
+    assert mount_call[:5] == ["sudo", "-n", "/bin/mount", "-N", "/proc/1/ns/mnt"]
 
 
-def test_unmount_drive_uses_plain_umount_command_when_mount_namespace_differs():
+def test_unmount_drive_uses_mount_namespace_flag_when_mount_namespace_differs():
     dm = LinuxDriveMount()
     with patch("app.infrastructure.drive_mount.settings") as mock_settings:
         mock_settings.usb_mount_base_path = _BASE
@@ -171,8 +170,7 @@ def test_unmount_drive_uses_plain_umount_command_when_mount_namespace_differs():
     assert ok is True
     assert err is None
     mount_call = mock_run.call_args_list[0].args[0]
-    assert mount_call[:3] == ["sudo", "-n", "/bin/umount"]
-    assert "-N" not in mount_call
+    assert mount_call[:5] == ["sudo", "-n", "/bin/umount", "-N", "/proc/1/ns/mnt"]
 
 
 def test_mount_drive_repairs_mount_point_access_for_service_user():

@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.models.jobs import ExportJob, JobStatus
 from app.models.network import MountStatus, MountType, NetworkShare
+from app.infrastructure.mount_namespace import shares_host_mount_namespace
 from app.infrastructure.subprocess_runner import resolve_binary, run_subprocess
 from app.repositories.audit_repository import AuditRepository
 from app.repositories.share_repository import ShareRepository
@@ -451,7 +452,7 @@ class LinuxShareProvider:
             else:
                 cmd += ["-o", "guest"]
 
-        cmd = _with_sudo(cmd)
+        cmd = _with_host_mount_namespace(cmd)
         mount_label = _redacted_mount_label(local_mount_point)
         command_path = _mount_command_path(cmd)
         if mount_type == MountType.NFS:
@@ -619,7 +620,7 @@ class LinuxShareProvider:
 
     def os_unmount(self, local_mount_point: str) -> Tuple[bool, Optional[str]]:
         try:
-            cmd = _with_sudo([settings.umount_binary_path, local_mount_point])
+            cmd = _with_host_mount_namespace([settings.umount_binary_path, local_mount_point])
             mount_label = _redacted_mount_label(local_mount_point)
             logger.info("Executing unmount command for mount_label=%s", mount_label)
             result = run_subprocess(
@@ -662,6 +663,27 @@ class LinuxShareProvider:
         try:
             default_timeout = _network_mount_timeout_seconds()
             timeout = default_timeout if timeout_seconds is None or timeout_seconds <= 0 else timeout_seconds
+            if not _in_host_mount_namespace():
+                local_path = os.path.normpath(local_mount_point)
+                cmd = _with_sudo([settings.mount_binary_path, "-N", "/proc/1/ns/mnt"])
+                result = run_subprocess(
+                    cmd,
+                    runner=subprocess.run,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                )
+                if result.returncode != 0:
+                    error = (result.stderr or result.stdout or "").strip() or "mount list check failed"
+                    logger.warning("Host namespace mount list check failed: reason=%s", sanitize_error_message(error, "Mount list check failed"))
+                    return self._check_mounted_with_mountpoint(local_mount_point, timeout)
+
+                stdout = result.stdout if isinstance(result.stdout, str) else ""
+                if stdout:
+                    return f" on {local_path} " in stdout
+
+                return self._check_mounted_with_mountpoint(local_mount_point, timeout)
+
             return self._check_mounted_with_mountpoint(local_mount_point, timeout)
         except Exception:
             return None
@@ -779,6 +801,44 @@ def _with_sudo(cmd: list[str]) -> list[str]:
     if settings.use_sudo and os.geteuid() != 0:
         return ["sudo", "-n", *cmd]
     return cmd
+
+
+def _with_mount_namespace_flag(cmd: list[str]) -> Optional[list[str]]:
+    """Add util-linux namespace flag for mount/umount commands when applicable."""
+    if not cmd:
+        return None
+
+    binary = os.path.basename(cmd[0])
+    if binary == "mount":
+        return [cmd[0], "-N", "/proc/1/ns/mnt", *cmd[1:]]
+    if binary == "umount":
+        # Force util-linux internal unmount handling so helper binaries such as
+        # umount.nfs do not receive the namespace flag they do not support.
+        return [cmd[0], "-i", "-N", "/proc/1/ns/mnt", *cmd[1:]]
+    return None
+
+
+def _in_host_mount_namespace() -> bool:
+    return shares_host_mount_namespace(
+        on_self_read_error=True,
+        on_host_read_error=False,
+        on_host_read_error_callback=lambda _exc: logger.warning(
+            "Unable to read host mount namespace; assuming namespace differs"
+        ),
+    )
+
+
+def _with_host_mount_namespace(cmd: list[str]) -> list[str]:
+    if _in_host_mount_namespace():
+        return _with_sudo(cmd)
+
+    ns_flag_cmd = _with_mount_namespace_flag(cmd)
+    if ns_flag_cmd is not None:
+        logger.warning("Mount namespace differs from host; using util-linux namespace flag")
+        return _with_sudo(ns_flag_cmd)
+
+    logger.warning("Mount namespace differs from host but no namespace helper is available; using current namespace")
+    return _with_sudo(cmd)
 
 
 def _mount_root_for_type(mount_type: MountType) -> str:

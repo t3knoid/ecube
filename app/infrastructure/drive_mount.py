@@ -16,6 +16,7 @@ from app.config import settings
 from app.infrastructure.device_path import validate_device_path
 from app.infrastructure.filesystem_detection import LinuxFilesystemDetector
 from app.infrastructure.mount_info import find_device_mount_point
+from app.infrastructure.mount_namespace import shares_host_mount_namespace
 from app.utils.sanitize import sanitize_error_message
 
 logger = logging.getLogger(__name__)
@@ -114,6 +115,39 @@ def _with_sudo(cmd: list[str]) -> list[str]:
     if settings.use_sudo and os.geteuid() != 0:
         return ["sudo", "-n", *cmd]
     return cmd
+
+
+def _with_mount_namespace_flag(cmd: list[str]) -> list[str] | None:
+    if not cmd:
+        return None
+
+    binary = os.path.basename(cmd[0])
+    if binary in ("mount", "umount"):
+        return [cmd[0], "-N", "/proc/1/ns/mnt", *cmd[1:]]
+    return None
+
+
+def _in_host_mount_namespace() -> bool:
+    return shares_host_mount_namespace(
+        on_self_read_error=True,
+        on_host_read_error=False,
+        on_host_read_error_callback=lambda _exc: logger.warning(
+            "Unable to read host mount namespace; assuming namespace differs"
+        ),
+    )
+
+
+def _with_host_mount_namespace(cmd: list[str]) -> list[str]:
+    if _in_host_mount_namespace():
+        return _with_sudo(cmd)
+
+    ns_flag_cmd = _with_mount_namespace_flag(cmd)
+    if ns_flag_cmd is not None:
+        logger.warning("Mount namespace differs from host; using util-linux namespace flag")
+        return _with_sudo(ns_flag_cmd)
+
+    logger.warning("Mount namespace differs from host but no namespace helper is available; using current namespace")
+    return _with_sudo(cmd)
 
 
 def _ensure_managed_mount_point(mount_point: str) -> tuple[bool, str | None]:
@@ -310,7 +344,7 @@ class LinuxDriveMount:
 
         try:
             subprocess.run(
-                _with_sudo(mount_command),
+                _with_host_mount_namespace(mount_command),
                 check=True,
                 capture_output=True,
                 timeout=mount_timeout_seconds,
@@ -416,7 +450,7 @@ class LinuxDriveMount:
 
         try:
             subprocess.run(
-                _with_sudo([settings.umount_binary_path, mount_point]),
+                _with_host_mount_namespace([settings.umount_binary_path, mount_point]),
                 check=True,
                 capture_output=True,
                 timeout=settings.subprocess_timeout_seconds,

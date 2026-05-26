@@ -56,11 +56,10 @@ class ShareRepository:
         """Persist a new mount and flush it to obtain its ID."""
         self.db.add(mount)
         try:
-            self.db.commit()
+            self.db.flush()
         except Exception:
             self.db.rollback()
             raise
-        self.db.refresh(mount)
         return mount
 
     def has_mounted_project(self, project_id: str) -> bool:

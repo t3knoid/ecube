@@ -137,9 +137,12 @@ def _persisted_usb_mount_path(
     discovered_mount_path: Optional[str],
     *,
     drive_id: Optional[int],
+    has_project_binding: bool = False,
     current_state: Optional[DriveState] = None,
     existing_mount_path: Optional[str] = None,
 ) -> Optional[str]:
+    if has_project_binding and discovered_mount_path:
+        return discovered_mount_path
     if drive_id is not None and discovered_mount_path and is_managed_usb_mount_slot(discovered_mount_path, drive_id):
         return discovered_mount_path
     if current_state == DriveState.IN_USE and drive_id is not None and existing_mount_path and is_managed_usb_mount_slot(existing_mount_path, drive_id):
@@ -427,6 +430,7 @@ def run_discovery_sync(
             persisted_mount_path = _persisted_usb_mount_path(
                 discovered_drive.mount_path,
                 drive_id=existing.id,
+                has_project_binding=has_project_binding,
                 current_state=existing.current_state,
                 existing_mount_path=existing.mount_path,
             )
