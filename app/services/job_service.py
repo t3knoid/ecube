@@ -26,6 +26,7 @@ from app.repositories.job_repository import (
 from app.repositories.share_repository import ShareRepository
 from app.schemas.jobs import JobCreate, JobOverflowContinueRequest, JobStart, JobUpdate
 from app.services import copy_engine
+from app.services import metrics_service
 from app.services.callback_service import deliver_callback
 from app.services.copy_tuning import resolve_job_copy_tuning
 from app.services.workload_profiles import (
@@ -965,6 +966,7 @@ def create_job(
     db.refresh(job)
     created_job_id = cast(int, job_row.id)
     selected_drive_id = cast(int, drive_row.id)
+    metrics_service.record_job_created()
 
     # Best-effort audit logging — failures never abort job creation.
     try:

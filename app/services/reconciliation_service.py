@@ -49,6 +49,7 @@ from app.repositories.audit_repository import AuditRepository
 from app.services.callback_service import deliver_callback
 from app.services.drive_service import normalize_unreleased_drive_states
 from app.services.demo_seed_service import seed_runtime_demo_environment
+from app.services import metrics_service
 from app.services.share_check_utils import check_mounted_with_configured_timeout
 from app.services.operation_context import details_with_operation_id as _details_with_operation_id, operation_extra as _operation_extra
 from app.constants import ECUBE_GROUP_ROLE_MAP
@@ -1261,6 +1262,8 @@ def run_startup_reconciliation(
 
     if not _acquire_reconciliation_lock(db):
         logger.info("Another worker is running startup reconciliation — skipping", extra=_operation_extra(operation_id))
+        for pass_name in ("mounts", "jobs", "drives"):
+            metrics_service.record_reconciliation_pass(pass_name=pass_name, outcome="skipped", duration_seconds=0.0)
         return {"skipped": True}
 
     try:
@@ -1336,8 +1339,14 @@ def run_startup_reconciliation(
             _refresh_reconciliation_lock(db)
 
         logger.info("Startup reconciliation: checking mounts", extra=_operation_extra(operation_id))
+        mounts_started_at = time.perf_counter()
         try:
             results["mounts"] = reconcile_mounts(db, mount_provider, drive_mount_provider, operation_id=operation_id)
+            metrics_service.record_reconciliation_pass(
+                pass_name="mounts",
+                outcome="success",
+                duration_seconds=max(time.perf_counter() - mounts_started_at, 0.0),
+            )
         except Exception as exc:
             db.rollback()
             db.expire_all()
@@ -1347,12 +1356,23 @@ def run_startup_reconciliation(
             else:
                 logger.exception("Mount reconciliation failed", extra=_operation_extra(operation_id))
             results["mounts"] = {"error": hint or "mount reconciliation failed"}
+            metrics_service.record_reconciliation_pass(
+                pass_name="mounts",
+                outcome="error",
+                duration_seconds=max(time.perf_counter() - mounts_started_at, 0.0),
+            )
 
         _refresh_reconciliation_lock(db)
 
         logger.info("Startup reconciliation: checking jobs", extra=_operation_extra(operation_id))
+        jobs_started_at = time.perf_counter()
         try:
             results["jobs"] = reconcile_jobs(db)
+            metrics_service.record_reconciliation_pass(
+                pass_name="jobs",
+                outcome="success",
+                duration_seconds=max(time.perf_counter() - jobs_started_at, 0.0),
+            )
         except Exception as exc:
             db.rollback()
             db.expire_all()
@@ -1362,6 +1382,11 @@ def run_startup_reconciliation(
             else:
                 logger.exception("Job reconciliation failed", extra=_operation_extra(operation_id))
             results["jobs"] = {"error": hint or "job reconciliation failed"}
+            metrics_service.record_reconciliation_pass(
+                pass_name="jobs",
+                outcome="error",
+                duration_seconds=max(time.perf_counter() - jobs_started_at, 0.0),
+            )
         if "error" in results["jobs"]:
             logger.info(
                 "Startup reconciliation: jobs result",
@@ -1387,12 +1412,18 @@ def run_startup_reconciliation(
         _refresh_reconciliation_lock(db)
 
         logger.info("Startup reconciliation: checking USB drives", extra=_operation_extra(operation_id))
+        drives_started_at = time.perf_counter()
         try:
             results["drives"] = reconcile_drives(
                 db,
                 topology_source=topology_source,
                 filesystem_detector=filesystem_detector,
                 operation_id=operation_id,
+            )
+            metrics_service.record_reconciliation_pass(
+                pass_name="drives",
+                outcome="success",
+                duration_seconds=max(time.perf_counter() - drives_started_at, 0.0),
             )
         except Exception as exc:
             db.rollback()
@@ -1403,6 +1434,11 @@ def run_startup_reconciliation(
             else:
                 logger.exception("Drive reconciliation failed", extra=_operation_extra(operation_id))
             results["drives"] = {"error": hint or "drive reconciliation failed"}
+            metrics_service.record_reconciliation_pass(
+                pass_name="drives",
+                outcome="error",
+                duration_seconds=max(time.perf_counter() - drives_started_at, 0.0),
+            )
 
         logger.info("Startup reconciliation complete: %s", results, extra=_operation_extra(operation_id))
         return results

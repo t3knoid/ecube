@@ -23,6 +23,7 @@ from app.schemas.hardware import DriveRelatedJobSchema
 from app.services.audit_service import get_job_drive_custody_summary, log_and_audit
 from app.services.callback_service import deliver_callback
 from app.services.drive_space_service import request_available_space_refresh_for_drive
+from app.services import metrics_service
 from app.utils.drive_identity import mask_serial_number
 from app.utils.sanitize import normalize_project_id, sanitize_error_message
 
@@ -1104,6 +1105,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
             )
         except Exception:
             logger.exception("Failed to write audit log for DRIVE_EJECT_PREPARED")
+        metrics_service.record_drive_eject("prepared")
         if assigned_job is not None and assigned_job.status in PREPARE_EJECT_CALLBACK_JOB_STATUSES:
             try:
                 deliver_callback(
@@ -1180,6 +1182,7 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
             )
         except Exception:
             logger.exception("Failed to write audit log for DRIVE_EJECT_FAILED")
+        metrics_service.record_drive_eject("failed")
 
         recoverable_detail = _recoverable_prepare_eject_detail(
             drive.mount_path,
@@ -1416,6 +1419,7 @@ def _complete_drive_format(
         formatter.format(drive.filesystem_path, filesystem_type)
     except RuntimeError as exc:
         safe_error = sanitize_error_message(exc, "Drive format failed")
+        metrics_service.record_drive_format(filesystem_type=filesystem_type, outcome="error")
         drive = _set_drive_format_failure(
             drive,
             drive_repo,
@@ -1524,6 +1528,7 @@ def _complete_drive_format(
         )
     except Exception:
         logger.exception("Failed to write audit log for DRIVE_FORMATTED")
+    metrics_service.record_drive_format(filesystem_type=filesystem_type, outcome="success")
 
     _attach_related_job_contexts(db, [drive], include_related_job_custody=True)
     return drive

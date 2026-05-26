@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.exceptions import AuthorizationError
+from app.services import metrics_service
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 logger = logging.getLogger(__name__)
@@ -40,6 +41,15 @@ def _raise_authentication_http_exception(
     }
     if extra:
         log_extra.update(extra)
+
+    auth_metric_result = {
+        "token_expired": "token_expired",
+        "token_validation_failed": "token_invalid",
+        "invalid_token_payload": "token_invalid",
+        "oidc_validation_failed": "token_invalid",
+    }.get(reason)
+    if auth_metric_result is not None:
+        metrics_service.record_auth_attempt(auth_metric_result)
 
     logger.warning("Authentication denied", extra=log_extra)
     raise HTTPException(
@@ -258,6 +268,7 @@ def require_roles(*allowed_roles: str) -> Callable[..., CurrentUser]:
         db: Session = Depends(get_db),
     ) -> CurrentUser:
         if not any(r in current_user.roles for r in allowed_roles):
+            metrics_service.record_role_denial(metrics_service.route_template_from_request(request))
             _try_log_authorization_denied(
                 db=db,
                 actor_id=current_user.id,

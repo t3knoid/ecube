@@ -25,6 +25,7 @@ dependencies = [
     "itsdangerous>=2.1.0",
     "httpx>=0.27.0",
     "psutil>=5.9.0",
+    "prometheus-client>=0.20.0",
 ]
 
 [project.scripts]

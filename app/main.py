@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Generator
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -38,11 +38,13 @@ from app.schemas.introspection import HealthLiveResponse, HealthNotReadyResponse
 from app.session import close_session_backend, init_session_backend, mount_session_middleware
 from app.utils.client_ip import get_client_ip
 from app.repositories.audit_repository import best_effort_audit
+from app.services import metrics_service
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
 # Configure logging before anything else.
 configure_logging()
+metrics_service.install_sqlalchemy_metrics_hooks()
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +56,7 @@ _SETUP_REDIRECT_EXEMPT_PATHS = frozenset({
     "/docs",
     "/redoc",
     "/openapi.json",
+    "/metrics",
     "/health",
     "/health/live",
     "/health/ready",
@@ -673,8 +676,20 @@ async def lifespan(application: FastAPI):
     # Background: USB discovery runtime mode (polling or udev events)
     # ------------------------------------------------------------------
     discovery_task = None
+    metrics_sampling_stop = asyncio.Event()
+    metrics_sampling_task = None
     if db_runtime_ready:
         discovery_task = asyncio.create_task(_usb_discovery_runtime_loop())
+
+    try:
+        metrics_sampling_task = asyncio.create_task(
+            metrics_service.run_sampling_loop(
+                db_factory=db_module.SessionLocal,
+                stop_event=metrics_sampling_stop,
+            )
+        )
+    except Exception:
+        logger.exception("Metrics sampling loop setup failed")
 
     yield
 
@@ -696,6 +711,13 @@ async def lifespan(application: FastAPI):
         discovery_task.cancel()
         try:
             await discovery_task
+        except asyncio.CancelledError:
+            pass
+
+    if metrics_sampling_task is not None:
+        metrics_sampling_stop.set()
+        try:
+            await metrics_sampling_task
         except asyncio.CancelledError:
             pass
 
@@ -758,11 +780,34 @@ async def fallback_status_logging(request: Request, call_next):
     (Payload Too Large) responses may come from Uvicorn's ASGI request limits.
     Add fallback log lines for observability.
     """
+    started_at = time.perf_counter()
+    route_template = metrics_service.route_template_from_request(request)
+    metrics_service.record_http_request_start(method=request.method, route=route_template)
+    status_code = 500
+
     if not db_module.is_database_configured() and _is_browser_navigation_request(request) and _should_redirect_to_setup(request):
-        return RedirectResponse(url="/setup", status_code=307)
+        response = RedirectResponse(url="/setup", status_code=307)
+        metrics_service.record_http_request_finish(
+            method=request.method,
+            route=route_template,
+            status_code=response.status_code,
+            duration_seconds=max(time.perf_counter() - started_at, 0.0),
+        )
+        return response
 
     request.state.trace_id = request.headers.get("X-Trace-Id") or str(uuid.uuid4())
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception:
+        metrics_service.record_http_request_finish(
+            method=request.method,
+            route=route_template,
+            status_code=status_code,
+            duration_seconds=max(time.perf_counter() - started_at, 0.0),
+        )
+        raise
+
+    status_code = response.status_code
     if request.method == "GET" and request.url.path.endswith("/audit/chain-of-custody"):
         response.headers["Cache-Control"] = "no-store"
     if "X-Trace-Id" not in response.headers:
@@ -773,6 +818,13 @@ async def fallback_status_logging(request: Request, call_next):
             logger.info("405 HTTP_405 path=%s method=%s", request.url.path, request.method)
         elif response.status_code == 413:
             logger.warning("413 PAYLOAD_TOO_LARGE path=%s method=%s", request.url.path, request.method)
+
+    metrics_service.record_http_request_finish(
+        method=request.method,
+        route=route_template,
+        status_code=status_code,
+        duration_seconds=max(time.perf_counter() - started_at, 0.0),
+    )
     return response
 
 
@@ -802,6 +854,15 @@ def _get_db_or_none() -> Generator[Session | None, None, None]:
         yield db
     finally:
         db.close()
+
+
+@app.get("/metrics", include_in_schema=True)
+def metrics(db: Session | None = Depends(_get_db_or_none)) -> Response:
+    """Return Prometheus-compatible application and runtime metrics."""
+    return Response(
+        content=metrics_service.render_metrics(db),
+        media_type=metrics_service.metrics_content_type(),
+    )
 
 
 @app.get(

@@ -30,6 +30,7 @@ from app.repositories.user_role_repository import UserRoleRepository
 from app.infrastructure.pam_protocol import PamAuthenticator
 from app.infrastructure.password_policy_protocol import PasswordPolicyProvider
 from app.schemas.errors import R_400, R_401, R_403, R_404, R_422
+from app.services import metrics_service
 from app.utils.client_ip import get_client_ip
 from app.utils.sanitize import sanitize_error_message, summarize_password_policy_violation
 
@@ -302,6 +303,7 @@ def login(
     """
     if not pam.authenticate(body.username, body.password):
         auth_reason, auth_message = _classify_pam_auth_failure(pam)
+        metrics_service.record_auth_attempt("invalid_credentials")
         best_effort_audit(
             db,
             "AUTH_FAILURE",
@@ -340,6 +342,7 @@ def login(
         {"groups": groups, "roles": roles, "path": str(request.url.path)},
         client_ip=get_client_ip(request),
     )
+    metrics_service.record_auth_attempt("success")
 
     return _build_token_response(
         username=body.username,

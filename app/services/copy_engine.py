@@ -24,6 +24,7 @@ from app.repositories.job_repository import (
     JobRepository,
     StartupAnalysisEntryRepository,
 )
+from app.services import metrics_service
 from app.services.callback_service import deliver_callback
 from app.services.copy_tuning import resolve_job_copy_tuning, resolve_progress_flush_threshold_bytes
 from app.services.copy_worker_runtime import (
@@ -2070,6 +2071,7 @@ def _process_file(
                     },
                 ):
                     return
+                metrics_service.record_job_copy_error("retry")
                 time.sleep(delay)
                 ef.status = FileStatus.COPYING
                 ef.drive_assignment_id = active_assignment_id
@@ -2204,6 +2206,7 @@ def _process_file(
                     details={"file_id": ef.id, "relative_path": ef.relative_path},
                 )
                 db.commit()
+                metrics_service.record_job_file_copied(bytes_copied=bytes_reported)
             except Exception:
                 db.rollback()
                 logger.exception("DB commit failed saving DONE status for file %s", export_file_id)
@@ -2219,6 +2222,7 @@ def _process_file(
             ef.error_message = safe_error_message
             try:
                 file_repo.save(ef)
+                metrics_service.record_job_copy_error("failed")
             except Exception:
                 logger.exception("DB commit failed saving TIMEOUT status for file", {"file_id": export_file_id})
                 if bytes_reported:
@@ -2232,6 +2236,7 @@ def _process_file(
             ef.error_message = safe_error_message
             try:
                 file_repo.save(ef)
+                metrics_service.record_job_copy_error("failed")
             except Exception:
                 logger.exception("DB commit failed saving ERROR status for file %s", export_file_id)
     finally:
@@ -2602,6 +2607,11 @@ def run_copy_job(job_id: int) -> None:
                             audit_action = "JOB_COMPLETED" if job.status == JobStatus.COMPLETED else "JOB_FAILED"
                             elapsed_seconds = round(total_active_seconds, 2)
                             copy_rate_mbps = _calculate_copy_rate_mbps(job.copied_bytes or 0, elapsed_seconds)
+                            metrics_service.record_job_copy_terminal(
+                                outcome="completed" if job.status == JobStatus.COMPLETED else "failed",
+                                thread_count=job.thread_count,
+                                duration_seconds=elapsed_seconds,
+                            )
                             logger.info(
                                 "Copy job phase durations finalized",
                                 extra={
@@ -2819,6 +2829,7 @@ def run_verify_job(job_id: int) -> None:
     Opens its own DB session so it is safe to run as a FastAPI background task.
     """
     db: Session = SessionLocal()
+    verify_started_at = time.perf_counter()
     try:
         job_repo = JobRepository(db)
         file_repo = FileRepository(db)
@@ -2882,6 +2893,12 @@ def run_verify_job(job_id: int) -> None:
                     logger.error("Failed to write audit log for JOB_STATUS_PERSIST_FAILED")
             else:
                 audit_action = "JOB_VERIFICATION_COMPLETED" if not any_mismatch else "JOB_VERIFICATION_FAILED"
+                metrics_service.record_job_verify_terminal(
+                    outcome="failed" if any_mismatch else "completed",
+                    duration_seconds=max(time.perf_counter() - verify_started_at, 0.0),
+                )
+                if any_mismatch:
+                    metrics_service.record_job_terminal_status("failed")
                 try:
                     AuditRepository(db).add(
                         action=audit_action,

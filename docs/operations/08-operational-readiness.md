@@ -108,69 +108,70 @@ Orchestrators must be configured with a **startupPeriod** or **initialDelaySecon
 
 ### Application Metrics
 
-ECUBE must expose Prometheus-style metrics at `GET /metrics` in the format defined by the [Prometheus text exposition format](https://prometheus.io/docs/instrumenting/exposition_formats/).
+ECUBE exposes Prometheus metrics at `GET /metrics` using the Prometheus text exposition format. The endpoint is unauthenticated in the application so cluster-local scrapers can reach it without bearer-token management. Production deployments must keep the route behind network policy, reverse-proxy ACLs, or equivalent infrastructure controls.
 
-#### Hardware Metrics
+#### HTTP and Access Metrics
 
-| Metric Name | Type | Description | Example |
-|-------------|------|-------------|---------|
-| `ecube_usb_hubs_total` | Gauge | Number of USB hubs detected on this host | `2` |
-| `ecube_usb_ports_total` | Gauge | Number of USB ports across all hubs | `16` |
-| `ecube_usb_drives_present` | Gauge | Number of USB drives currently inserted (not necessarily `AVAILABLE`) | `3` |
-| `ecube_usb_drives_available` | Gauge | Number of drives ready for assignment (`AVAILABLE` state) | `2` |
-| `ecube_usb_drives_in_use` | Gauge | Number of drives actively assigned to projects (`IN_USE` state) | `1` |
-| `ecube_port_enabled_total` | Gauge | Number of ports that are administratively enabled | `12` |
-| `ecube_network_mounts_mounted` | Gauge | Number of network mounts in `MOUNTED` state | `2` |
-| `ecube_network_mounts_failed` | Gauge | Number of network mounts in `ERROR` state | `0` |
+| Metric Name | Type | Labels | Description |
+|-------------|------|--------|-------------|
+| `ecube_http_requests_total` | Counter | `method`, `route`, `status_class` | Total HTTP requests grouped by method, low-cardinality route template, and normalized status class such as `2xx` or `4xx`. |
+| `ecube_http_request_duration_seconds` | Histogram | `method`, `route` | HTTP request latency; buckets: `[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10]`. |
+| `ecube_http_requests_in_progress` | Gauge | `method`, `route` | Requests currently being processed. |
+| `ecube_auth_attempts_total` | Counter | `result` | Authentication attempts by normalized result: `success`, `invalid_credentials`, `token_invalid`, or `token_expired`. |
+| `ecube_role_denials_total` | Counter | `route` | Requests rejected because the authenticated user lacks a required role. |
 
-#### Job Metrics
+#### Job and Copy Metrics
 
-| Metric Name | Type | Description |
-|-------------|------|-------------|
-| `ecube_jobs_created_total` | Counter | Total jobs created since startup |
-| `ecube_jobs_running` | Gauge | Jobs currently in `RUNNING` state |
-| `ecube_jobs_completed_total` | Counter | Total jobs that reached `COMPLETED` state |
-| `ecube_jobs_failed_total` | Counter | Total jobs that reached `FAILED` state |
-| `ecube_job_copy_duration_seconds` | Histogram | Observed duration (seconds) of copy phase for completed jobs; buckets: [1, 10, 60, 300, 600, 1800, 3600] |
-| `ecube_job_files_copied_total` | Counter | Total files successfully copied across all jobs |
-| `ecube_job_bytes_copied_total` | Counter | Total bytes successfully copied across all jobs |
-| `ecube_job_bytes_copied_per_second` | Gauge | Instantaneous copy throughput (rolling average over last 10 seconds) |
-| `ecube_job_copy_errors_total` | Counter | Total file-copy errors (retry attempts) across all jobs |
+| Metric Name | Type | Labels | Description |
+|-------------|------|--------|-------------|
+| `ecube_jobs_created_total` | Counter | None | Jobs created since process start. |
+| `ecube_jobs_running` | Gauge | None | Jobs currently in `RUNNING` state at scrape time. |
+| `ecube_jobs_completed_total` | Counter | None | Jobs that reached `COMPLETED` since process start. |
+| `ecube_jobs_failed_total` | Counter | None | Jobs that reached `FAILED` since process start, including verification failures. |
+| `ecube_job_copy_duration_seconds` | Histogram | `outcome`, `thread_count_bucket` | Copy-phase duration for terminal job outcomes; buckets: `[1, 5, 15, 30, 60, 120, 300, 600, 1800, 3600, 7200]`. Thread-count buckets are `1`, `2`, `3_4`, `5_8`, `9_16`, and `17_plus`. |
+| `ecube_job_verify_duration_seconds` | Histogram | `outcome` | Verification duration by terminal outcome; buckets: `[1, 5, 15, 30, 60, 120, 300, 600, 1800, 3600]`. |
+| `ecube_job_files_copied_total` | Counter | None | Files successfully copied across all jobs. |
+| `ecube_job_bytes_copied_total` | Counter | None | Bytes successfully copied across all jobs. |
+| `ecube_job_copy_errors_total` | Counter | `outcome` | Copy-engine error events by normalized outcome: `retry` or `failed`. |
+| `ecube_job_copy_throughput_bytes_per_second` | Gauge | `thread_count_bucket` | Aggregated instantaneous throughput for active jobs, sampled on a fixed background interval. |
+| `ecube_metrics_sampling_runs_total` | Counter | `outcome` | Throughput-sampler loop executions by `ok`, `skipped`, or `error`. |
+| `ecube_metrics_sampling_lag_seconds` | Gauge | None | Current lag between the intended and observed sampler schedule. |
 
-#### Database Metrics
+#### Drive and Mount Metrics
 
-| Metric Name | Type | Description |
-|-------------|------|-------------|
-| `ecube_db_connection_pool_size` | Gauge | Current number of active database connections |
-| `ecube_db_connection_pool_max` | Gauge | Maximum size of the connection pool (configuration) |
-| `ecube_db_query_duration_seconds` | Histogram | Observed duration of database queries; buckets: [0.01, 0.05, 0.1, 0.5, 1.0, 5.0] |
-| `ecube_db_connections_created_total` | Counter | Total database connections created since startup |
-| `ecube_db_connections_closed_total` | Counter | Total database connections closed since startup |
+| Metric Name | Type | Labels | Description |
+|-------------|------|--------|-------------|
+| `ecube_usb_hubs_total` | Gauge | None | USB hubs in the current discovery snapshot. |
+| `ecube_usb_ports_total` | Gauge | None | USB ports in the current discovery snapshot. |
+| `ecube_usb_drives_present` | Gauge | None | Physically present USB drives. |
+| `ecube_usb_drives_state` | Gauge | `state` | USB drives grouped by ECUBE runtime state. |
+| `ecube_port_enabled_total` | Gauge | None | USB ports that are administratively enabled. |
+| `ecube_network_mounts_state` | Gauge | `state`, `mount_type` | Network mounts grouped by state and mount type. |
+| `ecube_drive_format_total` | Counter | `filesystem_type`, `outcome` | Drive format attempts by requested filesystem type and normalized outcome. |
+| `ecube_drive_eject_total` | Counter | `outcome` | Prepare-eject operations by normalized outcome, currently `prepared` or `failed`. |
 
-#### API Metrics
+#### Database and Runtime Metrics
 
-| Metric Name | Type | Description |
-|-------------|------|-------------|
-| `ecube_http_requests_total` | Counter | Total HTTP requests (includes method, endpoint, status code) |
-| `ecube_http_request_duration_seconds` | Histogram | Observed duration of HTTP requests; buckets: [0.01, 0.05, 0.1, 0.5, 1.0, 5.0] |
-| `ecube_http_requests_in_progress` | Gauge | Number of HTTP requests currently being processed |
-| `ecube_auth_failures_total` | Counter | Total authentication failures (invalid credentials, expired token) |
-| `ecube_auth_successes_total` | Counter | Total successful authentications |
-| `ecube_role_denials_total` | Counter | Total requests denied due to insufficient roles |
-
-#### System Metrics
-
-| Metric Name | Type | Description |
-|-------------|------|-------------|
-| `ecube_uptime_seconds` | Counter | Time since process started |
-| `ecube_python_gc_collections_total` | Counter | Garbage collection cycles |
-| `process_resident_memory_bytes` | Gauge | Process resident memory (standard Python metric) |
-| `process_virtual_memory_bytes` | Gauge | Process virtual memory (standard Python metric) |
+| Metric Name | Type | Labels | Description |
+|-------------|------|--------|-------------|
+| `ecube_db_connection_pool_size` | Gauge | None | Configured or effective database pool size when available. |
+| `ecube_db_connection_pool_in_use` | Gauge | None | Connections currently checked out of the pool when available. |
+| `ecube_db_connection_pool_idle` | Gauge | None | Idle pooled connections when available. |
+| `ecube_db_connection_pool_overflow` | Gauge | None | Overflow pool connections currently in use when available. |
+| `ecube_db_query_duration_seconds` | Histogram | `operation` | Database query latency by normalized operation type `select`, `insert`, `update`, or `delete`; buckets: `[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5]`. |
+| `ecube_db_connections_created_total` | Counter | None | Database connections created since process start. |
+| `ecube_db_connections_closed_total` | Counter | None | Database connections closed since process start. |
+| `ecube_reconciliation_runs_total` | Counter | `pass`, `outcome` | Startup reconciliation passes grouped by `mounts`, `jobs`, or `drives`, with outcomes `success`, `error`, or `skipped`. |
+| `ecube_reconciliation_duration_seconds` | Histogram | `pass`, `outcome` | Startup reconciliation duration; buckets: `[0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60]`. |
+| `ecube_uptime_seconds` | Counter | None | Monotonic process uptime exported as a counter. |
+| `ecube_python_gc_collections_total` | Counter | None | Python garbage-collection cycles since process start. |
+| `process_resident_memory_bytes` | Gauge | None | Resident memory used by the ECUBE process. |
+| `process_virtual_memory_bytes` | Gauge | None | Virtual memory used by the ECUBE process. |
 
 ### Metric Export Format
 
 - **Prometheus:** Expose metrics at `GET /metrics` in Prometheus text format.
-- **Interval:** Metrics are updated in real-time; Prometheus scrapes at configured intervals (default: 30 seconds).
+- **Interval:** Request, auth, job lifecycle, drive, and reconciliation counters update inline. Scrape-time gauges refresh when Prometheus requests `/metrics`. Throughput sampling runs in the application background loop every 10 seconds.
 - **Retention:** Metrics are kept in memory; long-term storage depends on the Prometheus deployment.
 
 ### Alerting Thresholds (Recommended)
