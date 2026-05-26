@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { canEditJob, canOperateOnInactiveJob, canPauseJob, canReadJobCoc, canStartJob, getDashboardNextStepKey, getJobDetailPrimaryActionKeys, getJobLifecycleToggleAction, getJobListLifecycleActions, shouldPollJobListEntry } from '../jobActions.js'
+import { canEditJob, canOperateOnInactiveJob, canPauseJob, canReadJobCoc, canStartJob, getDashboardFollowUpKey, getDashboardNextStepKey, getJobDetailPrimaryActionKeys, getJobLifecycleToggleAction, getJobListLifecycleActions, shouldPollJobListEntry } from '../jobActions.js'
 import { buildJobErrorMessage } from '../jobErrors.js'
 
 describe('job action helpers', () => {
@@ -106,6 +106,14 @@ describe('job action helpers', () => {
     expect(getDashboardNextStepKey({ jobStatus: 'FAILED', failedFiles: 1, timedOutFiles: 0 })).toBe('dashboard.nextStepReviewFailedFiles')
     expect(getDashboardNextStepKey({ jobStatus: 'PAUSED', failedFiles: 0, timedOutFiles: 0 })).toBe('dashboard.nextStepReviewAndResume')
     expect(getDashboardNextStepKey({ jobStatus: 'COMPLETED', custodyStatus: 'PENDING_HANDOFF', failedFiles: 0, timedOutFiles: 0 })).toBe('dashboard.nextStepReviewVerificationAndHandoff')
+    expect(getDashboardNextStepKey({ jobStatus: 'COMPLETED', custodyStatus: 'HANDOFF_RECORDED', driveState: 'IN_USE' })).toBe('dashboard.nextStepPrepareEject')
+    expect(getDashboardNextStepKey({ jobStatus: 'COMPLETED', custodyStatus: 'HANDOFF_RECORDED', driveIsMounted: true })).toBe('dashboard.nextStepPrepareEject')
+  })
+
+  it('flags ready-to-eject follow-up after custody handoff when the drive is still mounted or in use', () => {
+    expect(getDashboardFollowUpKey({ jobStatus: 'COMPLETED', custodyStatus: 'HANDOFF_RECORDED', driveState: 'IN_USE' })).toBe('dashboard.attentionReadyForEject')
+    expect(getDashboardFollowUpKey({ jobStatus: 'ARCHIVED', custodyStatus: 'HANDOFF_RECORDED', driveIsMounted: true })).toBe('dashboard.attentionReadyForEject')
+    expect(getDashboardFollowUpKey({ jobStatus: 'COMPLETED', custodyStatus: 'HANDOFF_RECORDED', driveState: 'AVAILABLE', driveIsMounted: false })).toBe('')
   })
 
   it('falls back to opening Job Detail when trusted next-step inputs are unavailable', () => {

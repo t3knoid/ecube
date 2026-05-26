@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getSystemHealth } from '@/api/introspection.js'
 import { getDrives } from '@/api/drives.js'
-import { listJobs } from '@/api/jobs.js'
+import { listAllJobs } from '@/api/jobs.js'
 import { getShares } from '@/api/shares.js'
 import { usePolling } from '@/composables/usePolling.js'
 import DataTable from '@/components/common/DataTable.vue'
@@ -120,6 +120,8 @@ const needsAttentionItems = computed(() => {
       jobStatus: status,
       startupAnalysisStatus: job.startup_analysis_status,
       custodyStatus: job.custody_status,
+      driveState: job?.drive?.current_state,
+      driveIsMounted: job?.drive?.is_mounted,
     })
     if (!Number.isInteger(jobId) || jobId < 1) continue
 
@@ -140,6 +142,16 @@ const needsAttentionItems = computed(() => {
         attentionPriority: 1,
       })
       seenJobIds.add(jobId)
+      continue
+    }
+
+    if (followUpKey === 'dashboard.attentionReadyForEject') {
+      items.push({
+        ...job,
+        attention: t(followUpKey),
+        attentionPriority: 3,
+      })
+      seenJobIds.add(jobId)
     }
   }
 
@@ -154,9 +166,11 @@ const needsAttentionItems = computed(() => {
       jobStatus: relatedJobStatus,
       startupAnalysisStatus: matchedJob?.startup_analysis_status,
       custodyStatus,
+      driveState: matchedJob?.drive?.current_state,
+      driveIsMounted: matchedJob?.drive?.is_mounted,
     })
 
-    if (followUpKey !== 'dashboard.attentionWaitingForCustody') continue
+    if (!['dashboard.attentionWaitingForCustody', 'dashboard.attentionReadyForEject'].includes(followUpKey)) continue
 
     items.push({
       ...(matchedJob || {}),
@@ -165,7 +179,7 @@ const needsAttentionItems = computed(() => {
       status: relatedJobStatus,
       custody_status: custodyStatus,
       attention: t(followUpKey),
-      attentionPriority: 2,
+      attentionPriority: followUpKey === 'dashboard.attentionWaitingForCustody' ? 2 : 3,
     })
     seenJobIds.add(relatedJobId)
   }
@@ -400,6 +414,8 @@ function nextStepLabel(job) {
     custodyStatus: job?.custody_status,
     failedFiles: job?.files_failed,
     timedOutFiles: job?.files_timed_out,
+    driveState: job?.drive?.current_state,
+    driveIsMounted: job?.drive?.is_mounted,
   }))
 }
 
@@ -409,7 +425,7 @@ async function refreshDashboard() {
     getSystemHealth(),
     getDrives({ include_disconnected: true }),
     getShares(),
-    listJobs({ limit: 200 }),
+    listAllJobs(),
   ])
 
   if (results[0].status === 'fulfilled') {

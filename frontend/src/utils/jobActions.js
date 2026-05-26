@@ -88,7 +88,21 @@ function hasKnownFileOutcomeState({ failedFiles, timedOutFiles }) {
   return Number.isFinite(Number(failedFiles)) && Number.isFinite(Number(timedOutFiles))
 }
 
-export function getDashboardNextStepKey({ jobStatus, startupAnalysisStatus, custodyStatus, failedFiles, timedOutFiles }) {
+function isDriveAwaitingEject({ driveState, driveIsMounted }) {
+  const normalizedDriveState = String(driveState || '').toUpperCase()
+  if (normalizedDriveState === 'IN_USE') return true
+  return Boolean(driveIsMounted)
+}
+
+export function getDashboardNextStepKey({
+  jobStatus,
+  startupAnalysisStatus,
+  custodyStatus,
+  failedFiles,
+  timedOutFiles,
+  driveState,
+  driveIsMounted,
+}) {
   const status = normalizeJobStatus(jobStatus)
   const normalizedStartupAnalysisStatus = normalizeStartupAnalysisStatus(startupAnalysisStatus)
   const normalizedCustodyStatus = String(custodyStatus || '').toUpperCase()
@@ -112,6 +126,10 @@ export function getDashboardNextStepKey({ jobStatus, startupAnalysisStatus, cust
   }
 
   if (['COMPLETED', 'ARCHIVED'].includes(status)) {
+    if (normalizedCustodyStatus === 'HANDOFF_RECORDED' && isDriveAwaitingEject({ driveState, driveIsMounted })) {
+      return 'dashboard.nextStepPrepareEject'
+    }
+
     if (status === 'ARCHIVED' || !knownFileOutcomeState) {
       return 'dashboard.nextStepOpenDetail'
     }
@@ -134,7 +152,7 @@ export function getDashboardNextStepKey({ jobStatus, startupAnalysisStatus, cust
   return 'dashboard.nextStepOpenDetail'
 }
 
-export function getDashboardFollowUpKey({ jobStatus, startupAnalysisStatus, custodyStatus }) {
+export function getDashboardFollowUpKey({ jobStatus, startupAnalysisStatus, custodyStatus, driveState, driveIsMounted }) {
   const status = normalizeJobStatus(jobStatus)
   const normalizedStartupAnalysisStatus = normalizeStartupAnalysisStatus(startupAnalysisStatus)
   const normalizedCustodyStatus = String(custodyStatus || '').toUpperCase()
@@ -149,6 +167,10 @@ export function getDashboardFollowUpKey({ jobStatus, startupAnalysisStatus, cust
 
   if (['COMPLETED', 'ARCHIVED'].includes(status) && normalizedCustodyStatus === 'PENDING_HANDOFF') {
     return 'dashboard.attentionWaitingForCustody'
+  }
+
+  if (['COMPLETED', 'ARCHIVED'].includes(status) && normalizedCustodyStatus === 'HANDOFF_RECORDED' && isDriveAwaitingEject({ driveState, driveIsMounted })) {
+    return 'dashboard.attentionReadyForEject'
   }
 
   return ''
