@@ -228,6 +228,7 @@ describe('JobDetailView start action', () => {
     mocks.clearJobStartupAnalysisCache.mockReset()
     mocks.confirmJobChainOfCustodyHandoff.mockReset()
     mocks.getDrives.mockReset()
+    mocks.prepareEjectDrive.mockReset()
     mocks.getShares.mockReset()
     mocks.getFileHashes.mockReset()
     mocks.compareFiles.mockReset()
@@ -312,6 +313,7 @@ describe('JobDetailView start action', () => {
     mocks.continueJobOverflow.mockResolvedValue({ id: 6, status: 'RUNNING', project_id: 'PROJ-001', evidence_number: 'EV-006', thread_count: 4, copied_bytes: 10, total_bytes: 20, files_failed: 0, files_timed_out: 0, source_path: '/nfs/project-001/evidence', target_mount_path: '/mnt/ecube/2', drive: { id: 2, available_bytes: 4096 } })
     mocks.deleteJob.mockResolvedValue({ status: 'deleted' })
     mocks.clearJobStartupAnalysisCache.mockResolvedValue({ id: 6, status: 'FAILED', project_id: 'PROJ-001', evidence_number: 'EV-006', thread_count: 4, copied_bytes: 0, total_bytes: 0, startup_analysis_cached: false })
+    mocks.prepareEjectDrive.mockResolvedValue({ id: 1, current_state: 'AVAILABLE', mount_path: null, current_project_id: 'PROJ-001' })
     mocks.getJobChainOfCustody.mockResolvedValue({ selector_mode: 'JOB', project_id: 'PROJ-001', snapshot_updated_at: '2026-04-28T19:30:00Z', reports: [] })
     mocks.refreshJobChainOfCustody.mockResolvedValue({ selector_mode: 'JOB', project_id: 'PROJ-001', snapshot_updated_at: '2026-04-29T09:15:00Z', reports: [] })
     mocks.confirmJobChainOfCustodyHandoff.mockResolvedValue({ event_id: 99 })
@@ -3616,6 +3618,47 @@ describe('JobDetailView start action', () => {
     await flushPromises()
 
     expect(mocks.prepareEjectDrive).toHaveBeenCalledWith(1, { confirm_incomplete: false })
+  })
+
+  it('prompts for confirmation and retries prepare-eject when incomplete files require override', async () => {
+    mocks.hasAnyRole.mockImplementation((roles) => roles.includes('admin') || roles.includes('manager'))
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      drive: { id: 1, current_state: 'IN_USE', is_mounted: true, mount_path: '/media/ecube/drive-1', current_project_id: 'PROJ-001' },
+    })
+    mocks.prepareEjectDrive
+      .mockRejectedValueOnce({
+        response: {
+          status: 409,
+          data: {
+            detail: 'EJECT_CONFIRM_REQUIRED: This drive has 1 incomplete file(s). Confirm eject to continue.',
+          },
+        },
+      })
+      .mockResolvedValueOnce({ id: 1, current_state: 'AVAILABLE', mount_path: null, current_project_id: 'PROJ-001' })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const ejectButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.prepareEject'))
+    expect(ejectButton).toBeTruthy()
+
+    await ejectButton.trigger('click')
+    await flushPromises()
+    await wrapper.find('.confirm-dialog-confirm').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('drives.ejectIncompleteConfirmTitle'))
+    expect(wrapper.text()).toContain('This drive has 1 incomplete file(s). Confirm eject to continue.')
+
+    await wrapper.find('.confirm-dialog-confirm').trigger('click')
+    await flushPromises()
+
+    expect(mocks.prepareEjectDrive).toHaveBeenNthCalledWith(1, 1, { confirm_incomplete: false })
+    expect(mocks.prepareEjectDrive).toHaveBeenNthCalledWith(2, 1, { confirm_incomplete: true })
   })
 
   it('shows the prepare-eject button when job drive is partial and mount metadata comes from drives list', async () => {

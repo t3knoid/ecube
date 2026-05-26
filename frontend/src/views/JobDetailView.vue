@@ -63,6 +63,7 @@ const showEditSourceBrowser = ref(false)
 const showDeleteDialog = ref(false)
 const showArchiveDialog = ref(false)
 const showPrepareEjectDialog = ref(false)
+const showPrepareEjectIncompleteDialog = ref(false)
 const showStartupAnalysisCleanupDialog = ref(false)
 const showOverflowDialog = ref(false)
 const showPausePendingDialog = ref(false)
@@ -84,6 +85,7 @@ const dialogTriggerRef = ref(null)
 const hashDialogTriggerRef = ref(null)
 const fileErrorDialogTriggerRef = ref(null)
 const selectedErrorFile = ref(null)
+const prepareEjectIncompleteMessage = ref('')
 
 const editForm = ref({
   project_id: '',
@@ -1663,19 +1665,28 @@ async function confirmArchive() {
   }
 }
 
-async function confirmPrepareEject() {
+async function runPrepareEject(confirmIncomplete = false) {
   const drive = prepareEjectDriveRecord.value
   if (!job.value || !canPrepareEject.value || !Number.isInteger(Number(drive?.id))) return
   acting.value = true
   error.value = ''
+  showPrepareEjectDialog.value = false
+  showPrepareEjectIncompleteDialog.value = false
+  prepareEjectIncompleteMessage.value = ''
   try {
-    await prepareEjectDrive(Number(drive.id), { confirm_incomplete: false })
+    await prepareEjectDrive(Number(drive.id), { confirm_incomplete: confirmIncomplete })
     showPrepareEjectDialog.value = false
     infoMessage.value = t('drives.ejectSuccess')
     await refreshAll()
   } catch (err) {
     const status = err?.response?.status
     const detail = err?.response?.data?.detail || String(err?.message || '')
+    const confirmPrefix = 'EJECT_CONFIRM_REQUIRED:'
+    if (status === 409 && typeof detail === 'string' && detail.startsWith(confirmPrefix)) {
+      prepareEjectIncompleteMessage.value = detail.slice(confirmPrefix.length).trim()
+      showPrepareEjectIncompleteDialog.value = true
+      return
+    }
     if (!status) {
       error.value = t('common.errors.networkError')
     } else if (status === 403) {
@@ -1694,6 +1705,14 @@ async function confirmPrepareEject() {
   } finally {
     acting.value = false
   }
+}
+
+async function confirmPrepareEject() {
+  await runPrepareEject(false)
+}
+
+async function confirmPrepareEjectIncomplete() {
+  await runPrepareEject(true)
 }
 
 async function confirmStartupAnalysisCleanup() {
@@ -2756,6 +2775,16 @@ onUnmounted(() => {
       :cancel-label="t('common.actions.cancel')"
       :busy="acting"
       @confirm="confirmPrepareEject"
+    />
+
+    <ConfirmDialog
+      v-model="showPrepareEjectIncompleteDialog"
+      :title="t('drives.ejectIncompleteConfirmTitle')"
+      :message="prepareEjectIncompleteMessage || t('drives.ejectIncompleteConfirmBody')"
+      :confirm-label="t('drives.ejectIncompleteConfirmAction')"
+      :cancel-label="t('common.actions.cancel')"
+      :busy="acting"
+      @confirm="confirmPrepareEjectIncomplete"
     />
 
     <ConfirmDialog
