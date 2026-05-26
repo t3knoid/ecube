@@ -1008,7 +1008,44 @@ class TestReconcileDrives:
         db.refresh(drive)
         assert result["drives_updated"] >= 1
         assert drive.current_state == DriveState.IN_USE
-        assert drive.mount_path == "/media/ecube/usb-mounted"
+        assert drive.mount_path is None
+
+    def test_mounted_discovered_drive_in_managed_slot_preserves_mount_path(self, db: Session):
+        hub, port = _make_hub_and_port(db, enabled=True)
+        drive = _make_drive(db, "USB-MANAGED-SLOT", DriveState.AVAILABLE, port_id=port.id)
+        drive.current_project_id = "PROJ-001"
+        db.commit()
+
+        managed_mount_path = f"{settings.usb_mount_base_path}/{drive.id}"
+        topology = DiscoveredTopology(
+            hubs=[DiscoveredHub(
+                system_identifier="hub-1", name="Hub-1",
+                location_hint=None, vendor_id=None, product_id=None,
+            )],
+            ports=[DiscoveredPort(
+                hub_system_identifier="hub-1", port_number=1,
+                system_path="/sys/bus/usb/1-1",
+                vendor_id=None, product_id=None, speed=None,
+            )],
+            drives=[DiscoveredDrive(
+                device_identifier="USB-MANAGED-SLOT",
+                port_system_path="/sys/bus/usb/1-1",
+                filesystem_path="/dev/sdb1",
+                mount_path=managed_mount_path,
+                capacity_bytes=1_000_000,
+            )],
+        )
+
+        result = reconcile_drives(
+            db,
+            topology_source=lambda: topology,
+            filesystem_detector=FakeFilesystemDetector(),
+        )
+
+        db.refresh(drive)
+        assert result["drives_updated"] >= 1
+        assert drive.current_state == DriveState.IN_USE
+        assert drive.mount_path == managed_mount_path
 
     def test_mounted_discovered_drive_without_project_binding_stays_available(self, db: Session):
         hub, port = _make_hub_and_port(db, enabled=True)

@@ -570,7 +570,7 @@ The directory browser allows users to explore the contents of active mount point
 
 **Roles:** All authenticated roles (`admin`, `manager`, `processor`, `auditor`) can browse directories.
 
-> **Note:** Only active, registered ECUBE mount points can be browsed. A pre-existing host mount outside the managed ECUBE USB mount root does not create a drive browse entry point until the drive is mounted into its managed ECUBE slot.
+> **Note:** Only active, registered ECUBE mount points can be browsed. A pre-existing host mount outside the managed ECUBE USB mount root does not create a drive browse entry point until the drive is mounted into its managed ECUBE slot. If discovery finds a project-bound drive already mounted outside that managed root, ECUBE keeps the project ownership state but still withholds browse access until the drive is mounted into its managed ECUBE slot.
 
 ---
 
