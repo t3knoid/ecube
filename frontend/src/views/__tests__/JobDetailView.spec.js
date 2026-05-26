@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   clearJobStartupAnalysisCache: vi.fn(),
   confirmJobChainOfCustodyHandoff: vi.fn(),
   getDrives: vi.fn(),
+  prepareEjectDrive: vi.fn(),
   getShares: vi.fn(),
   getFileHashes: vi.fn(),
   compareFiles: vi.fn(),
@@ -107,6 +108,7 @@ vi.mock('@/api/jobs.js', () => ({
 
 vi.mock('@/api/drives.js', () => ({
   getDrives: (...args) => mocks.getDrives(...args),
+  prepareEjectDrive: (...args) => mocks.prepareEjectDrive(...args),
 }))
 
 vi.mock('@/api/shares.js', () => ({
@@ -3494,5 +3496,172 @@ describe('JobDetailView start action', () => {
     await flushPromises()
 
     expect(wrapper.findAll('button').some((node) => node.text() === i18n.global.t('jobs.closeOutWithHandoff'))).toBe(false)
+  })
+
+  it('shows the prepare-eject button when job is completed with custody handoff and drive is in use', async () => {
+    mocks.hasAnyRole.mockImplementation((roles) => roles.includes('admin') || roles.includes('manager'))
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 10,
+      total_bytes: 10,
+      file_count: 1,
+      files_succeeded: 1,
+      files_failed: 0,
+      files_timed_out: 0,
+      startup_analysis_status: 'READY',
+      custody_status: 'HANDOFF_RECORDED',
+      drive: { id: 1, current_state: 'IN_USE', is_mounted: true, mount_path: '/media/ecube/drive-1', current_project_id: 'PROJ-001' },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const ejectButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.prepareEject'))
+    expect(ejectButton).toBeTruthy()
+    expect(ejectButton.attributes('disabled')).not.toBeDefined()
+
+    await ejectButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('drives.ejectConfirmTitle'))
+    expect(wrapper.find('.confirm-dialog-confirm').text()).toBe(i18n.global.t('drives.prepareEject'))
+
+    await wrapper.find('.confirm-dialog-confirm').trigger('click')
+    await flushPromises()
+
+    expect(mocks.prepareEjectDrive).toHaveBeenCalledWith(1, { confirm_incomplete: false })
+  })
+
+  it('shows the prepare-eject button when drive is available but still mounted', async () => {
+    mocks.hasAnyRole.mockImplementation((roles) => roles.includes('admin') || roles.includes('manager'))
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 10,
+      total_bytes: 10,
+      file_count: 1,
+      files_succeeded: 1,
+      files_failed: 0,
+      files_timed_out: 0,
+      startup_analysis_status: 'READY',
+      custody_status: 'HANDOFF_RECORDED',
+      drive: { id: 1, current_state: 'AVAILABLE', is_mounted: false, mount_path: '/media/ecube/drive-1', current_project_id: 'PROJ-001' },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const ejectButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.prepareEject'))
+    expect(ejectButton).toBeTruthy()
+  })
+
+  it('shows the prepare-eject button for completed jobs regardless of custody status', async () => {
+    mocks.hasAnyRole.mockImplementation((roles) => roles.includes('admin') || roles.includes('manager'))
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 10,
+      total_bytes: 10,
+      file_count: 1,
+      files_succeeded: 1,
+      files_failed: 0,
+      files_timed_out: 0,
+      startup_analysis_status: 'READY',
+      custody_status: 'PENDING_HANDOFF',
+      drive: { id: 1, current_state: 'AVAILABLE', is_mounted: false, mount_path: '/media/ecube/drive-1', current_project_id: 'PROJ-001' },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const ejectButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.prepareEject'))
+    expect(ejectButton).toBeTruthy()
+  })
+
+  it('shows the prepare-eject button when job drive is returned as a numeric ID', async () => {
+    mocks.hasAnyRole.mockImplementation((roles) => roles.includes('admin') || roles.includes('manager'))
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      drive: 1,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const ejectButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.prepareEject'))
+    expect(ejectButton).toBeTruthy()
+
+    await ejectButton.trigger('click')
+    await flushPromises()
+    await wrapper.find('.confirm-dialog-confirm').trigger('click')
+    await flushPromises()
+
+    expect(mocks.prepareEjectDrive).toHaveBeenCalledWith(1, { confirm_incomplete: false })
+  })
+
+  it('shows the prepare-eject button when job drive is partial and mount metadata comes from drives list', async () => {
+    mocks.hasAnyRole.mockImplementation((roles) => roles.includes('admin') || roles.includes('manager'))
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      drive: { id: 1 },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const ejectButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.prepareEject'))
+    expect(ejectButton).toBeTruthy()
+  })
+
+  it('hides the prepare-eject button if drive is not mounted', async () => {
+    mocks.hasAnyRole.mockImplementation((roles) => roles.includes('admin') || roles.includes('manager'))
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      drive: { id: 1, current_state: 'IN_USE', is_mounted: false, mount_path: '', current_project_id: 'PROJ-001' },
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    const ejectButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.prepareEject'))
+    expect(ejectButton).toBeFalsy()
+  })
+
+  it('hides the prepare-eject button if drive is not assigned to the job project', async () => {
+    mocks.hasAnyRole.mockImplementation((roles) => roles.includes('admin') || roles.includes('manager'))
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      drive: { id: 1, current_state: 'IN_USE', is_mounted: true, mount_path: '/media/ecube/drive-1', current_project_id: 'OTHER-PROJ' },
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    const ejectButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.prepareEject'))
+    expect(ejectButton).toBeFalsy()
   })
 })

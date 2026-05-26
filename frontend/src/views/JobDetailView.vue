@@ -6,7 +6,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useCopyTuningDefaultsStore } from '@/stores/copyTuningDefaults.js'
 import { analyzeJob, applyRecommendedStartupAnalysisProfile, archiveJob, continueJobOverflow, getJob, getJobChainOfCustody, refreshJobChainOfCustody, getJobFiles, startJob, retryFailedJob, pauseJob, verifyJob, downloadManifest, updateJob, completeJob, deleteJob, clearJobStartupAnalysisCache, confirmJobChainOfCustodyHandoff } from '@/api/jobs.js'
 import { getFileHashes, compareFiles } from '@/api/files.js'
-import { getDrives } from '@/api/drives.js'
+import { getDrives, prepareEjectDrive } from '@/api/drives.js'
 import { getShares } from '@/api/shares.js'
 import { usePolling } from '@/composables/usePolling.js'
 import CocReport from '@/components/audit/CocReport.vue'
@@ -62,6 +62,7 @@ const showEditDialog = ref(false)
 const showEditSourceBrowser = ref(false)
 const showDeleteDialog = ref(false)
 const showArchiveDialog = ref(false)
+const showPrepareEjectDialog = ref(false)
 const showStartupAnalysisCleanupDialog = ref(false)
 const showOverflowDialog = ref(false)
 const showPausePendingDialog = ref(false)
@@ -168,6 +169,33 @@ const archivePrerequisiteNotice = computed(() => (archiveBlockedByDriveEject.val
 const canArchive = computed(() => canArchiveJobs.value
   && ['COMPLETED', 'FAILED'].includes(currentStatus.value)
   && archiveDriveReady.value)
+
+const prepareEjectDriveRecord = computed(() => {
+  const rawDrive = job.value?.drive
+  if (!rawDrive) return null
+
+  const rawDriveId = typeof rawDrive === 'object' ? rawDrive?.id : rawDrive
+  const driveId = Number(rawDriveId)
+  const supportingDrive = supportingDrives.value.find((drive) => Number(drive?.id) === driveId) || null
+
+  if (typeof rawDrive === 'object') {
+    return supportingDrive ? { ...supportingDrive, ...rawDrive } : rawDrive
+  }
+
+  return supportingDrive
+})
+
+const canPrepareEject = computed(() => {
+  if (!authStore.hasAnyRole(['admin', 'manager'])) return false
+  if (!['COMPLETED', 'ARCHIVED'].includes(currentStatus.value)) return false
+  const drive = prepareEjectDriveRecord.value
+  if (!drive) return false
+  if (!drive.mount_path) return false
+  const jobProjectId = normalizeProjectId(job.value?.project_id)
+  const driveProjectId = normalizeProjectId(drive.current_project_id)
+  if (!jobProjectId || !driveProjectId || jobProjectId !== driveProjectId) return false
+  return true
+})
 
 function normalizeFileStatus(status) {
   return String(status || '').toUpperCase()
@@ -650,6 +678,15 @@ const actionItems = computed(() => {
         showStartupAnalysisCleanupDialog.value = true
       },
       visible: showClearStartupAnalysisCache.value,
+    },
+    {
+      key: 'prepare-eject',
+      label: t('drives.prepareEject'),
+      disabled: !canPrepareEject.value || acting.value,
+      run: () => {
+        showPrepareEjectDialog.value = true
+      },
+      visible: canPrepareEject.value,
     },
     {
       key: 'archive',
@@ -1621,6 +1658,39 @@ async function confirmArchive() {
     jobPoller.stop()
   } catch (err) {
     error.value = buildJobError(err)
+  } finally {
+    acting.value = false
+  }
+}
+
+async function confirmPrepareEject() {
+  const drive = prepareEjectDriveRecord.value
+  if (!job.value || !canPrepareEject.value || !Number.isInteger(Number(drive?.id))) return
+  acting.value = true
+  error.value = ''
+  try {
+    await prepareEjectDrive(Number(drive.id), { confirm_incomplete: false })
+    showPrepareEjectDialog.value = false
+    infoMessage.value = t('drives.ejectSuccess')
+    await refreshAll()
+  } catch (err) {
+    const status = err?.response?.status
+    const detail = err?.response?.data?.detail || String(err?.message || '')
+    if (!status) {
+      error.value = t('common.errors.networkError')
+    } else if (status === 403) {
+      error.value = detail || t('common.errors.insufficientPermissions')
+    } else if (status === 404) {
+      error.value = detail || t('common.errors.notFound')
+    } else if (status === 409) {
+      error.value = detail || t('common.errors.requestConflict')
+    } else if (status === 422) {
+      error.value = detail || t('common.errors.validationFailed')
+    } else if (status >= 500) {
+      error.value = detail || t('common.errors.serverError', { status })
+    } else {
+      error.value = detail || t('common.errors.serverErrorGeneric')
+    }
   } finally {
     acting.value = false
   }
@@ -2677,6 +2747,16 @@ onUnmounted(() => {
         <p>{{ t('jobs.archiveConfirmBodyUseHandoff') }}</p>
       </div>
     </ConfirmDialog>
+
+    <ConfirmDialog
+      v-model="showPrepareEjectDialog"
+      :title="t('drives.ejectConfirmTitle')"
+      :message="t('drives.ejectConfirmBody')"
+      :confirm-label="t('drives.prepareEject')"
+      :cancel-label="t('common.actions.cancel')"
+      :busy="acting"
+      @confirm="confirmPrepareEject"
+    />
 
     <ConfirmDialog
       v-model="showDeleteDialog"
