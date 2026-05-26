@@ -264,29 +264,15 @@ def test_add_share_uses_nfs_v4_1_to_avoid_slow_negotiation(manager_client, db):
     assert response.status_code == 200
     first_call = mock_run.call_args_list[0]
     command = first_call.args[0]
-    nsenter_path = shutil.which("nsenter")
-    if nsenter_path:
-        assert command[:9] == [
-            "sudo",
-            "-n",
-            nsenter_path,
-            "-t",
-            "1",
-            "-m",
-            settings.mount_binary_path,
-            "-t",
-            "nfs",
-        ]
-    else:
-        assert command[:7] == [
-            "sudo",
-            "-n",
-            settings.mount_binary_path,
-            "-N",
-            "/proc/1/ns/mnt",
-            "-t",
-            "nfs",
-        ]
+    assert command[:7] == [
+        "sudo",
+        "-n",
+        settings.mount_binary_path,
+        "-N",
+        "/proc/1/ns/mnt",
+        "-t",
+        "nfs",
+    ]
     assert "vers=4.1" in first_call.args[0]
 
     mount = db.query(NetworkShare).filter(NetworkShare.project_id == "PROJ-NFS41").one()
@@ -1649,7 +1635,7 @@ def test_validate_share_candidate_timeout_returns_conflict(manager_client, db, c
          patch(
              "subprocess.run",
              side_effect=subprocess.TimeoutExpired(
-                 cmd=["sudo", "-n", "/usr/bin/nsenter", "-t", "1", "-m", "/bin/mount"],
+                 cmd=["sudo", "-n", "/bin/mount", "-N", "/proc/1/ns/mnt", "-t", "nfs"],
                  timeout=30,
              ),
          ):
@@ -2304,11 +2290,7 @@ def test_linux_mount_provider_uses_mount_namespace_flag_when_mount_namespace_dif
     assert ok is True
     assert err is None
     cmd = mock_run.call_args_list[0].args[0]
-    nsenter_path = shutil.which("nsenter")
-    if nsenter_path:
-        assert cmd[:7] == ["sudo", "-n", nsenter_path, "-t", "1", "-m", "/bin/mount"]
-    else:
-        assert cmd[:5] == ["sudo", "-n", "/bin/mount", "-N", "/proc/1/ns/mnt"]
+    assert cmd[:5] == ["sudo", "-n", "/bin/mount", "-N", "/proc/1/ns/mnt"]
 
 
 def test_check_mounted_uses_mount_namespace_flag_when_mount_namespace_differs(monkeypatch):
@@ -2354,14 +2336,13 @@ def test_linux_mount_provider_uses_mount_namespace_flag_when_host_namespace_read
     assert cmd[:5] == ["sudo", "-n", "/bin/mount", "-N", "/proc/1/ns/mnt"]
 
 
-def test_linux_mount_provider_prefers_nsenter_when_host_namespace_differs(monkeypatch):
+def test_linux_mount_provider_uses_mount_namespace_flag_when_host_namespace_differs(monkeypatch):
     provider = LinuxShareProvider()
 
     monkeypatch.setattr("app.services.share_service.settings.use_sudo", True)
     monkeypatch.setattr("app.services.share_service.os.geteuid", lambda: 1000)
 
     with patch("app.services.share_service.os.readlink", side_effect=["mnt:[2]", PermissionError("denied")]), \
-         patch("app.services.share_service.shutil.which", return_value="/usr/bin/nsenter"), \
          patch("subprocess.run") as mock_run, \
          patch.object(provider, "check_mounted", return_value=True):
         mock_run.return_value = MagicMock(returncode=0, stderr="", stdout="")
@@ -2375,7 +2356,7 @@ def test_linux_mount_provider_prefers_nsenter_when_host_namespace_differs(monkey
     assert ok is True
     assert err is None
     cmd = mock_run.call_args_list[0].args[0]
-    assert cmd[:7] == ["sudo", "-n", "/usr/bin/nsenter", "-t", "1", "-m", "/bin/mount"]
+    assert cmd[:5] == ["sudo", "-n", "/bin/mount", "-N", "/proc/1/ns/mnt"]
 
 
 def test_linux_mount_provider_uses_direct_helper_on_fstab_option_failure():

@@ -205,7 +205,7 @@ sudo install -d -m 0755 /etc/sudoers.d
 sudo tee /etc/sudoers.d/ecube-user-mgmt > /dev/null <<'EOF_SUDOERS'
 # /etc/sudoers.d/ecube-user-mgmt
 # Narrowly scoped privilege escalation for the ECUBE service account.
-ecube ALL=(root) NOPASSWD: /usr/sbin/useradd, /usr/sbin/usermod, /usr/sbin/userdel, /usr/sbin/groupadd, /usr/sbin/groupdel, /usr/sbin/chpasswd, /usr/bin/chage, /usr/local/bin/ecube-write-pwquality-conf, /bin/mount, /bin/umount, /sbin/mount.nfs, /usr/sbin/mount.nfs, /usr/bin/nsenter, /bin/nsenter, /bin/sync, /sbin/mkfs.ext4, /sbin/mkfs.exfat, /bin/mkdir, /bin/chown, /usr/bin/chown, /usr/sbin/modprobe
+ecube ALL=(root) NOPASSWD: /usr/sbin/useradd, /usr/sbin/usermod, /usr/sbin/userdel, /usr/sbin/groupadd, /usr/sbin/groupdel, /usr/sbin/chpasswd, /usr/bin/chage, /usr/local/bin/ecube-write-pwquality-conf, /bin/mount, /bin/umount, /sbin/mount.nfs, /usr/sbin/mount.nfs, /bin/sync, /sbin/mkfs.ext4, /sbin/mkfs.exfat, /bin/mkdir, /bin/chown, /usr/bin/chown, /usr/sbin/modprobe
 EOF_SUDOERS
 sudo chmod 0440 /etc/sudoers.d/ecube-user-mgmt
 sudo visudo -cf /etc/sudoers.d/ecube-user-mgmt
