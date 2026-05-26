@@ -108,7 +108,7 @@ Orchestrators must be configured with a **startupPeriod** or **initialDelaySecon
 
 ### Application Metrics
 
-ECUBE exposes Prometheus metrics at `GET /metrics` using the Prometheus text exposition format. The endpoint is unauthenticated in the application so cluster-local scrapers can reach it without bearer-token management. Production deployments must keep the route behind network policy, reverse-proxy ACLs, or equivalent infrastructure controls.
+ECUBE exposes Prometheus metrics at `GET /metrics` using the Prometheus text exposition format. The endpoint requires an authenticated bearer token with the `admin` or `auditor` role. Production deployments should still keep the route behind network policy, reverse-proxy ACLs, or equivalent infrastructure controls.
 
 #### HTTP and Access Metrics
 
@@ -128,8 +128,8 @@ ECUBE exposes Prometheus metrics at `GET /metrics` using the Prometheus text exp
 | `ecube_jobs_running` | Gauge | None | Jobs currently in `RUNNING` state at scrape time. |
 | `ecube_jobs_completed_total` | Counter | None | Jobs that reached `COMPLETED` since process start. |
 | `ecube_jobs_failed_total` | Counter | None | Jobs that reached `FAILED` since process start, including verification failures. |
-| `ecube_job_copy_duration_seconds` | Histogram | `outcome`, `thread_count_bucket` | Copy-phase duration for terminal job outcomes; buckets: `[1, 5, 15, 30, 60, 120, 300, 600, 1800, 3600, 7200]`. Thread-count buckets are `1`, `2`, `3_4`, `5_8`, `9_16`, and `17_plus`. |
-| `ecube_job_verify_duration_seconds` | Histogram | `outcome` | Verification duration by terminal outcome; buckets: `[1, 5, 15, 30, 60, 120, 300, 600, 1800, 3600]`. |
+| `ecube_job_copy_duration_seconds` | Histogram | `outcome`, `thread_count_bucket` | Copy-phase duration for terminal job outcomes; buckets: `[1, 5, 10, 30, 60, 120, 300, 600, 1800, 3600, 7200]`. Thread-count buckets are `1`, `2`, `3_4`, `5_8`, `9_16`, and `17_plus`. |
+| `ecube_job_verify_duration_seconds` | Histogram | `outcome` | Verification duration by terminal outcome; buckets: `[0.1, 0.5, 1, 5, 10, 30, 60, 120, 300]`. |
 | `ecube_job_files_copied_total` | Counter | None | Files successfully copied across all jobs. |
 | `ecube_job_bytes_copied_total` | Counter | None | Bytes successfully copied across all jobs. |
 | `ecube_job_copy_errors_total` | Counter | `outcome` | Copy-engine error events by normalized outcome: `retry` or `failed`. |
@@ -171,7 +171,7 @@ ECUBE exposes Prometheus metrics at `GET /metrics` using the Prometheus text exp
 ### Metric Export Format
 
 - **Prometheus:** Expose metrics at `GET /metrics` in Prometheus text format.
-- **Interval:** Request, auth, job lifecycle, drive, and reconciliation counters update inline. Scrape-time gauges refresh when Prometheus requests `/metrics`. Throughput sampling runs in the application background loop every 10 seconds.
+- **Interval:** Request, auth, job lifecycle, drive, and reconciliation counters update inline. Scrape-time gauges refresh when Prometheus requests `/metrics`. Throughput sampling runs in the application background loop every 5 seconds once the database is runtime-ready.
 - **Retention:** Metrics are kept in memory; long-term storage depends on the Prometheus deployment.
 
 ### Alerting Thresholds (Recommended)

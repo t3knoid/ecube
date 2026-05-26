@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.routing import BaseRoute, Match
 
-from app.auth import get_current_user
+from app.auth import CurrentUser, get_current_user, require_roles
 from app import API_VERSION, __version__
 from app.config import (
     DEFAULT_DEMO_ACCOUNTS,
@@ -33,7 +33,7 @@ from app.logging_config import configure_logging
 from app.models.network import NetworkShare
 from app.openapi import build_ecube_openapi_schema, tags_metadata
 from app.routers import admin, audit, auth, browse, configuration, database_setup, drives, files, introspection, jobs, shares, password_policy, setup, telemetry, users
-from app.schemas.errors import ErrorResponse
+from app.schemas.errors import ErrorResponse, R_401, R_403
 from app.schemas.introspection import HealthLiveResponse, HealthNotReadyResponse, HealthReadyResponse, HealthResponse, VersionResponse
 from app.session import close_session_backend, init_session_backend, mount_session_middleware
 from app.utils.client_ip import get_client_ip
@@ -61,6 +61,8 @@ _SETUP_REDIRECT_EXEMPT_PATHS = frozenset({
     "/health/live",
     "/health/ready",
 })
+
+_METRICS_READ_ONLY = require_roles("admin", "auditor")
 
 
 def _is_browser_navigation_request(request: Request) -> bool:
@@ -680,16 +682,15 @@ async def lifespan(application: FastAPI):
     metrics_sampling_task = None
     if db_runtime_ready:
         discovery_task = asyncio.create_task(_usb_discovery_runtime_loop())
-
-    try:
-        metrics_sampling_task = asyncio.create_task(
-            metrics_service.run_sampling_loop(
-                db_factory=db_module.SessionLocal,
-                stop_event=metrics_sampling_stop,
+        try:
+            metrics_sampling_task = asyncio.create_task(
+                metrics_service.run_sampling_loop(
+                    db_factory=db_module.SessionLocal,
+                    stop_event=metrics_sampling_stop,
+                )
             )
-        )
-    except Exception:
-        logger.exception("Metrics sampling loop setup failed")
+        except Exception:
+            logger.exception("Metrics sampling loop setup failed")
 
     yield
 
@@ -856,9 +857,15 @@ def _get_db_or_none() -> Generator[Session | None, None, None]:
         db.close()
 
 
-@app.get("/metrics", include_in_schema=True)
-def metrics(db: Session | None = Depends(_get_db_or_none)) -> Response:
-    """Return Prometheus-compatible application and runtime metrics."""
+@app.get("/metrics", include_in_schema=True, responses={**R_401, **R_403})
+def metrics(
+    db: Session | None = Depends(_get_db_or_none),
+    _: CurrentUser = Depends(_METRICS_READ_ONLY),
+) -> Response:
+    """Return Prometheus-compatible application and runtime metrics.
+
+    **Roles:** ``admin``, ``auditor``
+    """
     return Response(
         content=metrics_service.render_metrics(db),
         media_type=metrics_service.metrics_content_type(),

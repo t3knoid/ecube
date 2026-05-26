@@ -89,10 +89,10 @@ systemctl cat ecube | grep -E "ExecStart|Environment"
 
 ```bash
 # Check memory metrics via API
-curl http://localhost:8000/metrics | grep process_resident_memory_bytes
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/metrics | grep process_resident_memory_bytes
 
 # Monitor memory over time
-watch -n 5 'curl -s http://localhost:8000/metrics | grep process_resident_memory_bytes'
+watch -n 5 'curl -s -H "Authorization: Bearer '$TOKEN'" http://localhost:8000/metrics | grep process_resident_memory_bytes'
 
 # Check ECUBE process memory usage directly
 ps aux | grep ecube | grep -v grep
@@ -308,10 +308,10 @@ journalctl -u ecube -n 50 | grep -i mount
 
 ```bash
 # A. Check metrics
-curl http://localhost:8000/metrics | grep request_duration
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/metrics | grep request_duration
 
 # B. Check database connections
-curl http://localhost:8000/metrics | grep db_connection_pool
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/metrics | grep db_connection_pool
 
 # C. Test simple endpoint
 time curl http://localhost:8000/health/live
@@ -628,7 +628,7 @@ journalctl -u ecube --tail 50
 # Test key endpoints
 curl -s http://localhost:8000/drives | jq .
 curl -s http://localhost:8000/jobs | jq .
-curl -s http://localhost:8000/metrics | head -20
+curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8000/metrics | head -20
 
 # Check for errors in logs
 journalctl -u ecube | grep -i "error\|critical" | tail -20

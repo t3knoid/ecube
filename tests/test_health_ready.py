@@ -206,6 +206,28 @@ def test_lifespan_audits_and_logs_startup_reconciliation_failure(db, monkeypatch
     assert any(record.getMessage() == "Startup reconciliation raw failure" for record in caplog.records)
 
 
+def test_lifespan_skips_metrics_sampling_until_database_runtime_ready(monkeypatch):
+    observed = {"calls": 0}
+
+    async def _fake_run_sampling_loop(*, db_factory, stop_event):
+        observed["calls"] += 1
+
+    monkeypatch.setattr(main_module.settings, "database_url", "sqlite://")
+    monkeypatch.setattr(main_module.settings, "audit_log_retention_days", 0)
+    monkeypatch.setattr(main_module.settings, "usb_discovery_interval", 0)
+    monkeypatch.setattr(main_module.settings, "role_resolver", "oidc")
+    monkeypatch.setattr(main_module, "init_session_backend", _noop_session_backend)
+    monkeypatch.setattr(main_module, "close_session_backend", _noop_session_backend)
+    monkeypatch.setattr(database_service, "is_database_provisioned", lambda: False)
+    monkeypatch.setattr("app.services.metrics_service.run_sampling_loop", _fake_run_sampling_loop)
+    monkeypatch.setattr("app.routers.introspection.prime_cpu_sampler", lambda: None)
+
+    with TestClient(main_module.app):
+        pass
+
+    assert observed["calls"] == 0
+
+
 def test_lifespan_logs_demo_mode_runtime_configuration(monkeypatch, caplog):
     caplog.set_level(logging.DEBUG, logger="app.main")
 

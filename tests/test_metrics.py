@@ -16,13 +16,24 @@ def _metrics_text(client) -> str:
     return response.text
 
 
-def test_metrics_endpoint_exposes_prometheus_text_and_route_labels(unauthenticated_client):
+def test_metrics_endpoint_requires_authenticated_read_only_role(unauthenticated_client, client, auditor_client):
+    unauthenticated_response = unauthenticated_client.get("/metrics")
+    assert unauthenticated_response.status_code == 401
+
+    processor_response = client.get("/metrics")
+    assert processor_response.status_code == 403
+
+    auditor_response = auditor_client.get("/metrics")
+    assert auditor_response.status_code == 200
+
+
+def test_metrics_endpoint_exposes_prometheus_text_and_route_labels(unauthenticated_client, auditor_client):
     metrics_service.reset_for_tests()
 
     live_response = unauthenticated_client.get("/health/live")
     assert live_response.status_code == 200
 
-    metrics_text = _metrics_text(unauthenticated_client)
+    metrics_text = _metrics_text(auditor_client)
 
     assert "# HELP ecube_http_requests_total" in metrics_text
     assert "# HELP ecube_jobs_running" in metrics_text
@@ -33,7 +44,7 @@ def test_metrics_endpoint_exposes_prometheus_text_and_route_labels(unauthenticat
     )
 
 
-def test_metrics_endpoint_tracks_auth_attempt_results(unauthenticated_client, db):
+def test_metrics_endpoint_tracks_auth_attempt_results(unauthenticated_client, auditor_client, db):
     metrics_service.reset_for_tests()
     db.add(UserRole(username="metrics-user", role="processor"))
     db.commit()
@@ -56,20 +67,20 @@ def test_metrics_endpoint_tracks_auth_attempt_results(unauthenticated_client, db
         )
         assert success_response.status_code == 200
 
-        metrics_text = _metrics_text(unauthenticated_client)
+        metrics_text = _metrics_text(auditor_client)
         assert 'ecube_auth_attempts_total{result="invalid_credentials"} 1.0' in metrics_text
         assert 'ecube_auth_attempts_total{result="success"} 1.0' in metrics_text
     finally:
         fastapi_app.dependency_overrides.pop(_get_pam, None)
 
 
-def test_metrics_endpoint_tracks_role_denials(client):
+def test_metrics_endpoint_tracks_role_denials(client, auditor_client):
     metrics_service.reset_for_tests()
 
     response = client.get("/users")
     assert response.status_code == 403
 
-    metrics_text = _metrics_text(client)
+    metrics_text = _metrics_text(auditor_client)
     assert 'ecube_role_denials_total{route="/users"} 1.0' in metrics_text
 
 

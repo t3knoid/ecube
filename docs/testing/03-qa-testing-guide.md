@@ -2317,6 +2317,7 @@ Contributor note: when adding or renumbering QA test cases in this guide, run `p
 | 4 | Readiness reports mount or provider problems | Break a configured mount or provider, then `GET /health/ready` | 503, response identifies the failing check without using the generic error schema |
 | 5 | Version endpoint is public | `GET /introspection/version` without token | 200, returns version/application metadata |
 | 6 | Readiness remains separate from authenticated system health | Compare `GET /health/ready` and authenticated `GET /introspection/system-health` | Readiness stays public and fail-fast; system health returns richer operational metrics |
+| 7 | Metrics endpoint enforces read-only observability roles | `GET /metrics` without a token, with a `processor` token, and with an `auditor` or `admin` token | Unauthenticated requests return 401, non-observability roles return 403, and `admin`/`auditor` receive Prometheus text exposition |
 
 ### 12.16 Real-World Copy Performance & Hashing Addendum
 

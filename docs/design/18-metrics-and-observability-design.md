@@ -13,7 +13,7 @@ This document captures the concrete metrics contract for issue #171 and is inten
 
 Design goals:
 
-- Expose Prometheus text format at `GET /metrics`.
+- Expose Prometheus text format at `GET /metrics` for authenticated `admin` and `auditor` callers.
 - Provide stable metric names and bucket definitions.
 - Enforce low-cardinality labels suitable for production scraping.
 - Include periodic sampling for live copy-throughput observability.
@@ -85,13 +85,14 @@ Forbidden high-cardinality labels:
 
 Sampling behavior:
 
-- Sampling interval target: every 5-10 seconds.
+- Sampling interval target: every 5 seconds while the database is runtime-ready.
 - Throughput calculation per sample window:
   - `delta_bytes = copied_bytes_now - copied_bytes_prev`
   - `delta_seconds = t_now - t_prev`
   - `throughput = delta_bytes / delta_seconds`
 - Export aggregated instantaneous throughput for active jobs via `ecube_job_copy_throughput_bytes_per_second`.
 - Sampling delays/skips must degrade gracefully and never block copy execution.
+- Skip the background sampler when the database is not runtime-ready.
 
 ### Drive / USB / Mount
 
@@ -100,7 +101,7 @@ Sampling behavior:
 | `ecube_usb_hubs_total` | Gauge | hubs | none | From discovery snapshot |
 | `ecube_usb_ports_total` | Gauge | ports | none | From discovery snapshot |
 | `ecube_usb_drives_present` | Gauge | drives | none | Physically present drives |
-| `ecube_usb_drives_state` | Gauge | drives | `state` | `state`: `disconnected`, `disabled`, `available`, `in_use` |
+| `ecube_usb_drives_state` | Gauge | drives | `state` | `state`: `empty`, `available`, `in_use` |
 | `ecube_port_enabled_total` | Gauge | ports | none | Administratively enabled ports |
 | `ecube_network_mounts_state` | Gauge | mounts | `state`, `mount_type` | `state`: `mounted`, `unmounted`, `error`; `mount_type`: `nfs`, `smb` |
 | `ecube_drive_format_total` | Counter | operations | `filesystem_type`, `outcome` | `outcome`: `success`, `error` |
@@ -123,7 +124,7 @@ Sampling behavior:
 | Metric | Type | Unit | Labels | Notes |
 |---|---|---|---|---|
 | `ecube_reconciliation_runs_total` | Counter | runs | `pass`, `outcome` | `pass`: `mounts`, `jobs`, `drives`; `outcome`: `success`, `error`, `skipped` |
-| `ecube_reconciliation_duration_seconds` | Histogram | seconds | `pass`, `outcome` | Buckets: `[0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30]` |
+| `ecube_reconciliation_duration_seconds` | Histogram | seconds | `pass`, `outcome` | Buckets: `[0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60]` |
 
 ### Process / Runtime
 
@@ -146,7 +147,7 @@ Sampling behavior:
 
 Implementation is considered complete when:
 
-- `GET /metrics` returns valid Prometheus text exposition.
+- `GET /metrics` returns valid Prometheus text exposition for authenticated `admin` or `auditor` callers.
 - Catalog metrics above are present with matching names/types/labels.
 - Histogram bucket boundaries match this document.
 - Label constraints are enforced (no forbidden high-cardinality labels).
