@@ -1,7 +1,6 @@
 # ecube
 
 [![Tests](https://github.com/t3knoid/ecube/actions/workflows/run-tests.yml/badge.svg)](https://github.com/t3knoid/ecube/actions/workflows/run-tests.yml)
-[![Docker Build](https://github.com/t3knoid/ecube/actions/workflows/docker-build.yml/badge.svg)](https://github.com/t3knoid/ecube/actions/workflows/docker-build.yml)
 [![Security Scan](https://github.com/t3knoid/ecube/actions/workflows/security-scan.yml/badge.svg)](https://github.com/t3knoid/ecube/actions/workflows/security-scan.yml)
 [![Schemathesis API Fuzz](https://github.com/t3knoid/ecube/actions/workflows/schemathesis-fuzz.yml/badge.svg)](https://github.com/t3knoid/ecube/actions/workflows/schemathesis-fuzz.yml)
 [![Newman API Smoke](https://github.com/t3knoid/ecube/actions/workflows/newman-smoke.yml/badge.svg)](https://github.com/t3knoid/ecube/actions/workflows/newman-smoke.yml)

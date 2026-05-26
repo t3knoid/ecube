@@ -272,8 +272,6 @@ For installer-oriented package artifact generation details, see:
 | `run-tests.yml` — frontend unit tests | manual (`workflow_dispatch`) and push to `main` with same path filter | `npm run test:unit` |
 | `run-tests.yml` — frontend E2E tests | manual (`workflow_dispatch`) and push to `main` with same path filter | `npm run build` + `npm run test:e2e` (Chromium + WebKit), upload `frontend/playwright-report/` artifact |
 | `update-e2e-snapshots.yml` | manual (`workflow_dispatch`) | `npm run test:e2e:update-snapshots`, then commit and push snapshots |
-| `docker-build.yml` — build and smoke | manual (`workflow_dispatch`), push to `main`, tag push (`v*`) | build images, bring stack up, smoke-check `/health` |
-| `docker-build.yml` — publish | release published | push images to GHCR, attach generated `docker-compose.yml` release asset |
 
 ## References
 
