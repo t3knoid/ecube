@@ -434,7 +434,7 @@ ExecStart=/opt/ecube/venv/bin/uvicorn \
 
 Restart=on-failure
 RestartSec=10
-PrivateTmp=yes
+PrivateTmp=no
 # Required for setup endpoints that invoke tightly scoped sudoers commands.
 NoNewPrivileges=false
 

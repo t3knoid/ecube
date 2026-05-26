@@ -418,7 +418,7 @@ ExecStart=/opt/ecube/venv/bin/uvicorn \
   app.main:app
 Restart=on-failure
 RestartSec=10
-PrivateTmp=yes
+PrivateTmp=no
 # Required for setup endpoints that invoke tightly scoped sudoers commands.
 NoNewPrivileges=false
 
@@ -453,7 +453,7 @@ ExecStart=/opt/ecube/venv/bin/uvicorn \
   app.main:app
 Restart=on-failure
 RestartSec=10
-PrivateTmp=yes
+PrivateTmp=no
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 # Required for setup endpoints that invoke tightly scoped sudoers commands.
 NoNewPrivileges=false

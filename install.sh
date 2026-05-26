@@ -2487,7 +2487,7 @@ ExecStart=${INSTALL_DIR}/venv/bin/python -m uvicorn \
   app.main:app
 Restart=on-failure
 RestartSec=10
-PrivateTmp=yes${cap_section}
+PrivateTmp=no${cap_section}
 # ECUBE setup endpoints use tightly scoped sudoers rules for OS user/group
 # management. NoNewPrivileges must be disabled so sudo can elevate.
 NoNewPrivileges=false
@@ -2519,7 +2519,7 @@ ExecStart=${INSTALL_DIR}/venv/bin/python -m uvicorn \
   app.main:app
 Restart=on-failure
 RestartSec=10
-PrivateTmp=yes${cap_section}
+PrivateTmp=no${cap_section}
 # ECUBE setup endpoints use tightly scoped sudoers rules for OS user/group
 # management. NoNewPrivileges must be disabled so sudo can elevate.
 NoNewPrivileges=false
