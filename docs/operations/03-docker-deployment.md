@@ -40,6 +40,8 @@ For Docker-specific USB passthrough setup and detailed architecture, see
 
 The Compose deployment mounts USB, udev, and sysfs interfaces into the `ecube-app` container for hardware visibility. Mount-state checks use the runtime procfs mount table configured by `PROCFS_MOUNTS_PATH`, which defaults to the container's `/proc/mounts` unless an alternate procfs view is configured explicitly.
 
+The image also seeds the local OS-authentication baseline used by setup, demo reconciliation, and local password resets inside the container. The build installs Cracklib runtime data, writes a local-only `/etc/pam.d/ecube` service when SSSD is not present in the image, patches `/etc/pam.d/common-password` with `pam_pwquality` and `pam_pwhistory`, and seeds the ECUBE defaults in `/etc/security/pwquality.conf`.
+
 ---
 
 ## Prerequisites
@@ -200,6 +202,8 @@ Both native and Docker deployments use the same credential defaulting cascade:
 The wizard auto-fills superuser credentials from these defaults. With the default `.env.example` values, the wizard connects using `ecube`/`ecube` — the same account the `postgres:16` container creates on first start. No manual password entry is required.
 
 The wizard also detects that it is running inside a container and pre-fills the **Database Host** field with the PostgreSQL service name (default: `postgres`).
+
+Passwords created during setup and later local-account resets inside the container pass through that seeded PAM stack. In the shipped image, ECUBE-managed local accounts follow the container's `pwquality.conf` rules and password history checks without requiring extra host-side PAM edits.
 
 After successful provisioning:
 - `DATABASE_URL` and `TRUST_PROXY_HEADERS` are written to the mounted `.env` file.

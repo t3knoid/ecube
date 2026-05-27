@@ -1,5 +1,9 @@
+import shutil
 import subprocess
+import uuid
 from pathlib import Path
+
+import pytest
 
 
 def test_container_os_auth_prep_installs_pam_and_password_policy_baseline(tmp_path):
@@ -127,3 +131,59 @@ def test_container_os_auth_prep_keeps_sssd_template_when_module_is_present(tmp_p
 
     assert result.returncode == 0, result.stderr
     assert pam_dest.read_text(encoding="utf-8") == "auth [success=done ignore=ignore user_unknown=ignore default=die] pam_sss.so use_first_pass\n"
+
+
+@pytest.mark.integration
+def test_container_image_applies_auth_prep_to_real_runtime(tmp_path):
+    docker_bin = shutil.which("docker")
+    if docker_bin is None:
+        pytest.skip("docker is required for container runtime validation")
+
+    repo_root = Path(__file__).resolve().parent.parent
+    image_tag = f"ecube-auth-prep-test:{uuid.uuid4().hex[:12]}"
+    runtime_check = " && ".join(
+        [
+            "test -f /etc/pam.d/ecube",
+            "grep -F 'auth    sufficient  pam_unix.so nullok' /etc/pam.d/ecube",
+            "grep -F 'password\trequisite\tpam_pwquality.so local_users_only' /etc/pam.d/common-password",
+            "grep -F 'password\trequired\tpam_pwhistory.so remember=12 use_authtok enforce_for_root' /etc/pam.d/common-password",
+            "grep -F 'enforce_for_root = 1' /etc/security/pwquality.conf",
+            "useradd -m ecube_docker_auth_test",
+            "password=$(python -c \"from app.utils.password_policy import build_policy_friendly_demo_password; print(build_policy_friendly_demo_password({}))\")",
+            "printf 'ecube_docker_auth_test:%s\\n' \"$password\" | chpasswd",
+            "chage -l ecube_docker_auth_test >/dev/null",
+        ]
+    )
+
+    build_result = subprocess.run(
+        [
+            docker_bin,
+            "build",
+            "-t",
+            image_tag,
+            "-f",
+            str(repo_root / "deploy" / "ecube-host" / "Dockerfile"),
+            str(repo_root),
+        ],
+        capture_output=True,
+        text=True,
+        cwd=repo_root,
+    )
+    try:
+        assert build_result.returncode == 0, build_result.stderr or build_result.stdout
+
+        run_result = subprocess.run(
+            [docker_bin, "run", "--rm", "--entrypoint", "bash", image_tag, "-lc", runtime_check],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+        )
+        assert run_result.returncode == 0, run_result.stderr or run_result.stdout
+    finally:
+        subprocess.run(
+            [docker_bin, "rmi", "-f", image_tag],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+            check=False,
+        )

@@ -302,8 +302,8 @@ Operational notes:
 | `CHPASSWD_BINARY_PATH`       | `/usr/sbin/chpasswd`   | Path to `chpasswd` (must match sudoers whitelist).             |
 | `CHAGE_BINARY_PATH`          | `/usr/bin/chage`       | Path to `chage` used for password-expiration inspection and default aging policy application. |
 | `NON_INTERACTIVE_SHELL_PATH` | `/usr/sbin/nologin`    | Path to the non-interactive shell assigned to ECUBE-managed application accounts during create and reconciliation flows. |
-| `PWQUALITY_CONF_PATH`        | `/etc/security/pwquality.conf` | Path to the PAM password-quality configuration file used by the password-policy API. |
-| `PASSWORD_POLICY_WRITER_PATH` | `/usr/local/bin/ecube-write-pwquality-conf` | Root-owned helper used for atomic writes to `pwquality.conf` when `USE_SUDO=true`. |
+| `PWQUALITY_CONF_PATH`        | `/etc/security/pwquality.conf` | Path to the PAM password-quality configuration file used by the password-policy API. Native installs seed this on the host; the Docker image seeds the same baseline inside the container during build. |
+| `PASSWORD_POLICY_WRITER_PATH` | `/usr/local/bin/ecube-write-pwquality-conf` | Root-owned helper used for atomic writes to `pwquality.conf` when `USE_SUDO=true`. Docker deployments run as root by default, so container-local writes use `PWQUALITY_CONF_PATH` directly instead of this helper. |
 | `PROCFS_MOUNTS_PATH`         | `/proc/mounts`         | Path to the procfs mount table used for reading active mounts. Override this only when the runtime must read an alternate procfs view. |
 | `PROCFS_DISKSTATS_PATH`      | `/proc/diskstats`      | Path to `/proc/diskstats` for block-device I/O statistics. |
 | `SYSFS_USB_DEVICES_PATH`     | `/sys/bus/usb/devices` | Sysfs USB devices directory.                                   |
