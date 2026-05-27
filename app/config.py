@@ -423,6 +423,10 @@ class Settings(BaseSettings):
     #: Path to the ``chage`` binary (must match sudoers whitelist).
     chage_binary_path: str = "/usr/bin/chage"
 
+    #: Path to the non-interactive shell assigned to ECUBE-managed
+    #: application accounts.
+    non_interactive_shell_path: str = "/usr/sbin/nologin"
+
     #: Path to the ``modprobe`` binary used by explicit runtime repair actions.
     #: Must match the sudoers whitelist when ``use_sudo`` is enabled.
     modprobe_binary_path: str = "/usr/sbin/modprobe"

@@ -55,6 +55,32 @@ def test_login_success_returns_token(unauthenticated_client, db):
     assert "iat" in claims
 
 
+def test_login_success_remains_independent_of_os_user_management(unauthenticated_client, db):
+    """Login remains PAM-based even when managed accounts use a non-interactive shell."""
+    db.add(UserRole(username="noninteractive_user", role="processor"))
+    db.commit()
+
+    mock_pam = MagicMock()
+    mock_pam.authenticate.return_value = True
+    mock_pam.get_user_groups.return_value = ["ecube-processors"]
+    fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
+
+    def _unexpected_os_user_provider():
+        raise AssertionError("/auth/token should not request the OS user provider")
+
+    fastapi_app.dependency_overrides[_get_os_user] = _unexpected_os_user_provider
+
+    resp = unauthenticated_client.post(
+        "/auth/token",
+        json={"username": "noninteractive_user", "password": "secret"},
+    )
+
+    assert resp.status_code == 200
+    claims = _decode_token(resp.json()["access_token"])
+    assert claims["username"] == "noninteractive_user"
+    assert claims["roles"] == ["processor"]
+
+
 def test_login_success_includes_password_expiry_warning_metadata(unauthenticated_client, db):
     db.add(UserRole(username="warnuser", role="processor"))
     db.commit()

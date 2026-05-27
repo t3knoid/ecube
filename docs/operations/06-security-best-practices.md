@@ -143,7 +143,7 @@ Additional guidance:
 - Use VPN or SSH tunnel for remote access
 - Enable audit logging for all operations (enabled by default)
 - Review audit logs regularly through the API or approved database access paths.
-- ECUBE-managed application accounts are created and reconciled with the non-interactive shell `/usr/sbin/nologin`. Use separate host-administration accounts for shell or SSH access.
+- ECUBE-managed application accounts are created and reconciled with the configured non-interactive shell (default `/usr/sbin/nologin`). Use separate host-administration accounts for shell or SSH access.
 
 ### 4.1 SSH Hardening For Backend Hosts
 

@@ -291,7 +291,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 
 | Method | Endpoint | Role | Description |
 | ------ | -------- | ---- | ----------- |
-| POST | `/admin/os-users` | admin | Create a new OS user or link an existing OS/directory user into ECUBE role assignments (decision-based flow). |
+| POST | `/admin/os-users` | admin | Create a new OS user or link an existing OS/directory user into ECUBE role assignments (decision-based flow). Managed ECUBE application accounts keep the configured non-interactive shell. |
 | GET | `/admin/os-users` | admin | List ECUBE-relevant users (ecube-group users plus DB role-assigned users). |
 | DELETE | `/admin/os-users/{username}` | admin | Delete OS user and clean up DB role assignments. |
 | PUT | `/admin/os-users/{username}/password` | admin | Reset OS user password. |

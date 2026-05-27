@@ -1304,7 +1304,7 @@ Requests with non-matching values are rejected with `422 Unprocessable Entity` a
 
 ### `POST /admin/os-users`
 
-Create an OS user (new-account path) or link an already-existing OS user into ECUBE role assignments (existing-account path). ECUBE OS groups are derived from selected roles. Optional extra groups may be included for compatibility, but role-derived ECUBE groups are always applied.
+Create an OS user (new-account path) or link an already-existing OS user into ECUBE role assignments (existing-account path). ECUBE OS groups are derived from selected roles. Optional extra groups may be included for compatibility, but role-derived ECUBE groups are always applied. Managed ECUBE application accounts keep the configured non-interactive shell during both create and existing-user reconciliation paths.
 
 **Roles:** `admin`
 

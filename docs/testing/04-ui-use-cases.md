@@ -84,12 +84,12 @@ Use this checklist when validating UI behavior for UC-3.5 (create user), UC-3.6 
 | Check | Steps | Expected |
 |---|---|---|
 | Existing user confirmation prompt appears | In `Users` click `Create User`, enter a username that already exists in OS/directory identity, choose roles, click `Create` | Create dialog closes and confirmation dialog appears with existing-user wording |
-| Existing user confirm path | In confirmation dialog click `Add to ECUBE` | Confirmation dialog closes, user is linked to ECUBE roles, no password dialog is shown |
+| Existing user confirm path | In confirmation dialog click `Add to ECUBE` | Confirmation dialog closes, user is linked to ECUBE roles, no password dialog is shown, and the account remains a non-interactive ECUBE application account |
 | Existing user cancel path | In confirmation dialog click `Cancel` | Dialog closes and screen returns to Users page (create dialog does not reopen) |
 | New user deferred password prompt | Create a brand-new username with roles and click `Create` | Password dialog appears after create attempt |
 | Password confirmation enforcement | Enter non-matching password/confirm password in password dialog | Validation message appears and submit action remains disabled |
 | Password show/hide control | Toggle the show/hide password control in password dialog | Password fields toggle between masked and plain text |
-| New user completion | Enter matching password values and submit | Password dialog closes and new user appears in Users list with selected roles |
+| New user completion | Enter matching password values and submit | Password dialog closes and new user appears in Users list with selected roles while using the configured non-interactive shell |
 | Directory-backed role visibility | Link a directory-backed user into ECUBE roles and refresh Users page | User remains visible in list even when host-enumeration fields are placeholders |
 
 ---

@@ -926,7 +926,7 @@ curl -sk -X DELETE https://localhost:8443/users/qa-processor/roles \
 
 ### 11.8 OS User & Group Management (Admin Only, Local Mode)
 
-These endpoints manage OS-level user and group accounts. They require the `admin` role and are only available when `role_resolver = "local"` (returns `404` otherwise). Group names must start with the `ecube-` prefix. Creating a user requires at least one role that maps to an `ecube-*` group, and mutative user operations require the target user to be ECUBE-managed.
+These endpoints manage OS-level user and group accounts. They require the `admin` role and are only available when `role_resolver = "local"` (returns `404` otherwise). Group names must start with the `ecube-` prefix. Creating a user requires at least one role that maps to an `ecube-*` group, and mutative user operations require the target user to be ECUBE-managed. ECUBE-managed application accounts keep the configured non-interactive shell during create and reconciliation flows.
 
 ```bash
 # Create an OS group
@@ -979,6 +979,9 @@ curl -sk -X POST https://localhost:8443/admin/os-users \
     "confirm_existing_os_user": false
   }' | jq
 
+# Verify the account keeps the configured non-interactive shell
+getent passwd qa-testuser | cut -d: -f7
+
 # List OS users relevant to ECUBE user management
 # Includes users in ecube-* groups and users with DB role assignments.
 # Reserved accounts are excluded.
@@ -1030,6 +1033,9 @@ curl -sk -X POST https://localhost:8443/setup/initialize \
   -H "Content-Type: application/json" \
   -d '{"username": "ecube-admin", "password": "AdminPass-789!"}' | jq
 # Expected: 200 with message, username, groups_created
+
+# Verify setup-created admin uses the configured non-interactive shell
+getent passwd ecube-admin | cut -d: -f7
 
 # Verify status changed
 curl -sk https://localhost:8443/setup/status | jq

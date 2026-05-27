@@ -123,7 +123,7 @@ class TestCreateUser:
     @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
     def test_create_basic_user(self, mock_pwd, mock_grp, mock_subprocess):
-        pw = _make_pw(shell="/usr/sbin/nologin")
+        pw = _make_pw(shell=settings.non_interactive_shell_path)
         mock_pwd.getpwnam.side_effect = [
             KeyError("no such user"),   # user_exists check
             pw,                         # final lookup after creation
@@ -140,7 +140,7 @@ class TestCreateUser:
 
         assert user.username == "testuser"
         assert user.uid == 1000
-        assert user.shell == "/usr/sbin/nologin"
+        assert user.shell == settings.non_interactive_shell_path
         # Should have called sudo useradd and sudo chpasswd.
         calls = [c.args[0] for c in mock_subprocess.call_args_list]
         assert [
@@ -152,7 +152,7 @@ class TestCreateUser:
             "-g",
             "ecube-admins",
             "-s",
-            "/usr/sbin/nologin",
+            settings.non_interactive_shell_path,
             "testuser",
         ] in calls
         assert ["sudo", "-n", "/usr/sbin/chpasswd"] in calls
@@ -160,6 +160,41 @@ class TestCreateUser:
         # Only one requested group => it is used as the primary group, so no
         # usermod -aG call is required.
         assert not any("/usr/sbin/usermod" in cmd for cmd in calls)
+
+    @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_create_user_uses_configured_non_interactive_shell_path(self, mock_pwd, mock_grp, mock_subprocess):
+        with patch.object(settings, "non_interactive_shell_path", "/sbin/nologin"):
+            pw = _make_pw(shell="/sbin/nologin")
+            mock_pwd.getpwnam.side_effect = [
+                KeyError("no such user"),
+                pw,
+                pw,
+            ]
+            mock_grp.getgrnam.return_value = _make_grp(name="ecube-admins")
+            mock_grp.getgrall.return_value = [
+                _make_grp(name="ecube-admins", members=["testuser"]),
+            ]
+            mock_grp.getgrgid.return_value = _make_grp(name="testuser", gid=1000)
+            mock_subprocess.return_value = _ok_result()
+
+            user = create_user("testuser", "s3cret", groups=["ecube-admins"])
+
+        assert user.shell == "/sbin/nologin"
+        calls = [c.args[0] for c in mock_subprocess.call_args_list]
+        assert [
+            "sudo",
+            "-n",
+            "/usr/sbin/useradd",
+            "-m",
+            "-N",
+            "-g",
+            "ecube-admins",
+            "-s",
+            "/sbin/nologin",
+            "testuser",
+        ] in calls
 
     @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
@@ -200,7 +235,7 @@ class TestCreateUser:
     @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
     def test_create_user_with_groups(self, mock_pwd, mock_grp, mock_subprocess):
-        pw = _make_pw(shell="/usr/sbin/nologin")
+        pw = _make_pw(shell=settings.non_interactive_shell_path)
         mock_pwd.getpwnam.side_effect = [
             KeyError("no such user"),   # user_exists
             pw,                         # final lookup
@@ -500,7 +535,7 @@ class TestAddUserToGroups:
     @patch("app.services.os_user_service.grp")
     @patch("app.services.os_user_service.pwd")
     def test_add_to_groups_skips_group_append_when_shell_already_non_interactive(self, mock_pwd, mock_grp, mock_subprocess):
-        mock_pwd.getpwnam.return_value = _make_pw(name="demo_admin", gid=1001, shell="/usr/sbin/nologin")
+        mock_pwd.getpwnam.return_value = _make_pw(name="demo_admin", gid=1001, shell=settings.non_interactive_shell_path)
         mock_grp.getgrgid.return_value = _make_grp(name="ecube-admins", gid=1001)
         mock_grp.getgrnam.return_value = _make_grp(name="ecube-admins", gid=1001)
         mock_grp.getgrall.return_value = []
@@ -519,7 +554,7 @@ class TestAddUserToGroups:
     @patch("app.services.os_user_service.pwd")
     def test_add_to_groups_repairs_interactive_shell_when_membership_already_present(self, mock_pwd, mock_grp, mock_subprocess):
         interactive_pw = _make_pw(name="demo_admin", gid=1001, shell="/bin/bash")
-        non_interactive_pw = _make_pw(name="demo_admin", gid=1001, shell="/usr/sbin/nologin")
+        non_interactive_pw = _make_pw(name="demo_admin", gid=1001, shell=settings.non_interactive_shell_path)
         mock_pwd.getpwnam.side_effect = [
             interactive_pw,      # user_exists
             interactive_pw,      # _get_user_groups primary group lookup
@@ -538,9 +573,38 @@ class TestAddUserToGroups:
             _skip_managed_check=True,
         )
 
-        assert user.shell == "/usr/sbin/nologin"
+        assert user.shell == settings.non_interactive_shell_path
         calls = [c.args[0] for c in mock_subprocess.call_args_list]
-        assert ["sudo", "-n", "/usr/sbin/usermod", "-s", "/usr/sbin/nologin", "demo_admin"] in calls
+        assert ["sudo", "-n", "/usr/sbin/usermod", "-s", settings.non_interactive_shell_path, "demo_admin"] in calls
+
+    @patch("app.services.os_user_service.subprocess.run")
+    @patch("app.services.os_user_service.grp")
+    @patch("app.services.os_user_service.pwd")
+    def test_add_to_groups_repairs_interactive_shell_using_configured_path(self, mock_pwd, mock_grp, mock_subprocess):
+        with patch.object(settings, "non_interactive_shell_path", "/sbin/nologin"):
+            interactive_pw = _make_pw(name="demo_admin", gid=1001, shell="/bin/bash")
+            non_interactive_pw = _make_pw(name="demo_admin", gid=1001, shell="/sbin/nologin")
+            mock_pwd.getpwnam.side_effect = [
+                interactive_pw,
+                interactive_pw,
+                interactive_pw,
+                non_interactive_pw,
+                non_interactive_pw,
+            ]
+            mock_grp.getgrgid.return_value = _make_grp(name="ecube-admins", gid=1001)
+            mock_grp.getgrnam.return_value = _make_grp(name="ecube-admins", gid=1001)
+            mock_grp.getgrall.return_value = []
+            mock_subprocess.return_value = _ok_result()
+
+            user = os_user_service.add_user_to_groups(
+                "demo_admin",
+                ["ecube-admins"],
+                _skip_managed_check=True,
+            )
+
+        assert user.shell == "/sbin/nologin"
+        calls = [c.args[0] for c in mock_subprocess.call_args_list]
+        assert ["sudo", "-n", "/usr/sbin/usermod", "-s", "/sbin/nologin", "demo_admin"] in calls
 
 
 class TestCreateGroup:
@@ -885,7 +949,7 @@ class TestOSUserEndpoints:
             uid=1001,
             gid=1001,
             home="/home/testuser",
-            shell="/bin/bash",
+            shell=settings.non_interactive_shell_path,
             groups=["ecube-admins", "testuser"],
         )
 
@@ -900,6 +964,7 @@ class TestOSUserEndpoints:
         body = resp.json()
         assert body["status"] == "synced_existing_user"
         assert body["user"]["username"] == "testuser"
+        assert body["user"]["shell"] == settings.non_interactive_shell_path
 
         repo = UserRoleRepository(db)
         assert repo.get_roles("testuser") == ["admin"]

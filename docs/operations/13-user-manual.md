@@ -188,8 +188,8 @@ For direct/native deployments, leave reverse-proxy header trust disabled. Enable
 
 Important first-run behavior:
 
-- If the admin username entered in setup does not yet exist on the host, ECUBE creates that OS user, adds it to `ecube-admins`, and grants the ECUBE `admin` role.
-- If the admin username already exists on the host, ECUBE treats that as a reconciliation path instead of an error. The wizard adds the existing OS user to `ecube-admins`, syncs the ECUBE `admin` role, resets the password entered in the wizard, and then completes setup successfully.
+- If the admin username entered in setup does not yet exist on the host, ECUBE creates that OS user with the configured non-interactive shell, adds it to `ecube-admins`, and grants the ECUBE `admin` role.
+- If the admin username already exists on the host, ECUBE treats that as a reconciliation path instead of an error. The wizard adds the existing OS user to `ecube-admins`, repairs the account back to the configured non-interactive shell, syncs the ECUBE `admin` role, resets the password entered in the wizard, and then completes setup successfully.
 - In the existing-user path, the setup screen shows an informational success message indicating that the existing OS admin user was reconciled.
 - After either path completes, return to the login page and sign in with the username and password you entered and confirmed during setup.
 

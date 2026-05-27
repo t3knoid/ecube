@@ -57,7 +57,6 @@ logger = logging.getLogger(__name__)
 
 # Default subprocess timeout (seconds).
 _SUBPROCESS_TIMEOUT = settings.subprocess_timeout_seconds
-_NON_INTERACTIVE_SHELL = "/usr/sbin/nologin"
 _PASS_MAX_DAYS = "90"
 _PASS_MIN_DAYS = "1"
 _PASS_WARN_AGE = "14"
@@ -217,14 +216,14 @@ def _apply_password_expiration_policy(username: str) -> None:
 def _ensure_non_interactive_shell(username: str) -> None:
     """Ensure ECUBE-managed application users keep a non-interactive shell."""
     current_shell = pwd.getpwnam(username).pw_shell
-    if current_shell == _NON_INTERACTIVE_SHELL:
+    if current_shell == settings.non_interactive_shell_path:
         return
 
     _run_sudo(
         [
             settings.usermod_binary_path,
             "-s",
-            _NON_INTERACTIVE_SHELL,
+            settings.non_interactive_shell_path,
             username,
         ]
     )
@@ -421,7 +420,7 @@ def create_user(
         "-g",
         primary_group,
         "-s",
-        _NON_INTERACTIVE_SHELL,
+        settings.non_interactive_shell_path,
         username,
     ])
 
