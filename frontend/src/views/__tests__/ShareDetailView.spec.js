@@ -135,6 +135,7 @@ describe('ShareDetailView', () => {
     const jobLink = wrapper.find('.cell-link')
     expect(jobLink.exists()).toBe(true)
     expect(jobLink.text()).toBe('27')
+    expect(jobLink.attributes('title')).toBe('Show job ID 27')
     expect(wrapper.text()).toContain(i18n.global.t('shares.jobStatus'))
     expect(wrapper.text()).toContain('RUNNING')
 
