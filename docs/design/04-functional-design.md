@@ -335,6 +335,7 @@ The callback body is a JSON object containing:
 
 - Service reads host USB topology through the platform abstraction layer and produces a normalized snapshot for persistence.
 - Hub and port records are upserted using stable hardware identity keys.
+- For functional behavior, ECUBE considers a reinserted USB device to be the same drive when discovery can reconcile it to the same stable hardware identity derived from trusted USB metadata. Physical removal or safe eject does not by itself clear the persisted project binding for that drive. This preserves project isolation across disconnect/reconnect events and means operators can safely remove and reinsert the same prepared device without reassigning it to the project. Reassigning the device to a different project requires formatting the drive to clear the existing project binding before the drive can be initialized for the new project.
 - **Hardware enrichment:** Discovery should capture vendor, product, and negotiated-speed metadata when available, without erasing previously known values with empty readings.
 - **Label preservation:** Admin-assigned hub and port labels are never overwritten by discovery.
 - Drive state transitions follow FSM rules: `DISCONNECTED → DISABLED` when a drive is rediscovered on a disabled port, `DISABLED → AVAILABLE` when that port becomes enabled, `AVAILABLE → DISCONNECTED` on removal, and `AVAILABLE → DISABLED` when a still-present drive is blocked by a disabled port (unless `IN_USE` — project isolation takes priority).
