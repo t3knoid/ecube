@@ -442,12 +442,15 @@ def _should_attempt_target_full_continuation(incomplete_files: list[ExportFile])
     )
 
 
-def _read_copy_job_runtime_state(db: Session, job_id: int) -> tuple[Optional[JobStatus], Optional[datetime], bool]:
+def _read_copy_job_runtime_state(job_id: int) -> tuple[Optional[JobStatus], Optional[datetime], bool]:
     read_db = SessionLocal()
     try:
         latest_job = JobRepository(read_db).get(job_id)
-        latest_status = latest_job.status if latest_job else None
-        latest_started_at = latest_job.started_at if latest_job else None
+        latest_status: Optional[JobStatus] = None
+        latest_started_at: Optional[datetime] = None
+        if latest_job is not None:
+            latest_status = cast(Optional[JobStatus], getattr(latest_job, "status", None))
+            latest_started_at = cast(Optional[datetime], getattr(latest_job, "started_at", None))
         should_attempt_target_full = False
         if latest_job is not None:
             should_attempt_target_full = FileRepository(read_db).should_attempt_target_full_continuation(job_id)
@@ -456,7 +459,7 @@ def _read_copy_job_runtime_state(db: Session, job_id: int) -> tuple[Optional[Job
         read_db.close()
 
 
-def _read_copy_job_runtime_tuning_snapshot(db: Session, job_id: int) -> Optional[dict[str, Any]]:
+def _read_copy_job_runtime_tuning_snapshot(job_id: int) -> Optional[dict[str, Any]]:
     read_db = SessionLocal()
     try:
         latest_job = JobRepository(read_db).get(job_id)
@@ -478,7 +481,7 @@ def _read_copy_job_runtime_tuning_snapshot(db: Session, job_id: int) -> Optional
         read_db.close()
 
 
-def _job_has_active_assignment(db: Session, job_id: int) -> bool:
+def _job_has_active_assignment(job_id: int) -> bool:
     read_db = SessionLocal()
     try:
         return DriveAssignmentRepository(read_db).get_active_for_job(job_id) is not None
@@ -2337,7 +2340,7 @@ def run_copy_job(job_id: int) -> None:
                     def _handle_worker_completion(cancel_pending: list[Any] | None = None) -> bool:
                         nonlocal pause_requested, stop_for_target_full, stale_run_detected
 
-                        latest_status, latest_started_at, should_attempt_target_full = _read_copy_job_runtime_state(db, job_id)
+                        latest_status, latest_started_at, should_attempt_target_full = _read_copy_job_runtime_state(job_id)
                         latest_started_at_key = _normalize_started_at(latest_started_at)
                         if latest_status is not None and latest_started_at_key and latest_started_at_key != run_started_at_key:
                             stale_run_detected = True
@@ -2357,7 +2360,7 @@ def run_copy_job(job_id: int) -> None:
                                     if not pending.done():
                                         pending.cancel()
                             return True
-                        if should_attempt_target_full and _job_has_active_assignment(db, job_id):
+                        if should_attempt_target_full and _job_has_active_assignment(job_id):
                             stop_for_target_full = True
                             return False
                         return False
@@ -2369,7 +2372,7 @@ def run_copy_job(job_id: int) -> None:
                         if pause_requested or stop_for_target_full:
                             break
 
-                        tuning_snapshot = _read_copy_job_runtime_tuning_snapshot(db, job_id)
+                        tuning_snapshot = _read_copy_job_runtime_tuning_snapshot(job_id)
                         if tuning_snapshot is None:
                             return
                         snapshot_job = cast(ExportJob, tuning_snapshot["job"])
@@ -2476,7 +2479,7 @@ def run_copy_job(job_id: int) -> None:
 
                 # Determine final job status.
                 db.expire_all()
-                latest_status, latest_started_at, _ = _read_copy_job_runtime_state(db, job_id)
+                latest_status, latest_started_at, _ = _read_copy_job_runtime_state(job_id)
                 latest_started_at_key = _normalize_started_at(latest_started_at)
                 if latest_status is not None and latest_started_at_key != run_started_at_key:
                     logger.info(

@@ -3413,8 +3413,8 @@ def test_run_copy_job_applies_runtime_tuning_updates_at_batch_boundaries(db, tmp
         pending = original_list_pending(self, job_id, after_id=after_id, limit=1)
         return pending[:1]
 
-    def _runtime_tuning_snapshot(db_session, snapshot_job_id):
-        snapshot = original_read_tuning_snapshot(db_session, snapshot_job_id)
+    def _runtime_tuning_snapshot(snapshot_job_id):
+        snapshot = original_read_tuning_snapshot(snapshot_job_id)
         if snapshot is None:
             return None
         if retune_enabled:
@@ -3546,11 +3546,10 @@ def test_run_copy_job_reads_persisted_runtime_tuning_updates_between_batches(db,
             fsync_enabled=fsync_enabled,
         )
 
-    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
-        with patch("app.services.copy_engine.as_completed", side_effect=_as_completed_with_persisted_update):
-            with patch("app.services.copy_engine.copy_file", side_effect=_recording_copy_file):
-                with patch.object(copy_engine.FileRepository, "list_pending_by_job_after_id", _one_file_batch):
-                    copy_engine.run_copy_job(job.id)
+    with patch("app.services.copy_engine.as_completed", side_effect=_as_completed_with_persisted_update):
+        with patch("app.services.copy_engine.copy_file", side_effect=_recording_copy_file):
+            with patch.object(copy_engine.FileRepository, "list_pending_by_job_after_id", _one_file_batch):
+                copy_engine.run_copy_job(job.id)
 
     db.expire_all()
     db.refresh(job)
