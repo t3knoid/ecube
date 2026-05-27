@@ -1517,6 +1517,123 @@ def test_validate_share_command_failure(manager_client, db):
     assert data["last_checked_at"] is not None
 
 
+def test_validate_share_logs_unmount_failure_for_mounted_share(manager_client, db, caplog):
+    mount = NetworkShare(
+        type=MountType.NFS,
+        remote_path="192.168.1.1:/data",
+        project_id="PROJ-VAL",
+        local_mount_point="/mnt/data",
+        status=MountStatus.MOUNTED,
+    )
+    db.add(mount)
+    db.commit()
+
+    class FailingUnmountProvider:
+        def check_mounted(self, local_mount_point: str, *, timeout_seconds=None):
+            return True
+
+        def os_unmount(self, local_mount_point: str):
+            return False, f"umount: {local_mount_point}: target is busy"
+
+    provider = FailingUnmountProvider()
+
+    with caplog.at_level(logging.DEBUG, logger="app.services.share_service"):
+        with patch("app.services.share_service._default_provider", return_value=provider):
+            response = manager_client.post(
+                f"/shares/{mount.id}/validate",
+                json={
+                    "type": "NFS",
+                    "remote_path": "192.168.1.1:/data",
+                    "project_id": "proj-val",
+                },
+            )
+
+    assert response.status_code == 409
+    trace_id = response.json()["trace_id"]
+
+    info_record = next(
+        record for record in caplog.records
+        if record.name == "app.services.share_service" and record.getMessage() == "Share unmount failed"
+    )
+    assert info_record.context["error_code"] == "MOUNT_UNMOUNT_FAILED"
+    assert info_record.context["failure_class"] == "mount_validate_unmount_failed"
+    assert info_record.context["trace_id"] == trace_id
+
+    debug_record = next(
+        record for record in caplog.records
+        if record.name == "app.services.share_service" and record.getMessage() == "Share unmount failure diagnostics"
+    )
+    assert debug_record.context["error_code"] == "MOUNT_UNMOUNT_FAILED"
+    assert debug_record.context["trace_id"] == trace_id
+    assert debug_record.context["raw_error"] == "umount: /mnt/data: target is busy"
+
+
+def test_validate_share_logs_restore_failure_for_mounted_share(manager_client, db, caplog):
+    mount = NetworkShare(
+        type=MountType.NFS,
+        remote_path="192.168.1.1:/data",
+        project_id="PROJ-VAL",
+        local_mount_point="/mnt/data",
+        status=MountStatus.MOUNTED,
+    )
+    db.add(mount)
+    db.commit()
+
+    class RestoreFailingProvider:
+        def __init__(self):
+            self.mounted = True
+            self.unmount_calls = 0
+
+        def check_mounted(self, local_mount_point: str, *, timeout_seconds=None):
+            return self.mounted
+
+        def os_unmount(self, local_mount_point: str):
+            self.unmount_calls += 1
+            if self.unmount_calls == 1:
+                self.mounted = False
+                return True, None
+            self.mounted = True
+            return False, f"umount: {local_mount_point}: target is busy"
+
+        def os_mount(self, mount_type, remote_path, local_mount_point, *, credentials_file=None, username=None, password=None, nfs_client_version=None):
+            self.mounted = True
+            return True, None
+
+    provider = RestoreFailingProvider()
+
+    with patch("app.services.share_service._default_provider", return_value=provider), \
+         patch("app.services.share_service._ensure_mount_directory", return_value=None), \
+         patch("app.services.share_service._validate_mount_directory_owner", return_value=None):
+        with caplog.at_level(logging.DEBUG, logger="app.services.share_service"):
+            response = manager_client.post(
+                f"/shares/{mount.id}/validate",
+                json={
+                    "type": "NFS",
+                    "remote_path": "192.168.1.1:/data",
+                    "project_id": "proj-val",
+                },
+            )
+
+    assert response.status_code == 500
+    trace_id = response.json()["trace_id"]
+
+    info_record = next(
+        record for record in caplog.records
+        if record.name == "app.services.share_service" and record.getMessage() == "Mount validation restore failed"
+    )
+    assert info_record.context["error_code"] == "MOUNT_VALIDATE_RESTORE_FAILED"
+    assert info_record.context["failure_class"] == "mount_validate_restore_failed"
+    assert info_record.context["trace_id"] == trace_id
+
+    debug_record = next(
+        record for record in caplog.records
+        if record.name == "app.services.share_service" and record.getMessage() == "Mount validation restore diagnostics"
+    )
+    assert debug_record.context["error_code"] == "MOUNT_VALIDATE_RESTORE_FAILED"
+    assert debug_record.context["trace_id"] == trace_id
+    assert "target is busy" in debug_record.context["raw_error"]
+
+
 def test_validate_share_candidate_returns_candidate_without_persisting(manager_client, db, caplog):
     class StatefulProvider:
         def __init__(self):
