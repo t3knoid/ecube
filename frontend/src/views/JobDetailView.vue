@@ -362,13 +362,20 @@ const sourceSizeToCopyLabel = computed(() => {
   return t('common.labels.notAvailable')
 })
 
-const fileColumns = computed(() => ([
-  { key: 'id', label: t('common.labels.id'), align: 'right' },
-  { key: 'relative_path', label: t('jobs.path'), width: isMobileViewport.value ? '12rem' : null },
-  { key: 'size_bytes', label: t('common.labels.size'), align: 'right' },
-  { key: 'destination_drive_label', label: t('jobs.destinationDrive') },
-  { key: 'status', label: t('common.labels.status'), align: 'center' },
-]))
+const fileColumns = computed(() => {
+  const columns = [
+    { key: 'id', label: t('common.labels.id'), align: 'right' },
+    { key: 'relative_path', label: t('jobs.path'), width: isMobileViewport.value ? '12rem' : null },
+    { key: 'status', label: t('common.labels.status'), align: 'center' },
+  ]
+
+  if (!isMobileViewport.value) {
+    columns.splice(2, 0, { key: 'size_bytes', label: t('common.labels.size'), align: 'right' })
+    columns.splice(3, 0, { key: 'destination_drive_label', label: t('jobs.destinationDrive') })
+  }
+
+  return columns
+})
 
 const retryableFileCount = computed(() => Number(job.value?.files_failed || 0) + Number(job.value?.files_timed_out || 0))
 const fileListRefreshKey = computed(() => ([
