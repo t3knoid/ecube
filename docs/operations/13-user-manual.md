@@ -188,6 +188,7 @@ For direct/native deployments, leave reverse-proxy header trust disabled. Enable
 
 Important first-run behavior:
 
+- If ECUBE reaches setup with a configured `DATABASE_URL` but the target database still has no Alembic revision or an incomplete schema, the database-provisioning step shows a warning that the current schema is incomplete and can cause application errors until migrations complete successfully.
 - If the admin username entered in setup does not yet exist on the host, ECUBE creates that OS user with the configured non-interactive shell, adds it to `ecube-admins`, and grants the ECUBE `admin` role.
 - If the admin username already exists on the host, ECUBE treats that as a reconciliation path instead of an error. The wizard adds the existing OS user to `ecube-admins`, repairs the account back to the configured non-interactive shell, syncs the ECUBE `admin` role, resets the password entered in the wizard, and then completes setup successfully.
 - In the existing-user path, the setup screen shows an informational success message indicating that the existing OS admin user was reconciled.

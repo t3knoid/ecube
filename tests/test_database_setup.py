@@ -778,7 +778,30 @@ class TestProvisionStatusEndpoint:
         resp = unauthenticated_client.get("/setup/database/provision-status")
 
         assert resp.status_code == 200
-        assert resp.json() == {"provisioned": False}
+        assert resp.json() == {
+            "provisioned": False,
+            "configured": True,
+            "schema_incomplete": True,
+            "warning_message": (
+                "Database connection settings are configured, but the current schema is incomplete. "
+                "The application may show errors until Alembic migrations complete successfully."
+            ),
+        }
+        mock_provisioned.assert_called_once_with()
+
+    @patch("app.services.database_service.is_database_provisioned", return_value=True)
+    def test_provision_status_returns_no_warning_when_schema_complete(
+        self, mock_provisioned, unauthenticated_client
+    ):
+        resp = unauthenticated_client.get("/setup/database/provision-status")
+
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "provisioned": True,
+            "configured": True,
+            "schema_incomplete": False,
+            "warning_message": None,
+        }
         mock_provisioned.assert_called_once_with()
 
     @patch("app.routers.database_setup._admins_have_any_os_account", return_value=True)
@@ -819,7 +842,12 @@ class TestProvisionStatusEndpoint:
         resp = unauthenticated_client.get("/setup/database/provision-status")
 
         assert resp.status_code == 200
-        assert resp.json() == {"provisioned": False}
+        assert resp.json() == {
+            "provisioned": False,
+            "configured": False,
+            "schema_incomplete": False,
+            "warning_message": None,
+        }
         mock_is_provisioned.assert_not_called()
 
 

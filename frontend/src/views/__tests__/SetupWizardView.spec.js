@@ -230,6 +230,54 @@ describe('SetupWizardView existing admin reconciliation', () => {
     expect(wrapper.find('.error-banner').exists()).toBe(false)
   })
 
+  it('shows a schema warning when provision-status reports an incomplete configured schema', async () => {
+    mocks.getDatabaseProvisionStatus.mockResolvedValue({
+      provisioned: false,
+      configured: true,
+      schema_incomplete: true,
+      warning_message: 'Database connection settings are configured, but the current schema is incomplete. The application may show errors until Alembic migrations complete successfully.',
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.find('#db-admin-user').setValue('postgres')
+    await wrapper.find('#db-admin-pass').setValue('DbAdmin#123')
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('setup.connectDatabase')).trigger('click')
+    await flushPromises()
+
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.next')).trigger('click')
+    await flushPromises()
+
+    const warning = wrapper.find('.warning-banner')
+    expect(warning.exists()).toBe(true)
+    expect(warning.text()).toContain('current schema is incomplete')
+    expect(wrapper.text()).not.toContain(i18n.global.t('setup.provisionAlready'))
+  })
+
+  it('keeps the generic provisioned note when the schema is already complete', async () => {
+    mocks.getDatabaseProvisionStatus.mockResolvedValue({
+      provisioned: true,
+      configured: true,
+      schema_incomplete: false,
+      warning_message: null,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.find('#db-admin-user').setValue('postgres')
+    await wrapper.find('#db-admin-pass').setValue('DbAdmin#123')
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('setup.connectDatabase')).trigger('click')
+    await flushPromises()
+
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.next')).trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.warning-banner').exists()).toBe(false)
+    expect(wrapper.text()).toContain(i18n.global.t('setup.provisionAlready'))
+  })
+
   it('skips the create-admin step when demo mode is enabled', async () => {
     mocks.getPublicAuthConfig.mockResolvedValue({
       demo_mode_enabled: true,

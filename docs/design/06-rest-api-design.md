@@ -1824,8 +1824,15 @@ Report whether the application database has already been provisioned.
 **Response (200 OK):**
 
 ```json
-{"provisioned": true}
+{
+    "provisioned": true,
+    "configured": true,
+    "schema_incomplete": false,
+    "warning_message": null
+}
 ```
+
+When `DATABASE_URL` is configured but the target database still has no Alembic revision or a partial schema, this endpoint returns `provisioned: false`, `configured: true`, `schema_incomplete: true`, and a safe warning message explaining that the current schema is incomplete until Alembic migrations complete successfully.
 
 **Error responses:**
 
@@ -1833,7 +1840,7 @@ Report whether the application database has already been provisioned.
 - `403 Forbidden` — Non-admin role (after setup)
 - `503 Service Unavailable` — Database unreachable and no valid admin JWT provided (fail-closed)
 
-**Consumer behavior:** The setup wizard can call this on load to disable the Provision button when the database is already provisioned, preventing accidental re-provisioning.
+**Consumer behavior:** The setup wizard can call this on load to disable the Provision button when the database is already provisioned, and to show a dedicated warning banner when the runtime points at a configured but incompletely migrated schema.
 
 #### `GET /setup/database/system-info`
 

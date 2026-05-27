@@ -22,6 +22,7 @@ const busy = ref(false)
 const error = ref('')
 const complete = ref(false)
 const provisionNote = ref('')
+const provisionWarning = ref('')
 const setupSuccessMessage = ref('')
 const demoModeEnabled = ref(false)
 const demoSetupAccountUsername = ref('')
@@ -119,6 +120,7 @@ async function runProvision() {
   busy.value = true
   error.value = ''
   provisionNote.value = ''
+  provisionWarning.value = ''
   try {
     await provisionDatabase({
       host: db.value.host,
@@ -141,6 +143,7 @@ async function runProvision() {
       // Backend confirms schema/db already exist; allow setup flow to continue.
       provisionOk.value = true
       error.value = ''
+      provisionWarning.value = ''
       provisionNote.value = t('setup.provisionAlready')
     } else if (err?.response?.status === 401) {
       routeAfterSetupCheck()
@@ -265,7 +268,10 @@ onMounted(async () => {
       if (provisionStatus?.provisioned === true) {
         provisionDetected.value = true
         provisionOk.value = true
+        provisionWarning.value = ''
         provisionNote.value = t('setup.provisionAlready')
+      } else if (provisionStatus?.schema_incomplete === true) {
+        provisionWarning.value = String(provisionStatus?.warning_message || '').trim()
       }
     } catch {
       // Provision-status check is best effort; keep manual provision path available.
@@ -302,6 +308,7 @@ onMounted(async () => {
 
       <div v-else-if="step === 2" class="step-grid">
         <h2>{{ t('setup.provisionDb') }}</h2>
+        <p v-if="provisionWarning" class="warning-banner" role="status" aria-live="polite">{{ provisionWarning }}</p>
         <label for="app-db-name">{{ t('setup.appDbName') }}</label>
         <input id="app-db-name" v-model="db.app_database" type="text" />
         <label for="app-db-user">{{ t('setup.appDbUser') }}</label>
@@ -419,6 +426,14 @@ input {
 
 .muted {
   color: var(--color-text-secondary);
+}
+
+.warning-banner {
+  color: var(--color-alert-warning-text);
+  background: var(--color-alert-warning-bg);
+  border: 1px solid var(--color-alert-warning-border);
+  border-radius: var(--border-radius);
+  padding: var(--space-sm);
 }
 
 .ok-text {

@@ -1062,7 +1062,8 @@ curl -sk https://localhost:8443/setup/database/system-info | jq
 
 # Check whether database is already provisioned (public before setup, admin-only after)
 curl -sk https://localhost:8443/setup/database/provision-status | jq
-# Expected during initial setup: 200, {"provisioned": false}
+# Expected during initial setup with no DATABASE_URL yet: 200, {"provisioned": false, "configured": false, "schema_incomplete": false, "warning_message": null}
+# Expected during recovery with DATABASE_URL set but schema still incomplete: 200, {"provisioned": false, "configured": true, "schema_incomplete": true, "warning_message": "...Alembic migrations complete successfully."}
 
 # Test PostgreSQL connectivity (unauthenticated during initial setup)
 curl -sk -X POST https://localhost:8443/setup/database/test-connection \
@@ -2249,6 +2250,7 @@ Only a truly unreachable server (connection refused, timeout, network failure) t
 | 33 | Provision — migration failure | `POST /setup/database/provision` with valid credentials but a broken Alembic migration (e.g. conflicting schema) | 500, "migration failed" message; `.env` not updated, engine not swapped |
 | 34 | Provision — .env write failure | `POST /setup/database/provision` after making `.env` read-only (or disk full) | 500, "failed to persist" message; engine not swapped |
 | 35 | Provision — engine reinit failure | `POST /setup/database/provision` while another reinit is in progress (lock contention) | 500, "engine could not be switched" message; `.env` already written |
+| 36 | Setup wizard warning — configured incomplete schema | Start ECUBE with `DATABASE_URL` pointing at a database that exists but has no `alembic_version` row (or an incomplete schema), open `/setup`, and advance to the provisioning step | The wizard shows a dedicated warning explaining that the current schema is incomplete and may cause application errors until Alembic migrations complete successfully |
 
 ### 12.14 Startup State Reconciliation
 

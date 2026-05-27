@@ -119,6 +119,15 @@ class DatabaseProvisionStatusResponse(BaseModel):
     """Response for ``GET /setup/database/provision-status``."""
 
     provisioned: bool = Field(..., description="Whether the application database is already provisioned")
+    configured: bool = Field(..., description="Whether DATABASE_URL is configured for the current runtime")
+    schema_incomplete: bool = Field(
+        ...,
+        description="Whether the configured database still has an incomplete Alembic schema",
+    )
+    warning_message: Optional[str] = Field(
+        default=None,
+        description="Operator-safe warning shown when the configured schema is incomplete",
+    )
 
 
 # ---------------------------------------------------------------------------

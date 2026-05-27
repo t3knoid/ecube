@@ -561,9 +561,14 @@ def get_database_provision_status(
     endpoint accepts unauthenticated requests. Once the system is initialized,
     a valid admin JWT is required.
     """
-    if not _database_is_configured():
-        logger.info("DATABASE_PROVISION_STATUS configured=false provisioned=false")
-        return DatabaseProvisionStatusResponse(provisioned=False)
+    configured = _database_is_configured()
+    if not configured:
+        logger.info("DATABASE_PROVISION_STATUS configured=false provisioned=false schema_incomplete=false")
+        return DatabaseProvisionStatusResponse(
+            provisioned=False,
+            configured=False,
+            schema_incomplete=False,
+        )
 
     try:
         provisioned = database_service.is_database_provisioned()
@@ -576,12 +581,26 @@ def get_database_provision_status(
             ),
         )
 
+    schema_incomplete = configured and not provisioned
+    warning_message = None
+    if schema_incomplete:
+        warning_message = (
+            "Database connection settings are configured, but the current schema is incomplete. "
+            "The application may show errors until Alembic migrations complete successfully."
+        )
+
     logger.info(
-        "DATABASE_PROVISION_STATUS configured=true provisioned=%s",
+        "DATABASE_PROVISION_STATUS configured=true provisioned=%s schema_incomplete=%s",
         provisioned,
+        schema_incomplete,
     )
 
-    return DatabaseProvisionStatusResponse(provisioned=provisioned)
+    return DatabaseProvisionStatusResponse(
+        provisioned=provisioned,
+        configured=True,
+        schema_incomplete=schema_incomplete,
+        warning_message=warning_message,
+    )
 
 
 @router.get(
