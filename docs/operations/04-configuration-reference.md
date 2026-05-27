@@ -304,7 +304,7 @@ Operational notes:
 | `NON_INTERACTIVE_SHELL_PATH` | `/usr/sbin/nologin`    | Path to the non-interactive shell assigned to ECUBE-managed application accounts during create and reconciliation flows. |
 | `PWQUALITY_CONF_PATH`        | `/etc/security/pwquality.conf` | Path to the PAM password-quality configuration file used by the password-policy API. |
 | `PASSWORD_POLICY_WRITER_PATH` | `/usr/local/bin/ecube-write-pwquality-conf` | Root-owned helper used for atomic writes to `pwquality.conf` when `USE_SUDO=true`. |
-| `PROCFS_MOUNTS_PATH`         | `/proc/mounts`         | Path to `/proc/mounts` for reading active mounts.              |
+| `PROCFS_MOUNTS_PATH`         | `/proc/mounts`         | Path to the procfs mount table used for reading active mounts. Override this only when the runtime must read an alternate procfs view. |
 | `PROCFS_DISKSTATS_PATH`      | `/proc/diskstats`      | Path to `/proc/diskstats` for block-device I/O statistics. |
 | `SYSFS_USB_DEVICES_PATH`     | `/sys/bus/usb/devices` | Sysfs USB devices directory.                                   |
 | `SYSFS_BLOCK_PATH`           | `/sys/block`           | Sysfs block devices directory.                                 |

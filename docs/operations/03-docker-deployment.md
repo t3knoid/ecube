@@ -38,6 +38,8 @@ In the Compose deployment, only the HTTPS port is published to the host by defau
 For Docker-specific USB passthrough setup and detailed architecture, see
 [12-runtime-environment-and-usb-visibility.md](../design/12-runtime-environment-and-usb-visibility.md).
 
+The Compose deployment mounts USB, udev, and sysfs interfaces into the `ecube-app` container for hardware visibility. Mount-state checks use the runtime procfs mount table configured by `PROCFS_MOUNTS_PATH`, which defaults to the container's `/proc/mounts` unless an alternate procfs view is configured explicitly.
+
 ---
 
 ## Prerequisites
