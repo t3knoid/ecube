@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-async function loadRouter({ roles = [], initialized = true, demoModeEnabled = false } = {}) {
+async function loadRouter({ roles = [], initialized = true } = {}) {
   vi.resetModules()
 
   const authStore = {
@@ -13,9 +13,6 @@ async function loadRouter({ roles = [], initialized = true, demoModeEnabled = fa
 
   vi.doMock('@/stores/auth.js', () => ({
     useAuthStore: () => authStore,
-  }))
-  vi.doMock('@/api/auth.js', () => ({
-    getPublicAuthConfig: vi.fn().mockResolvedValue({ demo_mode_enabled: demoModeEnabled }),
   }))
   vi.doMock('@/api/setup.js', () => ({
     getSetupStatus: vi.fn().mockResolvedValue({ initialized }),
@@ -38,18 +35,18 @@ afterEach(() => {
 })
 
 describe('router configuration/admin guards', () => {
-  it('allows navigation to login in demo mode before setup is marked initialized', async () => {
-    const { router } = await loadRouter({ initialized: false, demoModeEnabled: true })
+  it('redirects login to setup when setup is incomplete', async () => {
+    const { router } = await loadRouter({ initialized: false })
 
     await router.push({ name: 'login' })
 
-    expect(router.currentRoute.value.name).toBe('login')
+    expect(router.currentRoute.value.name).toBe('setup')
   })
 
-  it('redirects login to setup when demo mode is not enabled and setup is incomplete', async () => {
-    const { router } = await loadRouter({ initialized: false, demoModeEnabled: false })
+  it('redirects expired-login routes to setup when setup is incomplete', async () => {
+    const { router } = await loadRouter({ initialized: false })
 
-    await router.push({ name: 'login' })
+    await router.push('/login?expired=1')
 
     expect(router.currentRoute.value.name).toBe('setup')
   })

@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
-import { getPublicAuthConfig } from '@/api/auth.js'
 import { getSetupStatus } from '@/api/setup.js'
 import { AUDIT_ROLES, CONFIGURATION_ROLES, USERS_ROLES } from '@/constants/roles.js'
 import { EXPIRED_QUERY_KEY, EXPIRED_QUERY_VALUE } from '@/constants/auth.js'
@@ -143,18 +142,6 @@ router.beforeEach(async (to) => {
       // Fail closed: if the backend is unreachable, treat as not initialized
       // so the user is redirected to /setup rather than bypassing it
       systemInitialized = false
-    }
-  }
-
-  // Redirect to setup if system not initialized
-  if (!systemInitialized && to.name === 'login') {
-    try {
-      const publicConfig = await getPublicAuthConfig()
-      if (publicConfig?.demo_mode_enabled === true) {
-        return true
-      }
-    } catch {
-      // Keep the safe default below when public config is unavailable.
     }
   }
 

@@ -2253,6 +2253,7 @@ Only a truly unreachable server (connection refused, timeout, network failure) t
 | 35 | Provision — engine reinit failure | `POST /setup/database/provision` while another reinit is in progress (lock contention) | 500, "engine could not be switched" message; `.env` already written |
 | 36 | Setup wizard warning — configured incomplete schema | Start ECUBE with `DATABASE_URL` pointing at a database that exists but has no `alembic_version` row (or an incomplete schema), open `/setup`, and advance to the provisioning step | The wizard shows a dedicated warning explaining that the current schema is incomplete and may cause application errors until Alembic migrations complete successfully |
 | 37 | Setup wizard warning — configured database resources missing | Start ECUBE with `DATABASE_URL` pointing at an application database or role that does not exist yet, open `/setup`, and advance to the provisioning step | The wizard shows a dedicated warning explaining that database provisioning is incomplete and must be completed before continuing |
+| 38 | Login route blocked before setup completion | Start ECUBE with setup incomplete, then open `/login?expired=1` in the browser with demo mode enabled or disabled | The browser is redirected to `/setup` and the login screen does not render until setup is complete |
 
 ### 12.14 Startup State Reconciliation
 
