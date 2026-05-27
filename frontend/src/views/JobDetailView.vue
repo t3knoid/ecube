@@ -2356,7 +2356,7 @@ onUnmounted(() => {
               <span class="actions-menu-toggle-dot" />
             </span>
           </summary>
-          <div class="actions-menu-popover">
+          <div class="actions-menu-popover actions-menu-popover--align-start">
             <button
               v-for="action in secondaryActions"
               :key="action.key"
@@ -2965,7 +2965,6 @@ onUnmounted(() => {
 .actions-menu-popover {
   position: absolute;
   top: calc(100% + var(--space-2xs));
-  right: 0;
   z-index: 3;
   min-width: 12rem;
   display: grid;
@@ -2975,6 +2974,10 @@ onUnmounted(() => {
   border-radius: var(--border-radius);
   background: var(--color-bg-primary);
   box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.12));
+}
+
+.actions-menu-popover--align-start {
+  left: 0;
 }
 
 select {

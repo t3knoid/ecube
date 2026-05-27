@@ -3241,6 +3241,7 @@ describe('JobDetailView start action', () => {
     ])
 
     expect(wrapper.find('.actions-menu').exists()).toBe(true)
+    expect(wrapper.find('.actions-menu-popover--align-start').exists()).toBe(true)
     expect(wrapper.find('.detail-action-menu-overflow').exists()).toBe(true)
     expect(wrapper.find('.detail-action-menu-complete').exists()).toBe(true)
     expect(wrapper.find('.detail-action-menu-delete').exists()).toBe(true)
