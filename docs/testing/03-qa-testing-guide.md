@@ -2415,6 +2415,15 @@ Use the repository helper `scripts/copy_path_diagnostic.py` when a mounted-share
 
 Run the helper from the repository root and point `target_path` at an ECUBE-managed mounted USB directory under the configured USB mount base. Do not point the diagnostic at arbitrary host directories or reuse the mounted source path as the target.
 
+Use this workflow when collecting contributor-facing copy-engine tuning evidence:
+
+1. Pick a mounted share and mounted destination drive that represent the workload you are investigating.
+2. Record the ECUBE settings or per-job overrides you are comparing before each run: `copy_chunk_size_bytes`, `copy_file_fsync_enabled`, and thread count.
+3. Run the script in `balanced` mode first so the result approximates the startup-analysis byte-budget sample.
+4. Run `small-file-stress` mode when the workload is dominated by small files or when files-per-second is more important than raw sequential throughput.
+5. Attach the diagnostic JSON output to the work item or QA artifact together with the completed ECUBE job metrics you are comparing against.
+6. Treat the script as a drill-down aid only. It exercises the `copy_file()` path, but it does not create a job, manifest, audit evidence, or end-to-end verification record.
+
 Run the balanced sample mode when you want a quick byte-budget sample that matches the startup-analysis benchmark shape:
 
 ```bash
@@ -2451,7 +2460,35 @@ Capture and attach these fields from the diagnostic output whenever the script i
 - `copy_file_fsync_enabled`
 - `notes`
 
-Interpret the script output alongside the UI throughput tests and completed job metrics. When `share_read_mbps` is healthy but `drive_write_mbps` is much lower, the target drive or USB enclosure path is the likely bottleneck. When `end_to_end_copy_mbps` and `sample_copy_files_per_second` collapse in small-file stress mode, treat the workload as file-count and metadata bound rather than raw sequential-throughput bound.
+Interpret the script output alongside the UI throughput tests and completed job metrics.
+
+- When `share_read_mbps` is healthy but `drive_write_mbps` is much lower, the mounted share or network path is probably not the limiting factor; the target drive, USB enclosure, or controller path is the more likely bottleneck.
+- When `drive_write_mbps` is healthy but `share_read_mbps` is much lower, look first at the mounted source share, network path, or source-side storage rather than at copy-engine settings.
+- When both isolated legs look healthy but `end_to_end_copy_mbps` is far below `benchmark_effective_copy_mbps`, treat the workload as copy-path overhead bound and inspect directory depth, file-count churn, hashing cost, or `copy_file_fsync_enabled`.
+- When `sample_copy_files_per_second` collapses in `small-file-stress` mode and `sample_small_file_count` is high, treat the workload as metadata and per-file overhead bound rather than raw sequential-throughput bound.
+- When comparing repeated runs on the same hardware and dataset, keep the source tree, target hardware, and comparison baseline fixed so a change in `copy_chunk_size_bytes`, `copy_file_fsync_enabled`, or thread count is the variable under test.
+
+#### Copy-Engine Efficiency Matrix
+
+Use the following matrix for repeatable copy-engine tuning work. Keep scenario IDs stable across follow-up work so contributors can compare results over time without inventing a new benchmark plan for each ticket.
+
+| Scenario ID | Workload shape | Source characteristics | Target characteristics | ECUBE settings under test | Diagnostic mode | Job configuration or comparison baseline | Measurements to record | Expected comparison focus |
+|---|---|---|---|---|---|---|---|---|
+| CE-1 | Sequential-heavy large-file corpus | One mounted share with mostly large files and minimal directory depth | One mounted destination drive on the test USB path | Baseline thread count plus current `copy_chunk_size_bytes` and `copy_file_fsync_enabled` | `balanced` | Compare with one completed RW-2-style single-drive job on the same dataset | `share_read_mbps`, `drive_write_mbps`, `benchmark_effective_copy_mbps`, `end_to_end_copy_mbps`, `copy_chunk_size_bytes`, `copy_file_fsync_enabled`, `notes` | Distinguish source-leg limits from target-leg limits on sequential-heavy copies |
+| CE-2 | Mixed corpus with nested directories | One mounted share with mixed file sizes and directory depth closer to normal startup analysis | One mounted destination drive on the same hardware used for the comparison job | Baseline settings first, then any proposed tuning delta | `balanced` | Compare with one completed RW-1-style or production-like mixed job on the same source tree | `share_read_mbps`, `drive_write_mbps`, `benchmark_effective_copy_mbps`, `end_to_end_copy_mbps`, `sample_copy_files_per_second`, `notes` | Show whether mixed-workload slowdown comes from source throughput or copy-path overhead |
+| CE-3 | Small-file-heavy corpus | One mounted share with many small files where file-count dominates | One mounted destination drive on the same USB path | Run once with current settings and once with the proposed tuning delta | `small-file-stress` | Compare with a completed ECUBE job whose workload is known to be metadata heavy | `sample_file_count`, `sample_small_file_count`, `sample_copy_files_per_second`, `end_to_end_copy_mbps`, `copy_chunk_size_bytes`, `copy_file_fsync_enabled`, `notes` | Surface per-file metadata overhead, hashing cost, and fsync sensitivity |
+| CE-4 | Same dataset, fsync comparison | Same mounted share and source tree as CE-2 or CE-3 | Same mounted destination drive and USB path | Hold thread count and chunk size constant; compare `copy_file_fsync_enabled=false` versus `true` | `balanced` or `small-file-stress`, matching the workload under study | Use the exact same dataset and hardware for both runs | `end_to_end_copy_mbps`, `sample_copy_files_per_second`, `copy_file_fsync_enabled`, `notes` | Isolate the throughput penalty of per-file fsync on the same workload |
+| CE-5 | Same dataset, chunk-size comparison | Same mounted share and source tree as CE-1 or CE-2 | Same mounted destination drive and USB path | Hold fsync and thread count constant; compare at least two `copy_chunk_size_bytes` values | `balanced` | Use the exact same dataset and hardware for both runs | `share_read_mbps`, `drive_write_mbps`, `benchmark_effective_copy_mbps`, `end_to_end_copy_mbps`, `copy_chunk_size_bytes`, `notes` | Identify chunk-size changes that materially improve or degrade end-to-end throughput |
+| CE-6 | Parallel or multi-drive comparison | Same mounted share or equivalent source across parallel jobs | Multiple mounted destination drives or parallel jobs on the same host | Record the live job tuning values used by each job | `balanced` for the script run paired with full ECUBE job metrics | Pair the script result with a completed RW-3-style parallel run | `benchmark_effective_copy_mbps`, `end_to_end_copy_mbps`, aggregate completed-job throughput, `sample_copy_files_per_second`, `notes` | Show where the script predicts a single-path ceiling and where full scale-out behavior must still be validated end-to-end |
+
+For every matrix row, record the following additional columns in the work item, spreadsheet, or QA artifact:
+
+- `Observed bottleneck notes`
+- `Follow-up hypothesis`
+- The exact command line used
+- The completed ECUBE job ID or comparison baseline used for the paired runtime result
+
+When the same scenario is rerun later, preserve the scenario ID and update only the hardware context, settings under test, measurements, and hypothesis so the matrix stays maintainable.
 
 #### Hashing and Integrity Validation
 
