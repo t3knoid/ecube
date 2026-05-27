@@ -392,6 +392,7 @@ onBeforeUnmount(() => {
           v-if="isValidJobId(row.current_project_job_id)"
           class="cell-link"
           type="button"
+          :title="t('jobs.showJobId', { id: row.current_project_job_id })"
           @click="openRelatedJob(row.current_project_job_id)"
         >
           {{ row.current_project_job_id }}
