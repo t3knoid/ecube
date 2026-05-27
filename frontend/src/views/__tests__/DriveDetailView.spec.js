@@ -434,6 +434,7 @@ describe('DriveDetailView mount workflow', () => {
     expect(wrapper.text()).toContain(i18n.global.t('jobs.jobId'))
     const jobLink = wrapper.find('.cell-link')
     expect(jobLink.exists()).toBe(true)
+    expect(jobLink.attributes('title')).toBe('Show job ID 20')
     expect(jobLink.text()).toBe('20')
 
     await jobLink.trigger('click')
