@@ -352,6 +352,7 @@ class TestDemoRuntimeBehavior:
         assert any(ch.islower() for ch in generated_password)
         assert any(ch.isupper() for ch in generated_password)
         assert any(ch.isdigit() for ch in generated_password)
+        assert any(not ch.isalnum() for ch in generated_password)
         assert s.get_demo_accounts() == [
             {
                 "username": "demo_admin",
@@ -398,6 +399,8 @@ class TestDemoRuntimeBehavior:
         assert first != second
         assert len(first) >= DEFAULT_PASSWORD_POLICY_VALUES["minlen"]
         assert len(second) >= DEFAULT_PASSWORD_POLICY_VALUES["minlen"]
+        assert any(not ch.isalnum() for ch in first)
+        assert any(not ch.isalnum() for ch in second)
 
     def test_demo_runtime_shared_password_follows_active_password_policy(self, tmp_path):
         policy_path = tmp_path / "pwquality.conf"

@@ -95,6 +95,13 @@ Global shell safety still lives in `shell-docker.mdc`, and backend trust-boundar
 - Cleanup and uninstall paths must determine targets explicitly from persisted configuration, not by guessing.
 - When a host change is intentionally one-way or destructive, require an explicit flag or clear operator intent.
 
+## 6.1 Container Parity Review
+
+- When installer or host-bootstrap changes add, remove, or alter OS/runtime requirements that could also affect the containerized deployment, review the Docker image and Compose path in the same task.
+- Native changes to package prerequisites, PAM configuration, password-policy setup, auth helpers, mount tooling, USB tooling, filesystem tooling, or other runtime OS dependencies should trigger a Docker parity check.
+- If the requirement is intentionally native-only, state that explicitly in code comments or documentation rather than leaving Docker parity ambiguous.
+- Shell and Docker implementation details for that follow-up work still belong to `shell-docker.mdc`; this section exists to force the review trigger whenever native installer behavior changes.
+
 ---
 
 ## 7. Testing Expectations

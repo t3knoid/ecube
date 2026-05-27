@@ -311,7 +311,7 @@ POOLS = {
   "lower": "bcdfghjkmnpqrstvwxyz",
   "upper": "BCDFGHJKLMNPQRSTVWXYZ",
   "digit": "346789",
-  "special": "@%+=_",
+  "special": "@%+=_!$-?",
 }
 
 
@@ -340,12 +340,10 @@ policy = parse_policy(Path("/etc/security/pwquality.conf"))
 minlen = max(int(policy.get("minlen", DEFAULTS["minlen"])), 12)
 minclass = max(0, min(int(policy.get("minclass", DEFAULTS["minclass"])), 4))
 
-pools = [POOLS["lower"], POOLS["upper"], POOLS["digit"]]
-if minclass >= 4:
-  pools.append(POOLS["special"])
+pools = [POOLS["lower"], POOLS["upper"], POOLS["digit"], POOLS["special"]]
 
 all_characters = "".join(pools)
-target_length = max(minlen, 20)
+target_length = max(minlen, 24)
 
 characters: list[str] = []
 for pool in pools:

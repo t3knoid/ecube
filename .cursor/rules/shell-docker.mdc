@@ -143,6 +143,15 @@ Entrypoints must:
 - All destructive operations must require explicit confirmation or flags.  
 - Deployment artifacts must not contain secrets or environment-specific paths.  
 
+## 5.1 Native-to-Docker Parity
+
+- When changing native OS or runtime prerequisites, explicitly inspect the Docker image and Compose deployment for equivalent container-side requirements.
+- Treat package additions or removals in installer or host-bootstrap flows as a required review trigger for Dockerfile and container startup parity.
+- This includes package-level dependencies, PAM and password-policy setup, auth/runtime helpers, filesystem and mount tooling, USB tooling, and other OS-backed behaviors that can affect ECUBE at runtime.
+- Do not assume a host-only requirement is irrelevant to Docker; either mirror it in the container path or document why the requirement is intentionally native-only.
+- When Docker parity is required, update the relevant Dockerfile, entrypoint, startup script, Compose asset, or container validation in the same change.
+- Add focused validation for the containerized path when syncing native OS/runtime behavior into Docker.
+
 ---
 
 ## 6. Out of Scope (Handled Elsewhere)

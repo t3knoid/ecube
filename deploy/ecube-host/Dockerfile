@@ -22,6 +22,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN apt-get update && apt-get -y upgrade && apt-get install -y --no-install-recommends \
     bash \
     ca-certificates \
+    cracklib-runtime \
     curl \
     exfatprogs \
     iproute2 \
@@ -44,12 +45,16 @@ COPY pyproject.toml /opt/ecube/pyproject.toml
 COPY app /opt/ecube/app
 COPY alembic /opt/ecube/alembic
 COPY alembic.ini /opt/ecube/alembic.ini
+COPY deploy/ecube-pam /opt/ecube/deploy/ecube-pam
 COPY deploy/ecube-host/entrypoint.sh /usr/local/bin/ecube-entrypoint.sh
+COPY deploy/ecube-host/configure-os-auth.sh /usr/local/bin/ecube-configure-os-auth.sh
 
-RUN chmod +x /usr/local/bin/ecube-entrypoint.sh
+RUN chmod +x /usr/local/bin/ecube-entrypoint.sh /usr/local/bin/ecube-configure-os-auth.sh
 
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
     && pip install --no-cache-dir .
+
+RUN /usr/local/bin/ecube-configure-os-auth.sh
 
 # Create the certs directory for TLS.  A self-signed certificate is
 # generated on first container start (not at build time) so each

@@ -31,7 +31,7 @@ DEFAULT_PASSWORD_POLICY_VALUES: dict[str, int] = {
 _LOWER_POOL = "bcdfghjkmnpqrstvwxyz"
 _UPPER_POOL = "BCDFGHJKLMNPQRSTVWXYZ"
 _DIGIT_POOL = "346789"
-_SPECIAL_POOL = "@%+=_"
+_SPECIAL_POOL = "@%+=_!$-?"
 
 
 def parse_pwquality_value(raw_value: str) -> int | None:
@@ -66,11 +66,12 @@ def build_policy_friendly_demo_password(policy_values: Mapping[str, int] | None 
     minlen = max(int(effective_values.get("minlen", DEFAULT_PASSWORD_POLICY_VALUES["minlen"])), 12)
     minclass = max(0, min(int(effective_values.get("minclass", DEFAULT_PASSWORD_POLICY_VALUES["minclass"])), 4))
 
-    pools = [_LOWER_POOL, _UPPER_POOL, _DIGIT_POOL]
-    if minclass >= 4:
-        pools.append(_SPECIAL_POOL)
+    # Always include all four character classes and use a longer minimum
+    # length so demo-mode generated passwords avoid pwquality
+    # "too simplistic/systematic" rejections under containerized PAM.
+    pools = [_LOWER_POOL, _UPPER_POOL, _DIGIT_POOL, _SPECIAL_POOL]
 
-    target_length = max(minlen, 20)
+    target_length = max(minlen, 24)
     all_characters = "".join(pools)
 
     characters: list[str] = []
