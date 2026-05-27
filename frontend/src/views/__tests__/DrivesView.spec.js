@@ -361,6 +361,7 @@ describe('DrivesView rescan and filter loading', () => {
     const linkedCells = wrapper.findAll('.drive-id-link')
     expect(linkedCells).toHaveLength(1)
     expect(linkedCells[0].text()).toBe('1')
+    expect(linkedCells[0].attributes('title')).toBe('Show details of drive 1')
 
     await linkedCells[0].trigger('click')
     await flushPromises()

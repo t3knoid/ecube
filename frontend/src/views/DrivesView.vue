@@ -363,7 +363,12 @@ onBeforeUnmount(() => {
 
     <DataTable :columns="columns" :rows="paged" :empty-text="t('drives.empty')">
       <template #cell-id="{ row }">
-        <button class="cell-link drive-id-link" type="button" @click="openDriveById(row.id)">
+        <button
+          class="cell-link drive-id-link"
+          type="button"
+          :title="t('drives.showDetailsOfDrive', { id: row.id })"
+          @click="openDriveById(row.id)"
+        >
           {{ row.id }}
         </button>
       </template>

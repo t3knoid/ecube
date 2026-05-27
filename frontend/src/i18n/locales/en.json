@@ -79,6 +79,7 @@
     "sortAsc": "Sort: ascending",
     "sortDesc": "Sort: descending",
     "empty": "No drives found",
+    "showDetailsOfDrive": "Show details of drive {id}",
     "details": "Details",
     "notFound": "Drive not found",
     "mount": "Mount",
