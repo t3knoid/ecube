@@ -555,6 +555,7 @@ def get_job_files(
         JobFileRowSchema(
             id=file_row.id,
             relative_path=file_row.relative_path,
+            size_bytes=getattr(file_row, "size_bytes", None),
             status=file_row.status,
             checksum=file_row.checksum,
             error_message=file_row.error_message,

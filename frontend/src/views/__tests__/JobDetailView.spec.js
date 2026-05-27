@@ -2561,6 +2561,40 @@ describe('JobDetailView start action', () => {
     expect(mocks.getJobFiles).toHaveBeenCalledTimes(2)
   })
 
+  it('shows a safe placeholder when a file row size is missing', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'RUNNING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 50,
+      total_bytes: 100,
+      file_count: 1,
+      files_succeeded: 1,
+      files_failed: 0,
+    })
+    mocks.getJobFiles.mockResolvedValue({
+      files: [{ id: 9, relative_path: 'doc.txt', status: 'DONE', checksum: 'abc' }],
+      total_files: 1,
+      returned_files: 1,
+      page: 1,
+      page_size: 40,
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.find('.files-panel-toggle').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('doc.txt')
+    expect(wrapper.text()).toContain('-')
+    expect(wrapper.text()).not.toContain('NaN B')
+  })
+
   it('reloads files while polling when the files panel is open and job progress changes', async () => {
     mocks.getJob
       .mockResolvedValueOnce({

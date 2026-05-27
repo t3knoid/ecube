@@ -217,6 +217,7 @@ class JobFileRowSchema(BaseModel):
 
     id: int = Field(..., description="Unique identifier for the file")
     relative_path: str = Field(..., description="Relative path from source root")
+    size_bytes: Optional[int] = Field(default=None, description="File size in bytes when available")
     status: FileStatus = Field(..., description="Current file status")
     checksum: Optional[str] = Field(default=None, description="Stored checksum when available")
     error_message: Optional[str] = Field(default=None, description="Operator-safe file error detail when available")

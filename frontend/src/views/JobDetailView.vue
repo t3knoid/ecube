@@ -2406,7 +2406,7 @@ onUnmounted(() => {
             </button>
           </template>
           <template #cell-size_bytes="{ row }">
-            {{ formatBytes(Number(row.size_bytes)) }}
+            {{ formatBytes(Number.isFinite(Number(row.size_bytes)) ? Number(row.size_bytes) : null) }}
           </template>
           <template #cell-destination_drive_label="{ row }">
             <span class="wrap-anywhere">{{ row.destination_drive_label || t('common.labels.notAvailable') }}</span>

@@ -2232,7 +2232,7 @@ def test_get_job_files_processor_allowed(client, db):
     )
     db.add(job)
     db.flush()
-    db.add(ExportFile(job_id=job.id, relative_path="doc/a.txt", status=FileStatus.DONE, checksum="sha256:a"))
+    db.add(ExportFile(job_id=job.id, relative_path="doc/a.txt", status=FileStatus.DONE, checksum="sha256:a", size_bytes=1536))
     db.add(ExportFile(job_id=job.id, relative_path="doc/b.txt", status=FileStatus.ERROR, checksum=None, error_message="Target storage is full"))
     db.commit()
 
@@ -2243,6 +2243,7 @@ def test_get_job_files_processor_allowed(client, db):
     assert data["job_id"] == job.id
     assert len(data["files"]) == 2
     assert data["files"][0]["relative_path"] == "doc/a.txt"
+    assert data["files"][0]["size_bytes"] == 1536
     assert data["files"][0]["status"] == "DONE"
     assert data["files"][0]["checksum"] == "sha256:a"
     assert data["files"][0]["error_message"] is None
