@@ -2166,7 +2166,10 @@ onUnmounted(() => {
   <section class="view-root">
     <header class="header-row">
       <h1>{{ t('jobs.detail') }} #{{ jobId }}</h1>
-      <button class="btn" @click="refreshAll">{{ t('common.actions.refresh') }}</button>
+      <div class="actions">
+        <button class="btn" @click="router.push({ name: 'jobs' })">{{ t('common.actions.back') }}</button>
+        <button class="btn" @click="refreshAll">{{ t('common.actions.refresh') }}</button>
+      </div>
     </header>
 
     <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>

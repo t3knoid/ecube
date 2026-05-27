@@ -331,6 +331,18 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).toContain('2.0 KB')
   })
 
+  it('routes the header back button to the jobs list', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const backButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.back'))
+    expect(backButton).toBeTruthy()
+
+    await backButton.trigger('click')
+
+    expect(mocks.routerPush).toHaveBeenCalledWith({ name: 'jobs' })
+  })
+
   it('shows the validation detail instead of a generic conflict message', async () => {
     mocks.startJob.mockRejectedValue({
       response: {
