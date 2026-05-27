@@ -377,6 +377,7 @@ onBeforeUnmount(() => {
           v-if="isDriveBrowsable(row)"
           class="cell-link drive-device-link"
           type="button"
+          :title="t('drives.browseDrive')"
           @click="toggleBrowse(row.id)"
         >
           {{ formatDriveIdentity(row) }}

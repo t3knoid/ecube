@@ -120,6 +120,7 @@
     "custodyStatusUnavailable": "Status unavailable",
     "custodyStatusRecordedAt": "Recorded at {timestamp}",
     "browse": "Browse",
+    "browseDrive": "Browse drive",
     "latestWriteSpeed": "Latest Write Speed",
     "lastThroughputTest": "Last Throughput Test",
     "localMountPoint": "Local Mount Point",

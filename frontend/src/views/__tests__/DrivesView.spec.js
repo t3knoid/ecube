@@ -331,6 +331,7 @@ describe('DrivesView rescan and filter loading', () => {
     const deviceButton = wrapper.find('.drive-device-link')
     expect(deviceButton.exists()).toBe(true)
     expect(deviceButton.text()).toContain('SanDisk Ultra - Port 1')
+    expect(deviceButton.attributes('title')).toBe('Browse drive')
 
     await deviceButton.trigger('click')
     await flushPromises()
