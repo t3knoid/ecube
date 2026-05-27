@@ -1294,6 +1294,8 @@ def test_prepare_eject(manager_client, db):
     drive = UsbDrive(
         device_identifier="USB005",
         current_state=DriveState.IN_USE,
+        filesystem_path="/dev/sdb",
+        mount_path="/mnt/ecube/usb005",
         current_project_id="PROJ-001",
     )
     db.add(drive)
@@ -1307,6 +1309,26 @@ def test_prepare_eject(manager_client, db):
     # Project binding is preserved through eject so re-insert for the same
     # project is allowed without a format, and cross-project reuse is blocked.
     assert data["current_project_id"] == "PROJ-001"
+
+
+def test_prepare_eject_rejects_in_use_drive_without_managed_mount(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB005-UNMANAGED-HOST-MOUNT",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-001",
+        filesystem_path="/dev/sdb",
+        mount_path=None,
+    )
+    db.add(drive)
+    db.commit()
+
+    provider = _fake_eject()
+    with patch("app.routers.drives.get_drive_eject", return_value=provider):
+        response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+
+    assert response.status_code == 409
+    assert response.json()["message"] == "Drive is not mounted; refresh drive status and retry prepare-eject"
+    provider.prepare_eject.assert_not_called()
 
 
 def test_prepare_eject_rejects_pending_format(manager_client, db):

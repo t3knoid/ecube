@@ -890,13 +890,13 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
 
     # Fail fast if the drive is not in an ejectable state.
     # Don't waste time on expensive OS operations for invalid preconditions.
-    if initial_state == DriveState.AVAILABLE:
+    if initial_state in (DriveState.AVAILABLE, DriveState.IN_USE):
         if not drive.mount_path:
             raise service_exception(
                 status_code=409,
                 detail="Drive is not mounted; refresh drive status and retry prepare-eject",
             )
-    elif initial_state != DriveState.IN_USE:
+    else:
         if drive.mount_path:
             raise service_exception(
                 status_code=409,
