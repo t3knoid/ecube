@@ -443,7 +443,7 @@ def _should_attempt_target_full_continuation(incomplete_files: list[ExportFile])
 
 
 def _read_copy_job_runtime_state(db: Session, job_id: int) -> tuple[Optional[JobStatus], Optional[datetime], bool]:
-    read_db = Session(bind=db.get_bind())
+    read_db = SessionLocal()
     try:
         latest_job = JobRepository(read_db).get(job_id)
         latest_status = latest_job.status if latest_job else None
@@ -457,7 +457,7 @@ def _read_copy_job_runtime_state(db: Session, job_id: int) -> tuple[Optional[Job
 
 
 def _read_copy_job_runtime_tuning_snapshot(db: Session, job_id: int) -> Optional[dict[str, Any]]:
-    read_db = Session(bind=db.get_bind())
+    read_db = SessionLocal()
     try:
         latest_job = JobRepository(read_db).get(job_id)
         if latest_job is None:
@@ -479,7 +479,7 @@ def _read_copy_job_runtime_tuning_snapshot(db: Session, job_id: int) -> Optional
 
 
 def _job_has_active_assignment(db: Session, job_id: int) -> bool:
-    read_db = Session(bind=db.get_bind())
+    read_db = SessionLocal()
     try:
         return DriveAssignmentRepository(read_db).get_active_for_job(job_id) is not None
     finally:
