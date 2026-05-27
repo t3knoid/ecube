@@ -769,6 +769,7 @@ onBeforeUnmount(() => {
           v-if="row.status === 'MOUNTED' && canBrowseMountContents"
           class="cell-link mount-project-link"
           type="button"
+          :title="t('shares.browseShare')"
           :aria-expanded="browsingMountId === row.id"
           :aria-label="mountBrowseTitle(row)"
           @click="toggleBrowse(row.id)"

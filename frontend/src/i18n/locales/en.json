@@ -380,6 +380,7 @@
     "removeConfirmTitle": "Remove mount?",
     "removeConfirmBody": "Removing a mount may impact in-progress jobs.",
     "browse": "Browse",
+    "browseShare": "Browse share",
     "browseUnavailable": "Browse is only available for mounted shares",
     "browseShares": "Browse",
     "browseSharesTitle": "Browse Available Shares",

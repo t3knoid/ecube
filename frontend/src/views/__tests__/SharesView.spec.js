@@ -246,6 +246,7 @@ describe('SharesView removal flow', () => {
     const browseButton = wrapper.findAll('.mount-project-link')
     expect(browseButton).toHaveLength(1)
     expect(browseButton[0].text()).toBe('PROJ-011')
+    expect(browseButton[0].attributes('title')).toBe('Browse share')
 
     await browseButton[0].trigger('click')
     await flushPromises()
