@@ -57,6 +57,7 @@ logger = logging.getLogger(__name__)
 
 # Default subprocess timeout (seconds).
 _SUBPROCESS_TIMEOUT = settings.subprocess_timeout_seconds
+_NON_INTERACTIVE_SHELL = "/usr/sbin/nologin"
 _PASS_MAX_DAYS = "90"
 _PASS_MIN_DAYS = "1"
 _PASS_WARN_AGE = "14"
@@ -208,6 +209,22 @@ def _apply_password_expiration_policy(username: str) -> None:
             _PASS_MIN_DAYS,
             "-W",
             _PASS_WARN_AGE,
+            username,
+        ]
+    )
+
+
+def _ensure_non_interactive_shell(username: str) -> None:
+    """Ensure ECUBE-managed application users keep a non-interactive shell."""
+    current_shell = pwd.getpwnam(username).pw_shell
+    if current_shell == _NON_INTERACTIVE_SHELL:
+        return
+
+    _run_sudo(
+        [
+            settings.usermod_binary_path,
+            "-s",
+            _NON_INTERACTIVE_SHELL,
             username,
         ]
     )
@@ -397,7 +414,16 @@ def create_user(
             "remains manageable through the API."
         )
 
-    _run_sudo([settings.useradd_binary_path, "-m", "-N", "-g", primary_group, username])
+    _run_sudo([
+        settings.useradd_binary_path,
+        "-m",
+        "-N",
+        "-g",
+        primary_group,
+        "-s",
+        _NON_INTERACTIVE_SHELL,
+        username,
+    ])
 
     # Set password via stdin (never on command line).
     try:
@@ -577,6 +603,7 @@ def set_user_groups(username: str, groups: List[str]) -> OSUser:
 
     # -G replaces all supplementary groups.
     _run_sudo([settings.usermod_binary_path, "-G", ",".join(final_groups), username])
+    _ensure_non_interactive_shell(username)
 
     pw = pwd.getpwnam(username)
     return OSUser(
@@ -615,6 +642,8 @@ def add_user_to_groups(username: str, groups: List[str], *, _skip_managed_check:
 
     if groups_to_add:
         _run_sudo([settings.usermod_binary_path, "-aG", ",".join(groups_to_add), username])
+
+    _ensure_non_interactive_shell(username)
 
     pw = pwd.getpwnam(username)
     return OSUser(

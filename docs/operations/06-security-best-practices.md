@@ -143,14 +143,15 @@ Additional guidance:
 - Use VPN or SSH tunnel for remote access
 - Enable audit logging for all operations (enabled by default)
 - Review audit logs regularly through the API or approved database access paths.
+- ECUBE-managed application accounts are created and reconciled with the non-interactive shell `/usr/sbin/nologin`. Use separate host-administration accounts for shell or SSH access.
 
 ### 4.1 SSH Hardening For Backend Hosts
 
 - Restrict SSH to management networks, bastion hosts, or VPN-only paths.
 - Use dedicated host-admin accounts for OS administration.
-- Do not assume members of `ecube-admins`, `ecube-managers`, `ecube-processors`, or `ecube-auditors` should automatically have shell access to the backend host.
+- ECUBE application accounts in `ecube-admins`, `ecube-managers`, `ecube-processors`, and `ecube-auditors` are for ECUBE authentication and role assignment only. They are not host-login accounts.
 
-For dedicated ECUBE hosts, consider explicitly denying SSH for ECUBE role groups so application users cannot log into the backend OS directly:
+ECUBE enforces a non-interactive login shell for managed application users. On dedicated ECUBE hosts, apply SSH group denial as defense in depth so those same accounts are also rejected earlier during SSH authorization:
 
 ```sshconfig
 # /etc/ssh/sshd_config.d/ecube-hardening.conf
@@ -159,7 +160,7 @@ DenyGroups ecube-admins ecube-managers ecube-processors ecube-auditors
 
 Operational guidance:
 
-- Apply this only when you have separate host-admin accounts that are not members of ECUBE role groups.
+- Apply this when you have separate host-admin accounts that are not members of ECUBE role groups.
 - Validate configuration before reload:
 
 ```bash
@@ -175,7 +176,7 @@ sudo systemctl reload ssh
 - Prefer an `sshd_config.d` drop-in over editing the base sshd config file.
 - On LDAP/SSSD/domain-managed hosts, verify group resolution carefully before using `DenyGroups`, because directory-backed group membership may be broader than expected.
 
-If operators require SSH access and ECUBE access on the same account, do not use `DenyGroups`; instead restrict SSH by source network, VPN, bastion, or `AllowGroups`/`AllowUsers` rules that reflect the host administration model.
+If operators require SSH access and ECUBE access on the same identity, provision a separate host-administration account or a distinct SSH authorization path outside the ECUBE role groups.
 
 ## 5. File Permissions
 
