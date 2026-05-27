@@ -265,7 +265,7 @@ The `GET /browse` endpoint allows authenticated users to list directory contents
 **Recommendations:**
 
 - Override `BROWSE_ALLOWED_PREFIXES` to match your actual mount hierarchy. The default (`/mnt/ecube/`, `/mnt/ecube-network/`) covers the standard ECUBE USB and generated network mount roots but may be broader than needed.
-- On deployments where the ECUBE service does not share the operator shell's mount namespace, stale USB browse requests still fail closed because mount-state validation uses the authoritative host mount table when needed.
+- Stale USB browse requests still fail closed because mount-state validation checks the active mount table before browse access is granted.
 - Rediscovery of a project-bound USB drive mounted outside the managed ECUBE USB root does not register that host path as an active browse root. The operator must mount the drive into its managed ECUBE slot before browse access is restored.
 - Tune `BROWSE_MAX_DIR_ENTRIES` (default `50000`) to cap the number of entries a single directory listing may return. Directories exceeding the limit are rejected with `400`. Set to `0` to disable the limit.
 - Avoid adding broad prefixes like `/` or `/home` to the allowlist.

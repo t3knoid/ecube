@@ -128,7 +128,7 @@ def test_mount_drive_uses_service_uid_gid_options_for_exfat_media():
     assert "umask=022" in options
 
 
-def test_mount_drive_uses_mount_namespace_flag_when_mount_namespace_differs():
+def test_mount_drive_uses_plain_sudo_mount_command():
     dm = LinuxDriveMount()
     with patch("app.infrastructure.drive_mount.settings") as mock_settings:
         mock_settings.usb_mount_base_path = _BASE
@@ -141,20 +141,19 @@ def test_mount_drive_uses_mount_namespace_flag_when_mount_namespace_differs():
         with patch("os.path.realpath", side_effect=lambda p: p):
             with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
                 with patch("app.infrastructure.drive_mount.LinuxFilesystemDetector.detect", return_value="ext4"):
-                    with patch("os.readlink", side_effect=["mnt:[2]", "mnt:[1]"]):
-                        with patch("os.makedirs"):
-                            with patch("os.geteuid", return_value=1000):
-                                with patch("os.access", return_value=True):
-                                    with patch("subprocess.run") as mock_run:
-                                        ok, err = dm.mount_drive(_VALID_DEVICE, f"{_BASE}/7")
+                    with patch("os.makedirs"):
+                        with patch("os.geteuid", return_value=1000):
+                            with patch("os.access", return_value=True):
+                                with patch("subprocess.run") as mock_run:
+                                    ok, err = dm.mount_drive(_VALID_DEVICE, f"{_BASE}/7")
 
     assert ok is True
     assert err is None
     mount_call = mock_run.call_args_list[0].args[0]
-    assert mount_call[:5] == ["sudo", "-n", "/bin/mount", "-N", "/proc/1/ns/mnt"]
+    assert mount_call == ["sudo", "-n", "/bin/mount", _VALID_DEVICE, f"{_BASE}/7"]
 
 
-def test_unmount_drive_uses_mount_namespace_flag_when_mount_namespace_differs():
+def test_unmount_drive_uses_plain_sudo_umount_command():
     dm = LinuxDriveMount()
     with patch("app.infrastructure.drive_mount.settings") as mock_settings:
         mock_settings.usb_mount_base_path = _BASE
@@ -162,15 +161,14 @@ def test_unmount_drive_uses_mount_namespace_flag_when_mount_namespace_differs():
         mock_settings.use_sudo = True
         mock_settings.subprocess_timeout_seconds = 10
         with patch("os.path.realpath", side_effect=lambda p: p):
-            with patch("os.readlink", side_effect=["mnt:[2]", "mnt:[1]"]):
-                with patch("os.geteuid", return_value=1000):
-                    with patch("subprocess.run") as mock_run:
-                        ok, err = dm.unmount_drive(f"{_BASE}/7")
+            with patch("os.geteuid", return_value=1000):
+                with patch("subprocess.run") as mock_run:
+                    ok, err = dm.unmount_drive(f"{_BASE}/7")
 
     assert ok is True
     assert err is None
     mount_call = mock_run.call_args_list[0].args[0]
-    assert mount_call[:5] == ["sudo", "-n", "/bin/umount", "-N", "/proc/1/ns/mnt"]
+    assert mount_call == ["sudo", "-n", "/bin/umount", f"{_BASE}/7"]
 
 
 def test_mount_drive_repairs_mount_point_access_for_service_user():

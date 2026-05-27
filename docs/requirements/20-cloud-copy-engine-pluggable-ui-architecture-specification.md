@@ -552,7 +552,7 @@ All Playwright E2E tests include axe-core scans. The artifact enforces at least 
 
 ## 10. i18n Considerations
 
-All user-facing strings are externalized through `vue-i18n` locale keys. The artifact adds a `cloud` namespace that includes labels for:
+All user-facing strings are externalized through `vue-i18n` locale keys. The artifact adds a `cloud` locale key group that includes labels for:
 
 - cloud jobs list and detail screens
 - provider selection and testing

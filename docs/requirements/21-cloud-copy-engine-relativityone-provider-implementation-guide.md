@@ -696,7 +696,7 @@ The artifact requires these prerequisites in the target RelativityOne environmen
 
 ### 13.2 Logging and Diagnostics
 
-The provider uses Python's standard logging hierarchy under the `ecube_provider_relativity` namespace.
+The provider uses Python's standard logging hierarchy under the `ecube_provider_relativity` logger prefix.
 
 | Logger Name | Component |
 |---|---|

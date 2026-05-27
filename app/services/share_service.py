@@ -254,7 +254,7 @@ def _build_nfs_timeout_fallback_message(selected_version: str, fallback_elapsed_
 
 def _should_retry_direct_nfs_helper(error: str) -> bool:
     normalized_error = str(error or "").lower()
-    return "failed to apply fstab options" in normalized_error or "invalid option -- 'n'" in normalized_error
+    return "failed to apply fstab options" in normalized_error
 
 
 def _should_probe_nfs_v3_fallback(
@@ -333,8 +333,6 @@ def _probe_nfs_v3_validation_warning(
 def _mount_command_path(cmd: list[str]) -> str:
     if not cmd:
         return "unknown"
-    if "-N" in cmd:
-        return "mount-namespace-flag"
     if cmd[:2] == ["sudo", "-n"]:
         return "sudo"
     return "direct"
@@ -663,7 +661,7 @@ class LinuxShareProvider:
             return None
 
     def _check_mounted_with_mountpoint(self, local_mount_point: str, timeout: float) -> Optional[bool]:
-        cmd = _with_sudo([settings.mountpoint_binary_path, "-q", local_mount_point])
+        cmd = [settings.mountpoint_binary_path, "-q", local_mount_point]
         result = run_subprocess(cmd, runner=subprocess.run, capture_output=True, timeout=timeout)
         return result.returncode == 0
 

@@ -57,7 +57,7 @@ The most important design-level coverage areas are:
 
 - **Drive eject safety:** partition discovery, mount parsing, nested unmount ordering, encrypted volume handling, and partial failure behavior.
 - **Filesystem detection and formatting:** supported filesystem recognition, unformatted-drive detection, precondition enforcement, and audit behavior around formatting failures.
-- **OS user and group management:** namespace isolation, compensation on partial failure, password validation, and local-only endpoint gating.
+- **OS user and group management:** ECUBE-prefixed account isolation, compensation on partial failure, password validation, and local-only endpoint gating.
 - **Role resolution and OIDC:** deny-by-default semantics, provider-specific group mapping, token validation, and error translation.
 - **Initialization and reconciliation:** first-run setup guards, stale lock reclaim, idempotent startup correction, and recovery from interrupted work.
 - **Concurrency behavior:** conflict detection and correct surfacing of lock contention or uniqueness violations.

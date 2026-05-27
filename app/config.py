@@ -795,7 +795,7 @@ class Settings(BaseSettings):
                 self.network_mount_base_path,
             ])
         except ValueError as exc:
-            raise ValueError("Managed mount base paths must be absolute and on the same filesystem namespace") from exc
+            raise ValueError("Managed mount base paths must be absolute and share a valid common path") from exc
 
         if common_mount_root in (self.usb_mount_base_path, self.network_mount_base_path):
             raise ValueError(

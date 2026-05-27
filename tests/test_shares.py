@@ -2307,7 +2307,7 @@ def test_linux_mount_provider_uses_plain_sudo_mount(monkeypatch):
     assert "-N" not in cmd
 
 
-def test_check_mounted_uses_mountpoint_binary(monkeypatch):
+def test_check_mounted_uses_mountpoint_binary_without_sudo(monkeypatch):
     provider = LinuxShareProvider()
 
     monkeypatch.setattr("app.services.share_service.settings.use_sudo", True)
@@ -2320,7 +2320,7 @@ def test_check_mounted_uses_mountpoint_binary(monkeypatch):
 
     assert mounted is True
     cmd = mock_run.call_args.args[0]
-    assert cmd == ["sudo", "-n", settings.mountpoint_binary_path, "-q", "/nfs/music"]
+    assert cmd == [settings.mountpoint_binary_path, "-q", "/nfs/music"]
 
 
 def test_linux_mount_provider_uses_direct_helper_on_fstab_option_failure():
@@ -2345,29 +2345,6 @@ def test_linux_mount_provider_uses_direct_helper_on_fstab_option_failure():
     direct_cmd = mock_run.call_args_list[1].args[0]
     assert "/sbin/mount.nfs" in direct_cmd
     assert "vers=4.1" in direct_cmd
-
-
-def test_linux_mount_provider_retries_direct_helper_when_namespace_flag_breaks_nfs_helper():
-    provider = LinuxShareProvider()
-
-    first = MagicMock(returncode=1, stderr="/sbin/mount.nfs: invalid option -- 'N'", stdout="")
-    second = MagicMock(returncode=0, stderr="", stdout="")
-
-    with patch("app.services.share_service._resolve_mount_nfs_binary", return_value="/sbin/mount.nfs"), \
-         patch("subprocess.run", side_effect=[first, second]) as mock_run:
-        ok, err = provider.os_mount(
-            MountType.NFS,
-            "192.168.2.250:/mnt/Data/music",
-            "/mnt/music",
-        )
-
-    assert ok is True
-    assert err is None
-    assert mock_run.call_count == 2
-    direct_cmd = mock_run.call_args_list[1].args[0]
-    assert direct_cmd[:4] == ["sudo", "-n", "/sbin/mount.nfs", "-o"]
-    assert "vers=4.1" in direct_cmd
-    assert "-N" not in direct_cmd
 
 
 def test_linux_mount_provider_returns_retry_error_when_fstab_retry_fails():

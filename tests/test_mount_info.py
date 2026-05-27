@@ -33,20 +33,11 @@ def test_read_mount_table_returns_empty_dict_on_oserror(monkeypatch):
 def test_read_mount_table_uses_configured_mounts_path(monkeypatch):
     monkeypatch.setattr(mount_info.settings, "procfs_mounts_path", "/proc/mounts")
 
-    def fake_readlink(path: str) -> str:
-        mapping = {
-            "/proc/self/ns/mnt": "mnt:[4026531840]",
-            "/proc/1/ns/mnt": "mnt:[4026531840]",
-        }
-        return mapping[path]
-
     opened_paths = []
 
     def fake_open(path, *args, **kwargs):
         opened_paths.append(path)
         return mock_open(read_data="/dev/sdb1 /mnt/ecube/7 ext4 rw 0 0\n")()
-
-    monkeypatch.setattr(mount_info.os, "readlink", fake_readlink)
 
     with patch("builtins.open", side_effect=fake_open):
         result = mount_info.read_mount_table()
@@ -55,99 +46,21 @@ def test_read_mount_table_uses_configured_mounts_path(monkeypatch):
     assert opened_paths == ["/proc/mounts"]
 
 
-def test_read_mount_table_prefers_host_mounts_when_namespace_differs(monkeypatch):
-    monkeypatch.setattr(mount_info.settings, "procfs_mounts_path", "/proc/mounts")
 
-    def fake_readlink(path: str) -> str:
-        mapping = {
-            "/proc/self/ns/mnt": "mnt:[4026534000]",
-            "/proc/1/ns/mnt": "mnt:[4026531840]",
-        }
-        return mapping[path]
+def test_read_mount_table_uses_custom_configured_mounts_path(monkeypatch):
+    monkeypatch.setattr(mount_info.settings, "procfs_mounts_path", "/proc/custom-mounts")
 
     opened_paths = []
 
     def fake_open(path, *args, **kwargs):
         opened_paths.append(path)
-        return mock_open(read_data="/dev/sdb1 /mnt/ecube/7 ext4 rw 0 0\n")()
-
-    monkeypatch.setattr(mount_info.os, "readlink", fake_readlink)
+        return mock_open(read_data="/dev/sdc /mnt/ecube/8 exfat rw 0 0\n")()
 
     with patch("builtins.open", side_effect=fake_open):
         result = mount_info.read_mount_table()
 
-    assert result == {"/mnt/ecube/7": "/dev/sdb1"}
-    assert opened_paths == ["/proc/1/mounts"]
-
-
-def test_read_mount_table_prefers_host_mounts_when_host_namespace_probe_fails(monkeypatch, caplog):
-    monkeypatch.setattr(mount_info.settings, "procfs_mounts_path", "/proc/mounts")
-    monkeypatch.setattr(mount_info, "_host_namespace_probe_warning_emitted", False)
-
-    def fake_readlink(path: str) -> str:
-        if path == "/proc/self/ns/mnt":
-            return "mnt:[4026534000]"
-        if path == "/proc/1/ns/mnt":
-            raise OSError("permission denied")
-        raise AssertionError(f"unexpected path {path}")
-
-    opened_paths = []
-
-    def fake_open(path, *args, **kwargs):
-        opened_paths.append(path)
-        return mock_open(read_data="/dev/sdc /mnt/ecube/8 exfat rw 0 0\n")()
-
-    monkeypatch.setattr(mount_info.os, "readlink", fake_readlink)
-
-    with caplog.at_level("WARNING"):
-        with patch("builtins.open", side_effect=fake_open):
-            result = mount_info.read_mount_table()
-
     assert result == {"/mnt/ecube/8": "/dev/sdc"}
-    assert opened_paths == ["/proc/1/mounts"]
-    assert any(
-        record.getMessage() == "Unable to read host mount namespace; assuming namespace differs"
-        for record in caplog.records
-    )
-
-
-def test_read_mount_table_logs_host_namespace_probe_failure_only_once(monkeypatch, caplog):
-    monkeypatch.setattr(mount_info.settings, "procfs_mounts_path", "/proc/mounts")
-    monkeypatch.setattr(mount_info, "_host_namespace_probe_warning_emitted", False)
-
-    def fake_readlink(path: str) -> str:
-        if path == "/proc/self/ns/mnt":
-            return "mnt:[4026534000]"
-        if path == "/proc/1/ns/mnt":
-            raise OSError("permission denied")
-        raise AssertionError(f"unexpected path {path}")
-
-    def fake_open(path, *args, **kwargs):
-        return mock_open(read_data="/dev/sdc /mnt/ecube/8 exfat rw 0 0\n")()
-
-    monkeypatch.setattr(mount_info.os, "readlink", fake_readlink)
-
-    with caplog.at_level("DEBUG"):
-        with patch("builtins.open", side_effect=fake_open):
-            first = mount_info.read_mount_table()
-            second = mount_info.read_mount_table()
-
-    assert first == {"/mnt/ecube/8": "/dev/sdc"}
-    assert second == {"/mnt/ecube/8": "/dev/sdc"}
-    warning_messages = [
-        record.getMessage()
-        for record in caplog.records
-        if record.levelname == "WARNING"
-    ]
-    debug_messages = [
-        record.getMessage()
-        for record in caplog.records
-        if record.levelname == "DEBUG"
-    ]
-    assert warning_messages.count("Unable to read host mount namespace; assuming namespace differs") == 1
-    assert debug_messages.count(
-        "Unable to read host mount namespace; continuing with host mount table fallback"
-    ) == 1
+    assert opened_paths == ["/proc/custom-mounts"]
 
 
 

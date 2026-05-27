@@ -28,7 +28,7 @@ The design documents are grouped by role so readers can move from high-level int
 
 8. `08-programming-language-framework-requirements.md` — stack-selection rationale and framework requirements.
 9. `09-architectural-invariants.md` — synthesis of the guarantees the system must preserve across implementations.
-10. `10-security-and-access-control.md` — identity, authorization, namespace isolation, and security control model.
+10. `10-security-and-access-control.md` — identity, authorization, ECUBE-prefixed account isolation, and security control model.
 
 ### Quality and Runtime Environment
 

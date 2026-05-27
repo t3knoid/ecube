@@ -68,7 +68,7 @@ The following sequence describes the complete lifecycle of a provider plugin wit
 
 ## 3. Core Interfaces
 
-This section defines the abstract base classes that constitute the provider contract. All interfaces use Python 3.10+ type annotations and `asyncio` patterns. Providers MUST implement every abstract method. All code targets the `ecube_provider_sdk` package namespace.
+This section defines the abstract base classes that constitute the provider contract. All interfaces use Python 3.10+ type annotations and `asyncio` patterns. Providers MUST implement every abstract method. All code targets the `ecube_provider_sdk` package name.
 
 ### 3.1 ICloudProvider - Main Entry Point
 
