@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
@@ -911,7 +912,7 @@ def test_mount_drive_requires_filesystem_path(manager_client, db):
     assert "filesystem_path" in response.json()["message"]
 
 
-def test_mount_drive_provider_failure_is_audited(manager_client, db):
+def test_mount_drive_provider_failure_is_audited(manager_client, db, caplog):
     from app.models.audit import AuditLog
 
     drive = UsbDrive(
@@ -926,14 +927,32 @@ def test_mount_drive_provider_failure_is_audited(manager_client, db):
     provider = MagicMock()
     provider.mount_drive.return_value = (False, "mount failed for /dev/sdd at /mnt/ecube/4")
 
-    with patch("app.routers.drives.get_drive_mount", return_value=provider):
-        response = manager_client.post(f"/drives/{drive.id}/mount")
+    with caplog.at_level(logging.DEBUG, logger="app.services.drive_service"):
+        with patch("app.routers.drives.get_drive_mount", return_value=provider):
+            response = manager_client.post(f"/drives/{drive.id}/mount")
 
     assert response.status_code == 500
     assert response.json()["message"] == "Drive mount failed"
     trace_id = response.json()["trace_id"]
     assert trace_id
     assert response.headers["X-Trace-Id"] == trace_id
+
+    info_record = next(
+        record for record in caplog.records
+        if record.name == "app.services.drive_service" and record.getMessage() == "Drive mount failed"
+    )
+    assert info_record.error_code == "MOUNT_FAILED"
+    assert info_record.failure_class == "mount_failed"
+    assert info_record.failure_summary == "Provider mount operation failed"
+    assert info_record.trace_id == trace_id
+
+    debug_record = next(
+        record for record in caplog.records
+        if record.name == "app.services.drive_service" and record.getMessage() == "Drive mount failure diagnostics"
+    )
+    assert debug_record.error_code == "MOUNT_FAILED"
+    assert debug_record.trace_id == trace_id
+    assert debug_record.raw_error == "mount failed for /dev/sdd at /mnt/ecube/4"
 
     audit = db.query(AuditLog).filter(AuditLog.action == "DRIVE_MOUNT_FAILED").first()
     assert audit is not None
@@ -1829,7 +1848,7 @@ def test_prepare_eject_not_found(manager_client, db):
     assert response.status_code == 404
 
 
-def test_prepare_eject_flush_failure(manager_client, db):
+def test_prepare_eject_flush_failure(manager_client, db, caplog):
     """When sync fails the drive stays IN_USE and DRIVE_EJECT_FAILED is logged."""
     drive = UsbDrive(
         device_identifier="USB007",
@@ -1839,11 +1858,32 @@ def test_prepare_eject_flush_failure(manager_client, db):
     db.add(drive)
     db.commit()
 
-    with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject(flush_ok=False, flush_error="sync failed")):
-        response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
+    with caplog.at_level(logging.DEBUG, logger="app.services.drive_service"):
+        with patch("app.routers.drives.get_drive_eject", return_value=_fake_eject(flush_ok=False, flush_error="sync failed")):
+            response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
 
     assert response.status_code == 500
     assert response.json()["message"] == "Drive eject preparation failed"
+
+    info_record = next(
+        record for record in caplog.records
+        if record.name == "app.services.drive_service" and record.getMessage() == "Prepare-eject failed"
+    )
+    trace_id = response.json()["trace_id"]
+    assert info_record.error_code == "EJECT_FLUSH_FAILED"
+    assert info_record.failure_class == "prepare_eject_failed"
+    assert info_record.failure_summary == "Drive flush operation failed"
+    assert info_record.trace_id == trace_id
+
+    debug_record = next(
+        record for record in caplog.records
+        if record.name == "app.services.drive_service" and record.getMessage() == "Prepare-eject failure diagnostics"
+    )
+    assert debug_record.error_code == "EJECT_FLUSH_FAILED"
+    assert debug_record.trace_id == trace_id
+    assert debug_record.raw_flush_error == "sync failed"
+    assert debug_record.flush_ok is False
+    assert debug_record.unmount_ok is True
 
     # Drive state must remain IN_USE.
     db.expire(drive)

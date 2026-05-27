@@ -139,6 +139,7 @@ def prepare_eject(
         eject_provider=get_drive_eject(),
         client_ip=get_client_ip(request),
         confirm_incomplete=confirm_incomplete,
+        trace_id=getattr(request.state, "trace_id", None),
     )
 
 

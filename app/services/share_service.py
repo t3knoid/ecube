@@ -198,6 +198,49 @@ def _log_mount_debug_failure(
     logger.debug("%s: %s raw_error=%s", message, " ".join(context_parts), raw_text)
 
 
+def _log_share_unmount_failure(
+    *,
+    mount_label: str,
+    failure_class: str,
+    failure_summary: str,
+    sanitized_reason: str,
+    raw_error: str,
+    actor: Optional[str] = None,
+    mount_id: Optional[int] = None,
+    mount_type: Optional[MountType] = None,
+    project_id: Optional[str] = None,
+    local_mount_point: Optional[str] = None,
+    trace_id: Optional[str] = None,
+    error_code: str = "MOUNT_UNMOUNT_FAILED",
+) -> None:
+    info_context = {
+        "mount_label": mount_label,
+        "error_code": error_code,
+        "failure_class": failure_class,
+        "failure_summary": failure_summary,
+        "reason": sanitized_reason,
+    }
+    if actor:
+        info_context["actor"] = actor
+    if mount_id is not None:
+        info_context["mount_id"] = mount_id
+    if mount_type is not None:
+        info_context["type"] = mount_type.value
+    if project_id:
+        info_context["project_id"] = project_id
+    if trace_id:
+        info_context["trace_id"] = trace_id
+
+    logger.info("Share unmount failed", extra={"context": info_context})
+
+    debug_context = dict(info_context)
+    debug_context["raw_error"] = raw_error
+    if local_mount_point:
+        debug_context["local_mount_point"] = local_mount_point
+
+    logger.debug("Share unmount failure diagnostics", extra={"context": debug_context})
+
+
 def _timed_mount_attempt(
     provider: "MountProvider",
     mount_type: MountType,
@@ -1162,6 +1205,9 @@ def _prepare_mount_for_update(
     mount: NetworkShare,
     *,
     provider: "MountProvider",
+    actor: Optional[str] = None,
+    trace_id: Optional[str] = None,
+    failure_class: str = "mount_unmount_failed",
 ) -> None:
     local_mount_point = str(mount.local_mount_point)
     if mount.status != MountStatus.MOUNTED or not local_mount_point:
@@ -1193,16 +1239,18 @@ def _prepare_mount_for_update(
         mount.status = MountStatus.UNMOUNTED
         return
 
-    logger.warning(
-        "Mount update aborted because unmount failed",
-        extra={
-            "context": {
-                "mount_id": mount.id,
-                "mount_label": _redacted_mount_label(local_mount_point),
-                "reason": sanitize_error_message(error_text, "Unmount failed"),
-                "failure_category": "mount_unmount",
-            }
-        },
+    _log_share_unmount_failure(
+        mount_id=mount.id,
+        mount_type=mount.type if isinstance(mount.type, MountType) else None,
+        mount_label=_redacted_mount_label(local_mount_point),
+        project_id=normalize_project_id(mount.project_id),
+        actor=actor,
+        trace_id=trace_id,
+        local_mount_point=local_mount_point,
+        failure_class=failure_class,
+        failure_summary="Network share unmount failed",
+        sanitized_reason=sanitize_error_message(error_text, "Unmount failed"),
+        raw_error=error_text,
     )
     raise service_exception(
         status_code=409,
@@ -1263,7 +1311,8 @@ def _restore_mount_after_candidate_validation(
 
 def validate_share_candidate(mount_data: ShareCreate, db: Session, actor: Optional[str] = None,
                              provider: Optional["MountProvider"] = None,
-                             client_ip: Optional[str] = None) -> CandidateNetworkShareSchema:
+                             client_ip: Optional[str] = None,
+                             trace_id: Optional[str] = None) -> CandidateNetworkShareSchema:
     normalized_project_id = normalize_project_id(mount_data.project_id)
     if not isinstance(normalized_project_id, str) or not normalized_project_id:
         raise service_exception(status_code=422, detail="project_id must not be empty")
@@ -1370,22 +1419,29 @@ def validate_share_candidate(mount_data: ShareCreate, db: Session, actor: Option
         )
 
     if restore_error:
+        restore_mount_label = _redacted_mount_label(str(mount.local_mount_point))
         logger.info(
-            "Mount candidate validation could not restore original state",
+            "Mount validation restore failed",
             extra={
                 "context": {
-                    "mount_label": _redacted_mount_label(str(mount.local_mount_point)),
-                    "failure_category": "mount_validate_restore",
+                    "mount_label": restore_mount_label,
                     "project_id": normalized_project_id,
+                    "error_code": "MOUNT_VALIDATE_RESTORE_FAILED",
+                    "failure_class": "mount_validate_restore_failed",
+                    "failure_summary": "Mount validation could not restore original mount state",
+                    "trace_id": trace_id,
                 }
             },
         )
         logger.debug(
-            "Mount candidate validation restore raw error",
+            "Mount validation restore diagnostics",
             extra={
                 "context": {
-                    "mount_label": _redacted_mount_label(str(mount.local_mount_point)),
+                    "mount_label": restore_mount_label,
                     "project_id": normalized_project_id,
+                    "error_code": "MOUNT_VALIDATE_RESTORE_FAILED",
+                    "trace_id": trace_id,
+                    "local_mount_point": str(mount.local_mount_point),
                     "raw_error": restore_error,
                 }
             },
@@ -1774,7 +1830,8 @@ def add_share(mount_data: ShareCreate, db: Session, actor: Optional[str] = None,
 
 def update_share(mount_id: int, mount_data: ShareUpdate, db: Session, actor: Optional[str] = None,
                  provider: Optional["MountProvider"] = None,
-                 client_ip: Optional[str] = None) -> NetworkShare:
+                 client_ip: Optional[str] = None,
+                 trace_id: Optional[str] = None) -> NetworkShare:
     normalized_project_id = normalize_project_id(mount_data.project_id)
     if not isinstance(normalized_project_id, str) or not normalized_project_id:
         raise service_exception(status_code=422, detail="project_id must not be empty")
@@ -1826,7 +1883,13 @@ def update_share(mount_id: int, mount_data: ShareUpdate, db: Session, actor: Opt
         },
     )
     try:
-        _prepare_mount_for_update(mount, provider=provider)
+        _prepare_mount_for_update(
+            mount,
+            provider=provider,
+            actor=actor,
+            trace_id=trace_id,
+            failure_class="mount_update_unmount_failed",
+        )
 
         create_dir_error = _ensure_mount_directory(mount.local_mount_point)
         if create_dir_error:
@@ -1976,7 +2039,8 @@ def update_share(mount_id: int, mount_data: ShareUpdate, db: Session, actor: Opt
 
 def remove_share(mount_id: int, db: Session, actor: Optional[str] = None,
                  provider: Optional["MountProvider"] = None,
-                 client_ip: Optional[str] = None) -> None:
+                 client_ip: Optional[str] = None,
+                 trace_id: Optional[str] = None) -> None:
     mount_repo = ShareRepository(db)
     audit_repo = AuditRepository(db)
 
@@ -2044,11 +2108,18 @@ def remove_share(mount_id: int, db: Session, actor: Optional[str] = None,
                     sanitize_error_message(error_text, "Target was already unmounted"),
                 )
             else:
-                logger.warning(
-                    "Mount removal aborted because unmount failed: mount_id=%s mount_label=%s reason=%s",
-                    mount_id,
-                    _redacted_mount_label(local_mount_point),
-                    sanitize_error_message(error_text, "Unmount failed"),
+                _log_share_unmount_failure(
+                    mount_id=mount_id,
+                    mount_type=mount.type if isinstance(mount.type, MountType) else None,
+                    mount_label=_redacted_mount_label(local_mount_point),
+                    project_id=normalize_project_id(mount.project_id),
+                    actor=actor,
+                    trace_id=trace_id,
+                    local_mount_point=local_mount_point,
+                    failure_class="mount_remove_unmount_failed",
+                    failure_summary="Network share unmount failed",
+                    sanitized_reason=sanitize_error_message(error_text, "Unmount failed"),
+                    raw_error=error_text,
                 )
                 raise service_exception(
                     status_code=409,
@@ -2101,15 +2172,20 @@ def list_shares(db: Session, user_roles: Optional[list[str]] = None):
 
 
 def validate_all_shares(db: Session, actor: Optional[str] = None,
-                        client_ip: Optional[str] = None) -> list[NetworkShare]:
+                        client_ip: Optional[str] = None,
+                        trace_id: Optional[str] = None) -> list[NetworkShare]:
     mount_repo = ShareRepository(db)
     mounts = mount_repo.list_all()
-    return [validate_share(mount.id, db, actor=actor, client_ip=client_ip) for mount in mounts]
+    return [
+        validate_share(mount.id, db, actor=actor, client_ip=client_ip, trace_id=trace_id)
+        for mount in mounts
+    ]
 
 
 def validate_share(mount_id: int, db: Session, actor: Optional[str] = None,
                    provider: Optional["MountProvider"] = None,
                    client_ip: Optional[str] = None,
+                   trace_id: Optional[str] = None,
                    mount_data: Optional[ShareUpdate] = None) -> NetworkShare:
     mount_repo = ShareRepository(db)
     audit_repo = AuditRepository(db)
@@ -2149,7 +2225,13 @@ def validate_share(mount_id: int, db: Session, actor: Optional[str] = None,
         validation_error = None
         try:
             if original_was_mounted:
-                _prepare_mount_for_update(mount, provider=provider)
+                _prepare_mount_for_update(
+                    mount,
+                    provider=provider,
+                    actor=actor,
+                    trace_id=trace_id,
+                    failure_class="mount_validate_unmount_failed",
+                )
 
             create_dir_error = _ensure_mount_directory(mount.local_mount_point)
             if create_dir_error:
@@ -2181,22 +2263,29 @@ def validate_share(mount_id: int, db: Session, actor: Optional[str] = None,
             )
 
         if restore_error:
+            restore_mount_label = _redacted_mount_label(str(mount.local_mount_point))
             logger.info(
-                "Mount candidate validation could not restore original state",
+                "Mount validation restore failed",
                 extra={
                     "context": {
                         "mount_id": mount.id,
-                        "mount_label": _redacted_mount_label(str(mount.local_mount_point)),
-                        "failure_category": "mount_validate_restore",
+                        "mount_label": restore_mount_label,
+                        "error_code": "MOUNT_VALIDATE_RESTORE_FAILED",
+                        "failure_class": "mount_validate_restore_failed",
+                        "failure_summary": "Mount validation could not restore original mount state",
+                        "trace_id": trace_id,
                     }
                 },
             )
             logger.debug(
-                "Mount candidate validation restore raw error",
+                "Mount validation restore diagnostics",
                 extra={
                     "context": {
                         "mount_id": mount.id,
-                        "mount_label": _redacted_mount_label(str(mount.local_mount_point)),
+                        "mount_label": restore_mount_label,
+                        "error_code": "MOUNT_VALIDATE_RESTORE_FAILED",
+                        "trace_id": trace_id,
+                        "local_mount_point": str(mount.local_mount_point),
                         "raw_error": restore_error,
                     }
                 },

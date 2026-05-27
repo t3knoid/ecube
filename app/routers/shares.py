@@ -60,6 +60,7 @@ def update_share(
         db,
         actor=current_user.username,
         client_ip=get_client_ip(request),
+        trace_id=getattr(request.state, "trace_id", None),
     )
 
 
@@ -90,7 +91,12 @@ def validate_all_shares(
 
     **Roles:** ``admin``, ``manager``
     """
-    return share_service.validate_all_shares(db, actor=current_user.username, client_ip=get_client_ip(request))
+    return share_service.validate_all_shares(
+        db,
+        actor=current_user.username,
+        client_ip=get_client_ip(request),
+        trace_id=getattr(request.state, "trace_id", None),
+    )
 
 
 @router.post("/test", response_model=CandidateNetworkShareSchema, responses={**R_401, **R_403, **R_409, **R_422, **R_500})
@@ -113,6 +119,7 @@ def validate_share_candidate(
         db,
         actor=current_user.username,
         client_ip=get_client_ip(request),
+        trace_id=getattr(request.state, "trace_id", None),
     )
 
 
@@ -167,7 +174,13 @@ def remove_share(
 
     **Roles:** ``admin``, ``manager``
     """
-    share_service.remove_share(share_id, db, actor=current_user.username, client_ip=get_client_ip(request))
+    share_service.remove_share(
+        share_id,
+        db,
+        actor=current_user.username,
+        client_ip=get_client_ip(request),
+        trace_id=getattr(request.state, "trace_id", None),
+    )
 
 
 @router.post("/{share_id}/validate", response_model=NetworkShareSchema, responses={**R_401, **R_403, **R_404, **R_409, **R_422, **R_500})
@@ -191,6 +204,7 @@ def validate_share(
         mount_data=body,
         actor=current_user.username,
         client_ip=get_client_ip(request),
+        trace_id=getattr(request.state, "trace_id", None),
     )
 
 

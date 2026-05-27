@@ -686,6 +686,9 @@ def mount_drive(
 
     success, error = provider.mount_drive(initial_filesystem_path, mount_point)
     if not success:
+        failure_code = "MOUNT_FAILED"
+        failure_message = "Provider mount operation failed"
+        failure_detail = sanitize_error_message(error, "Mount provider reported failure")
         if _is_already_mounted_error(error):
             logger.info(
                 "Drive mount rejected because the device is already mounted",
@@ -698,12 +701,27 @@ def mount_drive(
                 status_code=409,
                 detail="Drive is already mounted; refresh drive status and retry",
             )
-        logger.warning(
+        logger.info(
             "Drive mount failed",
             extra={
-                **_safe_drive_log_context(drive, reason=sanitize_error_message(error, "Mount provider reported failure")),
-                "filesystem_type": drive.filesystem_type,
+                "drive_id": drive_id,
+                "actor": actor,
+                "error_code": failure_code,
+                "failure_class": "mount_failed",
+                "failure_summary": failure_message,
                 "trace_id": trace_id,
+            },
+        )
+        logger.debug(
+            "Drive mount failure diagnostics",
+            extra={
+                **_safe_drive_log_context(drive, reason=failure_detail),
+                "filesystem_type": drive.filesystem_type,
+                "actor": actor,
+                "error_code": failure_code,
+                "trace_id": trace_id,
+                "device_path": initial_filesystem_path,
+                "raw_error": error,
             },
         )
         try:
@@ -716,9 +734,9 @@ def mount_drive(
                     "drive_id": drive_id,
                     "device_name": _redacted_device_name(initial_filesystem_path),
                     "mount_slot": _redacted_device_name(mount_point),
-                    "error_code": "MOUNT_FAILED",
-                    "message": "Provider mount operation failed",
-                    "details": sanitize_error_message(error, "Mount provider reported failure"),
+                    "error_code": failure_code,
+                    "message": failure_message,
+                    "details": failure_detail,
                     "trace_id": trace_id,
                 },
                 client_ip=client_ip,
@@ -824,12 +842,13 @@ def mount_drive(
     except Exception:
         rollback_attempted, rollback_ok, rollback_error = _rollback_mount()
         logger.exception(
-            "DB commit failed after successful OS mount for drive %s rollback_attempted=%s rollback_ok=%s mount_slot=%s rollback_reason=%s",
+            "DB commit failed after successful OS mount for drive %s rollback_attempted=%s rollback_ok=%s mount_slot=%s rollback_reason=%s trace_id=%s",
             drive_id,
             rollback_attempted,
             rollback_ok,
             _redacted_device_name(mount_point),
             sanitize_error_message(rollback_error, "Mount rollback failed"),
+            trace_id,
         )
         detail = "Drive mount failed after database update error; rollback attempted"
         if rollback_attempted and not rollback_ok:
@@ -874,7 +893,8 @@ def mount_drive(
 def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                   eject_provider: Optional[DriveEjectProvider] = None,
                   client_ip: Optional[str] = None,
-                  confirm_incomplete: bool = False) -> UsbDrive:
+                  confirm_incomplete: bool = False,
+                  trace_id: Optional[str] = None) -> UsbDrive:
     drive_repo = DriveRepository(db)
     audit_repo = AuditRepository(db)
     provider = eject_provider or _default_eject_provider()
@@ -1067,8 +1087,9 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
             drive_repo.save(drive)
         except Exception:
             logger.exception(
-                "DB commit failed after successful OS eject for drive %s",
+                "DB commit failed after successful OS eject for drive %s trace_id=%s",
                 drive_id,
+                trace_id,
             )
             raise service_exception(
                 status_code=500,
@@ -1129,6 +1150,24 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                     extra={"job_id": assigned_job.id, "event": "DRIVE_EJECT_PREPARED"},
                 )
     else:
+        failure_code = (
+            "EJECT_FLUSH_FAILED"
+            if not result.flush_ok
+            else "EJECT_UNMOUNT_FAILED"
+            if not result.unmount_ok
+            else "EJECT_FAILED"
+        )
+        failure_message = (
+            "Drive flush operation failed"
+            if not result.flush_ok
+            else "Drive unmount operation failed"
+            if not result.unmount_ok
+            else "Drive eject preparation failed"
+        )
+        failure_detail = sanitize_error_message(
+            result.flush_error if not result.flush_ok else result.unmount_error,
+            "Drive eject operation failed",
+        )
         if not result.unmount_ok:
             try:
                 audit_repo.add(
@@ -1159,24 +1198,9 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                     "device_name": _redacted_device_name(initial_device_path),
                     "flush_ok": result.flush_ok,
                     "unmount_ok": result.unmount_ok,
-                    "error_code": (
-                        "EJECT_FLUSH_FAILED"
-                        if not result.flush_ok
-                        else "EJECT_UNMOUNT_FAILED"
-                        if not result.unmount_ok
-                        else "EJECT_FAILED"
-                    ),
-                    "message": (
-                        "Drive flush operation failed"
-                        if not result.flush_ok
-                        else "Drive unmount operation failed"
-                        if not result.unmount_ok
-                        else "Drive eject preparation failed"
-                    ),
-                    "details": sanitize_error_message(
-                        result.flush_error if not result.flush_ok else result.unmount_error,
-                        "Drive eject operation failed",
-                    ),
+                    "error_code": failure_code,
+                    "message": failure_message,
+                    "details": failure_detail,
                 },
                 client_ip=client_ip,
             )
@@ -1199,6 +1223,32 @@ def prepare_eject(drive_id: int, db: Session, actor: Optional[str] = None,
                 status_code=409,
                 detail=recoverable_detail,
             )
+
+        logger.info(
+            "Prepare-eject failed",
+            extra={
+                "drive_id": drive_id,
+                "actor": actor,
+                "error_code": failure_code,
+                "failure_class": "prepare_eject_failed",
+                "failure_summary": failure_message,
+                "trace_id": trace_id,
+            },
+        )
+        logger.debug(
+            "Prepare-eject failure diagnostics",
+            extra={
+                "drive_id": drive_id,
+                "actor": actor,
+                "error_code": failure_code,
+                "trace_id": trace_id,
+                "flush_ok": result.flush_ok,
+                "unmount_ok": result.unmount_ok,
+                "device_path": initial_device_path,
+                "raw_flush_error": result.flush_error,
+                "raw_unmount_error": result.unmount_error,
+            },
+        )
 
         raise service_exception(
             status_code=500,
