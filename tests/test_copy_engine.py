@@ -3413,8 +3413,8 @@ def test_run_copy_job_applies_runtime_tuning_updates_at_batch_boundaries(db, tmp
         pending = original_list_pending(self, job_id, after_id=after_id, limit=1)
         return pending[:1]
 
-    def _runtime_tuning_snapshot(snapshot_job_id):
-        snapshot = original_read_tuning_snapshot(snapshot_job_id)
+    def _runtime_tuning_snapshot(db_session, snapshot_job_id):
+        snapshot = original_read_tuning_snapshot(db_session, snapshot_job_id)
         if snapshot is None:
             return None
         if retune_enabled:
