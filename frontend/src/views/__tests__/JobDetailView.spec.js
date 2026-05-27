@@ -998,6 +998,45 @@ describe('JobDetailView start action', () => {
     expect(wrapper.findAll('button').some((node) => node.text() === i18n.global.t('jobs.archiveWithoutHandoff'))).toBe(false)
   })
 
+  it('hides the mobile overflow menu when all secondary actions are disabled', async () => {
+    setMobileViewport(true)
+    let resolveAnalyze
+    mocks.analyzeJob.mockImplementation(
+      () => new Promise((resolve) => {
+        resolveAnalyze = resolve
+      }),
+    )
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('.actions-menu').exists()).toBe(true)
+
+    const analyzeButton = findJobActionButtons(wrapper).find((button) => button.text() === i18n.global.t('jobs.analyze'))
+    expect(analyzeButton).toBeTruthy()
+
+    await analyzeButton.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.actions-menu').exists()).toBe(false)
+
+    resolveAnalyze({
+      id: 6,
+      status: 'PENDING',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      thread_count: 4,
+      copied_bytes: 0,
+      total_bytes: 0,
+      startup_analysis_status: 'ANALYZING',
+      startup_analysis_cached: true,
+      startup_analysis_ready: false,
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      drive: { id: 1, available_bytes: 2048 },
+    })
+    await flushPromises()
+  })
+
   it('loads archived job-scoped CoC snapshots and exposes print/export affordances', async () => {
     mocks.getJob.mockResolvedValue({
       id: 6,
@@ -3625,6 +3664,36 @@ describe('JobDetailView start action', () => {
 
     const ejectButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('drives.prepareEject'))
     expect(ejectButton).toBeTruthy()
+  })
+
+  it('keeps prepare-eject as a primary action on mobile instead of putting it in overflow', async () => {
+    setMobileViewport(true)
+    mocks.hasAnyRole.mockImplementation((roles) => roles.includes('admin') || roles.includes('manager'))
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 10,
+      total_bytes: 10,
+      file_count: 1,
+      files_succeeded: 1,
+      files_failed: 0,
+      files_timed_out: 0,
+      startup_analysis_status: 'READY',
+      custody_status: 'HANDOFF_RECORDED',
+      drive: { id: 1, current_state: 'AVAILABLE', is_mounted: false, mount_path: '/media/ecube/drive-1', current_project_id: 'PROJ-001' },
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const primaryButtons = findJobActionButtons(wrapper)
+    expect(primaryButtons.map((button) => button.text())).toContain(i18n.global.t('drives.prepareEject'))
+    expect(wrapper.find('.detail-action-menu-prepare-eject').exists()).toBe(false)
   })
 
   it('shows the prepare-eject button for completed jobs regardless of custody status', async () => {

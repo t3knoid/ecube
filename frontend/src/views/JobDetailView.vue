@@ -726,18 +726,24 @@ const actionItems = computed(() => {
 const primaryActions = computed(() => {
   const keys = new Set(primaryActionKeys.value)
   const items = actionItems.value.filter((item) => keys.has(item.key))
+  const resolvedItems = items.length > 0 ? items : actionItems.value.slice(0, 3)
 
-  if (items.length > 0) {
-    return items
+  if (isMobileViewport.value && canPrepareEject.value) {
+    const prepareEjectAction = actionItems.value.find((item) => item.key === 'prepare-eject')
+    if (prepareEjectAction && !resolvedItems.some((item) => item.key === 'prepare-eject')) {
+      return [...resolvedItems, prepareEjectAction]
+    }
   }
 
-  return actionItems.value.slice(0, 3)
+  return resolvedItems
 })
 
 const secondaryActions = computed(() => {
   const primaryKeys = new Set(primaryActions.value.map((item) => item.key))
   return actionItems.value.filter((item) => !primaryKeys.has(item.key))
 })
+
+const hasEnabledSecondaryActions = computed(() => secondaryActions.value.some((item) => !item.disabled))
 
 const editEligibleMounts = computed(() => {
   const projectId = normalizeProjectId(editForm.value.project_id)
@@ -2355,7 +2361,7 @@ onUnmounted(() => {
             {{ action.label }}
           </button>
         </template>
-        <details v-if="isMobileViewport && secondaryActions.length" class="actions-menu">
+        <details v-if="isMobileViewport && secondaryActions.length && hasEnabledSecondaryActions" class="actions-menu">
           <summary class="actions-menu-toggle" :aria-label="`${t('jobs.detail')} actions`">
             <span class="actions-menu-toggle-dots" aria-hidden="true">
               <span class="actions-menu-toggle-dot" />
