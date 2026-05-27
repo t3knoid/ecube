@@ -336,6 +336,7 @@ describe('SharesView removal flow', () => {
       .find((node) => node.text() === '27')
 
     expect(jobButton).toBeTruthy()
+    expect(jobButton.attributes('title')).toBe('Show job ID 27')
 
     await jobButton.trigger('click')
     await flushPromises()

@@ -134,6 +134,7 @@
   "jobs": {
     "title": "Jobs",
     "detail": "Job Detail",
+    "showJobId": "Show job ID {id}",
     "placeholder": "Jobs view will be implemented in a future phase.",
     "activeJobs": "Active Jobs",
     "jobId": "Job ID",
