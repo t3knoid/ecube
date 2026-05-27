@@ -1828,11 +1828,14 @@ Report whether the application database has already been provisioned.
     "provisioned": true,
     "configured": true,
     "schema_incomplete": false,
+    "resources_missing": false,
     "warning_message": null
 }
 ```
 
-When `DATABASE_URL` is configured but the target database still has no Alembic revision or a partial schema, this endpoint returns `provisioned: false`, `configured: true`, `schema_incomplete: true`, and a safe warning message explaining that the current schema is incomplete until Alembic migrations complete successfully.
+When `DATABASE_URL` is configured but the target database still has no Alembic revision or a partial schema, this endpoint returns `provisioned: false`, `configured: true`, `schema_incomplete: true`, `resources_missing: false`, and a safe warning message explaining that the current schema is incomplete until Alembic migrations complete successfully.
+
+When `DATABASE_URL` is configured but still points at a database or application role that has not been created yet, this endpoint returns `provisioned: false`, `configured: true`, `schema_incomplete: false`, `resources_missing: true`, and a safe warning message telling the operator to complete database provisioning.
 
 **Error responses:**
 
@@ -1840,7 +1843,7 @@ When `DATABASE_URL` is configured but the target database still has no Alembic r
 - `403 Forbidden` — Non-admin role (after setup)
 - `503 Service Unavailable` — Database unreachable and no valid admin JWT provided (fail-closed)
 
-**Consumer behavior:** The setup wizard can call this on load to disable the Provision button when the database is already provisioned, and to show a dedicated warning banner when the runtime points at a configured but incompletely migrated schema.
+**Consumer behavior:** The setup wizard can call this on load to disable the Provision button when the database is already provisioned, and to show a dedicated warning banner when the runtime points at either an incompletely migrated schema or missing provisioned database resources.
 
 #### `GET /setup/database/system-info`
 

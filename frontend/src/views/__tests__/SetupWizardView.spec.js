@@ -74,7 +74,13 @@ describe('SetupWizardView existing admin reconciliation', () => {
       in_docker: false,
     })
     mocks.getSetupStatus.mockResolvedValue({ initialized: false })
-    mocks.getDatabaseProvisionStatus.mockResolvedValue({ provisioned: false })
+    mocks.getDatabaseProvisionStatus.mockResolvedValue({
+      provisioned: false,
+      configured: false,
+      schema_incomplete: false,
+      resources_missing: false,
+      warning_message: null,
+    })
     mocks.connectDatabase.mockResolvedValue({})
     mocks.provisionDatabase.mockResolvedValue({})
   })
@@ -235,6 +241,7 @@ describe('SetupWizardView existing admin reconciliation', () => {
       provisioned: false,
       configured: true,
       schema_incomplete: true,
+      resources_missing: false,
       warning_message: 'Database connection settings are configured, but the current schema is incomplete. The application may show errors until Alembic migrations complete successfully.',
     })
 
@@ -260,6 +267,7 @@ describe('SetupWizardView existing admin reconciliation', () => {
       provisioned: true,
       configured: true,
       schema_incomplete: false,
+      resources_missing: false,
       warning_message: null,
     })
 
@@ -276,6 +284,31 @@ describe('SetupWizardView existing admin reconciliation', () => {
 
     expect(wrapper.find('.warning-banner').exists()).toBe(false)
     expect(wrapper.text()).toContain(i18n.global.t('setup.provisionAlready'))
+  })
+
+  it('shows a provisioning warning when the configured database or role is missing', async () => {
+    mocks.getDatabaseProvisionStatus.mockResolvedValue({
+      provisioned: false,
+      configured: true,
+      schema_incomplete: false,
+      resources_missing: true,
+      warning_message: 'Database connection settings are configured, but the configured database or role is not available yet. Complete database provisioning before continuing.',
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.find('#db-admin-user').setValue('postgres')
+    await wrapper.find('#db-admin-pass').setValue('DbAdmin#123')
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('setup.connectDatabase')).trigger('click')
+    await flushPromises()
+
+    await wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.next')).trigger('click')
+    await flushPromises()
+
+    const warning = wrapper.find('.warning-banner')
+    expect(warning.exists()).toBe(true)
+    expect(warning.text()).toContain('configured database or role is not available yet')
   })
 
   it('skips the create-admin step when demo mode is enabled', async () => {

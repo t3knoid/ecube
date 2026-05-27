@@ -124,9 +124,13 @@ class DatabaseProvisionStatusResponse(BaseModel):
         ...,
         description="Whether the configured database still has an incomplete Alembic schema",
     )
+    resources_missing: bool = Field(
+        ...,
+        description="Whether the configured database or application role does not exist yet",
+    )
     warning_message: Optional[str] = Field(
         default=None,
-        description="Operator-safe warning shown when the configured schema is incomplete",
+        description="Operator-safe warning shown when configured database provisioning is incomplete",
     )
 
 

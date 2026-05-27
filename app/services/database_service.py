@@ -279,6 +279,35 @@ def is_database_provisioned() -> bool:
     return _get_current_revision(settings.database_url) is not None
 
 
+def get_database_provision_status() -> Dict[str, Any]:
+    """Describe whether the configured database is provisioned and usable."""
+    from app.config import settings
+
+    state, _current_revision = _get_current_revision_state(settings.database_url)
+    provisioned = state == "provisioned"
+    schema_incomplete = state == "schema_incomplete"
+    resources_missing = state == "resources_missing"
+
+    warning_message = None
+    if schema_incomplete:
+        warning_message = (
+            "Database connection settings are configured, but the current schema is incomplete. "
+            "The application may show errors until Alembic migrations complete successfully."
+        )
+    elif resources_missing:
+        warning_message = (
+            "Database connection settings are configured, but the configured database or role is not available yet. "
+            "Complete database provisioning before continuing."
+        )
+
+    return {
+        "provisioned": provisioned,
+        "schema_incomplete": schema_incomplete,
+        "resources_missing": resources_missing,
+        "warning_message": warning_message,
+    }
+
+
 def migrate_configured_database_schema() -> int:
     """Run Alembic migrations for the currently configured DATABASE_URL.
 
@@ -343,30 +372,32 @@ def _get_current_revision(database_url: str) -> Optional[str]:
     connection-level error prevents the check (transient outage, server
     unreachable, authentication failure with an *existing* role, etc.).
     """
+    state, current_revision = _get_current_revision_state(database_url)
+    if state != "provisioned":
+        return None
+    return current_revision
+
+
+def _get_current_revision_state(database_url: str) -> tuple[str, Optional[str]]:
+    """Return the provisioning state and current Alembic revision, if any."""
     from app.exceptions import DatabaseStatusUnknownError
 
-    # PostgreSQL SQLSTATE codes that indicate the target DB/role has not
-    # been created yet — i.e. the system is genuinely unprovisioned.
-    _NOT_PROVISIONED_PGCODES = frozenset({
-        "3D000",  # invalid_catalog_name  – database does not exist
-        "28000",  # invalid_authorization_specification – role does not exist
+    not_provisioned_pgcodes = frozenset({
+        "3D000",  # invalid_catalog_name - database does not exist
+        "28000",  # invalid_authorization_specification - role does not exist
     })
 
     try:
-        # psycopg2.connect() expects a plain libpq DSN or a postgresql://
-        # URL.  SQLAlchemy URLs use a dialect suffix (e.g.
-        # "postgresql+psycopg2://…") that libpq cannot parse.  Strip it.
         dsn = _strip_sqlalchemy_dialect(database_url)
         conn = psycopg2.connect(dsn, connect_timeout=_STATUS_CONNECT_TIMEOUT)
     except psycopg2.OperationalError as exc:
         pgcode = getattr(exc, "pgcode", None)
-        if pgcode in _NOT_PROVISIONED_PGCODES:
+        if pgcode in not_provisioned_pgcodes:
             logger.info(
-                "Target database/role does not exist (SQLSTATE %s); "
-                "treating as not provisioned.",
+                "Target database/role does not exist (SQLSTATE %s); treating as not provisioned.",
                 pgcode,
             )
-            return None
+            return "resources_missing", None
         raise DatabaseStatusUnknownError(
             f"Cannot connect to database to verify provisioning state: {exc}"
         ) from exc
@@ -381,10 +412,12 @@ def _get_current_revision(database_url: str) -> Optional[str]:
                 ")"
             )
             if not cur.fetchone()[0]:
-                return None
+                return "schema_incomplete", None
             cur.execute("SELECT version_num FROM alembic_version")
             row = cur.fetchone()
-            return row[0] if row else None
+            if row:
+                return "provisioned", row[0]
+            return "schema_incomplete", None
         finally:
             cur.close()
     finally:

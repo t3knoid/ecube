@@ -568,10 +568,11 @@ def get_database_provision_status(
             provisioned=False,
             configured=False,
             schema_incomplete=False,
+            resources_missing=False,
         )
 
     try:
-        provisioned = database_service.is_database_provisioned()
+        status_data = database_service.get_database_provision_status()
     except DatabaseStatusUnknownError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -581,25 +582,16 @@ def get_database_provision_status(
             ),
         )
 
-    schema_incomplete = configured and not provisioned
-    warning_message = None
-    if schema_incomplete:
-        warning_message = (
-            "Database connection settings are configured, but the current schema is incomplete. "
-            "The application may show errors until Alembic migrations complete successfully."
-        )
-
     logger.info(
-        "DATABASE_PROVISION_STATUS configured=true provisioned=%s schema_incomplete=%s",
-        provisioned,
-        schema_incomplete,
+        "DATABASE_PROVISION_STATUS configured=true provisioned=%s schema_incomplete=%s resources_missing=%s",
+        status_data["provisioned"],
+        status_data["schema_incomplete"],
+        status_data["resources_missing"],
     )
 
     return DatabaseProvisionStatusResponse(
-        provisioned=provisioned,
         configured=True,
-        schema_incomplete=schema_incomplete,
-        warning_message=warning_message,
+        **status_data,
     )
 
 

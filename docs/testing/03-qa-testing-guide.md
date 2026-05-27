@@ -1062,8 +1062,9 @@ curl -sk https://localhost:8443/setup/database/system-info | jq
 
 # Check whether database is already provisioned (public before setup, admin-only after)
 curl -sk https://localhost:8443/setup/database/provision-status | jq
-# Expected during initial setup with no DATABASE_URL yet: 200, {"provisioned": false, "configured": false, "schema_incomplete": false, "warning_message": null}
-# Expected during recovery with DATABASE_URL set but schema still incomplete: 200, {"provisioned": false, "configured": true, "schema_incomplete": true, "warning_message": "...Alembic migrations complete successfully."}
+# Expected during initial setup with no DATABASE_URL yet: 200, {"provisioned": false, "configured": false, "schema_incomplete": false, "resources_missing": false, "warning_message": null}
+# Expected during recovery with DATABASE_URL set but schema still incomplete: 200, {"provisioned": false, "configured": true, "schema_incomplete": true, "resources_missing": false, "warning_message": "...Alembic migrations complete successfully."}
+# Expected when DATABASE_URL still points at a missing DB or role: 200, {"provisioned": false, "configured": true, "schema_incomplete": false, "resources_missing": true, "warning_message": "...Complete database provisioning before continuing."}
 
 # Test PostgreSQL connectivity (unauthenticated during initial setup)
 curl -sk -X POST https://localhost:8443/setup/database/test-connection \
@@ -2216,7 +2217,7 @@ Only a truly unreachable server (connection refused, timeout, network failure) t
 | # | Test | How | Expected |
 |---|------|-----|----------|
 | 1 | System info — Linux host defaults | `GET /setup/database/system-info` before setup | 200, `{"in_docker": false, "suggested_db_host": "localhost"}` |
-| 2 | Provision status — pre-init public | `GET /setup/database/provision-status` before any admin exists | 200, `{"provisioned": false}` |
+| 2 | Provision status — pre-init public | `GET /setup/database/provision-status` before any admin exists | 200, `{"provisioned": false, "configured": false, "schema_incomplete": false, "resources_missing": false, "warning_message": null}` |
 | 3 | Provision status — post-init requires admin | `GET /setup/database/provision-status` without token after setup | 401 |
 | 4 | Provision status — state unknown | Stop PostgreSQL, `GET /setup/database/provision-status` during initial setup | 503, cannot determine provisioning state |
 | 5 | Test connection — success | `POST /setup/database/test-connection` with valid PostgreSQL credentials | 200, `{"status": "ok", "server_version": "..."}` |
@@ -2251,6 +2252,7 @@ Only a truly unreachable server (connection refused, timeout, network failure) t
 | 34 | Provision — .env write failure | `POST /setup/database/provision` after making `.env` read-only (or disk full) | 500, "failed to persist" message; engine not swapped |
 | 35 | Provision — engine reinit failure | `POST /setup/database/provision` while another reinit is in progress (lock contention) | 500, "engine could not be switched" message; `.env` already written |
 | 36 | Setup wizard warning — configured incomplete schema | Start ECUBE with `DATABASE_URL` pointing at a database that exists but has no `alembic_version` row (or an incomplete schema), open `/setup`, and advance to the provisioning step | The wizard shows a dedicated warning explaining that the current schema is incomplete and may cause application errors until Alembic migrations complete successfully |
+| 37 | Setup wizard warning — configured database resources missing | Start ECUBE with `DATABASE_URL` pointing at an application database or role that does not exist yet, open `/setup`, and advance to the provisioning step | The wizard shows a dedicated warning explaining that database provisioning is incomplete and must be completed before continuing |
 
 ### 12.14 Startup State Reconciliation
 

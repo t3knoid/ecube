@@ -771,9 +771,20 @@ class TestSystemInfoEndpoint:
 class TestProvisionStatusEndpoint:
     """Tests for GET /setup/database/provision-status."""
 
-    @patch("app.services.database_service.is_database_provisioned", return_value=False)
+    @patch(
+        "app.services.database_service.get_database_provision_status",
+        return_value={
+            "provisioned": False,
+            "schema_incomplete": True,
+            "resources_missing": False,
+            "warning_message": (
+                "Database connection settings are configured, but the current schema is incomplete. "
+                "The application may show errors until Alembic migrations complete successfully."
+            ),
+        },
+    )
     def test_provision_status_unauthenticated_allowed_pre_init(
-        self, mock_provisioned, unauthenticated_client
+        self, mock_provision_status, unauthenticated_client
     ):
         resp = unauthenticated_client.get("/setup/database/provision-status")
 
@@ -782,16 +793,25 @@ class TestProvisionStatusEndpoint:
             "provisioned": False,
             "configured": True,
             "schema_incomplete": True,
+            "resources_missing": False,
             "warning_message": (
                 "Database connection settings are configured, but the current schema is incomplete. "
                 "The application may show errors until Alembic migrations complete successfully."
             ),
         }
-        mock_provisioned.assert_called_once_with()
+        mock_provision_status.assert_called_once_with()
 
-    @patch("app.services.database_service.is_database_provisioned", return_value=True)
+    @patch(
+        "app.services.database_service.get_database_provision_status",
+        return_value={
+            "provisioned": True,
+            "schema_incomplete": False,
+            "resources_missing": False,
+            "warning_message": None,
+        },
+    )
     def test_provision_status_returns_no_warning_when_schema_complete(
-        self, mock_provisioned, unauthenticated_client
+        self, mock_provision_status, unauthenticated_client
     ):
         resp = unauthenticated_client.get("/setup/database/provision-status")
 
@@ -800,14 +820,53 @@ class TestProvisionStatusEndpoint:
             "provisioned": True,
             "configured": True,
             "schema_incomplete": False,
+            "resources_missing": False,
             "warning_message": None,
         }
-        mock_provisioned.assert_called_once_with()
+        mock_provision_status.assert_called_once_with()
+
+    @patch(
+        "app.services.database_service.get_database_provision_status",
+        return_value={
+            "provisioned": False,
+            "schema_incomplete": False,
+            "resources_missing": True,
+            "warning_message": (
+                "Database connection settings are configured, but the configured database or role is not available yet. "
+                "Complete database provisioning before continuing."
+            ),
+        },
+    )
+    def test_provision_status_reports_missing_database_resources_separately(
+        self, mock_provision_status, unauthenticated_client
+    ):
+        resp = unauthenticated_client.get("/setup/database/provision-status")
+
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "provisioned": False,
+            "configured": True,
+            "schema_incomplete": False,
+            "resources_missing": True,
+            "warning_message": (
+                "Database connection settings are configured, but the configured database or role is not available yet. "
+                "Complete database provisioning before continuing."
+            ),
+        }
+        mock_provision_status.assert_called_once_with()
 
     @patch("app.routers.database_setup._admins_have_any_os_account", return_value=True)
-    @patch("app.services.database_service.is_database_provisioned", return_value=True)
+    @patch(
+        "app.services.database_service.get_database_provision_status",
+        return_value={
+            "provisioned": True,
+            "schema_incomplete": False,
+            "resources_missing": False,
+            "warning_message": None,
+        },
+    )
     def test_provision_status_requires_admin_after_setup(
-        self, mock_provisioned, _mock_admin_os_state, unauthenticated_client, db
+        self, mock_provision_status, _mock_admin_os_state, unauthenticated_client, db
     ):
         db.add(UserRole(username="admin-user", role="admin"))
         db.commit()
@@ -815,7 +874,7 @@ class TestProvisionStatusEndpoint:
         resp = unauthenticated_client.get("/setup/database/provision-status")
 
         assert resp.status_code == 401
-        mock_provisioned.assert_not_called()
+        mock_provision_status.assert_not_called()
 
     def test_provision_status_503_when_provisioning_state_unknown(
         self, unauthenticated_client
@@ -826,7 +885,7 @@ class TestProvisionStatusEndpoint:
             "app.routers.database_setup._database_is_configured",
             return_value=True,
         ), patch(
-            "app.services.database_service.is_database_provisioned",
+            "app.services.database_service.get_database_provision_status",
             side_effect=DatabaseStatusUnknownError(),
         ):
             resp = unauthenticated_client.get("/setup/database/provision-status")
@@ -834,10 +893,10 @@ class TestProvisionStatusEndpoint:
         assert resp.status_code == 503
         assert "provisioning state" in resp.json()["message"].lower()
 
-    @patch("app.services.database_service.is_database_provisioned")
+    @patch("app.services.database_service.get_database_provision_status")
     @patch("app.routers.database_setup._database_is_configured", return_value=False)
     def test_provision_status_false_when_db_not_configured(
-        self, _mock_configured, mock_is_provisioned, unauthenticated_client
+        self, _mock_configured, mock_provision_status, unauthenticated_client
     ):
         resp = unauthenticated_client.get("/setup/database/provision-status")
 
@@ -846,9 +905,10 @@ class TestProvisionStatusEndpoint:
             "provisioned": False,
             "configured": False,
             "schema_incomplete": False,
+            "resources_missing": False,
             "warning_message": None,
         }
-        mock_is_provisioned.assert_not_called()
+        mock_provision_status.assert_not_called()
 
 
 class TestSetupWizardLogging:
@@ -1707,6 +1767,51 @@ class TestDatabaseService:
 
             from app.services.database_service import is_database_provisioned
             assert is_database_provisioned() is False
+
+    def test_get_database_provision_status_reports_missing_resources(self):
+        """Provision status distinguishes missing DB/role from incomplete schema."""
+        import psycopg2 as real_psycopg2
+
+        class _PgError(real_psycopg2.OperationalError):
+            pgcode = "3D000"
+
+        with patch("app.services.database_service.psycopg2") as mock_pg:
+            mock_pg.OperationalError = real_psycopg2.OperationalError
+            mock_pg.connect.side_effect = _PgError('database "ecube" does not exist')
+
+            from app.services.database_service import get_database_provision_status
+
+            status = get_database_provision_status()
+            assert status == {
+                "provisioned": False,
+                "schema_incomplete": False,
+                "resources_missing": True,
+                "warning_message": (
+                    "Database connection settings are configured, but the configured database or role is not available yet. "
+                    "Complete database provisioning before continuing."
+                ),
+            }
+
+    def test_get_database_provision_status_reports_incomplete_schema(self):
+        """Provision status reports incomplete schema when alembic_version is absent."""
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
+        mock_cur.fetchone.return_value = (False,)
+        mock_conn.cursor.return_value = mock_cur
+
+        with patch("app.services.database_service.psycopg2.connect", return_value=mock_conn):
+            from app.services.database_service import get_database_provision_status
+
+            status = get_database_provision_status()
+            assert status == {
+                "provisioned": False,
+                "schema_incomplete": True,
+                "resources_missing": False,
+                "warning_message": (
+                    "Database connection settings are configured, but the current schema is incomplete. "
+                    "The application may show errors until Alembic migrations complete successfully."
+                ),
+            }
 
     @patch("app.services.database_service._write_env_setting")
     @patch("app.services.database_service._reinitialize_engine")

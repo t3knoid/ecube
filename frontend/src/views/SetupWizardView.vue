@@ -270,7 +270,7 @@ onMounted(async () => {
         provisionOk.value = true
         provisionWarning.value = ''
         provisionNote.value = t('setup.provisionAlready')
-      } else if (provisionStatus?.schema_incomplete === true) {
+      } else if (typeof provisionStatus?.warning_message === 'string' && provisionStatus.warning_message.trim()) {
         provisionWarning.value = String(provisionStatus?.warning_message || '').trim()
       }
     } catch {
