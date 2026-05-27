@@ -778,7 +778,8 @@ Use a large enough source tree that ECUBE needs noticeable startup analysis time
 For the current Jobs page UI, verify the grouped `Create Job` dialog behaves as follows:
 
 - When the dialog opens, only the `Project` field is active.
-- When the dialog opens, keyboard focus moves to the `Project` field, `Tab` stays trapped inside the modal, `Escape` closes the dialog, and focus returns to the `Create Job` button.
+- When the dialog opens, keyboard focus moves to the `Project` field, `Tab` stays trapped inside the modal, and closing a pristine dialog with `Escape` returns focus to the `Create Job` button.
+- If the operator has entered values, `Escape`, `Cancel`, and click-away open a discard-confirmation dialog. Canceling that confirmation preserves the draft, and confirming discard closes the dialog and returns focus to the `Create Job` button.
 - Required fields use the shared inline required-marker icon, and the footer includes a `Required field` legend using the same marker.
 - After selecting a project, the `Source` and `Destination` sections unlock and show only mounted project-matching sources and eligible mounted USB drives.
 - If no matching project, mount, or drive exists, the dialog shows the corresponding helper message instead of an empty or generic failure state.

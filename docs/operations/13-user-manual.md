@@ -1518,6 +1518,8 @@ Notes:
 10. Monitor progress until completion.
 11. Run verification and generate a manifest if required by your workflow.
 
+If you dismiss a partially completed Create Job draft with `Escape`, `Cancel`, or click-away, ECUBE opens a discard-confirmation dialog before it clears the entered values.
+
 If the job should notify an external case-management or orchestration system when it completes, enter the destination `Webhook callback URL` during job creation. Leave the field blank if the job should use the administrator-configured system default instead.
 
 Important prerequisite reminder:

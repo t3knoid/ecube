@@ -300,6 +300,31 @@ describe('JobsView grouped create dialog', () => {
     expect(wrapper.find('#job-project').exists()).toBe(false)
   })
 
+  it('opens a single active modal when Escape dismisses a dirty create dialog', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const createButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.create'))
+    await createButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#job-project').setValue('PROJ-001')
+    await flushPromises()
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.discardCreateConfirmTitle'))
+    expect(wrapper.findAll('.dialog-panel[aria-modal="true"]')).toHaveLength(1)
+    expect(wrapper.find('[aria-hidden="true"] #job-project').exists()).toBe(true)
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain(i18n.global.t('jobs.discardCreateConfirmTitle'))
+    expect(wrapper.find('#job-project').exists()).toBe(true)
+  })
+
   it('excludes archived jobs by default and reloads them when requested', async () => {
     mocks.hasArchivedJobs.mockResolvedValue(true)
     mocks.listJobs

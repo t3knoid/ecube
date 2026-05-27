@@ -731,7 +731,7 @@ function requestCloseCreateDialog() {
 }
 
 function handleCreateDialogKeydown(event) {
-  if (!showCreateDialog.value) return
+  if (!showCreateDialog.value || showCreateDiscardDialog.value) return
   if (event.key === 'Escape') {
     event.preventDefault()
     requestCloseCreateDialog()
@@ -937,7 +937,15 @@ onBeforeUnmount(() => {
 
     <teleport to="body">
       <div v-if="showCreateDialog" class="dialog-overlay" @click.self="requestCloseCreateDialog">
-        <div ref="createDialogRef" class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="job-editor-title">
+        <div
+          ref="createDialogRef"
+          class="dialog-panel"
+          :role="showCreateDiscardDialog ? undefined : 'dialog'"
+          :aria-modal="showCreateDiscardDialog ? undefined : 'true'"
+          :aria-hidden="showCreateDiscardDialog ? 'true' : undefined"
+          :inert="showCreateDiscardDialog ? '' : undefined"
+          aria-labelledby="job-editor-title"
+        >
           <JobEditorDialogContent
             :title="t('jobs.createDialog')"
             :description="t('jobs.dialogDescription')"
