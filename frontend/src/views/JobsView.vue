@@ -7,6 +7,7 @@ import { useCopyTuningDefaultsStore } from '@/stores/copyTuningDefaults.js'
 import { hasArchivedJobs, listJobs, createJob, startJob, pauseJob } from '@/api/jobs.js'
 import { getDrives } from '@/api/drives.js'
 import { getShares } from '@/api/shares.js'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import JobEditorDialogContent from '@/components/jobs/JobEditorDialogContent.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
@@ -38,6 +39,7 @@ const createDialogError = ref('')
 const compatibilityNote = ref('')
 
 const showCreateDialog = ref(false)
+const showCreateDiscardDialog = ref(false)
 const showSourceBrowser = ref(false)
 const showPausePendingDialog = ref(false)
 const pausePendingJobId = ref(null)
@@ -54,20 +56,24 @@ const pageSize = ref(10)
 const isMobileViewport = ref(false)
 let mobileViewportQuery = null
 
-const form = ref({
-  project_id: '',
-  evidence_number: '',
-  drive_id: null,
-  overflow_drive_ids: [],
-  mount_id: null,
-  source_path: '/',
-  ...copyTuningDefaults.currentDefaults(),
-  startup_analysis_auto_apply_recommended_profile: false,
-  notes: '',
-  allow_insecure_callback_url: false,
-  callback_url: '',
-  run_immediately: false,
-})
+function buildCreateJobForm() {
+  return {
+    project_id: '',
+    evidence_number: '',
+    drive_id: null,
+    overflow_drive_ids: [],
+    mount_id: null,
+    source_path: '/',
+    ...copyTuningDefaults.currentDefaults(),
+    startup_analysis_auto_apply_recommended_profile: false,
+    notes: '',
+    allow_insecure_callback_url: false,
+    callback_url: '',
+    run_immediately: false,
+  }
+}
+
+const form = ref(buildCreateJobForm())
 
 function isInsecureHttpCallbackUrl(value) {
   return String(value || '').trim().toLowerCase().startsWith('http://')
@@ -261,26 +267,43 @@ function formatMountLabel(mount) {
   return mount?.remote_path || t('jobs.chooseMount')
 }
 
+function normalizeCreateJobFormState(value) {
+  return {
+    project_id: normalizeProjectId(value?.project_id),
+    evidence_number: String(value?.evidence_number || ''),
+    drive_id: value?.drive_id == null || value?.drive_id === '' ? null : Number(value.drive_id),
+    overflow_drive_ids: Array.isArray(value?.overflow_drive_ids)
+      ? value.overflow_drive_ids
+        .map((item) => Number(item))
+        .filter((item) => Number.isInteger(item))
+        .sort((left, right) => left - right)
+      : [],
+    mount_id: value?.mount_id == null || value?.mount_id === '' ? null : Number(value.mount_id),
+    source_path: String(value?.source_path || ''),
+    thread_count: value?.thread_count == null || value?.thread_count === '' ? null : Number(value.thread_count),
+    copy_chunk_size_bytes: value?.copy_chunk_size_bytes == null || value?.copy_chunk_size_bytes === ''
+      ? null
+      : Number(value.copy_chunk_size_bytes),
+    copy_progress_flush_bytes: value?.copy_progress_flush_bytes == null || value?.copy_progress_flush_bytes === ''
+      ? null
+      : Number(value.copy_progress_flush_bytes),
+    copy_file_fsync_enabled: Boolean(value?.copy_file_fsync_enabled),
+    startup_analysis_auto_apply_recommended_profile: Boolean(value?.startup_analysis_auto_apply_recommended_profile),
+    notes: String(value?.notes || ''),
+    allow_insecure_callback_url: Boolean(value?.allow_insecure_callback_url),
+    callback_url: String(value?.callback_url || ''),
+    run_immediately: Boolean(value?.run_immediately),
+  }
+}
+
+const hasUnsavedCreateDialogChanges = computed(() => (
+  JSON.stringify(normalizeCreateJobFormState(form.value))
+  !== JSON.stringify(normalizeCreateJobFormState(buildCreateJobForm()))
+))
+
 function resetForm() {
   showSourceBrowser.value = false
-  const tuning = copyTuningDefaults.currentDefaults()
-  form.value = {
-    project_id: '',
-    evidence_number: '',
-    drive_id: null,
-    overflow_drive_ids: [],
-    mount_id: null,
-    source_path: '/',
-    thread_count: tuning.thread_count,
-    copy_chunk_size_bytes: tuning.copy_chunk_size_bytes,
-    copy_progress_flush_bytes: tuning.copy_progress_flush_bytes,
-    copy_file_fsync_enabled: tuning.copy_file_fsync_enabled,
-    startup_analysis_auto_apply_recommended_profile: false,
-    notes: '',
-    allow_insecure_callback_url: false,
-    callback_url: '',
-    run_immediately: false,
-  }
+  form.value = buildCreateJobForm()
 }
 
 function toggleSourceBrowser() {
@@ -688,16 +711,30 @@ async function openCreateDialog(event) {
 }
 
 function closeCreateDialog() {
+  showCreateDiscardDialog.value = false
   showCreateDialog.value = false
   createDialogError.value = ''
   resetForm()
+}
+
+function requestCloseCreateDialog() {
+  if (saving.value) {
+    return
+  }
+
+  if (hasUnsavedCreateDialogChanges.value) {
+    showCreateDiscardDialog.value = true
+    return
+  }
+
+  closeCreateDialog()
 }
 
 function handleCreateDialogKeydown(event) {
   if (!showCreateDialog.value) return
   if (event.key === 'Escape') {
     event.preventDefault()
-    closeCreateDialog()
+    requestCloseCreateDialog()
     return
   }
   if (event.key === 'Tab') {
@@ -899,7 +936,7 @@ onBeforeUnmount(() => {
     </teleport>
 
     <teleport to="body">
-      <div v-if="showCreateDialog" class="dialog-overlay" @click.self="closeCreateDialog">
+      <div v-if="showCreateDialog" class="dialog-overlay" @click.self="requestCloseCreateDialog">
         <div ref="createDialogRef" class="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="job-editor-title">
           <JobEditorDialogContent
             :title="t('jobs.createDialog')"
@@ -973,13 +1010,22 @@ onBeforeUnmount(() => {
             :disabled-label="t('common.labels.disabled')"
             :format-mount-label="formatMountLabel"
             :format-drive-label="formatDriveLabel"
-            @close="closeCreateDialog"
+            @close="requestCloseCreateDialog"
             @submit="submitCreateJob"
             @toggle-source-browser="toggleSourceBrowser"
           />
         </div>
       </div>
     </teleport>
+
+    <ConfirmDialog
+      v-model="showCreateDiscardDialog"
+      :title="t('jobs.discardCreateConfirmTitle')"
+      :message="t('jobs.discardCreateConfirmBody')"
+      :confirm-label="t('jobs.discardCreateConfirmAction')"
+      :cancel-label="t('common.actions.cancel')"
+      @confirm="closeCreateDialog"
+    />
   </section>
 </template>
 

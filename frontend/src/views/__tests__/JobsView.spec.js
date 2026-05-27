@@ -250,6 +250,56 @@ describe('JobsView grouped create dialog', () => {
     expect(wrapper.text()).toContain(i18n.global.t('jobs.workflowTabCreateHelp'))
   })
 
+  it('asks for confirmation before canceling a dirty create dialog', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const createButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.create'))
+    await createButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#job-project').setValue('PROJ-001')
+    await flushPromises()
+
+    const cancelButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('common.actions.cancel'))
+    await cancelButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.discardCreateConfirmTitle'))
+    expect(wrapper.find('#job-project').exists()).toBe(true)
+
+    const dismissButtons = wrapper.findAll('button').filter((node) => node.text() === i18n.global.t('common.actions.cancel'))
+    await dismissButtons[dismissButtons.length - 1].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain(i18n.global.t('jobs.discardCreateConfirmTitle'))
+    expect(wrapper.find('#job-project').exists()).toBe(true)
+  })
+
+  it('asks for confirmation before click-away closes a dirty create dialog', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const createButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.create'))
+    await createButton.trigger('click')
+    await flushPromises()
+
+    await wrapper.find('#job-project').setValue('PROJ-001')
+    await flushPromises()
+
+    await wrapper.find('.dialog-overlay').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.discardCreateConfirmTitle'))
+
+    const discardButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.discardCreateConfirmAction'))
+    await discardButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain(i18n.global.t('jobs.discardCreateConfirmTitle'))
+    expect(wrapper.find('#job-project').exists()).toBe(false)
+  })
+
   it('excludes archived jobs by default and reloads them when requested', async () => {
     mocks.hasArchivedJobs.mockResolvedValue(true)
     mocks.listJobs
