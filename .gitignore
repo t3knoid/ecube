@@ -228,3 +228,4 @@ docs/review/**
 .vscodeprompt.md
 None
 *.sh
+!deploy/ecube-host/configure-os-auth.sh
