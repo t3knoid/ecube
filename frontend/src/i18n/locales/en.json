@@ -904,6 +904,8 @@
       "close": "Close",
       "confirm": "Confirm",
       "back": "Back",
+      "first": "First",
+      "last": "Last",
       "previous": "Previous",
       "next": "Next",
       "previousPageWindow": "Previous {count} pages",

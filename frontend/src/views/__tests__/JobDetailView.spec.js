@@ -1532,9 +1532,18 @@ describe('JobDetailView start action', () => {
   it('keeps the files panel collapsed by default and pages through file rows with a 5-page window', async () => {
     setMobileViewport(true)
     mocks.getJobFiles.mockImplementation((_jobId, params = {}) => {
+      if (params.page === 12) {
+        return Promise.resolve({
+          files: [{ id: 401, relative_path: 'doc/401.txt', size_bytes: 4096, status: 'DONE', checksum: 'sha256:401' }],
+          total_files: 480,
+          returned_files: 40,
+          page: 12,
+          page_size: 40,
+        })
+      }
       if (params.page === 6) {
         return Promise.resolve({
-          files: [{ id: 201, relative_path: 'doc/201.txt', status: 'DONE', checksum: 'sha256:201' }],
+          files: [{ id: 201, relative_path: 'doc/201.txt', size_bytes: 2048, status: 'DONE', checksum: 'sha256:201' }],
           total_files: 480,
           returned_files: 40,
           page: 6,
@@ -1542,7 +1551,7 @@ describe('JobDetailView start action', () => {
         })
       }
       return Promise.resolve({
-        files: [{ id: 1, relative_path: 'doc/001.txt', status: 'DONE', checksum: 'sha256:001' }],
+        files: [{ id: 1, relative_path: 'doc/001.txt', size_bytes: 1536, status: 'DONE', checksum: 'sha256:001' }],
         total_files: 480,
         returned_files: 40,
         page: 1,
@@ -1566,6 +1575,10 @@ describe('JobDetailView start action', () => {
     expect(toggle.attributes('aria-expanded')).toBe('true')
     expect(wrapper.find('.columns-stub').text()).not.toContain(i18n.global.t('jobs.checksum'))
     expect(wrapper.find('.columns-stub').text()).not.toContain(i18n.global.t('common.actions.edit'))
+    expect(wrapper.find('.columns-stub').text()).toContain(`${i18n.global.t('jobs.path')}|${i18n.global.t('common.labels.size')}|${i18n.global.t('jobs.destinationDrive')}`)
+    expect(wrapper.text()).toContain('1.5 KB')
+    expect(wrapper.find('.page-boundary-first').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.page-boundary-last').attributes('disabled')).toBeUndefined()
     expect(wrapper.findAll('.page-number-btn').map((node) => node.text())).toEqual(['1', '2', '3', '4', '5'])
 
     await wrapper.find('.page-window-next').trigger('click')
@@ -1574,6 +1587,12 @@ describe('JobDetailView start action', () => {
     expect(mocks.getJobFiles.mock.calls).toContainEqual([6, { page: 6 }])
     expect(wrapper.findAll('.page-number-btn').map((node) => node.text())).toEqual(['6', '7', '8', '9', '10'])
 
+    await wrapper.find('.page-boundary-last').trigger('click')
+    await flushPromises()
+
+    expect(mocks.getJobFiles.mock.calls).toContainEqual([6, { page: 12 }])
+    expect(wrapper.find('.page-boundary-last').attributes('disabled')).toBeDefined()
+
     await toggle.trigger('click')
     await flushPromises()
     expect(toggle.attributes('aria-expanded')).toBe('false')
@@ -1581,7 +1600,7 @@ describe('JobDetailView start action', () => {
     await toggle.trigger('click')
     await flushPromises()
     expect(toggle.attributes('aria-expanded')).toBe('true')
-    expect(wrapper.find('.page-number-btn--active').text()).toBe('6')
+    expect(wrapper.find('.page-number-btn--active').text()).toBe('12')
   })
 
   it('renders compact accessible status icons in the files panel', async () => {
@@ -3311,7 +3330,7 @@ describe('JobDetailView start action', () => {
 
   it('keeps desktop job detail actions expanded and files pagination wide', async () => {
     mocks.getJobFiles.mockResolvedValue({
-      files: [{ id: 1, relative_path: 'doc/001.txt', status: 'DONE' }],
+      files: [{ id: 1, relative_path: 'doc/001.txt', size_bytes: 4096, status: 'DONE' }],
       total_files: 480,
       returned_files: 40,
       page: 1,
@@ -3340,6 +3359,9 @@ describe('JobDetailView start action', () => {
 
     expect(wrapper.find('.file-status-icon').exists()).toBe(false)
     expect(wrapper.text()).toContain('DONE')
+    expect(wrapper.text()).toContain('4.0 KB')
+    expect(wrapper.find('.page-boundary-first').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.page-boundary-last').attributes('disabled')).toBeUndefined()
     expect(wrapper.findAll('.page-number-btn').map((node) => node.text())).toEqual([
       '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
     ])

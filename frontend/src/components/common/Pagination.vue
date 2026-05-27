@@ -33,6 +33,10 @@ const props = defineProps({
     type: Number,
     default: 0,
   },
+  showBoundaryShortcuts: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const emit = defineEmits(['update:page'])
@@ -80,6 +84,16 @@ function goToNextWindow() {
     <template v-if="showPageWindow">
       <div class="page-window-controls">
         <button
+          v-if="showBoundaryShortcuts"
+          type="button"
+          class="btn page-btn page-window-btn page-boundary-btn page-boundary-first"
+          :disabled="page <= 1"
+          :aria-label="t('common.actions.first')"
+          @click="goToPage(1)"
+        >
+          {{ t('common.actions.first') }}
+        </button>
+        <button
           type="button"
           class="btn page-btn page-window-btn page-window-prev"
           :disabled="windowStart <= 1"
@@ -107,6 +121,16 @@ function goToNextWindow() {
           @click="goToNextWindow"
         >
           <span aria-hidden="true">&gt;</span>
+        </button>
+        <button
+          v-if="showBoundaryShortcuts"
+          type="button"
+          class="btn page-btn page-window-btn page-boundary-btn page-boundary-last"
+          :disabled="page >= totalPages"
+          :aria-label="t('common.actions.last')"
+          @click="goToPage(totalPages)"
+        >
+          {{ t('common.actions.last') }}
         </button>
       </div>
     </template>

@@ -66,4 +66,58 @@ describe('Pagination', () => {
 
     expect(wrapper.emitted('update:page')?.[0]).toEqual([6])
   })
+
+  it('supports explicit first and last shortcuts when enabled', async () => {
+    const wrapper = mount(Pagination, {
+      props: {
+        page: 6,
+        pageSize: 40,
+        total: 480,
+        showPageWindow: true,
+        showBoundaryShortcuts: true,
+      },
+      global: { plugins: [i18n] },
+    })
+
+    const firstButton = wrapper.find('.page-boundary-first')
+    const lastButton = wrapper.find('.page-boundary-last')
+
+    expect(firstButton.text()).toBe('First')
+    expect(lastButton.text()).toBe('Last')
+
+    await firstButton.trigger('click')
+    await lastButton.trigger('click')
+
+    expect(wrapper.emitted('update:page')).toEqual([[1], [12]])
+  })
+
+  it('disables explicit first and last shortcuts at the pagination boundaries', () => {
+    const firstPageWrapper = mount(Pagination, {
+      props: {
+        page: 1,
+        pageSize: 40,
+        total: 480,
+        showPageWindow: true,
+        showBoundaryShortcuts: true,
+      },
+      global: { plugins: [i18n] },
+    })
+
+    expect(firstPageWrapper.find('.page-boundary-first').attributes('disabled')).toBeDefined()
+    expect(firstPageWrapper.find('.page-boundary-last').attributes('disabled')).toBeUndefined()
+
+    const lastPageWrapper = mount(Pagination, {
+      props: {
+        page: 12,
+        pageSize: 40,
+        total: 480,
+        showPageWindow: true,
+        showBoundaryShortcuts: true,
+      },
+      global: { plugins: [i18n] },
+    })
+
+    expect(lastPageWrapper.find('.page-boundary-first').attributes('disabled')).toBeUndefined()
+    expect(lastPageWrapper.find('.page-boundary-last').attributes('disabled')).toBeDefined()
+  })
 })

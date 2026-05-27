@@ -902,6 +902,8 @@ File ID
 </li><li>
 Relative path
 </li><li>
+Size
+</li><li>
 Destination drive
 </li><li>
 Status
@@ -910,7 +912,7 @@ Status
 <p>This per-file destination information is more granular than the manifest location. At clean completion, ECUBE refreshes a separate <code>manifest.json</code> on each drive assignment that received successful copies, while the table can still show exactly which earlier files were copied to an earlier overflow drive.</p>
 <p>Rows that include a safe file-level error summary are visually emphasized in the Files panel. Select the <code>ERROR</code> or <code>FAILED</code> status badge on desktop, or the matching compact status icon on smaller screens, to open the <code>File Error Details</code> dialog for that row. The dialog shows the file ID, relative path, status, and the sanitized per-file error text returned by the trusted backend.</p>
 <p>Users allowed to inspect hashes open the hash viewer by selecting the file path itself. On smaller screens, ECUBE may replace full status badges with compact status icons and shorten the visible pagination window so the file list stays within the viewport.</p>
-<p>If the job contains more rows than fit on one page, the panel shows a numbered pagination control with left/right navigation. Desktop layouts expose a wider page-number window, while smaller screens show a shorter page-number window to reduce horizontal crowding. The number of rows shown per page is controlled by the admin-only <code>Job Detail Files Per Page</code> runtime setting and is bounded between 20 and 100.</p>
+<p>If the job contains more rows than fit on one page, the panel shows <code>First</code> and <code>Last</code> shortcuts together with the numbered pagination control and left/right page-window navigation. Desktop layouts expose a wider page-number window, while smaller screens show a shorter page-number window to reduce horizontal crowding. The number of rows shown per page is controlled by the admin-only <code>Job Detail Files Per Page</code> runtime setting and is bounded between 20 and 100.</p>
 <h3 id="6-4-3-hash-viewer">6.4.3 Hash Viewer</h3>
 <p>Users with sufficient permissions can inspect file hashes in a popup dialog opened from the file path in the Files panel. The dialog includes values such as:</p>
 <ul><li>

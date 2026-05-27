@@ -824,6 +824,7 @@ When expanded, the file table usually shows:
 
 - File ID
 - Relative path
+- Size
 - Destination drive
 - Status
 
@@ -835,7 +836,7 @@ Rows that include a safe file-level error summary are visually emphasized in the
 
 Users allowed to inspect hashes open the hash viewer by selecting the file path itself. On smaller screens, ECUBE may replace full status badges with compact status icons and shorten the visible pagination window so the file list stays within the viewport.
 
-If the job contains more rows than fit on one page, the panel shows a numbered pagination control with left/right navigation. Desktop layouts expose a wider page-number window, while smaller screens show a shorter page-number window to reduce horizontal crowding. The number of rows shown per page is controlled by the admin-only `Job Detail Files Per Page` runtime setting and is bounded between 20 and 100.
+If the job contains more rows than fit on one page, the panel shows `First` and `Last` shortcuts together with the numbered pagination control and left/right page-window navigation. Desktop layouts expose a wider page-number window, while smaller screens show a shorter page-number window to reduce horizontal crowding. The number of rows shown per page is controlled by the admin-only `Job Detail Files Per Page` runtime setting and is bounded between 20 and 100.
 
 #### 9.4.3 Hash Viewer
 

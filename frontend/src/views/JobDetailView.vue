@@ -365,6 +365,7 @@ const sourceSizeToCopyLabel = computed(() => {
 const fileColumns = computed(() => ([
   { key: 'id', label: t('common.labels.id'), align: 'right' },
   { key: 'relative_path', label: t('jobs.path'), width: isMobileViewport.value ? '12rem' : null },
+  { key: 'size_bytes', label: t('common.labels.size'), align: 'right' },
   { key: 'destination_drive_label', label: t('jobs.destinationDrive') },
   { key: 'status', label: t('common.labels.status'), align: 'center' },
 ]))
@@ -2404,6 +2405,9 @@ onUnmounted(() => {
               {{ row.relative_path }}
             </button>
           </template>
+          <template #cell-size_bytes="{ row }">
+            {{ formatBytes(Number(row.size_bytes)) }}
+          </template>
           <template #cell-destination_drive_label="{ row }">
             <span class="wrap-anywhere">{{ row.destination_drive_label || t('common.labels.notAvailable') }}</span>
           </template>
@@ -2446,6 +2450,7 @@ onUnmounted(() => {
           :page-size="debug.page_size"
           :total="debug.total_files"
           :show-page-window="true"
+          :show-boundary-shortcuts="true"
           :window-size="isMobileViewport ? 5 : 10"
           @update:page="debug.page = $event"
         />
