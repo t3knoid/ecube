@@ -1311,7 +1311,7 @@ def test_prepare_eject(manager_client, db):
     assert data["current_project_id"] == "PROJ-001"
 
 
-def test_prepare_eject_rejects_in_use_drive_without_managed_mount(manager_client, db):
+def test_prepare_eject_allows_in_use_drive_without_managed_mount(manager_client, db):
     drive = UsbDrive(
         device_identifier="USB005-UNMANAGED-HOST-MOUNT",
         current_state=DriveState.IN_USE,
@@ -1326,9 +1326,9 @@ def test_prepare_eject_rejects_in_use_drive_without_managed_mount(manager_client
     with patch("app.routers.drives.get_drive_eject", return_value=provider):
         response = manager_client.post(f"/drives/{drive.id}/prepare-eject")
 
-    assert response.status_code == 409
-    assert response.json()["message"] == "Drive is not mounted; refresh drive status and retry prepare-eject"
-    provider.prepare_eject.assert_not_called()
+    assert response.status_code == 200
+    assert response.json()["current_state"] == "AVAILABLE"
+    provider.prepare_eject.assert_called_once_with("/dev/sdb")
 
 
 def test_prepare_eject_rejects_pending_format(manager_client, db):

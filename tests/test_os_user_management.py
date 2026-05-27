@@ -2138,12 +2138,14 @@ class TestSetupEndpoints:
         ]
         mock_grp.getgrgid.return_value = _make_grp(name="admin1", gid=1000)
         pw = _make_pw(name="admin1")
+        pw_with_managed_shell = _make_pw(name="admin1", shell=settings.non_interactive_shell_path)
         mock_pwd.getpwnam.side_effect = [
             pw,                        # create_user → user_exists (True → raises)
             pw,                        # add_user_to_groups → user_exists
             pw,                        # add_user_to_groups → _get_user_groups
-            pw,                        # add_user_to_groups → pwd.getpwnam (OSUser)
-            pw,                        # add_user_to_groups → _get_user_groups
+            pw,                        # add_user_to_groups → _ensure_non_interactive_shell current shell
+            pw_with_managed_shell,     # add_user_to_groups → pwd.getpwnam (OSUser)
+            pw_with_managed_shell,     # add_user_to_groups → _get_user_groups
             pw,                        # reset_password → user_exists
         ]
         mock_subprocess.return_value = _ok_result()
@@ -2159,6 +2161,7 @@ class TestSetupEndpoints:
         calls = [c.args[0] for c in mock_subprocess.call_args_list]
         aG_calls = [c for c in calls if "-aG" in c]
         assert len(aG_calls) == 0
+        assert ["sudo", "-n", "/usr/sbin/usermod", "-s", settings.non_interactive_shell_path, "admin1"] in calls
         # Verify password was reset via chpasswd.
         chpasswd_calls = [c for c in calls if "/usr/sbin/chpasswd" in c]
         assert len(chpasswd_calls) >= 1
@@ -2192,12 +2195,14 @@ class TestSetupEndpoints:
         mock_grp.getgrall.return_value = []
         mock_grp.getgrgid.return_value = _make_grp(name="admin1", gid=1000)
         pw = _make_pw(name="admin1")
+        pw_with_managed_shell = _make_pw(name="admin1", shell=settings.non_interactive_shell_path)
         mock_pwd.getpwnam.side_effect = [
             pw,                        # create_user → user_exists (True → raises)
             pw,                        # add_user_to_groups → user_exists
             pw,                        # add_user_to_groups → _get_user_groups
-            pw,                        # add_user_to_groups → pwd.getpwnam (OSUser)
-            pw,                        # add_user_to_groups → _get_user_groups
+            pw,                        # add_user_to_groups → _ensure_non_interactive_shell current shell
+            pw_with_managed_shell,     # add_user_to_groups → pwd.getpwnam (OSUser)
+            pw_with_managed_shell,     # add_user_to_groups → _get_user_groups
             pw,                        # reset_password → user_exists
         ]
         mock_subprocess.return_value = _ok_result()
@@ -2209,6 +2214,8 @@ class TestSetupEndpoints:
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "reconciled_existing_user"
+        calls = [c.args[0] for c in mock_subprocess.call_args_list]
+        assert ["sudo", "-n", "/usr/sbin/usermod", "-s", settings.non_interactive_shell_path, "admin1"] in calls
 
     @patch("app.routers.setup.get_os_user_provider")
     def test_run_os_setup_existing_user_match_is_case_insensitive(self, mock_get_provider):
