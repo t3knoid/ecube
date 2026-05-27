@@ -755,7 +755,12 @@ onBeforeUnmount(() => {
 
     <DataTable :columns="columns" :rows="paged" :empty-text="t('shares.empty')">
       <template #cell-id="{ row }">
-        <button class="cell-link mount-id-link" type="button" @click="openMountDetails(row.id)">
+        <button
+          class="cell-link mount-id-link"
+          type="button"
+          :title="t('shares.showShareDetails')"
+          @click="openMountDetails(row.id)"
+        >
           {{ row.id }}
         </button>
       </template>

@@ -361,6 +361,7 @@
     "workflowBucket": "Workflow bucket",
     "allWorkflowBuckets": "All workflow buckets",
     "empty": "No shares found",
+    "showShareDetails": "Show share details",
     "test": "Test",
     "testThroughput": "Test Throughput",
     "remove": "Remove",

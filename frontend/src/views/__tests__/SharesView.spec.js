@@ -193,6 +193,7 @@ describe('SharesView removal flow', () => {
     const detailButton = wrapper.findAll('.mount-id-link')
     expect(detailButton).toHaveLength(1)
     expect(detailButton[0].text()).toBe('11')
+    expect(detailButton[0].attributes('title')).toBe('Show share details')
 
     await detailButton[0].trigger('click')
     await flushPromises()
