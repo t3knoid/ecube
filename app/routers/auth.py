@@ -304,6 +304,25 @@ def login(
     if not pam.authenticate(body.username, body.password):
         auth_reason, auth_message = _classify_pam_auth_failure(pam)
         metrics_service.record_auth_attempt("invalid_credentials")
+        logger.info(
+            "Login denied",
+            extra={
+                "operation_surface": "auth.login",
+                "auth_reason": auth_reason or "invalid_credentials",
+                "request_path": str(request.url.path),
+                "request_method": request.method,
+                "role_resolver": settings.role_resolver,
+                "username": body.username,
+            },
+        )
+        logger.debug(
+            "Login denial provider detail",
+            extra={
+                "username": body.username,
+                "pam_code": getattr(pam, "code", None),
+                "pam_reason": getattr(pam, "reason", None),
+            },
+        )
         best_effort_audit(
             db,
             "AUTH_FAILURE",

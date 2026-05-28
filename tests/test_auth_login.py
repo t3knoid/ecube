@@ -1,5 +1,6 @@
 """Tests for POST /auth/token local login endpoint."""
 
+import logging
 import json
 import sys
 from unittest.mock import MagicMock, patch
@@ -145,6 +146,31 @@ def test_login_invalid_credentials_returns_401(unauthenticated_client):
 
     assert resp.status_code == 401
     assert "invalid" in resp.json()["message"].lower()
+
+
+def test_login_invalid_credentials_emits_safe_app_log(unauthenticated_client, caplog):
+    mock_pam = MagicMock()
+    mock_pam.authenticate.return_value = False
+    fastapi_app.dependency_overrides[_get_pam] = lambda: mock_pam
+
+    caplog.set_level(logging.INFO, logger="app.routers.auth")
+
+    resp = unauthenticated_client.post(
+        "/auth/token",
+        json={"username": "baduser", "password": "wrong"},
+    )
+
+    assert resp.status_code == 401
+    info_record = next(
+        record
+        for record in caplog.records
+        if record.name == "app.routers.auth" and record.getMessage() == "Login denied"
+    )
+    assert info_record.operation_surface == "auth.login"
+    assert info_record.auth_reason == "invalid_credentials"
+    assert info_record.request_path == "/auth/token"
+    assert info_record.request_method == "POST"
+    assert info_record.username == "baduser"
 
 
 def test_login_password_expired_returns_structured_401(unauthenticated_client):
