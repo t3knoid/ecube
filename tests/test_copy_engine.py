@@ -614,6 +614,93 @@ def test_process_file_ends_initial_read_transaction_before_copy(db, tmp_path):
     assert refreshed.status == FileStatus.DONE
 
 
+def test_process_file_routes_progress_to_writer_without_direct_progress_commits(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    payload = b"progress-live"
+    test_file = source_dir / "live-progress.bin"
+    test_file.write_bytes(payload)
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    assignment = _assign_drive(db, job)
+    ef = ExportFile(
+        job_id=job.id,
+        relative_path="live-progress.bin",
+        size_bytes=len(payload),
+        status=FileStatus.PENDING,
+        retry_attempts=0,
+    )
+    db.add(ef)
+    db.commit()
+    db.refresh(ef)
+
+    class _Writer:
+        def __init__(self):
+            self.deltas = []
+
+        def record_delta(self, assignment_id, delta_bytes):
+            self.deltas.append((assignment_id, delta_bytes))
+
+    writer = _Writer()
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch.object(copy_engine.settings, "copy_chunk_size_bytes", 4), patch.object(
+            copy_engine.settings,
+            "copy_progress_flush_bytes",
+            8,
+        ), patch.object(copy_engine.FileRepository, "increment_copy_progress", autospec=True, side_effect=AssertionError("worker progress commits should be centralized")), patch.object(
+            copy_engine.FileRepository,
+            "decrement_copy_progress",
+            autospec=True,
+            side_effect=AssertionError("worker progress rollbacks should be centralized"),
+        ):
+            copy_engine._process_file(
+                ef.id,
+                test_file,
+                target_dir,
+                max_retries=0,
+                retry_delay=0,
+                progress_writer=writer,
+            )
+
+    db.expire_all()
+    refreshed_job = db.get(ExportJob, job.id)
+    refreshed_assignment = db.get(DriveAssignment, assignment.id)
+    assert refreshed_job is not None
+    assert refreshed_assignment is not None
+    assert refreshed_job.copied_bytes == 0
+    assert refreshed_assignment.copied_bytes == 0
+    assert writer.deltas == [(assignment.id, 8), (assignment.id, len(payload) - 8)]
+
+
+def test_copy_progress_writer_flushes_aggregated_job_and_assignment_deltas(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    assignment = _assign_drive(db, job)
+
+    writer = copy_engine._CopyProgressWriter(db=db, job_id=job.id, flush_interval_seconds=0.001)
+    writer.start()
+    writer.record_delta(assignment.id, 5)
+    writer.record_delta(assignment.id, 7)
+    writer.record_delta(assignment.id, -4)
+    writer.close()
+
+    db.expire_all()
+    refreshed_job = db.get(ExportJob, job.id)
+    refreshed_assignment = db.get(DriveAssignment, assignment.id)
+    assert refreshed_job is not None
+    assert refreshed_assignment is not None
+    assert refreshed_job.copied_bytes == 8
+    assert refreshed_assignment.copied_bytes == 8
+
+
 def test_process_file_retry_audit_entries_created(db, tmp_path):
     """FILE_COPY_RETRY audit entries are written for each retry attempt."""
     source_dir = tmp_path / "source"

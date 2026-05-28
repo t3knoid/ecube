@@ -623,6 +623,62 @@ class FileRepository:
             self.db.rollback()
             raise
 
+    def apply_copy_progress_batch(
+        self,
+        job_id: int,
+        *,
+        job_delta_bytes: int,
+        assignment_delta_bytes: Dict[int, int] | None = None,
+    ) -> None:
+        """Apply aggregated signed progress deltas for a job and its assignments."""
+        if job_delta_bytes == 0 and not assignment_delta_bytes:
+            return
+
+        if job_delta_bytes > 0:
+            self.db.execute(
+                update(ExportJob)
+                .where(ExportJob.id == job_id)
+                .values(copied_bytes=ExportJob.copied_bytes + job_delta_bytes)
+            )
+        elif job_delta_bytes < 0:
+            self.db.execute(
+                update(ExportJob)
+                .where(ExportJob.id == job_id)
+                .values(
+                    copied_bytes=case(
+                        (ExportJob.copied_bytes > abs(job_delta_bytes), ExportJob.copied_bytes + job_delta_bytes),
+                        else_=0,
+                    )
+                )
+            )
+
+        for assignment_id, delta_bytes in (assignment_delta_bytes or {}).items():
+            if delta_bytes == 0:
+                continue
+            if delta_bytes > 0:
+                self.db.execute(
+                    update(DriveAssignment)
+                    .where(DriveAssignment.id == assignment_id)
+                    .values(copied_bytes=DriveAssignment.copied_bytes + delta_bytes)
+                )
+                continue
+            self.db.execute(
+                update(DriveAssignment)
+                .where(DriveAssignment.id == assignment_id)
+                .values(
+                    copied_bytes=case(
+                        (DriveAssignment.copied_bytes > abs(delta_bytes), DriveAssignment.copied_bytes + delta_bytes),
+                        else_=0,
+                    )
+                )
+            )
+
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+
     def decrement_job_bytes(self, job_id: int, size_bytes: int) -> None:
         """Atomically subtract bytes from the parent job, clamping at zero."""
         self.db.execute(
