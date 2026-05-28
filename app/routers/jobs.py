@@ -801,8 +801,9 @@ def pause_job(
 
     The job enters ``PAUSING`` immediately and transitions to ``PAUSED`` once
     in-flight copy threads finish their current work. If the service restarts
-    before that drain completes, startup reconciliation restores the stranded
-    pause state to ``PAUSED`` before operators resume the job.
+    before that drain completes, startup reconciliation restores unfinished
+    work to ``PAUSED`` and preserves any terminal copy result that had already
+    been reached.
 
     **Roles:** ``admin``, ``manager``, ``processor``
     """

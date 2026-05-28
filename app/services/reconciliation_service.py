@@ -858,6 +858,9 @@ _IN_PROGRESS_STATUSES = (JobStatus.PREPARING, JobStatus.RUNNING, JobStatus.VERIF
 
 
 def _reconcile_stale_pausing_job(db: Session, job: ExportJob) -> dict[str, Any]:
+    from app.services.copy_engine import _select_automatic_overflow_assignment, _should_attempt_target_full_continuation
+
+    file_repo = FileRepository(db)
     reset_in_flight_file_count = int(
         db.query(ExportFile)
         .filter(
@@ -876,16 +879,51 @@ def _reconcile_stale_pausing_job(db: Session, job: ExportJob) -> dict[str, Any]:
             .update({ExportFile.status: FileStatus.PENDING}, synchronize_session=False)
         )
 
-    job.status = JobStatus.PAUSED
-    job.completed_at = None
+    incomplete_files = file_repo.list_incomplete_by_job(job.id)
+    done_count, error_count, timeout_count = file_repo.bulk_count_done_errors_and_timeouts([job.id]).get(
+        job.id,
+        (0, 0, 0),
+    )
+    all_files_finished = (done_count + error_count + timeout_count) >= int(job.file_count or 0)
+
+    target_full_failure_reason: Optional[str] = None
+    if (
+        reset_in_flight_file_count == 0
+        and all_files_finished
+        and error_count > 0
+        and timeout_count == 0
+        and _should_attempt_target_full_continuation(incomplete_files)
+    ):
+        next_assignment, decision_details = _select_automatic_overflow_assignment(db=db, job=job)
+        if next_assignment is None:
+            target_full_failure_reason = str(
+                decision_details.get("failure_reason")
+                or "Destination capacity exhausted and no assigned drive can continue this copy"
+            )
+        else:
+            all_files_finished = False
+
+    if reset_in_flight_file_count == 0 and all_files_finished:
+        job.status = JobStatus.FAILED if target_full_failure_reason else JobStatus.COMPLETED
+        job.completed_at = datetime.now(timezone.utc)
+        reason = (
+            "terminal_copy_failure_preserved_after_restart"
+            if target_full_failure_reason
+            else "terminal_copy_completion_preserved_after_restart"
+        )
+    else:
+        job.status = JobStatus.PAUSED
+        job.completed_at = None
+        reason = "pause_interrupted_by_restart"
+
     job.copy_started_at = None
-    job.failure_reason = None
+    job.failure_reason = target_full_failure_reason
 
     return {
         "job_id": job.id,
         "old_status": JobStatus.PAUSING.value,
-        "new_status": JobStatus.PAUSED.value,
-        "reason": "pause_interrupted_by_restart",
+        "new_status": job.status.value,
+        "reason": reason,
         "reset_in_flight_file_count": reset_in_flight_file_count,
     }
 

@@ -344,3 +344,44 @@ def test_reconcile_jobs_recovers_stale_pausing_job_to_paused(db):
         "new_status": "PAUSED",
         "reason": "pause_interrupted_by_restart",
     }
+
+
+def test_reconcile_jobs_preserves_terminal_completion_for_stale_pausing_job(db):
+    job = _make_job(
+        db,
+        project_id="PROJ-CALLBACK-LIFECYCLE-008",
+        evidence_number="EV-CALLBACK-LIFECYCLE-008",
+        status=JobStatus.PAUSING,
+        source_path="/data/callback-lifecycle-008",
+    )
+    job.copy_started_at = datetime(2026, 5, 28, 16, 52, tzinfo=timezone.utc)
+    db.flush()
+    db.add(
+        ExportFile(
+            job_id=job.id,
+            relative_path="done-copy.bin",
+            status=FileStatus.DONE,
+            size_bytes=256,
+        )
+    )
+    db.commit()
+
+    with patch("app.services.reconciliation_service.deliver_callback") as mock_callback:
+        result = reconcile_jobs(db)
+
+    db.expire_all()
+    refreshed_job = db.get(ExportJob, job.id)
+
+    assert result["jobs_corrected"] == 1
+    assert refreshed_job is not None
+    assert refreshed_job.status == JobStatus.COMPLETED
+    assert refreshed_job.copy_started_at is None
+    assert refreshed_job.completed_at is not None
+    assert refreshed_job.failure_reason is None
+    assert mock_callback.call_count == 1
+    assert mock_callback.call_args.kwargs["event"] == "JOB_RECONCILED"
+    assert mock_callback.call_args.kwargs["event_details"] == {
+        "old_status": "PAUSING",
+        "new_status": "COMPLETED",
+        "reason": "terminal_copy_completion_preserved_after_restart",
+    }

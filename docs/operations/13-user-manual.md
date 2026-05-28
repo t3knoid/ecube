@@ -800,7 +800,7 @@ The completion summary uses the normal success styling for clean completions. If
 
 During startup analysis, Job Detail can show `Preparing copy...` before any totals are known. While this state is visible, the page also explains that ECUBE is still scanning the source files and calculating totals, which can take time for large evidence sets.
 
-If the service restarts after a pause request but before the final `PAUSED` write, startup reconciliation restores that stranded job to `PAUSED` before operators return. Any file rows left in `COPYING` or `RETRYING` are returned to `PENDING`, so resuming the same job does not depend on the interrupted worker process surviving the restart.
+If the service restarts after a pause request but before the final status write, startup reconciliation restores unfinished work to `PAUSED` before operators return. Any file rows left in `COPYING` or `RETRYING` are returned to `PENDING`, while a copy run that had already reached a terminal result stays `COMPLETED` or `FAILED` instead of reopening as paused work.
 
 During `VERIFYING`, Job Detail keeps the same progress surface in `Current Task` but switches its text to verification-specific guidance. The page does not present an exact verification percentage because the current API does not expose verification counters.
 
