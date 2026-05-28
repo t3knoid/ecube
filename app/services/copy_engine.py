@@ -717,6 +717,7 @@ class _CopyProgressWriter:
         self._background_enabled = getattr(self._bind.dialect, "name", None) != "sqlite"
         self._pending_job_delta = 0
         self._pending_assignment_deltas: dict[int, int] = defaultdict(int)
+        self._pending_assignment_file_counts: dict[int, int] = defaultdict(int)
         self._pending_lock = threading.Lock()
         self._updates: "queue.Queue[tuple[Optional[int], int] | None]" = queue.Queue()
         self._thread = threading.Thread(
@@ -741,6 +742,15 @@ class _CopyProgressWriter:
             return
         self._updates.put((assignment_id, int(delta_bytes)))
 
+    def record_completion(self, assignment_id: Optional[int], completed_files: int = 1) -> None:
+        if assignment_id is None or completed_files == 0:
+            return
+        if not self._background_enabled:
+            with self._pending_lock:
+                self._pending_assignment_file_counts[int(assignment_id)] += int(completed_files)
+            return
+        self._updates.put((int(assignment_id), 0, int(completed_files)))
+
     def close(self) -> None:
         if not self._background_enabled:
             self._flush_synchronously()
@@ -752,8 +762,10 @@ class _CopyProgressWriter:
         with self._pending_lock:
             pending_job_delta = self._pending_job_delta
             pending_assignment_deltas = dict(self._pending_assignment_deltas)
+            pending_assignment_file_counts = dict(self._pending_assignment_file_counts)
             self._pending_job_delta = 0
             self._pending_assignment_deltas.clear()
+            self._pending_assignment_file_counts.clear()
 
         db = Session(bind=self._bind)
         try:
@@ -761,18 +773,20 @@ class _CopyProgressWriter:
                 FileRepository(db),
                 pending_job_delta=pending_job_delta,
                 pending_assignment_deltas=pending_assignment_deltas,
+                pending_assignment_file_counts=pending_assignment_file_counts,
             )
         finally:
             db.close()
 
     def _flush_pending(
         self,
-        repo: JobRepository,
+        repo: FileRepository,
         *,
         pending_job_delta: int,
         pending_assignment_deltas: dict[int, int],
+        pending_assignment_file_counts: dict[int, int],
     ) -> bool:
-        if pending_job_delta == 0 and not pending_assignment_deltas:
+        if pending_job_delta == 0 and not pending_assignment_deltas and not pending_assignment_file_counts:
             return True
         try:
             repo.apply_copy_progress_batch(
@@ -782,6 +796,11 @@ class _CopyProgressWriter:
                     assignment_id: delta_bytes
                     for assignment_id, delta_bytes in pending_assignment_deltas.items()
                     if delta_bytes != 0
+                },
+                assignment_file_count_deltas={
+                    assignment_id: completed_files
+                    for assignment_id, completed_files in pending_assignment_file_counts.items()
+                    if completed_files != 0
                 },
             )
             return True
@@ -794,11 +813,12 @@ class _CopyProgressWriter:
         repo = FileRepository(db)
         pending_job_delta = 0
         pending_assignment_deltas: dict[int, int] = defaultdict(int)
+        pending_assignment_file_counts: dict[int, int] = defaultdict(int)
         stop_requested = False
 
         try:
             while True:
-                timeout = self._flush_interval_seconds if (pending_job_delta or pending_assignment_deltas) else None
+                timeout = self._flush_interval_seconds if (pending_job_delta or pending_assignment_deltas or pending_assignment_file_counts) else None
                 try:
                     update_item = self._updates.get(timeout=timeout)
                 except queue.Empty:
@@ -811,21 +831,32 @@ class _CopyProgressWriter:
                             repo,
                             pending_job_delta=pending_job_delta,
                             pending_assignment_deltas=pending_assignment_deltas,
+                            pending_assignment_file_counts=pending_assignment_file_counts,
                         )
                         return
                     if self._flush_pending(
                         repo,
                         pending_job_delta=pending_job_delta,
                         pending_assignment_deltas=pending_assignment_deltas,
+                        pending_assignment_file_counts=pending_assignment_file_counts,
                     ):
                         pending_job_delta = 0
                         pending_assignment_deltas.clear()
+                        pending_assignment_file_counts.clear()
                     continue
 
-                assignment_id, delta_bytes = update_item
-                pending_job_delta += delta_bytes
-                if assignment_id is not None:
-                    pending_assignment_deltas[int(assignment_id)] += delta_bytes
+                if len(update_item) == 2:
+                    assignment_id, delta_bytes = update_item
+                    pending_job_delta += delta_bytes
+                    if assignment_id is not None:
+                        pending_assignment_deltas[int(assignment_id)] += delta_bytes
+                else:
+                    assignment_id, delta_bytes, completed_files = update_item
+                    pending_job_delta += delta_bytes
+                    if assignment_id is not None and delta_bytes != 0:
+                        pending_assignment_deltas[int(assignment_id)] += delta_bytes
+                    if assignment_id is not None and completed_files != 0:
+                        pending_assignment_file_counts[int(assignment_id)] += completed_files
 
                 while True:
                     try:
@@ -835,18 +866,28 @@ class _CopyProgressWriter:
                     if queued_item is None:
                         stop_requested = True
                         break
-                    queued_assignment_id, queued_delta_bytes = queued_item
-                    pending_job_delta += queued_delta_bytes
-                    if queued_assignment_id is not None:
-                        pending_assignment_deltas[int(queued_assignment_id)] += queued_delta_bytes
+                    if len(queued_item) == 2:
+                        queued_assignment_id, queued_delta_bytes = queued_item
+                        pending_job_delta += queued_delta_bytes
+                        if queued_assignment_id is not None:
+                            pending_assignment_deltas[int(queued_assignment_id)] += queued_delta_bytes
+                    else:
+                        queued_assignment_id, queued_delta_bytes, queued_completed_files = queued_item
+                        pending_job_delta += queued_delta_bytes
+                        if queued_assignment_id is not None and queued_delta_bytes != 0:
+                            pending_assignment_deltas[int(queued_assignment_id)] += queued_delta_bytes
+                        if queued_assignment_id is not None and queued_completed_files != 0:
+                            pending_assignment_file_counts[int(queued_assignment_id)] += queued_completed_files
 
                 if self._flush_pending(
                     repo,
                     pending_job_delta=pending_job_delta,
                     pending_assignment_deltas=pending_assignment_deltas,
+                    pending_assignment_file_counts=pending_assignment_file_counts,
                 ):
                     pending_job_delta = 0
                     pending_assignment_deltas.clear()
+                    pending_assignment_file_counts.clear()
                 if stop_requested:
                     return
         finally:
@@ -2567,7 +2608,7 @@ def _process_file(
             ef.status = FileStatus.DONE
             ef.drive_assignment_id = active_assignment_id
             _stage_remaining_progress()
-            if active_assignment_id is not None:
+            if active_assignment_id is not None and progress_writer is None:
                 db.execute(
                     update(DriveAssignment)
                     .where(DriveAssignment.id == active_assignment_id)
@@ -2580,6 +2621,8 @@ def _process_file(
                     details={"file_id": ef.id, "relative_path": ef.relative_path},
                 )
                 db.commit()
+                if progress_writer is not None:
+                    progress_writer.record_completion(active_assignment_id)
                 metrics_service.record_job_file_copied(bytes_copied=bytes_reported)
             except Exception:
                 db.rollback()

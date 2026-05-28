@@ -629,9 +629,10 @@ class FileRepository:
         *,
         job_delta_bytes: int,
         assignment_delta_bytes: Dict[int, int] | None = None,
+        assignment_file_count_deltas: Dict[int, int] | None = None,
     ) -> None:
         """Apply aggregated signed progress deltas for a job and its assignments."""
-        if job_delta_bytes == 0 and not assignment_delta_bytes:
+        if job_delta_bytes == 0 and not assignment_delta_bytes and not assignment_file_count_deltas:
             return
 
         if job_delta_bytes > 0:
@@ -668,6 +669,27 @@ class FileRepository:
                 .values(
                     copied_bytes=case(
                         (DriveAssignment.copied_bytes > abs(delta_bytes), DriveAssignment.copied_bytes + delta_bytes),
+                        else_=0,
+                    )
+                )
+            )
+
+        for assignment_id, delta_count in (assignment_file_count_deltas or {}).items():
+            if delta_count == 0:
+                continue
+            if delta_count > 0:
+                self.db.execute(
+                    update(DriveAssignment)
+                    .where(DriveAssignment.id == assignment_id)
+                    .values(file_count=DriveAssignment.file_count + delta_count)
+                )
+                continue
+            self.db.execute(
+                update(DriveAssignment)
+                .where(DriveAssignment.id == assignment_id)
+                .values(
+                    file_count=case(
+                        (DriveAssignment.file_count > abs(delta_count), DriveAssignment.file_count + delta_count),
                         else_=0,
                     )
                 )

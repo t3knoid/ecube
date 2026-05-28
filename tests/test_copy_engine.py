@@ -640,9 +640,13 @@ def test_process_file_routes_progress_to_writer_without_direct_progress_commits(
     class _Writer:
         def __init__(self):
             self.deltas = []
+            self.completions = []
 
         def record_delta(self, assignment_id, delta_bytes):
             self.deltas.append((assignment_id, delta_bytes))
+
+        def record_completion(self, assignment_id, completed_files=1):
+            self.completions.append((assignment_id, completed_files))
 
     writer = _Writer()
 
@@ -673,7 +677,9 @@ def test_process_file_routes_progress_to_writer_without_direct_progress_commits(
     assert refreshed_assignment is not None
     assert refreshed_job.copied_bytes == 0
     assert refreshed_assignment.copied_bytes == 0
+    assert refreshed_assignment.file_count == 0
     assert writer.deltas == [(assignment.id, 8), (assignment.id, len(payload) - 8)]
+    assert writer.completions == [(assignment.id, 1)]
 
 
 def test_copy_progress_writer_flushes_aggregated_job_and_assignment_deltas(db, tmp_path):
@@ -690,6 +696,8 @@ def test_copy_progress_writer_flushes_aggregated_job_and_assignment_deltas(db, t
     writer.record_delta(assignment.id, 5)
     writer.record_delta(assignment.id, 7)
     writer.record_delta(assignment.id, -4)
+    writer.record_completion(assignment.id)
+    writer.record_completion(assignment.id, 2)
     writer.close()
 
     db.expire_all()
@@ -699,6 +707,7 @@ def test_copy_progress_writer_flushes_aggregated_job_and_assignment_deltas(db, t
     assert refreshed_assignment is not None
     assert refreshed_job.copied_bytes == 8
     assert refreshed_assignment.copied_bytes == 8
+    assert refreshed_assignment.file_count == 3
 
 
 def test_process_file_retry_audit_entries_created(db, tmp_path):
