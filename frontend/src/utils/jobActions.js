@@ -1,3 +1,5 @@
+import { normalizeProjectId } from './projectId.js'
+
 export function normalizeJobStatus(status) {
   return String(status || '').toUpperCase()
 }
@@ -88,7 +90,16 @@ function hasKnownFileOutcomeState({ failedFiles, timedOutFiles }) {
   return Number.isFinite(Number(failedFiles)) && Number.isFinite(Number(timedOutFiles))
 }
 
-function isDriveAwaitingEject({ driveState, driveIsMounted }) {
+function isDriveAwaitingEject({ driveState, driveIsMounted, jobProjectId, driveProjectId }) {
+  const normalizedJobProjectId = normalizeProjectId(jobProjectId)
+  const normalizedDriveProjectId = normalizeProjectId(driveProjectId)
+
+  if (normalizedJobProjectId || normalizedDriveProjectId) {
+    if (!normalizedJobProjectId || normalizedDriveProjectId !== normalizedJobProjectId) {
+      return false
+    }
+  }
+
   const normalizedDriveState = String(driveState || '').toUpperCase()
   if (normalizedDriveState === 'IN_USE') return true
   return Boolean(driveIsMounted)
@@ -102,6 +113,8 @@ export function getDashboardNextStepKey({
   timedOutFiles,
   driveState,
   driveIsMounted,
+  jobProjectId,
+  driveProjectId,
 }) {
   const status = normalizeJobStatus(jobStatus)
   const normalizedStartupAnalysisStatus = normalizeStartupAnalysisStatus(startupAnalysisStatus)
@@ -130,7 +143,7 @@ export function getDashboardNextStepKey({
   }
 
   if (status === 'COMPLETED') {
-    if (normalizedCustodyStatus === 'HANDOFF_RECORDED' && isDriveAwaitingEject({ driveState, driveIsMounted })) {
+    if (normalizedCustodyStatus === 'HANDOFF_RECORDED' && isDriveAwaitingEject({ driveState, driveIsMounted, jobProjectId, driveProjectId })) {
       return 'dashboard.nextStepPrepareEject'
     }
 
@@ -156,7 +169,15 @@ export function getDashboardNextStepKey({
   return 'dashboard.nextStepOpenDetail'
 }
 
-export function getDashboardFollowUpKey({ jobStatus, startupAnalysisStatus, custodyStatus, driveState, driveIsMounted }) {
+export function getDashboardFollowUpKey({
+  jobStatus,
+  startupAnalysisStatus,
+  custodyStatus,
+  driveState,
+  driveIsMounted,
+  jobProjectId,
+  driveProjectId,
+}) {
   const status = normalizeJobStatus(jobStatus)
   const normalizedStartupAnalysisStatus = normalizeStartupAnalysisStatus(startupAnalysisStatus)
   const normalizedCustodyStatus = String(custodyStatus || '').toUpperCase()
@@ -177,7 +198,11 @@ export function getDashboardFollowUpKey({ jobStatus, startupAnalysisStatus, cust
     return 'dashboard.attentionWaitingForCustody'
   }
 
-  if (status === 'COMPLETED' && normalizedCustodyStatus === 'HANDOFF_RECORDED' && isDriveAwaitingEject({ driveState, driveIsMounted })) {
+  if (
+    status === 'COMPLETED'
+    && normalizedCustodyStatus === 'HANDOFF_RECORDED'
+    && isDriveAwaitingEject({ driveState, driveIsMounted, jobProjectId, driveProjectId })
+  ) {
     return 'dashboard.attentionReadyForEject'
   }
 

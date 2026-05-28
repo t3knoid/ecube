@@ -208,6 +208,7 @@ describe('DashboardView active jobs', () => {
           product_name: 'Vault',
           current_state: 'IN_USE',
           is_mounted: true,
+          current_project_id: 'PROJ-044',
         },
       },
     ])
@@ -264,6 +265,39 @@ describe('DashboardView active jobs', () => {
     expect(wrapper.text()).toContain(i18n.global.t('dashboard.noNeedsAttention'))
     expect(wrapper.text()).not.toContain(i18n.global.t('dashboard.attentionWaitingForCustody'))
     expect(wrapper.text()).not.toContain('70')
+  })
+
+  it('does not show prepare-eject attention when the drive is no longer bound to the job project', async () => {
+    mocks.listDashboardJobs.mockResolvedValue([
+      {
+        id: 74,
+        project_id: 'PROJ-074',
+        status: 'COMPLETED',
+        custody_status: 'HANDOFF_RECORDED',
+        copied_bytes: 10,
+        total_bytes: 10,
+        file_count: 1,
+        files_succeeded: 1,
+        files_failed: 0,
+        files_timed_out: 0,
+        drive: {
+          id: 7,
+          current_state: 'IN_USE',
+          is_mounted: true,
+          current_project_id: null,
+        },
+      },
+    ])
+    mocks.getShares.mockResolvedValue([
+      { id: 17, status: 'MOUNTED', project_id: 'PROJ-074', related_job: { job_id: 74, status: 'COMPLETED', custody_status: 'HANDOFF_RECORDED' } },
+    ])
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('dashboard.noNeedsAttention'))
+    expect(wrapper.text()).not.toContain(i18n.global.t('dashboard.attentionReadyForEject'))
+    expect(wrapper.text()).not.toContain(i18n.global.t('dashboard.nextStepPrepareEject'))
   })
 
   it('does not classify pending jobs that are still analyzing as waiting to start', async () => {

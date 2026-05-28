@@ -3871,6 +3871,38 @@ def test_archive_job_requires_related_drive_to_be_ejected(manager_client, db):
     assert job.status == JobStatus.COMPLETED
 
 
+def test_archive_job_allows_disassociated_unmounted_drive(manager_client, db):
+    drive = UsbDrive(
+        device_identifier="USB-ARCHIVE-EJECT-002",
+        current_state=DriveState.DISCONNECTED,
+        current_project_id=None,
+        mount_path=None,
+    )
+    db.add(drive)
+    db.flush()
+
+    job = ExportJob(
+        project_id="PROJ-ARCHIVE-EJECT-002",
+        evidence_number="EV-ARCHIVE-EJECT-002",
+        source_path="/data/evidence",
+        target_mount_path="/mnt/ecube/archive-eject-002",
+        status=JobStatus.COMPLETED,
+    )
+    db.add(job)
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id))
+    db.commit()
+
+    response = manager_client.post(
+        f"/jobs/{job.id}/archive",
+        json={"confirm": True},
+    )
+
+    assert response.status_code == 200
+    db.refresh(job)
+    assert job.status == JobStatus.ARCHIVED
+
+
 def test_get_job_reports_drive_mount_state_for_archive_gating(client, db):
     drive = UsbDrive(
         device_identifier="USB-ARCHIVE-EJECT-STATE-001",

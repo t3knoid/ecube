@@ -128,6 +128,8 @@ const needsAttentionItems = computed(() => {
       custodyStatus: job.custody_status,
       driveState: job?.drive?.current_state,
       driveIsMounted: job?.drive?.is_mounted,
+      jobProjectId: job?.project_id,
+      driveProjectId: job?.drive?.current_project_id,
     })
     if (!Number.isInteger(jobId) || jobId < 1) continue
 
@@ -154,6 +156,8 @@ const needsAttentionItems = computed(() => {
       custodyStatus,
       driveState: matchedJob?.drive?.current_state,
       driveIsMounted: matchedJob?.drive?.is_mounted,
+      jobProjectId: matchedJob?.project_id || mount.project_id,
+      driveProjectId: matchedJob?.drive?.current_project_id,
     })
 
     if (!['dashboard.attentionWaitingForCustody', 'dashboard.attentionReadyForEject'].includes(followUpKey)) continue
@@ -402,6 +406,8 @@ function nextStepLabel(job) {
     timedOutFiles: job?.files_timed_out,
     driveState: job?.drive?.current_state,
     driveIsMounted: job?.drive?.is_mounted,
+    jobProjectId: job?.project_id,
+    driveProjectId: job?.drive?.current_project_id,
   }))
 }
 

@@ -106,12 +106,14 @@ describe('job action helpers', () => {
     expect(getDashboardNextStepKey({ jobStatus: 'FAILED', failedFiles: 1, timedOutFiles: 0 })).toBe('dashboard.nextStepReviewFailedFiles')
     expect(getDashboardNextStepKey({ jobStatus: 'PAUSED', failedFiles: 0, timedOutFiles: 0 })).toBe('dashboard.nextStepReviewAndResume')
     expect(getDashboardNextStepKey({ jobStatus: 'COMPLETED', custodyStatus: 'PENDING_HANDOFF', failedFiles: 0, timedOutFiles: 0 })).toBe('dashboard.nextStepReviewVerificationAndHandoff')
-    expect(getDashboardNextStepKey({ jobStatus: 'COMPLETED', custodyStatus: 'HANDOFF_RECORDED', driveState: 'IN_USE' })).toBe('dashboard.nextStepPrepareEject')
-    expect(getDashboardNextStepKey({ jobStatus: 'COMPLETED', custodyStatus: 'HANDOFF_RECORDED', driveIsMounted: true })).toBe('dashboard.nextStepPrepareEject')
+    expect(getDashboardNextStepKey({ jobStatus: 'COMPLETED', custodyStatus: 'HANDOFF_RECORDED', failedFiles: 0, timedOutFiles: 0, driveState: 'IN_USE', jobProjectId: 'PROJ-001', driveProjectId: 'PROJ-001' })).toBe('dashboard.nextStepPrepareEject')
+    expect(getDashboardNextStepKey({ jobStatus: 'COMPLETED', custodyStatus: 'HANDOFF_RECORDED', failedFiles: 0, timedOutFiles: 0, driveIsMounted: true, jobProjectId: 'PROJ-001', driveProjectId: 'PROJ-001' })).toBe('dashboard.nextStepPrepareEject')
+    expect(getDashboardNextStepKey({ jobStatus: 'COMPLETED', custodyStatus: 'HANDOFF_RECORDED', driveState: 'IN_USE', jobProjectId: 'PROJ-001', driveProjectId: null })).toBe('dashboard.nextStepOpenDetail')
   })
 
   it('flags ready-to-eject follow-up only for completed jobs when the drive is still mounted or in use', () => {
-    expect(getDashboardFollowUpKey({ jobStatus: 'COMPLETED', custodyStatus: 'HANDOFF_RECORDED', driveState: 'IN_USE' })).toBe('dashboard.attentionReadyForEject')
+    expect(getDashboardFollowUpKey({ jobStatus: 'COMPLETED', custodyStatus: 'HANDOFF_RECORDED', driveState: 'IN_USE', jobProjectId: 'PROJ-001', driveProjectId: 'PROJ-001' })).toBe('dashboard.attentionReadyForEject')
+    expect(getDashboardFollowUpKey({ jobStatus: 'COMPLETED', custodyStatus: 'HANDOFF_RECORDED', driveState: 'IN_USE', jobProjectId: 'PROJ-001', driveProjectId: null })).toBe('')
     expect(getDashboardFollowUpKey({ jobStatus: 'ARCHIVED', custodyStatus: 'HANDOFF_RECORDED', driveIsMounted: true })).toBe('')
     expect(getDashboardFollowUpKey({ jobStatus: 'COMPLETED', custodyStatus: 'HANDOFF_RECORDED', driveState: 'AVAILABLE', driveIsMounted: false })).toBe('')
   })

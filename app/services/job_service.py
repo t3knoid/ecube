@@ -37,7 +37,7 @@ from app.services.workload_profiles import (
     job_has_explicit_copy_tuning_overrides,
     recommend_workload_profile,
 )
-from app.utils.sanitize import is_encoding_error, resolve_source_path, sanitize_error_message, validate_source_path
+from app.utils.sanitize import is_encoding_error, normalize_project_id, resolve_source_path, sanitize_error_message, validate_source_path
 from app.utils.path_overlap import classify_source_path_overlap
 
 logger = logging.getLogger(__name__)
@@ -814,8 +814,14 @@ def archive_job(
     assignment_row = _row(assignment) if assignment is not None else None
     assigned_drive = cast(Optional[UsbDrive], assignment_row.drive) if assignment_row is not None else None
     if assigned_drive is not None:
+        normalized_job_project_id = normalize_project_id(job_row.project_id)
+        normalized_drive_project_id = normalize_project_id(assigned_drive.current_project_id)
         drive_state = cast(DriveState, assigned_drive.current_state)
-        if drive_state != DriveState.AVAILABLE or assigned_drive.mount_path:
+        if (
+            normalized_job_project_id
+            and normalized_drive_project_id == normalized_job_project_id
+            and (drive_state != DriveState.AVAILABLE or assigned_drive.mount_path)
+        ):
             raise service_exception(
                 status_code=409,
                 detail=(
