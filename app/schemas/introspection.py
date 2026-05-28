@@ -62,6 +62,7 @@ class VersionResponse(BaseModel):
 
     version: str = Field(..., description="Application version")
     api_version: str = Field(..., description="API version")
+    build_timestamp: Optional[str] = Field(default=None, description="Build timestamp in UTC ISO 8601 format when available")
 
 
 # ---------------------------------------------------------------------------

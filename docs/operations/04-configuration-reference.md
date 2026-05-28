@@ -409,6 +409,14 @@ Additional behavior notes:
 
 **CORS note:** If you set `VITE_API_BASE_URL`, ensure the backend's `CORS_ALLOWED_ORIGINS` includes the frontend origin (for example `https://portal.example.com`), otherwise browser preflight requests will be rejected.
 
+## Image Build Metadata
+
+Use `ECUBE_BUILD_TIMESTAMP` as a Docker build argument or packaging-time environment variable when you want `/introspection/version` and the footer UI to show the exact packaged build time.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `ECUBE_BUILD_TIMESTAMP` | *(unset)* | UTC ISO 8601 timestamp injected during image or packaging build, for example `2026-05-27T21:18:00Z`. When set, ECUBE exposes it through `GET /introspection/version` and shows it in the footer as the build date. |
+
 ## References
 
 - [docs/operations/01-installation.md](01-installation.md)

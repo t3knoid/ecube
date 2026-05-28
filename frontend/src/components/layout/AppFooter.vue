@@ -6,16 +6,29 @@ import { getSystemHealth, getVersion } from '@/api/introspection.js'
 const { t } = useI18n()
 
 const version = ref('—')
+const buildTimestamp = ref('')
 const dbConnected = ref(null)
 const activeJobs = ref(null)
 
 let pollInterval = null
 let stopped = false
 
+function formatBuildTimestamp(value) {
+  if (!value) return ''
+
+  const timestamp = new Date(value)
+  if (Number.isNaN(timestamp.getTime())) return value
+
+  return `${timestamp.toISOString().slice(0, 16).replace('T', ' ')} UTC`
+}
+
 async function fetchVersion() {
   try {
     const versionData = await getVersion()
-    if (!stopped) version.value = versionData.version || '—'
+    if (!stopped) {
+      version.value = versionData.version || '—'
+      buildTimestamp.value = formatBuildTimestamp(versionData.build_timestamp)
+    }
   } catch (err) {
     console.debug('Failed to fetch version:', err.message || err)
   }
@@ -57,6 +70,10 @@ onUnmounted(() => {
 <template>
   <footer class="app-footer">
     <span class="footer-version">{{ t('app.name') }} {{ version }}</span>
+    <template v-if="buildTimestamp">
+      <span class="footer-separator">│</span>
+      <span class="footer-build">{{ t('app.buildDate') }}: {{ buildTimestamp }}</span>
+    </template>
     <span class="footer-separator">│</span>
     <span class="footer-db">
       {{ t('common.labels.db') }}:

@@ -7,6 +7,7 @@ from fastapi.openapi.utils import get_openapi
 
 from app import API_VERSION, __version__
 from app.auth import get_current_user
+from app.build_info import get_build_timestamp
 from app.config import settings
 from app.routers import (
     admin,
@@ -168,7 +169,11 @@ def _register_schema_only_routes(app: FastAPI) -> None:
 
     @app.get("/introspection/version", response_model=VersionResponse)
     def introspection_version() -> dict[str, str]:
-        return {"version": __version__, "api_version": API_VERSION}
+        return {
+            "version": __version__,
+            "api_version": API_VERSION,
+            "build_timestamp": get_build_timestamp(),
+        }
 
 
 def create_openapi_app() -> FastAPI:

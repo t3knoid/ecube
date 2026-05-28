@@ -52,6 +52,16 @@ def test_system_health(client, db):
     assert "ecube_process" in data
 
 
+def test_introspection_version_includes_build_timestamp_when_configured(client, db):
+    with patch("app.main.get_build_timestamp", return_value="2026-05-27T21:18:00Z"):
+        response = client.get("/introspection/version")
+
+    assert response.status_code == 200
+    assert response.json()["api_version"] == "1.0.0"
+    assert response.json()["build_timestamp"] == "2026-05-27T21:18:00Z"
+    assert isinstance(response.json()["version"], str)
+
+
 def test_system_health_reports_exfat_runtime_warning_when_formatting_is_available_but_mount_support_is_missing(admin_client, db):
     inspector = _runtime_inspector(formatting_available=True, mount_runtime_available=False)
 

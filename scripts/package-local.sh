@@ -41,10 +41,20 @@ require_cmd() {
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
+GENERATED_BUILD_INFO_PATH="${REPO_ROOT}/app/_generated_build_info.py"
 
 ARTIFACT_NAME=""
 SKIP_FRONTEND_BUILD=false
 BUILD_ONLY=false
+
+cleanup() {
+  rm -f "${GENERATED_BUILD_INFO_PATH}"
+  if [[ -n "${staging_link-}" ]]; then
+    rm -f "${staging_link}"
+  fi
+}
+
+trap cleanup EXIT
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -97,6 +107,16 @@ fi
 require_cmd tar
 require_cmd sha256sum
 
+if [[ -n "${ECUBE_BUILD_TIMESTAMP-}" ]]; then
+  BUILD_TIMESTAMP="${ECUBE_BUILD_TIMESTAMP}"
+else
+  require_cmd date
+  BUILD_TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+fi
+
+echo "==> Stamping packaged build metadata (${BUILD_TIMESTAMP})"
+printf 'BUILD_TIMESTAMP = "%s"\n' "${BUILD_TIMESTAMP}" > "${GENERATED_BUILD_INFO_PATH}"
+
 if [[ "${SKIP_FRONTEND_BUILD}" == false ]]; then
   require_cmd npm
   echo "==> Verifying generated help is in sync and building frontend"
@@ -144,7 +164,6 @@ echo "==> Creating dist/${ARTIFACT_NAME}.tar.gz"
 # GNU tar (--transform) and BSD tar (no --transform).
 staging_link="dist/${ARTIFACT_NAME}"
 ln -snf "${REPO_ROOT}" "${staging_link}"
-trap 'rm -f "${staging_link}"' EXIT
 tar -czf "dist/${ARTIFACT_NAME}.tar.gz" \
   -C dist \
   "${ARTIFACT_NAME}/install.sh" \

@@ -13,6 +13,8 @@ RUN npm run build
 # Stage 2: Python application with bundled frontend
 FROM python:3.11.11-slim-bookworm
 
+ARG ECUBE_BUILD_TIMESTAMP
+
 LABEL org.opencontainers.image.source="https://github.com/t3knoid/ecube"
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -48,6 +50,10 @@ COPY alembic.ini /opt/ecube/alembic.ini
 COPY deploy/ecube-pam /opt/ecube/deploy/ecube-pam
 COPY deploy/ecube-host/entrypoint.sh /usr/local/bin/ecube-entrypoint.sh
 COPY deploy/ecube-host/configure-os-auth.sh /usr/local/bin/ecube-configure-os-auth.sh
+
+RUN if [ -n "$ECUBE_BUILD_TIMESTAMP" ]; then \
+            printf 'BUILD_TIMESTAMP = "%s"\n' "$ECUBE_BUILD_TIMESTAMP" > /opt/ecube/app/_generated_build_info.py; \
+        fi
 
 RUN chmod +x /usr/local/bin/ecube-entrypoint.sh /usr/local/bin/ecube-configure-os-auth.sh
 

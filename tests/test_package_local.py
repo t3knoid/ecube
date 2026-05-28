@@ -67,6 +67,7 @@ def test_package_local_verifies_help_before_frontend_build(tmp_path):
 
     env = os.environ.copy()
     env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["ECUBE_BUILD_TIMESTAMP"] = "2026-05-27T21:18:00Z"
 
     result = subprocess.run(
         ["bash", str(package_script), "--artifact-name", "test-artifact", "--build-only"],
@@ -84,3 +85,7 @@ def test_package_local_verifies_help_before_frontend_build(tmp_path):
         "<html>generated help</html>\n"
     )
     assert (repo_root / "dist" / "test-artifact" / "dist" / "help" / "manual.html").exists()
+    assert not (repo_root / "app" / "_generated_build_info.py").exists()
+    assert (repo_root / "dist" / "test-artifact" / "app" / "_generated_build_info.py").read_text(encoding="utf-8") == (
+        'BUILD_TIMESTAMP = "2026-05-27T21:18:00Z"\n'
+    )

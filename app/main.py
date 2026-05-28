@@ -19,6 +19,7 @@ from starlette.routing import BaseRoute, Match
 
 from app.auth import CurrentUser, get_current_user, require_roles
 from app import API_VERSION, __version__
+from app.build_info import get_build_timestamp
 from app.config import (
     DEFAULT_DEMO_ACCOUNTS,
     DEFAULT_DEMO_LOGIN_MESSAGE,
@@ -1095,7 +1096,11 @@ def introspection_version():
 
     No authentication required. Useful for deployment verification.
     """
-    return {"version": __version__, "api_version": API_VERSION}
+    return {
+        "version": __version__,
+        "api_version": API_VERSION,
+        "build_timestamp": get_build_timestamp(),
+    }
 
 
 def custom_openapi():
