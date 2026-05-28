@@ -1322,7 +1322,7 @@ def test_run_copy_job_automatically_continues_overflow_on_next_project_drive(db,
         if relative_path != overflowed_relative_path["value"]
     )
     assert files_by_path[overflowed_relative_path["value"]].drive_assignment_id == assignments[1].id
-    assert files_by_path[retained_relative_path].drive_assignment_id == assignments[0].id
+    assert files_by_path[retained_relative_path].drive_assignment_id == assignments[1].id
     assert overflow_audit is not None
     assert overflow_audit.details["automatic"] is True
     assert target_full_audit is not None
