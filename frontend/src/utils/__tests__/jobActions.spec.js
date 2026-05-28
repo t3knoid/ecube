@@ -110,9 +110,9 @@ describe('job action helpers', () => {
     expect(getDashboardNextStepKey({ jobStatus: 'COMPLETED', custodyStatus: 'HANDOFF_RECORDED', driveIsMounted: true })).toBe('dashboard.nextStepPrepareEject')
   })
 
-  it('flags ready-to-eject follow-up after custody handoff when the drive is still mounted or in use', () => {
+  it('flags ready-to-eject follow-up only for completed jobs when the drive is still mounted or in use', () => {
     expect(getDashboardFollowUpKey({ jobStatus: 'COMPLETED', custodyStatus: 'HANDOFF_RECORDED', driveState: 'IN_USE' })).toBe('dashboard.attentionReadyForEject')
-    expect(getDashboardFollowUpKey({ jobStatus: 'ARCHIVED', custodyStatus: 'HANDOFF_RECORDED', driveIsMounted: true })).toBe('dashboard.attentionReadyForEject')
+    expect(getDashboardFollowUpKey({ jobStatus: 'ARCHIVED', custodyStatus: 'HANDOFF_RECORDED', driveIsMounted: true })).toBe('')
     expect(getDashboardFollowUpKey({ jobStatus: 'COMPLETED', custodyStatus: 'HANDOFF_RECORDED', driveState: 'AVAILABLE', driveIsMounted: false })).toBe('')
   })
 
