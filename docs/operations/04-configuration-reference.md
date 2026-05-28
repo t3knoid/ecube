@@ -277,7 +277,7 @@ Operational notes:
 | `COPY_DEFAULT_MAX_RETRIES`         | `3`       | Default maximum per-file retries when not set on a job.            |
 | `COPY_DEFAULT_RETRY_DELAY_SECONDS` | `1.0`     | Default retry delay in seconds when not set on a job.              |
 
-`admin` and `manager` users can adjust the copy-engine settings above from the `Configuration` page. The UI exposes direct controls for chunk size, progress flush threshold, default worker count, per-file disk sync, and the separate hashing mode flag together with workload profile shortcuts for `Small-file heavy`, `Mixed workload`, `Large-file heavy`, and `Greedy throughput`.
+`admin` and `manager` users can adjust copy-engine settings from the `Configuration` API surface. The `Configuration` page exposes direct controls for chunk size, progress flush threshold, default worker count, and per-file disk sync together with workload profile shortcuts for `Small-file heavy`, `Mixed workload`, `Large-file heavy`, and `Greedy throughput`.
 
 ---
 

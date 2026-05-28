@@ -326,8 +326,11 @@ def _copy_file_with_separate_hashing(
     finally:
         if copy_error is not None:
             stop_event.set()
-        cleanup_deadline = start_time + timeout_seconds if timeout_seconds > 0 else time.monotonic() + 5.0
+        cleanup_deadline = start_time + timeout_seconds if timeout_seconds > 0 else None
         while hash_thread.is_alive():
+            if cleanup_deadline is None:
+                hash_thread.join(timeout=0.1)
+                continue
             remaining = cleanup_deadline - time.monotonic()
             if remaining <= 0:
                 break

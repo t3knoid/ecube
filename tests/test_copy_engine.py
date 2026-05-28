@@ -222,6 +222,24 @@ def test_copy_file_separate_hashing_honors_timeout_without_hanging(tmp_path):
     assert time.monotonic() - start < 0.5
 
 
+def test_copy_file_separate_hashing_timeout_disabled_does_not_use_cleanup_deadline(tmp_path):
+    src = tmp_path / "no-timeout.bin"
+    dst = tmp_path / "no-timeout-copy.bin"
+    payload = b"q" * 8192
+    src.write_bytes(payload)
+
+    monotonic_values = iter([0.0, 1.0, 10_000.0, 10_001.0, 10_002.0, 10_003.0])
+
+    with patch.object(copy_engine.settings, "copy_hashing_separate_thread_enabled", True):
+        with patch("app.services.copy_engine.time.monotonic", side_effect=lambda: next(monotonic_values, 10_003.0)):
+            success, checksum, err = copy_engine.copy_file(src, dst, timeout_seconds=0)
+
+    assert success is True
+    assert err is None
+    assert checksum == hashlib.sha256(payload).hexdigest()
+    assert dst.read_bytes() == payload
+
+
 # ---------------------------------------------------------------------------
 # _process_file retry tests
 # ---------------------------------------------------------------------------
