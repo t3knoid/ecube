@@ -614,6 +614,44 @@ def test_process_file_ends_initial_read_transaction_before_copy(db, tmp_path):
     assert refreshed.status == FileStatus.DONE
 
 
+def test_process_file_does_not_hold_db_transaction_open_during_copy_io(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    payload = b"transaction-boundary"
+    test_file = source_dir / "copy-io.txt"
+    test_file.write_bytes(payload)
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), max_file_retries=0, retry_delay_seconds=0, target_mount_path=str(target_dir))
+    _assign_drive(db, job)
+
+    ef = ExportFile(
+        job_id=job.id,
+        relative_path="copy-io.txt",
+        size_bytes=len(payload),
+        status=FileStatus.PENDING,
+        retry_attempts=0,
+    )
+    db.add(ef)
+    db.commit()
+    db.refresh(ef)
+
+    def _assert_copy_starts_without_open_transaction(*args, **kwargs):
+        assert db.in_transaction() is False
+        return True, hashlib.sha256(payload).hexdigest(), None
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine.copy_file", side_effect=_assert_copy_starts_without_open_transaction):
+            copy_engine._process_file(ef.id, test_file, target_dir, max_retries=0, retry_delay=0)
+
+    db.expire_all()
+    refreshed = db.get(ExportFile, ef.id)
+    assert refreshed is not None
+    assert refreshed.status == FileStatus.DONE
+
+
 def test_process_file_routes_progress_to_writer_without_direct_progress_commits(db, tmp_path):
     source_dir = tmp_path / "source"
     source_dir.mkdir()
@@ -708,6 +746,26 @@ def test_copy_progress_writer_flushes_aggregated_job_and_assignment_deltas(db, t
     assert refreshed_job.copied_bytes == 8
     assert refreshed_assignment.copied_bytes == 8
     assert refreshed_assignment.file_count == 3
+
+
+def test_copy_progress_writer_close_times_out_when_background_thread_does_not_exit(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+
+    writer = copy_engine._CopyProgressWriter(db=db, job_id=job.id)
+    writer._background_enabled = True
+    fake_thread = SimpleNamespace(
+        join=lambda timeout=None: None,
+        is_alive=lambda: True,
+    )
+    writer._thread = fake_thread
+
+    with pytest.raises(TimeoutError, match="Timed out waiting for aggregated copy progress writer to stop"):
+        writer.close()
 
 
 def test_process_file_retry_audit_entries_created(db, tmp_path):

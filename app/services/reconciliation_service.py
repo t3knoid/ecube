@@ -857,6 +857,39 @@ def run_manual_managed_mount_reconciliation(
 _IN_PROGRESS_STATUSES = (JobStatus.PREPARING, JobStatus.RUNNING, JobStatus.VERIFYING)
 
 
+def _reconcile_stale_pausing_job(db: Session, job: ExportJob) -> dict[str, Any]:
+    reset_in_flight_file_count = int(
+        db.query(ExportFile)
+        .filter(
+            ExportFile.job_id == job.id,
+            ExportFile.status.in_((FileStatus.COPYING, FileStatus.RETRYING)),
+        )
+        .count()
+    )
+    if reset_in_flight_file_count:
+        (
+            db.query(ExportFile)
+            .filter(
+                ExportFile.job_id == job.id,
+                ExportFile.status.in_((FileStatus.COPYING, FileStatus.RETRYING)),
+            )
+            .update({ExportFile.status: FileStatus.PENDING}, synchronize_session=False)
+        )
+
+    job.status = JobStatus.PAUSED
+    job.completed_at = None
+    job.copy_started_at = None
+    job.failure_reason = None
+
+    return {
+        "job_id": job.id,
+        "old_status": JobStatus.PAUSING.value,
+        "new_status": JobStatus.PAUSED.value,
+        "reason": "pause_interrupted_by_restart",
+        "reset_in_flight_file_count": reset_in_flight_file_count,
+    }
+
+
 def _reconcile_stale_startup_analysis(
     db: Session,
     job: ExportJob,
@@ -929,15 +962,21 @@ def reconcile_jobs(db: Session) -> Dict[str, int]:
         .filter(ExportJob.status.in_(_IN_PROGRESS_STATUSES))
         .all()
     )
+    pausing_jobs = (
+        db.query(ExportJob)
+        .filter(ExportJob.status == JobStatus.PAUSING)
+        .all()
+    )
     startup_analysis_jobs = (
         db.query(ExportJob)
         .filter(ExportJob.startup_analysis_status == StartupAnalysisStatus.ANALYZING)
         .all()
     )
 
-    checked = len(jobs) + len(startup_analysis_jobs)
+    checked = len(jobs) + len(pausing_jobs) + len(startup_analysis_jobs)
     corrected = 0
     audit_entries = []
+    reconciled_jobs: list[tuple[ExportJob, dict[str, Any]]] = []
     startup_analysis_checked = len(startup_analysis_jobs)
     startup_analysis_audit_entries = []
 
@@ -951,12 +990,20 @@ def reconcile_jobs(db: Session) -> Dict[str, int]:
         job.failure_reason = "Job interrupted by service restart before completion"
         corrected += 1
 
-        audit_entries.append({
+        audit_entry = {
             "job_id": job.id,
             "old_status": old_status.value,
             "new_status": JobStatus.FAILED.value,
             "reason": "interrupted by restart",
-        })
+        }
+        audit_entries.append(audit_entry)
+        reconciled_jobs.append((job, audit_entry))
+
+    for job in pausing_jobs:
+        audit_entry = _reconcile_stale_pausing_job(db, job)
+        corrected += 1
+        audit_entries.append(audit_entry)
+        reconciled_jobs.append((job, audit_entry))
 
     for job in startup_analysis_jobs:
         audit_entry = _reconcile_stale_startup_analysis(
@@ -1024,7 +1071,7 @@ def reconcile_jobs(db: Session) -> Dict[str, int]:
             },
         )
 
-    for job, audit_entry in zip(jobs, audit_entries):
+    for job, audit_entry in reconciled_jobs:
         try:
             deliver_callback(
                 job,

@@ -51,6 +51,7 @@ COPY_PENDING_BATCH_MULTIPLIER = 4
 COPY_CONTROL_POLL_COMPLETION_INTERVAL = 2
 COPY_CONTROL_POLL_MAX_INTERVAL_SECONDS = 0.1
 COPY_PROGRESS_DB_FLUSH_INTERVAL_SECONDS = 0.05
+COPY_PROGRESS_DB_CLOSE_TIMEOUT_SECONDS = 5.0
 THROUGHPUT_BENCHMARK_SAMPLE_BUCKETS: tuple[tuple[int, Optional[int]], ...] = (
     (16 * 1024, 32 * 1024),
     (32 * 1024, 64 * 1024),
@@ -719,7 +720,8 @@ class _CopyProgressWriter:
         self._pending_assignment_deltas: dict[int, int] = defaultdict(int)
         self._pending_assignment_file_counts: dict[int, int] = defaultdict(int)
         self._pending_lock = threading.Lock()
-        self._updates: "queue.Queue[tuple[Optional[int], int] | None]" = queue.Queue()
+        self._updates: "queue.Queue[tuple[Optional[int], int, int] | None]" = queue.Queue()
+        self._close_error: Optional[BaseException] = None
         self._thread = threading.Thread(
             target=self._run,
             name=f"copy-progress-{job_id}",
@@ -740,7 +742,7 @@ class _CopyProgressWriter:
                 if assignment_id is not None:
                     self._pending_assignment_deltas[int(assignment_id)] += int(delta_bytes)
             return
-        self._updates.put((assignment_id, int(delta_bytes)))
+        self._updates.put((assignment_id, int(delta_bytes), 0))
 
     def record_completion(self, assignment_id: Optional[int], completed_files: int = 1) -> None:
         if assignment_id is None or completed_files == 0:
@@ -756,7 +758,11 @@ class _CopyProgressWriter:
             self._flush_synchronously()
             return
         self._updates.put(None)
-        self._thread.join()
+        self._thread.join(timeout=COPY_PROGRESS_DB_CLOSE_TIMEOUT_SECONDS)
+        if self._thread.is_alive():
+            raise TimeoutError("Timed out waiting for aggregated copy progress writer to stop")
+        if self._close_error is not None:
+            raise RuntimeError("Aggregated copy progress writer failed during shutdown") from self._close_error
 
     def _flush_synchronously(self) -> None:
         with self._pending_lock:
@@ -769,12 +775,13 @@ class _CopyProgressWriter:
 
         db = Session(bind=self._bind)
         try:
-            self._flush_pending(
+            if not self._flush_pending(
                 FileRepository(db),
                 pending_job_delta=pending_job_delta,
                 pending_assignment_deltas=pending_assignment_deltas,
                 pending_assignment_file_counts=pending_assignment_file_counts,
-            )
+            ):
+                raise RuntimeError("Aggregated copy progress writer failed during synchronous flush")
         finally:
             db.close()
 
@@ -819,21 +826,14 @@ class _CopyProgressWriter:
         try:
             while True:
                 timeout = self._flush_interval_seconds if (pending_job_delta or pending_assignment_deltas or pending_assignment_file_counts) else None
+                timed_out = False
                 try:
                     update_item = self._updates.get(timeout=timeout)
                 except queue.Empty:
+                    timed_out = True
                     update_item = None
-                    stop_requested = False
 
-                if update_item is None:
-                    if stop_requested:
-                        self._flush_pending(
-                            repo,
-                            pending_job_delta=pending_job_delta,
-                            pending_assignment_deltas=pending_assignment_deltas,
-                            pending_assignment_file_counts=pending_assignment_file_counts,
-                        )
-                        return
+                if timed_out:
                     if self._flush_pending(
                         repo,
                         pending_job_delta=pending_job_delta,
@@ -845,11 +845,8 @@ class _CopyProgressWriter:
                         pending_assignment_file_counts.clear()
                     continue
 
-                if len(update_item) == 2:
-                    assignment_id, delta_bytes = update_item
-                    pending_job_delta += delta_bytes
-                    if assignment_id is not None:
-                        pending_assignment_deltas[int(assignment_id)] += delta_bytes
+                if update_item is None:
+                    stop_requested = True
                 else:
                     assignment_id, delta_bytes, completed_files = update_item
                     pending_job_delta += delta_bytes
@@ -866,18 +863,12 @@ class _CopyProgressWriter:
                     if queued_item is None:
                         stop_requested = True
                         break
-                    if len(queued_item) == 2:
-                        queued_assignment_id, queued_delta_bytes = queued_item
-                        pending_job_delta += queued_delta_bytes
-                        if queued_assignment_id is not None:
-                            pending_assignment_deltas[int(queued_assignment_id)] += queued_delta_bytes
-                    else:
-                        queued_assignment_id, queued_delta_bytes, queued_completed_files = queued_item
-                        pending_job_delta += queued_delta_bytes
-                        if queued_assignment_id is not None and queued_delta_bytes != 0:
-                            pending_assignment_deltas[int(queued_assignment_id)] += queued_delta_bytes
-                        if queued_assignment_id is not None and queued_completed_files != 0:
-                            pending_assignment_file_counts[int(queued_assignment_id)] += queued_completed_files
+                    queued_assignment_id, queued_delta_bytes, queued_completed_files = queued_item
+                    pending_job_delta += queued_delta_bytes
+                    if queued_assignment_id is not None and queued_delta_bytes != 0:
+                        pending_assignment_deltas[int(queued_assignment_id)] += queued_delta_bytes
+                    if queued_assignment_id is not None and queued_completed_files != 0:
+                        pending_assignment_file_counts[int(queued_assignment_id)] += queued_completed_files
 
                 if self._flush_pending(
                     repo,
@@ -888,6 +879,9 @@ class _CopyProgressWriter:
                     pending_job_delta = 0
                     pending_assignment_deltas.clear()
                     pending_assignment_file_counts.clear()
+                elif stop_requested:
+                    self._close_error = RuntimeError("Aggregated copy progress writer failed during final flush")
+                    return
                 if stop_requested:
                     return
         finally:
@@ -2024,6 +2018,7 @@ def prepare_job_startup_analysis(
     manual: bool = False,
 ) -> dict[str, object]:
     db: Session = SessionLocal()
+    db.expire_on_commit = False
     try:
         job_repo = JobRepository(db)
         file_repo = FileRepository(db)
@@ -2332,7 +2327,11 @@ def _process_file(
     and file path.
     """
     db: Session = SessionLocal()
+    db.expire_on_commit = False
     worker_snapshot: Optional[dict[str, object]] = None
+    file_job_id: Optional[int] = None
+    file_id: Optional[int] = None
+    relative_path: Optional[str] = None
 
     def _commit_with_staged_audit(
         *,
@@ -2343,7 +2342,7 @@ def _process_file(
         if action is not None:
             audit_repo.add_uncommitted(
                 action=action,
-                job_id=ef.job_id,
+                job_id=file_job_id,
                 details=details,
             )
         try:
@@ -2361,13 +2360,14 @@ def _process_file(
         ef = file_repo.get(export_file_id)
         if ef is None:
             return False
+        file_job_id = int(ef.job_id)
 
         job_repo = JobRepository(db)
-        job = job_repo.get(ef.job_id)
+        job = job_repo.get(file_job_id)
         if job is None:
             return False
         assignment_repo = DriveAssignmentRepository(db)
-        active_assignment = assignment_repo.get_active_for_job(ef.job_id)
+        active_assignment = assignment_repo.get_active_for_job(file_job_id)
         active_assignment_id = int(active_assignment.id) if active_assignment is not None else None
         if job.status in (JobStatus.PAUSING, JobStatus.PAUSED):
             ef.status = FileStatus.PENDING
@@ -2384,20 +2384,24 @@ def _process_file(
         db.rollback()
         db.close()
         db = SessionLocal()
+        db.expire_on_commit = False
         file_repo = FileRepository(db)
         audit_repo = AuditRepository(db)
         ef = file_repo.get(export_file_id)
         if ef is None:
             return False
+        file_job_id = int(ef.job_id)
+        file_id = int(ef.id)
+        relative_path = str(ef.relative_path)
 
-        worker_snapshot = register_active_copy_worker(job_id=ef.job_id)
+        worker_snapshot = register_active_copy_worker(job_id=file_job_id)
 
         ef.status = FileStatus.COPYING
         ef.drive_assignment_id = active_assignment_id
         if not _commit_with_staged_audit(
             commit_error_message="DB commit failed setting file %s to COPYING",
             action="FILE_COPY_START",
-            details={"file_id": ef.id, "relative_path": ef.relative_path},
+            details={"file_id": file_id, "relative_path": relative_path},
         ):
             return False
 
@@ -2431,7 +2435,7 @@ def _process_file(
                     if progress_writer is not None:
                         progress_writer.record_delta(active_assignment_id, flushed_bytes)
                     else:
-                        file_repo.increment_copy_progress(ef.job_id, active_assignment_id, flushed_bytes)
+                        file_repo.increment_copy_progress(file_job_id, active_assignment_id, flushed_bytes)
                     attempt_bytes_reported += flushed_bytes
                     bytes_reported += flushed_bytes
                     pending_progress_bytes = 0
@@ -2455,7 +2459,7 @@ def _process_file(
                     self_execute = db.execute
                     self_execute(
                         update(ExportJob)
-                        .where(ExportJob.id == ef.job_id)
+                        .where(ExportJob.id == file_job_id)
                         .values(copied_bytes=ExportJob.copied_bytes + pending_progress_bytes)
                     )
                     if active_assignment_id is not None:
@@ -2476,7 +2480,7 @@ def _process_file(
                     action="FILE_COPY_RETRY",
                     details={
                         "file_id": ef.id,
-                        "relative_path": ef.relative_path,
+                        "relative_path": relative_path,
                         "attempt": attempt,
                         "delay_seconds": delay,
                     },
@@ -2492,7 +2496,7 @@ def _process_file(
                     logger.exception("DB commit failed setting file %s to COPYING on retry", export_file_id)
 
             if target is not None:
-                dst = target / ef.relative_path
+                dst = target / relative_path
                 file_timeout_seconds = int(getattr(settings, "copy_job_timeout", 0) or 0)
                 timeout_start = time.monotonic()
                 try:
@@ -2538,10 +2542,10 @@ def _process_file(
                 try:
                     AuditRepository(db).add(
                         action="FILE_COPY_TIMEOUT",
-                        job_id=ef.job_id,
+                        job_id=file_job_id,
                         details={
-                            "file_id": ef.id,
-                            "relative_path": ef.relative_path,
+                            "file_id": file_id,
+                            "relative_path": relative_path,
                             "timeout_seconds": file_timeout_seconds,
                             "elapsed_seconds": round(timeout_elapsed_seconds, 2),
                             "error_code": "copy_timeout",
@@ -2557,7 +2561,7 @@ def _process_file(
                     if progress_writer is not None:
                         progress_writer.record_delta(active_assignment_id, -attempt_bytes_reported)
                     else:
-                        file_repo.decrement_copy_progress(ef.job_id, active_assignment_id, attempt_bytes_reported)
+                        file_repo.decrement_copy_progress(file_job_id, active_assignment_id, attempt_bytes_reported)
                     bytes_reported = max(0, bytes_reported - attempt_bytes_reported)
                 except Exception:
                     logger.exception("DB commit failed rolling back copied_bytes for file %s", export_file_id)
@@ -2567,9 +2571,9 @@ def _process_file(
             logger.info(
                 "File copy failure recorded",
                 extra={
-                    "job_id": ef.job_id,
-                    "file_id": ef.id,
-                    "relative_path": ef.relative_path,
+                    "job_id": file_job_id,
+                    "file_id": file_id,
+                    "relative_path": relative_path,
                     "attempt": attempt,
                     "error_code": error_code,
                 },
@@ -2577,9 +2581,9 @@ def _process_file(
             logger.debug(
                 "File copy failure detail",
                 extra={
-                    "job_id": ef.job_id,
-                    "file_id": ef.id,
-                    "relative_path": ef.relative_path,
+                    "job_id": file_job_id,
+                    "file_id": file_id,
+                    "relative_path": relative_path,
                     "attempt": attempt,
                     "error_code": error_code,
                     "raw_error": str(last_err or "unknown error"),
@@ -2588,10 +2592,10 @@ def _process_file(
             try:
                 audit_repo.add_uncommitted(
                     action="FILE_COPY_FAILURE",
-                    job_id=ef.job_id,
+                    job_id=file_job_id,
                     details={
-                        "file_id": ef.id,
-                        "relative_path": ef.relative_path,
+                        "file_id": file_id,
+                        "relative_path": relative_path,
                         "attempt": attempt,
                         "error_code": error_code,
                         "error_detail": safe_error_message,
@@ -2617,8 +2621,8 @@ def _process_file(
             try:
                 audit_repo.add_uncommitted(
                     action="FILE_COPY_SUCCESS",
-                    job_id=ef.job_id,
-                    details={"file_id": ef.id, "relative_path": ef.relative_path},
+                    job_id=file_job_id,
+                    details={"file_id": file_id, "relative_path": relative_path},
                 )
                 db.commit()
                 if progress_writer is not None:
@@ -2632,7 +2636,7 @@ def _process_file(
                         if progress_writer is not None:
                             progress_writer.record_delta(active_assignment_id, -bytes_reported)
                         else:
-                            file_repo.decrement_copy_progress(ef.job_id, active_assignment_id, bytes_reported)
+                            file_repo.decrement_copy_progress(file_job_id, active_assignment_id, bytes_reported)
                     except Exception:
                         logger.exception("DB commit failed restoring copied_bytes for file %s", export_file_id)
         elif timed_out:
@@ -2650,7 +2654,7 @@ def _process_file(
                         if progress_writer is not None:
                             progress_writer.record_delta(active_assignment_id, -bytes_reported)
                         else:
-                            file_repo.decrement_copy_progress(ef.job_id, active_assignment_id, bytes_reported)
+                            file_repo.decrement_copy_progress(file_job_id, active_assignment_id, bytes_reported)
                     except Exception:
                         logger.exception("DB commit failed restoring copied_bytes for file", {"file_id": export_file_id})
         else:
@@ -2682,6 +2686,7 @@ def run_copy_job(job_id: int) -> None:
     tracked receive fresh ``PENDING`` records.
     """
     db: Session = SessionLocal()
+    db.expire_on_commit = False
     try:
         job_repo = JobRepository(db)
         file_timeout_seconds = int(getattr(settings, "copy_job_timeout", 0) or 0)

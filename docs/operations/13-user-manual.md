@@ -800,6 +800,8 @@ The completion summary uses the normal success styling for clean completions. If
 
 During startup analysis, Job Detail can show `Preparing copy...` before any totals are known. While this state is visible, the page also explains that ECUBE is still scanning the source files and calculating totals, which can take time for large evidence sets.
 
+If the service restarts after a pause request but before the final `PAUSED` write, startup reconciliation restores that stranded job to `PAUSED` before operators return. Any file rows left in `COPYING` or `RETRYING` are returned to `PENDING`, so resuming the same job does not depend on the interrupted worker process surviving the restart.
+
 During `VERIFYING`, Job Detail keeps the same progress surface in `Current Task` but switches its text to verification-specific guidance. The page does not present an exact verification percentage because the current API does not expose verification counters.
 
 Manual Analyze runs use the same startup-analysis engine before copy begins. Job Detail can show `Startup analysis started.` while the scan is running, then replace it with `Startup analysis completed.` when the persisted analysis summary is ready. The summary panel can show the startup-analysis state, discovered files, estimated total bytes, last analyzed time, and a sanitized failure reason when analysis fails.

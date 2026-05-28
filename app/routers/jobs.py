@@ -800,7 +800,9 @@ def pause_job(
     """Request a safe pause for an actively running export job.
 
     The job enters ``PAUSING`` immediately and transitions to ``PAUSED`` once
-    in-flight copy threads finish their current work.
+    in-flight copy threads finish their current work. If the service restarts
+    before that drain completes, startup reconciliation restores the stranded
+    pause state to ``PAUSED`` before operators resume the job.
 
     **Roles:** ``admin``, ``manager``, ``processor``
     """

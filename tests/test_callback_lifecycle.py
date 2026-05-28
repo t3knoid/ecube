@@ -293,3 +293,54 @@ def test_reconcile_jobs_emits_reconciled_callback(db):
         "new_status": "FAILED",
         "reason": "interrupted by restart",
     }
+
+
+def test_reconcile_jobs_recovers_stale_pausing_job_to_paused(db):
+    job = _make_job(
+        db,
+        project_id="PROJ-CALLBACK-LIFECYCLE-007",
+        evidence_number="EV-CALLBACK-LIFECYCLE-007",
+        status=JobStatus.PAUSING,
+        source_path="/data/callback-lifecycle-007",
+    )
+    job.copy_started_at = datetime(2026, 5, 28, 16, 44, tzinfo=timezone.utc)
+    db.flush()
+    db.add(
+        ExportFile(
+            job_id=job.id,
+            relative_path="stale-copy.bin",
+            status=FileStatus.COPYING,
+            size_bytes=128,
+        )
+    )
+    db.add(
+        ExportFile(
+            job_id=job.id,
+            relative_path="pending-copy.bin",
+            status=FileStatus.PENDING,
+            size_bytes=64,
+        )
+    )
+    db.commit()
+
+    with patch("app.services.reconciliation_service.deliver_callback") as mock_callback:
+        result = reconcile_jobs(db)
+
+    db.expire_all()
+    refreshed_job = db.get(ExportJob, job.id)
+    stale_file = db.query(ExportFile).filter(ExportFile.job_id == job.id, ExportFile.relative_path == "stale-copy.bin").one()
+    pending_file = db.query(ExportFile).filter(ExportFile.job_id == job.id, ExportFile.relative_path == "pending-copy.bin").one()
+
+    assert result["jobs_corrected"] == 1
+    assert refreshed_job is not None
+    assert refreshed_job.status == JobStatus.PAUSED
+    assert refreshed_job.copy_started_at is None
+    assert stale_file.status == FileStatus.PENDING
+    assert pending_file.status == FileStatus.PENDING
+    assert mock_callback.call_count == 1
+    assert mock_callback.call_args.kwargs["event"] == "JOB_RECONCILED"
+    assert mock_callback.call_args.kwargs["event_details"] == {
+        "old_status": "PAUSING",
+        "new_status": "PAUSED",
+        "reason": "pause_interrupted_by_restart",
+    }
