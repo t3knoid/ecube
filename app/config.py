@@ -303,9 +303,9 @@ class Settings(BaseSettings):
     #: last committed ``DONE`` file after crashes or restarts.
     copy_file_fsync_enabled: bool = False
 
-    #: Feature flag reserved for staged copy-engine work. When true, the runtime
-    #: may execute hashing outside the file-copy worker path. Current behavior is
-    #: unchanged; hashing remains in the copy worker.
+    #: Feature flag for the copy engine's separate hashing mode. When true,
+    #: copy work writes the file while a dedicated hashing thread computes the
+    #: checksum in parallel.
     copy_hashing_separate_thread_enabled: bool = False
 
     #: Minimum buffered byte count before the copy engine flushes

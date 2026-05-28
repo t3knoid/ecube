@@ -335,6 +335,7 @@ Manager-accessible fields are limited to:
 - `copy_progress_flush_bytes`
 - `copy_default_thread_count`
 - `copy_file_fsync_enabled`
+- `copy_hashing_separate_thread_enabled`
 - `job_detail_files_page_size`
 
 Notes:

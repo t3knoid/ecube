@@ -243,21 +243,58 @@ def _copy_file_with_separate_hashing(
     chunk_size: int,
     fsync_enabled: Optional[bool],
 ) -> str:
-    hash_queue: "queue.Queue[bytes | None]" = queue.Queue()
+    hash_queue: "queue.Queue[bytes | None]" = queue.Queue(maxsize=2)
     hash_errors: list[BaseException] = []
     checksum_hex: list[str] = []
+    stop_event = threading.Event()
+
+    def _raise_timeout_if_needed() -> None:
+        if timeout_seconds > 0 and (time.monotonic() - start_time) > timeout_seconds:
+            raise TimeoutError(f"File copy timed out after {timeout_seconds}s")
+
+    def _enqueue_hash_chunk(chunk: bytes) -> None:
+        while True:
+            _raise_timeout_if_needed()
+            if hash_errors:
+                raise RuntimeError("Checksum worker failed") from hash_errors[0]
+            try:
+                hash_queue.put(chunk, timeout=0.1)
+                return
+            except queue.Full:
+                if hash_errors:
+                    raise RuntimeError("Checksum worker failed") from hash_errors[0]
+                continue
+
+    def _close_hash_worker() -> None:
+        while True:
+            _raise_timeout_if_needed()
+            if hash_errors:
+                raise RuntimeError("Checksum worker failed") from hash_errors[0]
+            try:
+                hash_queue.put(None, timeout=0.1)
+                return
+            except queue.Full:
+                if hash_errors:
+                    raise RuntimeError("Checksum worker failed") from hash_errors[0]
+                continue
 
     def _hash_worker() -> None:
         try:
             h = hashlib.new(checksum_algorithm)
             while True:
-                chunk = hash_queue.get()
+                try:
+                    chunk = hash_queue.get(timeout=0.1)
+                except queue.Empty:
+                    if stop_event.is_set():
+                        return
+                    continue
                 if chunk is None:
                     checksum_hex.append(h.hexdigest())
                     return
                 h.update(chunk)
         except BaseException as exc:
             hash_errors.append(exc)
+            stop_event.set()
 
     hash_thread = threading.Thread(
         target=_hash_worker,
@@ -266,33 +303,44 @@ def _copy_file_with_separate_hashing(
     )
     hash_thread.start()
     start_time = time.monotonic()
+    copy_error: Optional[BaseException] = None
 
     try:
         with open(src, "rb") as fsrc, open(dst, "wb") as fdst:
             while True:
-                if timeout_seconds > 0 and (time.monotonic() - start_time) > timeout_seconds:
-                    raise TimeoutError(f"File copy timed out after {timeout_seconds}s")
+                _raise_timeout_if_needed()
                 chunk = fsrc.read(chunk_size)
                 if not chunk:
                     break
-                if timeout_seconds > 0 and (time.monotonic() - start_time) > timeout_seconds:
-                    raise TimeoutError(f"File copy timed out after {timeout_seconds}s")
                 fdst.write(chunk)
-                hash_queue.put(chunk)
-                if hash_errors:
-                    raise RuntimeError("Checksum worker failed") from hash_errors[0]
+                _enqueue_hash_chunk(chunk)
                 if progress_callback is not None:
                     progress_callback(len(chunk))
 
             if bool(settings.copy_file_fsync_enabled if fsync_enabled is None else fsync_enabled):
                 fdst.flush()
                 os.fsync(fdst.fileno())
+            _close_hash_worker()
+    except BaseException as exc:
+        copy_error = exc
     finally:
-        hash_queue.put(None)
-        hash_thread.join()
+        if copy_error is not None:
+            stop_event.set()
+        cleanup_deadline = start_time + timeout_seconds if timeout_seconds > 0 else time.monotonic() + 5.0
+        while hash_thread.is_alive():
+            remaining = cleanup_deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            hash_thread.join(timeout=min(0.1, remaining))
+        if copy_error is None and hash_errors:
+            copy_error = RuntimeError("Checksum worker failed")
+            copy_error.__cause__ = hash_errors[0]
+        if copy_error is None and hash_thread.is_alive():
+            copy_error = TimeoutError("Checksum worker did not finish before cleanup deadline")
 
-    if hash_errors:
-        raise RuntimeError("Checksum worker failed") from hash_errors[0]
+    if copy_error is not None:
+        raise copy_error
+
     if not checksum_hex:
         raise RuntimeError("Checksum worker did not produce a digest")
     return checksum_hex[0]

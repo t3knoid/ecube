@@ -3,6 +3,7 @@
 import hashlib
 import json
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -193,6 +194,32 @@ def test_copy_file_separate_hashing_enabled_keeps_copy_and_checksum_behavior(tmp
     assert err is None
     assert checksum == hashlib.sha256(payload).hexdigest()
     assert dst.read_bytes() == payload
+
+
+def test_copy_file_separate_hashing_honors_timeout_without_hanging(tmp_path):
+    src = tmp_path / "slow.bin"
+    dst = tmp_path / "slow-copy.bin"
+    src.write_bytes(b"x" * 128)
+
+    class _SlowHasher:
+        def __init__(self):
+            self._hasher = hashlib.sha256()
+
+        def update(self, chunk):
+            time.sleep(0.01)
+            self._hasher.update(chunk)
+
+        def hexdigest(self):
+            return self._hasher.hexdigest()
+
+    start = time.monotonic()
+
+    with patch.object(copy_engine.settings, "copy_hashing_separate_thread_enabled", True):
+        with patch("app.services.copy_engine.hashlib.new", side_effect=lambda algorithm: _SlowHasher()):
+            with pytest.raises(TimeoutError):
+                copy_engine.copy_file(src, dst, chunk_size=1, timeout_seconds=0.03)
+
+    assert time.monotonic() - start < 0.5
 
 
 # ---------------------------------------------------------------------------
