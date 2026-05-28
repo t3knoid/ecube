@@ -385,3 +385,46 @@ def test_reconcile_jobs_preserves_terminal_completion_for_stale_pausing_job(db):
         "new_status": "COMPLETED",
         "reason": "terminal_copy_completion_preserved_after_restart",
     }
+
+
+def test_reconcile_jobs_preserves_terminal_failure_for_stale_pausing_job(db):
+    job = _make_job(
+        db,
+        project_id="PROJ-CALLBACK-LIFECYCLE-009",
+        evidence_number="EV-CALLBACK-LIFECYCLE-009",
+        status=JobStatus.PAUSING,
+        source_path="/data/callback-lifecycle-009",
+        file_count=1,
+    )
+    job.copy_started_at = datetime(2026, 5, 28, 16, 58, tzinfo=timezone.utc)
+    db.flush()
+    db.add(
+        ExportFile(
+            job_id=job.id,
+            relative_path="target-full.bin",
+            status=FileStatus.ERROR,
+            error_message="Target storage is full",
+            size_bytes=512,
+        )
+    )
+    db.commit()
+
+    with patch("app.services.reconciliation_service.deliver_callback") as mock_callback:
+        result = reconcile_jobs(db)
+
+    db.expire_all()
+    refreshed_job = db.get(ExportJob, job.id)
+
+    assert result["jobs_corrected"] == 1
+    assert refreshed_job is not None
+    assert refreshed_job.status == JobStatus.FAILED
+    assert refreshed_job.copy_started_at is None
+    assert refreshed_job.completed_at is not None
+    assert refreshed_job.failure_reason == "Destination capacity exhausted and no assigned drive can continue this copy"
+    assert mock_callback.call_count == 1
+    assert mock_callback.call_args.kwargs["event"] == "JOB_RECONCILED"
+    assert mock_callback.call_args.kwargs["event_details"] == {
+        "old_status": "PAUSING",
+        "new_status": "FAILED",
+        "reason": "terminal_copy_failure_preserved_after_restart",
+    }
