@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { getSystemHealth } from '@/api/introspection.js'
 import { getDrives } from '@/api/drives.js'
-import { listAllJobs } from '@/api/jobs.js'
+import { listDashboardJobs } from '@/api/jobs.js'
 import { getShares } from '@/api/shares.js'
 import { usePolling } from '@/composables/usePolling.js'
 import DataTable from '@/components/common/DataTable.vue'
@@ -411,7 +411,7 @@ async function refreshDashboard() {
     getSystemHealth(),
     getDrives({ include_disconnected: true }),
     getShares(),
-    listAllJobs({ include_archived: true }),
+    listDashboardJobs(),
   ])
 
   if (results[0].status === 'fulfilled') {

@@ -25,7 +25,7 @@ from app.repositories.job_repository import (
 )
 from app.repositories.share_repository import ShareRepository
 from app.schemas.jobs import JobCreate, JobOverflowContinueRequest, JobStart, JobUpdate
-from app.services import copy_engine
+from app.services import audit_service, copy_engine
 from app.services import metrics_service
 from app.services.callback_service import deliver_callback
 from app.services.copy_tuning import resolve_job_copy_tuning
@@ -82,6 +82,14 @@ _STARTED_JOB_EDITABLE_STATUSES = (
     JobStatus.PAUSING,
     JobStatus.PAUSED,
     JobStatus.FAILED,
+)
+
+_DASHBOARD_ATTENTION_CANDIDATE_STATUSES = (
+    JobStatus.PENDING,
+    JobStatus.FAILED,
+    JobStatus.PAUSED,
+    JobStatus.COMPLETED,
+    JobStatus.ARCHIVED,
 )
 
 
@@ -473,9 +481,20 @@ def list_jobs(
     drive_id: Optional[int] = None,
     statuses: Optional[tuple[JobStatus, ...]] = None,
     include_archived: bool = False,
+    requires_attention: bool = False,
 ) -> list[ExportJob]:
     """Return the most recent export jobs."""
     repo = JobRepository(db)
+    if requires_attention:
+        return _list_jobs_requiring_attention(
+            db,
+            repo=repo,
+            limit=limit,
+            offset=offset,
+            drive_id=drive_id,
+            statuses=statuses,
+            include_archived=include_archived,
+        )
     return repo.list_recent(
         limit=limit,
         offset=offset,
@@ -483,6 +502,92 @@ def list_jobs(
         statuses=statuses,
         include_archived=include_archived,
     )
+
+
+def _list_jobs_requiring_attention(
+    db: Session,
+    *,
+    repo: JobRepository,
+    limit: int,
+    offset: int,
+    drive_id: Optional[int],
+    statuses: Optional[tuple[JobStatus, ...]],
+    include_archived: bool,
+) -> list[ExportJob]:
+    requested_statuses = tuple(statuses) if statuses else _DASHBOARD_ATTENTION_CANDIDATE_STATUSES
+    candidate_statuses = tuple(
+        status
+        for status in requested_statuses
+        if status in _DASHBOARD_ATTENTION_CANDIDATE_STATUSES
+        and (include_archived or status != JobStatus.ARCHIVED)
+    )
+    if not candidate_statuses:
+        return []
+
+    wanted_count = offset + limit
+    batch_size = min(max(wanted_count, 200), 1000)
+    scan_offset = 0
+    collected: list[ExportJob] = []
+    assignment_repo = DriveAssignmentRepository(db)
+
+    while len(collected) < wanted_count:
+        batch = repo.list_recent(
+            limit=batch_size,
+            offset=scan_offset,
+            drive_id=drive_id,
+            statuses=candidate_statuses,
+            include_archived=include_archived,
+        )
+        if not batch:
+            break
+
+        terminal_job_ids = [
+            job.id
+            for job in batch
+            if job.status in (JobStatus.COMPLETED, JobStatus.ARCHIVED)
+        ]
+        custody_by_job_id = audit_service.get_job_custody_summaries(db, job_ids=terminal_job_ids)
+        assignments_by_job_id = assignment_repo.bulk_get_active_for_jobs(terminal_job_ids)
+
+        for job in batch:
+            if _job_requires_attention(
+                job,
+                custody_complete=custody_by_job_id.get(job.id),
+                active_assignment=assignments_by_job_id.get(job.id),
+            ):
+                collected.append(job)
+                if len(collected) >= wanted_count:
+                    break
+
+        if len(batch) < batch_size:
+            break
+        scan_offset += len(batch)
+
+    return collected[offset:wanted_count]
+
+
+def _job_requires_attention(
+    job: ExportJob,
+    *,
+    custody_complete: Optional[bool],
+    active_assignment: Optional[DriveAssignment],
+) -> bool:
+    if job.status in (JobStatus.PENDING, JobStatus.FAILED, JobStatus.PAUSED):
+        return True
+
+    if job.status not in (JobStatus.COMPLETED, JobStatus.ARCHIVED):
+        return False
+
+    if custody_complete is False:
+        return True
+    if custody_complete is not True:
+        return False
+
+    drive = getattr(active_assignment, "drive", None)
+    if drive is None:
+        return False
+
+    return drive.current_state == DriveState.IN_USE or bool(drive.mount_path)
 
 
 def _resolve_job_source_path(body: JobCreate, db: Session) -> str:

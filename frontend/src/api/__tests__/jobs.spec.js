@@ -96,4 +96,42 @@ describe('jobs api helpers', () => {
     expect(jobs[999]).toEqual({ id: 1000 })
     expect(jobs[1001]).toEqual({ id: 1002 })
   })
+
+  it('fetches a bounded dashboard job snapshot without walking the full archive', async () => {
+    toData.mockImplementation(async (value) => (await value).data)
+    get
+      .mockResolvedValueOnce({ data: [{ id: 1, status: 'PENDING' }] })
+      .mockResolvedValueOnce({ data: [{ id: 2, status: 'ARCHIVED', custody_status: 'PENDING_HANDOFF' }] })
+
+    const { listDashboardJobs } = await import('@/api/jobs.js')
+
+    const jobs = await listDashboardJobs()
+
+    expect(get).toHaveBeenNthCalledWith(1, '/api/jobs', expect.objectContaining({
+      params: expect.any(URLSearchParams),
+    }))
+    expect(get.mock.calls[0][1].params.toString()).toBe(
+      'limit=200&statuses=PENDING&statuses=PREPARING&statuses=RUNNING&statuses=VERIFYING',
+    )
+    expect(get.mock.calls[1][1].params.toString()).toBe(
+      'limit=200&include_archived=true&requires_attention=true',
+    )
+    expect(jobs).toEqual([
+      { id: 1, status: 'PENDING' },
+      { id: 2, status: 'ARCHIVED', custody_status: 'PENDING_HANDOFF' },
+    ])
+  })
+
+  it('keeps active jobs visible when the attention query is unavailable', async () => {
+    toData.mockImplementation(async (value) => (await value).data)
+    get
+      .mockResolvedValueOnce({ data: [{ id: 4, status: 'RUNNING' }] })
+      .mockRejectedValueOnce(new Error('attention unavailable'))
+
+    const { listDashboardJobs } = await import('@/api/jobs.js')
+
+    const jobs = await listDashboardJobs()
+
+    expect(jobs).toEqual([{ id: 4, status: 'RUNNING' }])
+  })
 })

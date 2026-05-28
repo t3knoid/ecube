@@ -5693,6 +5693,124 @@ def test_list_jobs_include_archived_returns_custody_status_for_archived_jobs(cli
     assert match["custody_status"] == "PENDING_HANDOFF"
 
 
+def test_list_jobs_requires_attention_filters_to_follow_up_work(client, db):
+    pending_job = ExportJob(
+        project_id="PROJ-DASH-ATTN",
+        evidence_number="EV-DASH-PENDING-001",
+        source_path="/data/pending",
+        status=JobStatus.PENDING,
+    )
+    paused_job = ExportJob(
+        project_id="PROJ-DASH-ATTN",
+        evidence_number="EV-DASH-PAUSED-001",
+        source_path="/data/paused",
+        status=JobStatus.PAUSED,
+    )
+    failed_job = ExportJob(
+        project_id="PROJ-DASH-ATTN",
+        evidence_number="EV-DASH-FAILED-001",
+        source_path="/data/failed",
+        status=JobStatus.FAILED,
+    )
+
+    ready_drive = UsbDrive(
+        device_identifier="USB-DASH-READY-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-DASH-ATTN",
+        mount_path="/mnt/ecube/dashboard-ready-001",
+    )
+    complete_drive = UsbDrive(
+        device_identifier="USB-DASH-COMPLETE-001",
+        current_state=DriveState.AVAILABLE,
+        current_project_id="PROJ-DASH-ATTN",
+        mount_path=None,
+    )
+    db.add_all([pending_job, paused_job, failed_job, ready_drive, complete_drive])
+    db.flush()
+
+    completed_ready_job = ExportJob(
+        project_id="PROJ-DASH-ATTN",
+        evidence_number="EV-DASH-COMPLETE-READY-001",
+        source_path="/data/completed-ready",
+        target_mount_path=ready_drive.mount_path,
+        status=JobStatus.COMPLETED,
+    )
+    archived_waiting_job = ExportJob(
+        project_id="PROJ-DASH-ATTN",
+        evidence_number="EV-DASH-ARCHIVED-WAITING-001",
+        source_path="/data/archived-waiting",
+        target_mount_path=ready_drive.mount_path,
+        status=JobStatus.ARCHIVED,
+    )
+    archived_done_job = ExportJob(
+        project_id="PROJ-DASH-ATTN",
+        evidence_number="EV-DASH-ARCHIVED-DONE-001",
+        source_path="/data/archived-done",
+        target_mount_path="/mnt/ecube/dashboard-complete-001",
+        status=JobStatus.ARCHIVED,
+    )
+    db.add_all([completed_ready_job, archived_waiting_job, archived_done_job])
+    db.flush()
+
+    db.add_all([
+        DriveAssignment(drive_id=ready_drive.id, job_id=completed_ready_job.id, activated_at=datetime.now(timezone.utc)),
+        DriveAssignment(drive_id=ready_drive.id, job_id=archived_waiting_job.id, activated_at=datetime.now(timezone.utc)),
+        DriveAssignment(drive_id=complete_drive.id, job_id=archived_done_job.id, activated_at=datetime.now(timezone.utc)),
+    ])
+    db.add_all([
+        JobChainOfCustodySnapshot(
+            job_id=archived_waiting_job.id,
+            payload={
+                "selector_mode": "JOB",
+                "project_id": archived_waiting_job.project_id,
+                "reports": [{
+                    "drive_id": ready_drive.id,
+                    "drive_sn": ready_drive.device_identifier,
+                    "drive_manufacturer": None,
+                    "drive_model": None,
+                    "project_id": archived_waiting_job.project_id,
+                    "evidence_number": archived_waiting_job.evidence_number,
+                    "custody_complete": False,
+                    "delivery_time": None,
+                    "chain_of_custody_events": [],
+                    "manifest_summary": [],
+                }],
+            },
+        ),
+        JobChainOfCustodySnapshot(
+            job_id=archived_done_job.id,
+            payload={
+                "selector_mode": "JOB",
+                "project_id": archived_done_job.project_id,
+                "reports": [{
+                    "drive_id": complete_drive.id,
+                    "drive_sn": complete_drive.device_identifier,
+                    "drive_manufacturer": None,
+                    "drive_model": None,
+                    "project_id": archived_done_job.project_id,
+                    "evidence_number": archived_done_job.evidence_number,
+                    "custody_complete": True,
+                    "delivery_time": "2026-05-03T12:00:00Z",
+                    "chain_of_custody_events": [],
+                    "manifest_summary": [],
+                }],
+            },
+        ),
+    ])
+    db.commit()
+
+    response = client.get("/jobs", params={"include_archived": True, "requires_attention": True})
+
+    assert response.status_code == 200
+    evidence_numbers = {item["evidence_number"] for item in response.json()}
+    assert "EV-DASH-PENDING-001" in evidence_numbers
+    assert "EV-DASH-PAUSED-001" in evidence_numbers
+    assert "EV-DASH-FAILED-001" in evidence_numbers
+    assert "EV-DASH-COMPLETE-READY-001" in evidence_numbers
+    assert "EV-DASH-ARCHIVED-WAITING-001" in evidence_numbers
+    assert "EV-DASH-ARCHIVED-DONE-001" not in evidence_numbers
+
+
 def test_list_jobs_excludes_archived_status_filter_without_opt_in(client, db):
     db.add_all([
         ExportJob(

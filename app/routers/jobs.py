@@ -416,6 +416,7 @@ def list_jobs(
     drive_id: int | None = Query(default=None, ge=1, description="Filter jobs by currently assigned drive ID"),
     statuses: list[JobStatus] | None = Query(default=None, description="Filter jobs by status"),
     include_archived: bool = Query(default=False, description="Include archived jobs in the result set"),
+    requires_attention: bool = Query(default=False, description="Return only jobs that still require operator follow-up"),
     *,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(_ALL_ROLES),
@@ -434,6 +435,7 @@ def list_jobs(
         drive_id=drive_id,
         statuses=tuple(statuses) if statuses else None,
         include_archived=include_archived,
+        requires_attention=requires_attention,
     )
     return _enrich_jobs_bulk(jobs, current_user, db)
 

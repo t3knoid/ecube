@@ -165,7 +165,7 @@ Compatibility note: To support project-to-source-path policy, use project source
 
 | Method | Endpoint | Role | Description |
 | ------ | -------- | -------- | ----------- |
-| GET | `/jobs` | admin/manager/processor/auditor | List recent jobs. Optional `drive_id`, repeatable `statuses`, and `include_archived=true` filters |
+| GET | `/jobs` | admin/manager/processor/auditor | List recent jobs. Optional `drive_id`, repeatable `statuses`, `include_archived=true`, and `requires_attention=true` filters |
 | GET | `/jobs/copy-tuning-defaults` | admin/manager/processor | Return the live `thread_count`, `copy_chunk_size_bytes`, `copy_progress_flush_bytes`, and `copy_file_fsync_enabled` values used to pre-select Job Editor copy-tuning fields |
 | POST | `/jobs` | processor+ | Create new export job (omit `drive_id` for auto-assignment) |
 | PUT | `/jobs/{job_id}` | processor+ | Update a pending job from the Job Detail page, or update started-job runtime tuning and reserved overflow selections from the restricted Job Detail edit flow |
@@ -189,6 +189,8 @@ Compatibility note: To support project-to-source-path policy, use project source
 | GET | `/jobs/{job_id}/manifest/download` | processor+ | Download the most recently generated manifest JSON as an attachment |
 
 **Archived Job Visibility:** `GET /jobs` excludes `ARCHIVED` jobs by default. Pass `include_archived=true` when operator or QA workflows need to review archived jobs alongside active and terminal jobs.
+
+**Dashboard Attention Filter:** `GET /jobs?requires_attention=true` returns only jobs that still need operator follow-up. The filtered set includes pending, paused, and failed jobs plus completed or archived jobs that are still waiting on custody handoff or still need `Prepare Eject` after custody is recorded. Combine it with `include_archived=true` when callers need archived custody-closeout work without walking the full archived history.
 
 **Archive Semantics:** `POST /jobs/{job_id}/archive` is limited to `admin` and `manager`, requires `{ "confirm": true }`, and returns **409 Conflict** unless the current job is `COMPLETED` or `FAILED` and any related drive has already been through `Prepare Eject` so it is no longer mounted. Archived jobs remain available through `GET /jobs/{job_id}` but are removed from the default list flow.
 

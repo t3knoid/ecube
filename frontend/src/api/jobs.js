@@ -37,6 +37,54 @@ export function listJobs(params = {}, { timeout } = {}) {
   return toData(apiClient.get(`${API_BASE}/jobs`, config))
 }
 
+const DASHBOARD_ACTIVE_JOB_STATUSES = ['PENDING', 'PREPARING', 'RUNNING', 'VERIFYING']
+const DASHBOARD_JOB_LIMIT = 200
+
+function mergeUniqueJobs(jobLists) {
+  const jobsById = new Map()
+
+  for (const jobList of jobLists) {
+    const jobs = Array.isArray(jobList) ? jobList : []
+    for (const job of jobs) {
+      const normalizedJobId = Number(job?.id)
+      if (!Number.isInteger(normalizedJobId) || normalizedJobId < 1) continue
+      jobsById.set(normalizedJobId, {
+        ...(jobsById.get(normalizedJobId) || {}),
+        ...job,
+      })
+    }
+  }
+
+  return Array.from(jobsById.values())
+}
+
+export async function listDashboardJobs({ timeout, limit = DASHBOARD_JOB_LIMIT } = {}) {
+  const effectiveLimit = Number.isInteger(limit) && limit > 0
+    ? Math.min(limit, 1000)
+    : DASHBOARD_JOB_LIMIT
+
+  const [activeJobsResult, attentionJobsResult] = await Promise.allSettled([
+    listJobs({
+      limit: effectiveLimit,
+      statuses: DASHBOARD_ACTIVE_JOB_STATUSES,
+    }, { timeout }),
+    listJobs({
+      limit: effectiveLimit,
+      include_archived: true,
+      requires_attention: true,
+    }, { timeout }),
+  ])
+
+  const activeJobs = activeJobsResult.status === 'fulfilled' ? activeJobsResult.value : []
+  const attentionJobs = attentionJobsResult.status === 'fulfilled' ? attentionJobsResult.value : []
+
+  if (activeJobsResult.status !== 'fulfilled' && attentionJobsResult.status !== 'fulfilled') {
+    throw activeJobsResult.reason || attentionJobsResult.reason
+  }
+
+  return mergeUniqueJobs([activeJobs, attentionJobs])
+}
+
 export async function listAllJobs(params = {}, { timeout, pageSize = 1000 } = {}) {
   const effectivePageSize = Number.isInteger(pageSize) && pageSize > 0
     ? Math.min(pageSize, 1000)
