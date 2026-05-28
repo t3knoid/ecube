@@ -3817,6 +3817,85 @@ def test_run_copy_job_does_not_refill_after_pause_request_between_concurrent_com
     assert len(executor_instances[0].submitted_file_ids) == job.thread_count
 
 
+def test_run_copy_job_does_not_refill_after_target_full_failure_between_concurrent_completions(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    for index in range(4):
+        (source_dir / f"file-{index}.bin").write_bytes((b"target-full-refill-" + str(index).encode("ascii")) * 128)
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    job.thread_count = 2
+    db.commit()
+    db.refresh(job)
+    _assign_drive(db, job)
+
+    executor_instances = []
+    copy_attempts = {"count": 0}
+    original_copy_file = copy_engine.copy_file
+
+    class _QueuedFuture:
+        def __init__(self, fn, *args):
+            self._fn = fn
+            self._args = args
+            self._ran = False
+            self._cancelled = False
+
+        def result(self):
+            if not self._cancelled and not self._ran:
+                self._ran = True
+                return self._fn(*self._args)
+            return False
+
+        def done(self):
+            return not self._cancelled
+
+        def cancel(self):
+            self._cancelled = True
+            return True
+
+    class _Executor:
+        def __init__(self, *args, **kwargs):
+            self.futures = []
+            self.submitted_file_ids = []
+            executor_instances.append(self)
+
+        def submit(self, fn, *args, **kwargs):
+            future = _QueuedFuture(fn, *args)
+            self.futures.append(future)
+            self.submitted_file_ids.append(int(args[0]))
+            return future
+
+        def shutdown(self, wait=True, cancel_futures=True):
+            return None
+
+    def _first_submitted_future(futures):
+        futures_list = list(futures)
+        if futures_list:
+            yield futures_list[0]
+
+    def _copy_with_second_target_full(src, dst, **kwargs):
+        copy_attempts["count"] += 1
+        if copy_attempts["count"] == 2:
+            return False, None, "disk full"
+        return original_copy_file(src, dst, **kwargs)
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine.ThreadPoolExecutor", _Executor):
+            with patch("app.services.copy_engine.as_completed", side_effect=_first_submitted_future):
+                with patch("app.services.copy_engine.copy_file", side_effect=_copy_with_second_target_full):
+                    copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+
+    assert job.status == JobStatus.FAILED
+    assert executor_instances
+    assert len(executor_instances[0].submitted_file_ids) == job.thread_count
+
+
 def test_run_copy_job_reads_persisted_runtime_tuning_updates_between_batches(db, tmp_path):
     source_dir = tmp_path / "source"
     source_dir.mkdir()

@@ -2062,7 +2062,7 @@ def _process_file(
     copy_chunk_size_bytes: Optional[int] = None,
     copy_progress_flush_threshold_bytes: Optional[int] = None,
     copy_file_fsync_enabled: Optional[bool] = None,
-) -> None:
+) -> bool:
     """Worker executed inside the thread pool.
 
     Each worker opens its own DB session to avoid cross-thread SQLAlchemy issues.
@@ -2102,12 +2102,12 @@ def _process_file(
 
         ef = file_repo.get(export_file_id)
         if ef is None:
-            return
+            return False
 
         job_repo = JobRepository(db)
         job = job_repo.get(ef.job_id)
         if job is None:
-            return
+            return False
         assignment_repo = DriveAssignmentRepository(db)
         active_assignment = assignment_repo.get_active_for_job(ef.job_id)
         active_assignment_id = int(active_assignment.id) if active_assignment is not None else None
@@ -2117,7 +2117,7 @@ def _process_file(
                 file_repo.save(ef)
             except Exception:
                 logger.exception("DB commit failed restoring PENDING status for file %s", export_file_id)
-            return
+            return False
 
         # Do not hold the worker's initial read transaction open across the
         # potentially long-running copy/checksum operation. Reopen a fresh
@@ -2130,7 +2130,7 @@ def _process_file(
         audit_repo = AuditRepository(db)
         ef = file_repo.get(export_file_id)
         if ef is None:
-            return
+            return False
 
         worker_snapshot = register_active_copy_worker(job_id=ef.job_id)
 
@@ -2141,7 +2141,7 @@ def _process_file(
             action="FILE_COPY_START",
             details={"file_id": ef.id, "relative_path": ef.relative_path},
         ):
-            return
+            return False
 
         last_err: Optional[str] = None
         success = False
@@ -2217,7 +2217,7 @@ def _process_file(
                         "delay_seconds": delay,
                     },
                 ):
-                    return
+                    return False
                 metrics_service.record_job_copy_error("retry")
                 time.sleep(delay)
                 ef.status = FileStatus.COPYING
@@ -2336,6 +2336,7 @@ def _process_file(
                 logger.exception("Failed to write audit log for FILE_COPY_FAILURE")
 
         ef.checksum = checksum
+        target_full_failure = False
         if success:
             ef.status = FileStatus.DONE
             ef.drive_assignment_id = active_assignment_id
@@ -2380,12 +2381,14 @@ def _process_file(
         else:
             ef.status = FileStatus.ERROR
             _error_code, safe_error_message = _classify_file_failure(last_err)
+            target_full_failure = _error_code == "target_full"
             ef.error_message = safe_error_message
             try:
                 file_repo.save(ef)
                 metrics_service.record_job_copy_error("failed")
             except Exception:
                 logger.exception("DB commit failed saving ERROR status for file %s", export_file_id)
+        return target_full_failure
     finally:
         unregister_active_copy_worker(worker_snapshot)
         db.close()
@@ -2716,18 +2719,26 @@ def run_copy_job(job_id: int) -> None:
                                     break
                                 continue
 
-                            done_future = next(as_completed(tuple(futures.keys())))
-                            completions_since_control_poll += 1
+                            done_futures = [next(as_completed(tuple(futures.keys())))]
+                            future_failed = False
+                            target_full_detected = False
                             if refill_pending_since is None:
                                 refill_pending_since = time.monotonic()
-                            future_failed = False
-                            try:
-                                done_future.result()
-                            except Exception:
-                                future_failed = True
-                            futures.pop(done_future, None)
 
-                            if _handle_worker_completion(list(futures)):
+                            while done_futures:
+                                done_future = done_futures.pop(0)
+                                completions_since_control_poll += 1
+                                try:
+                                    target_full_detected = bool(done_future.result()) or target_full_detected
+                                except Exception:
+                                    future_failed = True
+                                futures.pop(done_future, None)
+
+                                for future in list(futures.keys()):
+                                    if future.done() and future not in done_futures:
+                                        done_futures.append(future)
+
+                            if _handle_worker_completion(list(futures), include_target_full=target_full_detected):
                                 if stale_run_detected:
                                     return
                                 if pause_requested:
