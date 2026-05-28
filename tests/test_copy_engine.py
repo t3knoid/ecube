@@ -1230,6 +1230,8 @@ def test_run_copy_job_resume_reassigns_queued_pending_file_to_resumed_drive(db, 
     db.add_all([first_export, second_export])
     db.commit()
 
+    pause_state = {"applied": False}
+
     class _QueuedFuture:
         def __init__(self, fn, *args):
             self._fn = fn
@@ -1241,6 +1243,11 @@ def test_run_copy_job_resume_reassigns_queued_pending_file_to_resumed_drive(db, 
             if not self._cancelled and not self._ran:
                 self._fn(*self._args)
                 self._ran = True
+                if not pause_state["applied"]:
+                    paused_job = db.get(ExportJob, job.id)
+                    paused_job.status = JobStatus.PAUSING
+                    db.commit()
+                    pause_state["applied"] = True
             return None
 
         def done(self):
@@ -1265,9 +1272,6 @@ def test_run_copy_job_resume_reassigns_queued_pending_file_to_resumed_drive(db, 
     def _pause_after_first_completed(futures):
         first_future = list(futures)[0]
         yield first_future
-        paused_job = db.get(ExportJob, job.id)
-        paused_job.status = JobStatus.PAUSING
-        db.commit()
 
     with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
         with patch("app.services.copy_engine.ThreadPoolExecutor", _Executor):
@@ -3459,7 +3463,7 @@ def test_run_copy_job_logs_effective_runtime_parameters_at_debug(db, tmp_path, c
     assert record.pending_batch_multiplier == copy_engine.COPY_PENDING_BATCH_MULTIPLIER
 
 
-def test_run_copy_job_applies_runtime_tuning_updates_at_batch_boundaries(db, tmp_path, caplog):
+def test_run_copy_job_applies_runtime_tuning_updates_during_rolling_refill(db, tmp_path, caplog):
     source_dir = tmp_path / "source"
     source_dir.mkdir()
     for index in range(5):
@@ -3476,13 +3480,13 @@ def test_run_copy_job_applies_runtime_tuning_updates_at_batch_boundaries(db, tmp
     db.commit()
     db.refresh(job)
 
-    batch_index = 0
+    completion_index = 0
     retune_enabled = False
 
     def _as_completed_with_runtime_update(futures):
-        nonlocal batch_index, retune_enabled
-        batch_index += 1
-        if batch_index == 1:
+        nonlocal completion_index, retune_enabled
+        completion_index += 1
+        if completion_index == 1:
             retune_enabled = True
         for future in list(futures):
             yield future
