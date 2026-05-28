@@ -3633,26 +3633,60 @@ def test_run_copy_job_pause_responsiveness_is_bounded_by_poll_cadence(db, tmp_pa
     db.refresh(job)
 
     original_list_pending = copy_engine.FileRepository.list_pending_by_job_after_id
-    as_completed_calls = 0
+    pause_state = {"applied": False}
 
     def _one_file_batch(self, job_id, after_id=None, limit=None):
         pending = original_list_pending(self, job_id, after_id=after_id, limit=1)
         return pending[:1]
 
-    def _pause_after_first_completion(futures):
-        nonlocal as_completed_calls
-        as_completed_calls += 1
-        if as_completed_calls == 1:
-            paused_job = db.get(ExportJob, job.id)
-            paused_job.status = JobStatus.PAUSING
-            db.commit()
+    class _QueuedFuture:
+        def __init__(self, fn, *args):
+            self._fn = fn
+            self._args = args
+            self._ran = False
+            self._cancelled = False
+
+        def result(self):
+            if not self._cancelled and not self._ran:
+                self._fn(*self._args)
+                self._ran = True
+                if not pause_state["applied"]:
+                    paused_job = db.get(ExportJob, job.id)
+                    paused_job.status = JobStatus.PAUSING
+                    db.commit()
+                    pause_state["applied"] = True
+            return None
+
+        def done(self):
+            return self._ran or self._cancelled
+
+        def cancel(self):
+            self._cancelled = True
+            return True
+
+    class _Executor:
+        def __init__(self, *args, **kwargs):
+            self.futures = []
+
+        def submit(self, fn, *args, **kwargs):
+            future = _QueuedFuture(fn, *args)
+            self.futures.append(future)
+            return future
+
+        def shutdown(self, wait=True, cancel_futures=True):
+            return None
+
+    def _first_unfinished_future(futures):
         for future in list(futures):
-            yield future
+            if not future.done():
+                yield future
+                return
 
     with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
         with patch.object(copy_engine.FileRepository, "list_pending_by_job_after_id", _one_file_batch):
-            with patch("app.services.copy_engine.as_completed", side_effect=_pause_after_first_completion):
-                copy_engine.run_copy_job(job.id)
+            with patch("app.services.copy_engine.ThreadPoolExecutor", _Executor):
+                with patch("app.services.copy_engine.as_completed", side_effect=_first_unfinished_future):
+                    copy_engine.run_copy_job(job.id)
 
     db.expire_all()
     db.refresh(job)
@@ -3665,6 +3699,82 @@ def test_run_copy_job_pause_responsiveness_is_bounded_by_poll_cadence(db, tmp_pa
     assert job.status == JobStatus.PAUSED
     # Pause should be observed within the configured completion budget.
     assert done_count <= copy_engine.COPY_CONTROL_POLL_COMPLETION_INTERVAL
+
+
+def test_run_copy_job_does_not_refill_after_pause_request_between_concurrent_completions(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    for index in range(4):
+        (source_dir / f"file-{index}.bin").write_bytes((b"pause-refill-" + str(index).encode("ascii")) * 128)
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    job.thread_count = 2
+    db.commit()
+    db.refresh(job)
+
+    pause_state = {"applied": False}
+    executor_instances = []
+
+    class _QueuedFuture:
+        def __init__(self, fn, *args):
+            self._fn = fn
+            self._args = args
+            self._ran = False
+            self._cancelled = False
+
+        def result(self):
+            if not self._cancelled and not self._ran:
+                self._fn(*self._args)
+                self._ran = True
+                if not pause_state["applied"]:
+                    paused_job = db.get(ExportJob, job.id)
+                    paused_job.status = JobStatus.PAUSING
+                    db.commit()
+                    pause_state["applied"] = True
+            return None
+
+        def done(self):
+            return self._ran or self._cancelled
+
+        def cancel(self):
+            self._cancelled = True
+            return True
+
+    class _Executor:
+        def __init__(self, *args, **kwargs):
+            self.futures = []
+            self.submitted_file_ids = []
+            executor_instances.append(self)
+
+        def submit(self, fn, *args, **kwargs):
+            future = _QueuedFuture(fn, *args)
+            self.futures.append(future)
+            self.submitted_file_ids.append(int(args[0]))
+            return future
+
+        def shutdown(self, wait=True, cancel_futures=True):
+            return None
+
+    def _first_unfinished_future(futures):
+        for future in list(futures):
+            if not future.done():
+                yield future
+                return
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine.ThreadPoolExecutor", _Executor):
+            with patch("app.services.copy_engine.as_completed", side_effect=_first_unfinished_future):
+                copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+
+    assert job.status == JobStatus.PAUSED
+    assert executor_instances
+    assert len(executor_instances[0].submitted_file_ids) == job.thread_count
 
 
 def test_run_copy_job_reads_persisted_runtime_tuning_updates_between_batches(db, tmp_path):

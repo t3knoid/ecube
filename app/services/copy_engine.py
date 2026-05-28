@@ -2705,6 +2705,14 @@ def run_copy_job(job_id: int) -> None:
                                 future_failed = True
                             futures.pop(done_future, None)
 
+                            if _handle_worker_completion(list(futures)):
+                                if stale_run_detected:
+                                    return
+                                if pause_requested:
+                                    break
+                                if stop_for_target_full:
+                                    break
+
                             if future_failed:
                                 if _poll_runtime_control_state("worker_exception", list(futures)):
                                     if stale_run_detected:

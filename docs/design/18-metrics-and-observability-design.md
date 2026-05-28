@@ -82,10 +82,11 @@ Forbidden high-cardinality labels:
 
 Copy scheduler control-state polling behavior:
 
-- The scheduler polls pause/stale-run/target-full and runtime-tuning state on a bounded cadence.
-- Default bounds: at most every 2 worker completions or 0.1 seconds, whichever happens first.
+- The scheduler checks pause/stale-run/target-full state before refilling work after a completion, so a pause request does not dispatch additional files beyond the work that is already in flight.
+- The scheduler refreshes runtime-tuning state on a bounded cadence after startup and after the scheduler regains control from a completion.
+- Default runtime-tuning refresh bounds: at most every 2 worker completions, with a 0.1-second interval check evaluated on the next scheduler loop after a completion.
 - Worker exceptions force an immediate control poll.
-- The bound limits polling overhead in small-file workloads while preserving bounded pause/stop responsiveness.
+- The bounded refresh limits polling overhead in small-file workloads while the pre-refill state check preserves bounded pause/stop responsiveness.
 
 ### Periodic Sampling
 
