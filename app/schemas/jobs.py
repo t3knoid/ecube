@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from pydantic import BaseModel, Field, StrictBool, StrictInt, ValidationInfo, field_validator
-from typing import Optional
+from typing import Literal, Optional
 
 from app.models.hardware import DriveState
 from app.models.jobs import FileStatus, JobStatus, StartupAnalysisStatus
@@ -346,6 +346,10 @@ class ExportJobSchema(BaseModel):
     completed_at: Optional[datetime] = Field(default=None, description="When the job reached a terminal state")
     latest_manifest_created_at: Optional[datetime] = Field(default=None, description="When the most recent manifest for this job was generated")
     drive: Optional[DriveInfoSchema] = Field(default=None, description="Assigned drive metadata (null if no drive assigned)")
+    custody_status: Optional[Literal["HANDOFF_RECORDED", "PENDING_HANDOFF", "STATUS_UNAVAILABLE"]] = Field(
+        default=None,
+        description="Trusted chain-of-custody summary for terminal jobs when it can be derived",
+    )
     failure_reason: Optional[str] = Field(default=None, description="Persisted sanitized job-level failure reason (null when not available)")
     error_summary: Optional[str] = Field(default=None, description="Brief summary of file failures (null on success)")
     failure_log_entry: Optional[str] = Field(default=None, description="Correlated application log line for failed jobs (null on success)")

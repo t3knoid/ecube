@@ -5645,6 +5645,54 @@ def test_list_jobs_includes_archived_when_requested(client, db):
     assert "EV-LIST-ARCHIVED-002" in evidence_numbers
 
 
+def test_list_jobs_include_archived_returns_custody_status_for_archived_jobs(client, db):
+    drive = UsbDrive(
+        device_identifier="USB-LIST-ARCHIVED-CUSTODY-001",
+        current_state=DriveState.IN_USE,
+        current_project_id="PROJ-LIST-ARCHIVED-CUSTODY",
+        mount_path="/mnt/ecube/list-archived-custody-001",
+    )
+    job = ExportJob(
+        project_id="PROJ-LIST-ARCHIVED-CUSTODY",
+        evidence_number="EV-LIST-ARCHIVED-CUSTODY-001",
+        source_path="/data/archived-custody",
+        target_mount_path=drive.mount_path,
+        status=JobStatus.ARCHIVED,
+    )
+    db.add_all([drive, job])
+    db.flush()
+    db.add(DriveAssignment(drive_id=drive.id, job_id=job.id, activated_at=datetime.now(timezone.utc)))
+    db.add(
+        JobChainOfCustodySnapshot(
+            job_id=job.id,
+            payload={
+                "selector_mode": "JOB",
+                "project_id": job.project_id,
+                "reports": [{
+                    "drive_id": drive.id,
+                    "drive_sn": drive.device_identifier,
+                    "drive_manufacturer": None,
+                    "drive_model": None,
+                    "project_id": job.project_id,
+                    "evidence_number": job.evidence_number,
+                    "custody_complete": False,
+                    "delivery_time": None,
+                    "chain_of_custody_events": [],
+                    "manifest_summary": [],
+                }],
+            },
+        )
+    )
+    db.commit()
+
+    response = client.get("/jobs", params={"include_archived": True})
+
+    assert response.status_code == 200
+    data = response.json()
+    match = next(item for item in data if item["id"] == job.id)
+    assert match["custody_status"] == "PENDING_HANDOFF"
+
+
 def test_list_jobs_excludes_archived_status_filter_without_opt_in(client, db):
     db.add_all([
         ExportJob(

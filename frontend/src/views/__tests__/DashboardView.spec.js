@@ -242,18 +242,19 @@ describe('DashboardView active jobs', () => {
     expect(needsAttentionRows[0].find('.dashboard-source-context').text()).toContain(i18n.global.t('jobs.sourcePath'))
   })
 
-  it('falls back to Job Detail guidance for archived or incomplete custody-closeout state', async () => {
+  it('uses job custody status for archived custody-closeout guidance even when shares have no related job', async () => {
     mocks.listAllJobs.mockResolvedValue([
       {
         id: 70,
         project_id: 'PROJ-070',
         status: 'ARCHIVED',
+        custody_status: 'PENDING_HANDOFF',
         files_failed: 0,
         files_timed_out: 0,
       },
     ])
     mocks.getShares.mockResolvedValue([
-      { id: 13, status: 'MOUNTED', project_id: 'PROJ-070', related_job: { job_id: 70, status: 'ARCHIVED', custody_status: 'PENDING_HANDOFF' } },
+      { id: 13, status: 'MOUNTED', project_id: 'PROJ-070', related_job: { job_id: null, status: 'NO_RELATED_JOB', custody_status: 'NO_RELATED_JOB' } },
     ])
 
     const wrapper = mountView()

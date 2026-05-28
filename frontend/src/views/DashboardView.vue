@@ -107,6 +107,12 @@ const mountSummaryEntries = computed(() => [
 const needsAttentionItems = computed(() => {
   const items = []
   const seenJobIds = new Set()
+  const attentionPriorityByKey = {
+    'dashboard.attentionBlocked': 0,
+    'dashboard.attentionWaitingToStart': 1,
+    'dashboard.attentionWaitingForCustody': 2,
+    'dashboard.attentionReadyForEject': 3,
+  }
   const jobsById = new Map(
     jobs.value
       .map((job) => [Number(job.id), job])
@@ -125,31 +131,11 @@ const needsAttentionItems = computed(() => {
     })
     if (!Number.isInteger(jobId) || jobId < 1) continue
 
-    if (followUpKey === 'dashboard.attentionBlocked') {
+    if (attentionPriorityByKey[followUpKey] !== undefined) {
       items.push({
         ...job,
         attention: t(followUpKey),
-        attentionPriority: 0,
-      })
-      seenJobIds.add(jobId)
-      continue
-    }
-
-    if (followUpKey === 'dashboard.attentionWaitingToStart') {
-      items.push({
-        ...job,
-        attention: t(followUpKey),
-        attentionPriority: 1,
-      })
-      seenJobIds.add(jobId)
-      continue
-    }
-
-    if (followUpKey === 'dashboard.attentionReadyForEject') {
-      items.push({
-        ...job,
-        attention: t(followUpKey),
-        attentionPriority: 3,
+        attentionPriority: attentionPriorityByKey[followUpKey],
       })
       seenJobIds.add(jobId)
     }
@@ -425,7 +411,7 @@ async function refreshDashboard() {
     getSystemHealth(),
     getDrives({ include_disconnected: true }),
     getShares(),
-    listAllJobs(),
+    listAllJobs({ include_archived: true }),
   ])
 
   if (results[0].status === 'fulfilled') {

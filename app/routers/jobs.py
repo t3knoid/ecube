@@ -185,6 +185,49 @@ def _build_failure_log_entry(schema: ExportJobSchema, db: Session) -> str | None
     return _build_failure_audit_fallback(schema, db)
 
 
+def _apply_job_custody_statuses(schemas: list[ExportJobSchema], db: Session) -> None:
+    terminal_job_ids = [
+        schema.id
+        for schema in schemas
+        if schema.status in (JobStatus.COMPLETED, JobStatus.ARCHIVED)
+    ]
+    if not terminal_job_ids:
+        return
+
+    try:
+        custody_by_job_id = audit_service.get_job_custody_summaries(db, job_ids=terminal_job_ids)
+    except Exception as exc:
+        logger.info(
+            "Job custody status unavailable",
+            extra={
+                "context": {
+                    "failure_class": "job_custody_status_unavailable",
+                    "job_count": len(terminal_job_ids),
+                }
+            },
+        )
+        logger.debug(
+            "Job custody status batch lookup failed",
+            extra={
+                "job_count": len(terminal_job_ids),
+                "raw_error": str(exc),
+            },
+        )
+        custody_by_job_id = {}
+
+    for schema in schemas:
+        if schema.status not in (JobStatus.COMPLETED, JobStatus.ARCHIVED):
+            continue
+        custody_complete = custody_by_job_id.get(schema.id)
+        schema.custody_status = (
+            "HANDOFF_RECORDED"
+            if custody_complete is True
+            else "PENDING_HANDOFF"
+            if custody_complete is False
+            else "STATUS_UNAVAILABLE"
+        )
+
+
 def _redact_ip(job, user: CurrentUser, db: Session) -> ExportJobSchema:
     """Serialize an ExportJob, enriching with derived fields and redacting client_ip.
 
@@ -245,6 +288,8 @@ def _redact_ip(job, user: CurrentUser, db: Session) -> ExportJobSchema:
             )
         )
 
+    _apply_job_custody_statuses([schema], db)
+
     return schema
 
 
@@ -302,6 +347,8 @@ def _enrich_jobs_bulk(
             schema.drive.is_mounted = bool(getattr(active.drive, "mount_path", None))
 
         result.append(schema)
+
+    _apply_job_custody_statuses(result, db)
     return result
 
 
