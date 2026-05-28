@@ -238,6 +238,7 @@ describe('DashboardView active jobs', () => {
 
     const needsAttentionRows = wrapper.findAll('.row-stub').slice(0, 5)
     expect(needsAttentionRows[0].find('.dashboard-job-id-cell').text()).toBe('40')
+    expect(needsAttentionRows[0].find('.dashboard-job-id-cell .cell-link').attributes('title')).toBe('Show job ID 40')
     expect(needsAttentionRows[0].find('.dashboard-source-context').text()).toContain(i18n.global.t('dashboard.sourceMount'))
     expect(needsAttentionRows[0].find('.dashboard-source-context').text()).toContain(i18n.global.t('jobs.sourcePath'))
   })
@@ -845,6 +846,7 @@ describe('DashboardView active jobs', () => {
     const jobLink = wrapper.find('.cell-link')
     expect(jobLink.exists()).toBe(true)
     expect(jobLink.text()).toBe('44')
+    expect(jobLink.attributes('title')).toBe('Show job ID 44')
 
     await jobLink.trigger('click')
     await flushPromises()

@@ -545,7 +545,12 @@ onUnmounted(() => {
       >
         <template #cell-id="{ row }">
           <div class="dashboard-cell-stack dashboard-job-id-cell">
-            <button class="cell-link" type="button" @click="openJobDetail(row.id)">
+            <button
+              class="cell-link"
+              type="button"
+              :title="t('jobs.showJobId', { id: row.id })"
+              @click="openJobDetail(row.id)"
+            >
               {{ row.id }}
             </button>
           </div>
@@ -611,6 +616,7 @@ onUnmounted(() => {
               v-if="Number.isInteger(Number(row.id)) && Number(row.id) > 0"
               class="cell-link"
               type="button"
+              :title="t('jobs.showJobId', { id: row.id })"
               @click="openJobDetail(row.id)"
             >
               {{ row.id }}
