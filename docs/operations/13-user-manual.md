@@ -1202,7 +1202,7 @@ Basic workflow:
 
 Important operational notes:
 
-- The `Configuration` page contains only operational settings: `log_level`, `mkfs_exfat_cluster_size`, `drive_format_timeout_seconds`, `drive_mount_timeout_seconds`, `usb_discovery_interval`, `network_mount_timeout_seconds`, `mount_share_discovery_timeout_seconds`, `copy_job_timeout`, `copy_chunk_size_bytes`, `copy_progress_flush_bytes`, `copy_default_thread_count`, `copy_file_fsync_enabled`, `copy_hashing_separate_thread_enabled`, and `job_detail_files_page_size`.
+- The `Configuration` page contains only operational settings: `log_level`, `mkfs_exfat_cluster_size`, `drive_format_timeout_seconds`, `drive_mount_timeout_seconds`, `usb_discovery_interval`, `network_mount_timeout_seconds`, `mount_share_discovery_timeout_seconds`, `copy_job_timeout`, `copy_chunk_size_bytes`, `copy_progress_flush_bytes`, `copy_default_thread_count`, `copy_file_fsync_enabled`, and `job_detail_files_page_size`.
 - The `Configuration` page also shows the current effective log file name as a read-only value so managers can verify the target log file without exposing host path details.
 - Managers cannot view or trigger password policy, webhook secret, logging infrastructure, database runtime, or service restart controls from this page.
 - `exFAT Cluster Size` controls the allocation unit ECUBE uses when formatting drives as exFAT. `4K` is recommended for most situations. Use larger values only for drives that will store very large files only and no small files.

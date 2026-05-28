@@ -317,8 +317,8 @@ Password reset behavior:
 
 | Method | Endpoint | Role | Description |
 | ------ | -------- | ---- | ----------- |
-| GET | `/configuration` | admin/manager | Return the manager-accessible runtime configuration fields shown on the `Configuration` page. |
-| PUT | `/configuration` | admin/manager | Update only the manager-accessible runtime configuration fields. |
+| GET | `/configuration` | admin/manager | Return the manager-accessible runtime configuration fields exposed by the Configuration API. |
+| PUT | `/configuration` | admin/manager | Update only the manager-accessible runtime configuration fields exposed by the Configuration API. |
 
 Manager-accessible fields are limited to:
 
