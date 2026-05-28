@@ -76,7 +76,10 @@ def _attach_related_job_contexts(db: Session, mounts: list[NetworkShare]) -> lis
     try:
         job_rows = (
             db.query(ExportJob.id, ExportJob.project_id, ExportJob.status)
-            .filter(ExportJob.project_id.in_(sorted(project_ids)))
+            .filter(
+                ExportJob.project_id.in_(sorted(project_ids)),
+                ExportJob.status != JobStatus.ARCHIVED,
+            )
             .order_by(ExportJob.created_at.desc(), ExportJob.id.desc())
             .all()
         )

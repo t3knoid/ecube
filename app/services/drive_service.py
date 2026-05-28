@@ -188,11 +188,13 @@ def _attach_related_job_contexts(
             DriveAssignment.job_id,
             ExportJob.project_id,
             ExportJob.evidence_number,
+            ExportJob.status,
         )
         .join(ExportJob, ExportJob.id == DriveAssignment.job_id)
         .filter(
             DriveAssignment.drive_id.in_(drive_ids),
             DriveAssignment.released_at.is_(None),
+            ExportJob.status != JobStatus.ARCHIVED,
         )
         .order_by(
             DriveAssignment.drive_id,
@@ -203,7 +205,7 @@ def _attach_related_job_contexts(
     )
 
     selected_jobs: Dict[int, tuple[int, Optional[str]]] = {}
-    for drive_id, job_id, job_project_id, evidence_number in assignment_rows:
+    for drive_id, job_id, job_project_id, evidence_number, _job_status in assignment_rows:
         if drive_id in selected_jobs:
             continue
         drive = drive_by_id.get(drive_id)

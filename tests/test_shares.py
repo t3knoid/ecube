@@ -99,6 +99,34 @@ def test_list_shares_includes_related_job_custody_status_for_completed_jobs(clie
     }
 
 
+def test_list_shares_ignores_archived_jobs_when_selecting_related_job(client, db):
+    mount = NetworkShare(
+        type=MountType.SMB,
+        remote_path="//server/share",
+        project_id="PROJ-013",
+        local_mount_point="/smb/project-013",
+        status=MountStatus.MOUNTED,
+    )
+    archived_job = ExportJob(
+        project_id="PROJ-013",
+        evidence_number="EV-013-A",
+        source_path="/source/archived",
+        status=JobStatus.ARCHIVED,
+    )
+    db.add_all([mount, archived_job])
+    db.commit()
+
+    response = client.get("/shares")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data[0]["related_job"] == {
+        "job_id": None,
+        "status": "NO_RELATED_JOB",
+        "custody_status": "NO_RELATED_JOB",
+    }
+
+
 def test_list_shares_uses_no_related_job_fallback(client, db):
     mount = NetworkShare(
         type=MountType.NFS,

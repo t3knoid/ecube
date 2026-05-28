@@ -474,7 +474,7 @@ def test_list_drives_include_related_job_custody_for_explicit_overflow_assignmen
     }
 
 
-def test_list_drives_include_related_job_custody_unavailable_without_snapshot(client, db):
+def test_list_drives_ignore_archived_related_job_without_snapshot(client, db):
     drive = UsbDrive(device_identifier="USB-CUSTODY-3", current_state=DriveState.IN_USE, current_project_id="PROJ-003")
     job = ExportJob(
         project_id="PROJ-003",
@@ -493,14 +493,14 @@ def test_list_drives_include_related_job_custody_unavailable_without_snapshot(cl
     payload = response.json()
     match = next(item for item in payload if item["id"] == drive.id)
     assert match["related_job"] == {
-        "job_id": job.id,
-        "evidence_number": "EV-003",
-        "custody_status": "STATUS_UNAVAILABLE",
+        "job_id": None,
+        "evidence_number": None,
+        "custody_status": "NO_RELATED_JOB",
         "delivery_time": None,
     }
 
 
-def test_list_drives_include_related_job_custody_from_archived_snapshot(client, db):
+def test_list_drives_ignore_archived_related_job_even_with_archived_snapshot(client, db):
     drive = UsbDrive(device_identifier="USB-CUSTODY-4", current_state=DriveState.IN_USE, current_project_id="PROJ-004")
     job = ExportJob(
         project_id="PROJ-004",
@@ -540,10 +540,10 @@ def test_list_drives_include_related_job_custody_from_archived_snapshot(client, 
     payload = response.json()
     match = next(item for item in payload if item["id"] == drive.id)
     assert match["related_job"] == {
-        "job_id": job.id,
-        "evidence_number": "EV-004",
-        "custody_status": "HANDOFF_RECORDED",
-        "delivery_time": "2026-05-03T12:00:00Z",
+        "job_id": None,
+        "evidence_number": None,
+        "custody_status": "NO_RELATED_JOB",
+        "delivery_time": None,
     }
 
 
