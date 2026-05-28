@@ -134,6 +134,31 @@ JOB_COPY_THROUGHPUT_BYTES_PER_SECOND = Gauge(
     labelnames=("thread_count_bucket",),
     registry=REGISTRY,
 )
+JOB_COPY_SCHEDULER_CONTROL_POLLS_TOTAL = Counter(
+    "ecube_job_copy_scheduler_control_polls_total",
+    "Copy scheduler control-state polls by trigger reason.",
+    labelnames=("reason",),
+    registry=REGISTRY,
+)
+JOB_COPY_SCHEDULER_CONTROL_POLL_INTERVAL_SECONDS = Histogram(
+    "ecube_job_copy_scheduler_control_poll_interval_seconds",
+    "Elapsed seconds between copy scheduler control-state polls.",
+    labelnames=("reason",),
+    buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2),
+    registry=REGISTRY,
+)
+JOB_COPY_SCHEDULER_COMPLETIONS_PER_CONTROL_POLL = Histogram(
+    "ecube_job_copy_scheduler_completions_per_control_poll",
+    "Worker completions observed between copy scheduler control-state polls.",
+    buckets=(0, 1, 2, 4, 8, 16, 32),
+    registry=REGISTRY,
+)
+JOB_COPY_SCHEDULER_REFILL_LATENCY_SECONDS = Histogram(
+    "ecube_job_copy_scheduler_refill_latency_seconds",
+    "Elapsed seconds between a worker completion and submission of replacement work.",
+    buckets=(0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25),
+    registry=REGISTRY,
+)
 JOB_VERIFY_DURATION_SECONDS = Histogram(
     "ecube_job_verify_duration_seconds",
     "Verification duration in seconds by terminal verification outcome.",
@@ -404,6 +429,18 @@ def record_job_copy_error(outcome: str) -> None:
     if outcome not in {"retry", "failed"}:
         return
     JOB_COPY_ERRORS_TOTAL.labels(outcome=outcome).inc()
+
+
+def record_copy_scheduler_control_poll(*, reason: str, interval_seconds: float, completions_since_last: int) -> None:
+    if reason not in {"startup", "interval", "completion_budget", "worker_exception"}:
+        return
+    JOB_COPY_SCHEDULER_CONTROL_POLLS_TOTAL.labels(reason=reason).inc()
+    JOB_COPY_SCHEDULER_CONTROL_POLL_INTERVAL_SECONDS.labels(reason=reason).observe(max(interval_seconds, 0.0))
+    JOB_COPY_SCHEDULER_COMPLETIONS_PER_CONTROL_POLL.observe(max(float(completions_since_last), 0.0))
+
+
+def record_copy_scheduler_refill_latency(*, latency_seconds: float) -> None:
+    JOB_COPY_SCHEDULER_REFILL_LATENCY_SECONDS.observe(max(latency_seconds, 0.0))
 
 
 def record_job_verify_terminal(*, outcome: str, duration_seconds: float) -> None:

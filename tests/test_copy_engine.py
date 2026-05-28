@@ -3566,6 +3566,107 @@ def test_run_copy_job_applies_runtime_tuning_updates_during_rolling_refill(db, t
     assert update_records
 
 
+def test_run_copy_job_bounds_runtime_control_polling_cadence(db, tmp_path, caplog):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    for index in range(6):
+        (source_dir / f"file-{index}.bin").write_bytes((b"payload-" + str(index).encode("ascii")) * 128)
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    job.thread_count = 1
+    db.commit()
+    db.refresh(job)
+
+    tuning_snapshot_reads = 0
+    original_read_tuning_snapshot = copy_engine._read_copy_job_runtime_tuning_snapshot
+    original_list_pending = copy_engine.FileRepository.list_pending_by_job_after_id
+
+    def _counting_tuning_snapshot(db_session, snapshot_job_id):
+        nonlocal tuning_snapshot_reads
+        tuning_snapshot_reads += 1
+        return original_read_tuning_snapshot(db_session, snapshot_job_id)
+
+    def _one_file_batch(self, job_id, after_id=None, limit=None):
+        pending = original_list_pending(self, job_id, after_id=after_id, limit=1)
+        return pending[:1]
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch.object(copy_engine.FileRepository, "list_pending_by_job_after_id", _one_file_batch):
+            with patch("app.services.copy_engine._read_copy_job_runtime_tuning_snapshot", side_effect=_counting_tuning_snapshot):
+                with caplog.at_level("DEBUG"):
+                    copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+    assert job.status == JobStatus.COMPLETED
+
+    # Startup + bounded cadence checks should be noticeably lower than per-completion polling.
+    assert tuning_snapshot_reads < 6
+
+    scheduler_records = [
+        record
+        for record in caplog.records
+        if record.getMessage() == "Copy scheduler control polling summary" and record.job_id == job.id
+    ]
+    assert scheduler_records
+    summary = scheduler_records[-1]
+    assert summary.poll_completion_interval_limit == copy_engine.COPY_CONTROL_POLL_COMPLETION_INTERVAL
+    assert summary.poll_max_interval_seconds_limit == copy_engine.COPY_CONTROL_POLL_MAX_INTERVAL_SECONDS
+    assert summary.max_completions_between_polls <= copy_engine.COPY_CONTROL_POLL_COMPLETION_INTERVAL
+
+
+def test_run_copy_job_pause_responsiveness_is_bounded_by_poll_cadence(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    for index in range(8):
+        (source_dir / f"file-{index}.bin").write_bytes((b"pause-" + str(index).encode("ascii")) * 128)
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    job.thread_count = 1
+    db.commit()
+    db.refresh(job)
+
+    original_list_pending = copy_engine.FileRepository.list_pending_by_job_after_id
+    as_completed_calls = 0
+
+    def _one_file_batch(self, job_id, after_id=None, limit=None):
+        pending = original_list_pending(self, job_id, after_id=after_id, limit=1)
+        return pending[:1]
+
+    def _pause_after_first_completion(futures):
+        nonlocal as_completed_calls
+        as_completed_calls += 1
+        if as_completed_calls == 1:
+            paused_job = db.get(ExportJob, job.id)
+            paused_job.status = JobStatus.PAUSING
+            db.commit()
+        for future in list(futures):
+            yield future
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch.object(copy_engine.FileRepository, "list_pending_by_job_after_id", _one_file_batch):
+            with patch("app.services.copy_engine.as_completed", side_effect=_pause_after_first_completion):
+                copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+    done_count = (
+        db.query(ExportFile)
+        .filter(ExportFile.job_id == job.id, ExportFile.status == FileStatus.DONE)
+        .count()
+    )
+
+    assert job.status == JobStatus.PAUSED
+    # Pause should be observed within the configured completion budget.
+    assert done_count <= copy_engine.COPY_CONTROL_POLL_COMPLETION_INTERVAL
+
+
 def test_run_copy_job_reads_persisted_runtime_tuning_updates_between_batches(db, tmp_path):
     source_dir = tmp_path / "source"
     source_dir.mkdir()

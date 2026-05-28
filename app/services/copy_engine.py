@@ -47,6 +47,8 @@ logger = logging.getLogger(__name__)
 
 STARTUP_ANALYSIS_SAMPLE_LIMIT = 16
 COPY_PENDING_BATCH_MULTIPLIER = 4
+COPY_CONTROL_POLL_COMPLETION_INTERVAL = 2
+COPY_CONTROL_POLL_MAX_INTERVAL_SECONDS = 0.1
 THROUGHPUT_BENCHMARK_SAMPLE_BUCKETS: tuple[tuple[int, Optional[int]], ...] = (
     (16 * 1024, 32 * 1024),
     (32 * 1024, 64 * 1024),
@@ -2473,6 +2475,17 @@ def run_copy_job(job_id: int) -> None:
                     stale_run_detected = False
                     active_tuning_key: Optional[tuple[int, int, int, bool]] = None
                     active_tuning_sources: Optional[tuple[str, str, str, str]] = None
+                    control_poll_count = 0
+                    control_poll_reason_counts: dict[str, int] = {}
+                    completions_since_control_poll = 0
+                    max_completions_between_polls = 0
+                    max_refill_latency_seconds = 0.0
+                    refill_pending_since: Optional[float] = None
+                    last_control_poll_monotonic = time.monotonic()
+                    max_workers = int(resolve_job_copy_tuning(job).effective_thread_count)
+                    copy_chunk_size_bytes = int(resolve_job_copy_tuning(job).effective_copy_chunk_size_bytes)
+                    copy_progress_flush_threshold_bytes = int(resolve_progress_flush_threshold_bytes(job))
+                    copy_file_fsync_enabled = bool(resolve_job_copy_tuning(job).effective_copy_file_fsync_enabled)
 
                     def _handle_worker_completion(cancel_pending: list[Any] | None = None) -> bool:
                         nonlocal pause_requested, stop_for_target_full, stale_run_detected
@@ -2502,6 +2515,94 @@ def run_copy_job(job_id: int) -> None:
                             return False
                         return False
 
+                    def _poll_runtime_control_state(reason: str, cancel_pending: list[Any] | None = None) -> bool:
+                        nonlocal control_poll_count
+                        nonlocal completions_since_control_poll
+                        nonlocal last_control_poll_monotonic
+                        nonlocal max_completions_between_polls
+                        nonlocal active_tuning_key
+                        nonlocal active_tuning_sources
+                        nonlocal max_workers
+                        nonlocal copy_chunk_size_bytes
+                        nonlocal copy_progress_flush_threshold_bytes
+                        nonlocal copy_file_fsync_enabled
+
+                        now = time.monotonic()
+                        poll_interval_seconds = max(0.0, now - last_control_poll_monotonic)
+                        control_poll_count += 1
+                        control_poll_reason_counts[reason] = control_poll_reason_counts.get(reason, 0) + 1
+                        max_completions_between_polls = max(
+                            max_completions_between_polls,
+                            completions_since_control_poll,
+                        )
+                        metrics_service.record_copy_scheduler_control_poll(
+                            reason=reason,
+                            interval_seconds=poll_interval_seconds,
+                            completions_since_last=completions_since_control_poll,
+                        )
+                        last_control_poll_monotonic = now
+                        completions_since_control_poll = 0
+
+                        tuning_snapshot = _read_copy_job_runtime_tuning_snapshot(db, job_id)
+                        if tuning_snapshot is None:
+                            stale_run_detected = True
+                            return True
+                        snapshot_job = cast(ExportJob, tuning_snapshot["job"])
+                        max_workers = int(tuning_snapshot["max_workers"])
+                        copy_chunk_size_bytes = int(tuning_snapshot["copy_chunk_size_bytes"])
+                        copy_progress_flush_threshold_bytes = int(tuning_snapshot["copy_progress_flush_threshold_bytes"])
+                        copy_file_fsync_enabled = bool(tuning_snapshot["copy_file_fsync_enabled"])
+                        thread_count_source = str(tuning_snapshot["thread_count_source"])
+                        copy_chunk_size_source = str(tuning_snapshot["copy_chunk_size_source"])
+                        copy_progress_flush_source = str(tuning_snapshot["copy_progress_flush_source"])
+                        copy_file_fsync_source = str(tuning_snapshot["copy_file_fsync_source"])
+
+                        current_tuning_key = (
+                            max_workers,
+                            copy_chunk_size_bytes,
+                            copy_progress_flush_threshold_bytes,
+                            copy_file_fsync_enabled,
+                        )
+                        current_tuning_sources = (
+                            thread_count_source,
+                            copy_chunk_size_source,
+                            copy_progress_flush_source,
+                            copy_file_fsync_source,
+                        )
+                        batch_limit = max(1, max_workers * COPY_PENDING_BATCH_MULTIPLIER)
+
+                        if active_tuning_key != current_tuning_key or active_tuning_sources != current_tuning_sources:
+                            if active_tuning_key is not None:
+                                logger.info(
+                                    "Applied runtime copy tuning update",
+                                    extra={
+                                        "job_id": job_id,
+                                        "thread_count": max_workers,
+                                        "copy_chunk_size_bytes": copy_chunk_size_bytes,
+                                        "copy_progress_flush_threshold_bytes": copy_progress_flush_threshold_bytes,
+                                        "copy_file_fsync_enabled": copy_file_fsync_enabled,
+                                    },
+                                )
+                            _log_copy_job_runtime_parameters(
+                                snapshot_job,
+                                max_workers=max_workers,
+                                batch_limit=batch_limit,
+                                max_retries=int(max_retries),
+                                retry_delay_seconds=retry_delay,
+                                file_timeout_seconds=file_timeout_seconds,
+                                copy_chunk_size_bytes=copy_chunk_size_bytes,
+                                copy_progress_flush_threshold_bytes=copy_progress_flush_threshold_bytes,
+                                copy_file_fsync_enabled=copy_file_fsync_enabled,
+                                thread_count_source=thread_count_source,
+                                copy_chunk_size_source=copy_chunk_size_source,
+                                copy_progress_flush_source=copy_progress_flush_source,
+                                copy_file_fsync_source=copy_file_fsync_source,
+                            )
+
+                        active_tuning_key = current_tuning_key
+                        active_tuning_sources = current_tuning_sources
+                        return _handle_worker_completion(cancel_pending)
+
                     executor = ThreadPoolExecutor(
                         max_workers=32,
                         thread_name_prefix=f"copy-job-{job_id}",
@@ -2528,6 +2629,12 @@ def run_copy_job(job_id: int) -> None:
                             pending_buffer.extend(pending_files)
 
                         def _submit_pending_file(ef: ExportFile) -> None:
+                            nonlocal refill_pending_since, max_refill_latency_seconds
+                            if refill_pending_since is not None:
+                                refill_latency_seconds = max(0.0, time.monotonic() - refill_pending_since)
+                                max_refill_latency_seconds = max(max_refill_latency_seconds, refill_latency_seconds)
+                                metrics_service.record_copy_scheduler_refill_latency(latency_seconds=refill_latency_seconds)
+                                refill_pending_since = None
                             futures[executor.submit(
                                 _process_file,
                                 ef.id,
@@ -2540,64 +2647,38 @@ def run_copy_job(job_id: int) -> None:
                                 copy_file_fsync_enabled,
                             )] = ef.id
 
-                        while True:
-                            tuning_snapshot = _read_copy_job_runtime_tuning_snapshot(db, job_id)
-                            if tuning_snapshot is None:
+                        if _poll_runtime_control_state("startup"):
+                            if stale_run_detected:
                                 return
-                            snapshot_job = cast(ExportJob, tuning_snapshot["job"])
-                            max_workers = int(tuning_snapshot["max_workers"])
-                            copy_chunk_size_bytes = int(tuning_snapshot["copy_chunk_size_bytes"])
-                            copy_progress_flush_threshold_bytes = int(tuning_snapshot["copy_progress_flush_threshold_bytes"])
-                            copy_file_fsync_enabled = bool(tuning_snapshot["copy_file_fsync_enabled"])
-                            thread_count_source = str(tuning_snapshot["thread_count_source"])
-                            copy_chunk_size_source = str(tuning_snapshot["copy_chunk_size_source"])
-                            copy_progress_flush_source = str(tuning_snapshot["copy_progress_flush_source"])
-                            copy_file_fsync_source = str(tuning_snapshot["copy_file_fsync_source"])
+                            if pause_requested or stop_for_target_full:
+                                pass
 
-                            current_tuning_key = (
-                                max_workers,
-                                copy_chunk_size_bytes,
-                                copy_progress_flush_threshold_bytes,
-                                copy_file_fsync_enabled,
+                        while True:
+                            if stale_run_detected:
+                                return
+                            if pause_requested:
+                                break
+                            if stop_for_target_full:
+                                break
+
+                            poll_due_to_completion_budget = (
+                                completions_since_control_poll >= COPY_CONTROL_POLL_COMPLETION_INTERVAL
                             )
-                            current_tuning_sources = (
-                                thread_count_source,
-                                copy_chunk_size_source,
-                                copy_progress_flush_source,
-                                copy_file_fsync_source,
+                            poll_due_to_interval = (
+                                (time.monotonic() - last_control_poll_monotonic)
+                                >= COPY_CONTROL_POLL_MAX_INTERVAL_SECONDS
                             )
+                            if poll_due_to_completion_budget or poll_due_to_interval:
+                                poll_reason = "completion_budget" if poll_due_to_completion_budget else "interval"
+                                if _poll_runtime_control_state(poll_reason, list(futures)):
+                                    if stale_run_detected:
+                                        return
+                                    if pause_requested:
+                                        break
+                                    if stop_for_target_full:
+                                        break
+
                             batch_limit = max(1, max_workers * COPY_PENDING_BATCH_MULTIPLIER)
-
-                            if active_tuning_key != current_tuning_key or active_tuning_sources != current_tuning_sources:
-                                if active_tuning_key is not None:
-                                    logger.info(
-                                        "Applied runtime copy tuning update",
-                                        extra={
-                                            "job_id": job_id,
-                                            "thread_count": max_workers,
-                                            "copy_chunk_size_bytes": copy_chunk_size_bytes,
-                                            "copy_progress_flush_threshold_bytes": copy_progress_flush_threshold_bytes,
-                                            "copy_file_fsync_enabled": copy_file_fsync_enabled,
-                                        },
-                                    )
-                                _log_copy_job_runtime_parameters(
-                                    snapshot_job,
-                                    max_workers=max_workers,
-                                    batch_limit=batch_limit,
-                                    max_retries=int(max_retries),
-                                    retry_delay_seconds=retry_delay,
-                                    file_timeout_seconds=file_timeout_seconds,
-                                    copy_chunk_size_bytes=copy_chunk_size_bytes,
-                                    copy_progress_flush_threshold_bytes=copy_progress_flush_threshold_bytes,
-                                    copy_file_fsync_enabled=copy_file_fsync_enabled,
-                                    thread_count_source=thread_count_source,
-                                    copy_chunk_size_source=copy_chunk_size_source,
-                                    copy_progress_flush_source=copy_progress_flush_source,
-                                    copy_file_fsync_source=copy_file_fsync_source,
-                                )
-
-                            active_tuning_key = current_tuning_key
-                            active_tuning_sources = current_tuning_sources
 
                             if len(futures) < max_workers:
                                 while not pending_buffer and not pending_exhausted:
@@ -2614,25 +2695,37 @@ def run_copy_job(job_id: int) -> None:
                                 continue
 
                             done_future = next(as_completed(tuple(futures.keys())))
+                            completions_since_control_poll += 1
+                            if refill_pending_since is None:
+                                refill_pending_since = time.monotonic()
+                            future_failed = False
                             try:
                                 done_future.result()
                             except Exception:
-                                pass
+                                future_failed = True
                             futures.pop(done_future, None)
 
-                            if _handle_worker_completion(list(futures)):
-                                if stale_run_detected:
-                                    return
-                                if pause_requested:
-                                    break
-
-                            if stale_run_detected:
-                                return
-                            if pause_requested:
-                                break
-                            if stop_for_target_full:
-                                break
+                            if future_failed:
+                                if _poll_runtime_control_state("worker_exception", list(futures)):
+                                    if stale_run_detected:
+                                        return
+                                    if pause_requested:
+                                        break
+                                    if stop_for_target_full:
+                                        break
                     finally:
+                        logger.debug(
+                            "Copy scheduler control polling summary",
+                            extra={
+                                "job_id": job_id,
+                                "poll_count": control_poll_count,
+                                "poll_completion_interval_limit": COPY_CONTROL_POLL_COMPLETION_INTERVAL,
+                                "poll_max_interval_seconds_limit": COPY_CONTROL_POLL_MAX_INTERVAL_SECONDS,
+                                "max_completions_between_polls": max_completions_between_polls,
+                                "max_refill_latency_seconds": round(max_refill_latency_seconds, 6),
+                                "poll_reason_counts": control_poll_reason_counts,
+                            },
+                        )
                         executor.shutdown(wait=True, cancel_futures=True)
 
                 # Determine final job status.

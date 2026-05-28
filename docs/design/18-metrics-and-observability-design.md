@@ -74,7 +74,18 @@ Forbidden high-cardinality labels:
 | `ecube_job_bytes_copied_total` | Counter | bytes | none | Increment by bytes copied |
 | `ecube_job_copy_errors_total` | Counter | errors | `outcome` | `outcome`: `retry`, `failed` |
 | `ecube_job_copy_throughput_bytes_per_second` | Gauge | bytes/sec | `thread_count_bucket` | Sampled live throughput |
+| `ecube_job_copy_scheduler_control_polls_total` | Counter | polls | `reason` | Control-loop poll trigger count. `reason`: `startup`, `interval`, `completion_budget`, `worker_exception` |
+| `ecube_job_copy_scheduler_control_poll_interval_seconds` | Histogram | seconds | `reason` | Elapsed time between control-state polls. Buckets: `[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2]` |
+| `ecube_job_copy_scheduler_completions_per_control_poll` | Histogram | completions | none | Worker completions observed between control-state polls. Buckets: `[0, 1, 2, 4, 8, 16, 32]` |
+| `ecube_job_copy_scheduler_refill_latency_seconds` | Histogram | seconds | none | Elapsed time between worker completion and replacement submission. Buckets: `[0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25]` |
 | `ecube_job_verify_duration_seconds` | Histogram | seconds | `outcome` | Buckets: `[0.1, 0.5, 1, 5, 10, 30, 60, 120, 300]` |
+
+Copy scheduler control-state polling behavior:
+
+- The scheduler polls pause/stale-run/target-full and runtime-tuning state on a bounded cadence.
+- Default bounds: at most every 2 worker completions or 0.1 seconds, whichever happens first.
+- Worker exceptions force an immediate control poll.
+- The bound limits polling overhead in small-file workloads while preserving bounded pause/stop responsiveness.
 
 ### Periodic Sampling
 
