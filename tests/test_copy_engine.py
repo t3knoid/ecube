@@ -3618,6 +3618,46 @@ def test_run_copy_job_bounds_runtime_control_polling_cadence(db, tmp_path, caplo
     assert summary.max_completions_between_polls <= copy_engine.COPY_CONTROL_POLL_COMPLETION_INTERVAL
 
 
+def test_run_copy_job_bounds_target_full_continuation_checks_to_control_poll_cadence(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    for index in range(6):
+        (source_dir / f"file-{index}.bin").write_bytes((b"payload-" + str(index).encode("ascii")) * 128)
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    job.thread_count = 1
+    db.commit()
+    db.refresh(job)
+
+    target_full_checks = 0
+    original_list_pending = copy_engine.FileRepository.list_pending_by_job_after_id
+    original_should_attempt = copy_engine.FileRepository.should_attempt_target_full_continuation
+
+    def _one_file_batch(self, job_id, after_id=None, limit=None):
+        pending = original_list_pending(self, job_id, after_id=after_id, limit=1)
+        return pending[:1]
+
+    def _counting_should_attempt(self, job_id):
+        nonlocal target_full_checks
+        target_full_checks += 1
+        return original_should_attempt(self, job_id)
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch.object(copy_engine.FileRepository, "list_pending_by_job_after_id", _one_file_batch):
+            with patch.object(copy_engine.FileRepository, "should_attempt_target_full_continuation", _counting_should_attempt):
+                copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+    assert job.status == JobStatus.COMPLETED
+
+    # Startup + bounded cadence checks should remain lower than per-completion polling.
+    assert target_full_checks < 6
+
+
 def test_run_copy_job_pause_responsiveness_is_bounded_by_poll_cadence(db, tmp_path):
     source_dir = tmp_path / "source"
     source_dir.mkdir()

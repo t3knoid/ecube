@@ -593,6 +593,20 @@ def _read_copy_job_runtime_state(db: Session, job_id: int) -> tuple[Optional[Job
         read_db.close()
 
 
+def _read_copy_job_runtime_status(db: Session, job_id: int) -> tuple[Optional[JobStatus], Optional[datetime]]:
+    read_db = Session(bind=db.get_bind())
+    try:
+        latest_job = JobRepository(read_db).get(job_id)
+        latest_status: Optional[JobStatus] = None
+        latest_started_at: Optional[datetime] = None
+        if latest_job is not None:
+            latest_status = cast(Optional[JobStatus], getattr(latest_job, "status", None))
+            latest_started_at = cast(Optional[datetime], getattr(latest_job, "started_at", None))
+        return latest_status, latest_started_at
+    finally:
+        read_db.close()
+
+
 def _read_copy_job_runtime_tuning_snapshot(db: Session, job_id: int) -> Optional[dict[str, Any]]:
     read_db = Session(bind=db.get_bind())
     try:
@@ -2487,10 +2501,18 @@ def run_copy_job(job_id: int) -> None:
                     copy_progress_flush_threshold_bytes = int(resolve_progress_flush_threshold_bytes(job))
                     copy_file_fsync_enabled = bool(resolve_job_copy_tuning(job).effective_copy_file_fsync_enabled)
 
-                    def _handle_worker_completion(cancel_pending: list[Any] | None = None) -> bool:
+                    def _handle_worker_completion(
+                        cancel_pending: list[Any] | None = None,
+                        *,
+                        include_target_full: bool = False,
+                    ) -> bool:
                         nonlocal pause_requested, stop_for_target_full, stale_run_detected
 
-                        latest_status, latest_started_at, should_attempt_target_full = _read_copy_job_runtime_state(db, job_id)
+                        should_attempt_target_full = False
+                        if include_target_full:
+                            latest_status, latest_started_at, should_attempt_target_full = _read_copy_job_runtime_state(db, job_id)
+                        else:
+                            latest_status, latest_started_at = _read_copy_job_runtime_status(db, job_id)
                         latest_started_at_key = _normalize_started_at(latest_started_at)
                         if latest_status is not None and latest_started_at_key and latest_started_at_key != run_started_at_key:
                             stale_run_detected = True
@@ -2601,7 +2623,7 @@ def run_copy_job(job_id: int) -> None:
 
                         active_tuning_key = current_tuning_key
                         active_tuning_sources = current_tuning_sources
-                        return _handle_worker_completion(cancel_pending)
+                        return _handle_worker_completion(cancel_pending, include_target_full=True)
 
                     executor = ThreadPoolExecutor(
                         max_workers=32,
