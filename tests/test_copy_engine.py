@@ -1,5 +1,6 @@
 """Tests for retry/resume semantics in the copy engine."""
 
+import hashlib
 import json
 import logging
 from datetime import datetime, timedelta, timezone
@@ -159,6 +160,39 @@ def test_copy_file_fsyncs_when_enabled(tmp_path):
     assert checksum is not None
     assert err is None
     mock_fsync.assert_called_once()
+
+
+def test_copy_file_uses_separate_hashing_path_when_enabled(tmp_path):
+    src = tmp_path / "src.txt"
+    dst = tmp_path / "dst.txt"
+    src.write_bytes(b"hello world")
+
+    with patch.object(copy_engine.settings, "copy_hashing_separate_thread_enabled", True):
+        with patch(
+            "app.services.copy_engine._copy_file_with_separate_hashing",
+            return_value="d" * 64,
+        ) as mock_separate_hash:
+            success, checksum, err = copy_engine.copy_file(src, dst)
+
+    assert success is True
+    assert checksum == "d" * 64
+    assert err is None
+    mock_separate_hash.assert_called_once()
+
+
+def test_copy_file_separate_hashing_enabled_keeps_copy_and_checksum_behavior(tmp_path):
+    src = tmp_path / "src.bin"
+    dst = tmp_path / "dst.bin"
+    payload = b"evidence-data-" * 1024
+    src.write_bytes(payload)
+
+    with patch.object(copy_engine.settings, "copy_hashing_separate_thread_enabled", True):
+        success, checksum, err = copy_engine.copy_file(src, dst)
+
+    assert success is True
+    assert err is None
+    assert checksum == hashlib.sha256(payload).hexdigest()
+    assert dst.read_bytes() == payload
 
 
 # ---------------------------------------------------------------------------
@@ -3340,10 +3374,12 @@ def test_run_copy_job_logs_effective_runtime_parameters_at_debug(db, tmp_path, c
     original_chunk_size = copy_engine.settings.copy_chunk_size_bytes
     original_flush_bytes = copy_engine.settings.copy_progress_flush_bytes
     original_fsync = copy_engine.settings.copy_file_fsync_enabled
+    original_hashing_mode = copy_engine.settings.copy_hashing_separate_thread_enabled
     copy_engine.settings.copy_job_timeout = 123
     copy_engine.settings.copy_chunk_size_bytes = 2_097_152
     copy_engine.settings.copy_progress_flush_bytes = 8_388_608
     copy_engine.settings.copy_file_fsync_enabled = True
+    copy_engine.settings.copy_hashing_separate_thread_enabled = True
 
     try:
         with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
@@ -3354,6 +3390,7 @@ def test_run_copy_job_logs_effective_runtime_parameters_at_debug(db, tmp_path, c
         copy_engine.settings.copy_chunk_size_bytes = original_chunk_size
         copy_engine.settings.copy_progress_flush_bytes = original_flush_bytes
         copy_engine.settings.copy_file_fsync_enabled = original_fsync
+        copy_engine.settings.copy_hashing_separate_thread_enabled = original_hashing_mode
 
     parameter_records = [record for record in caplog.records if record.getMessage() == "Copy job runtime parameters"]
     assert parameter_records
@@ -3372,6 +3409,7 @@ def test_run_copy_job_logs_effective_runtime_parameters_at_debug(db, tmp_path, c
     assert record.copy_progress_flush_source == "job"
     assert record.copy_file_fsync_enabled is False
     assert record.copy_file_fsync_source == "job"
+    assert record.copy_hashing_separate_thread_enabled is True
     assert record.pending_batch_limit == 12
     assert record.pending_batch_multiplier == copy_engine.COPY_PENDING_BATCH_MULTIPLIER
 
@@ -3468,10 +3506,12 @@ def test_run_copy_job_applies_runtime_tuning_updates_at_batch_boundaries(db, tmp
     observed_chunk_sizes = {record.copy_chunk_size_bytes for record in parameter_records}
     observed_flush_thresholds = {record.copy_progress_flush_threshold_bytes for record in parameter_records}
     observed_fsync_values = {record.copy_file_fsync_enabled for record in parameter_records}
+    observed_hashing_mode_values = {record.copy_hashing_separate_thread_enabled for record in parameter_records}
     assert observed_thread_counts == {1, 2}
     assert observed_chunk_sizes == {1024, 2048}
     assert observed_flush_thresholds == {1024, 4096}
     assert observed_fsync_values == {False, True}
+    assert observed_hashing_mode_values == {bool(copy_engine.settings.copy_hashing_separate_thread_enabled)}
 
     update_records = [record for record in caplog.records if record.getMessage() == "Applied runtime copy tuning update" and record.job_id == job.id]
     assert update_records

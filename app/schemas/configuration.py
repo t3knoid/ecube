@@ -43,6 +43,7 @@ class ManagerConfigurationUpdateRequest(StrictIntMixin, BaseModel):
     copy_progress_flush_bytes: Optional[StrictInt] = Field(default=None, ge=1_048_576, le=1_073_741_824)
     copy_default_thread_count: Optional[StrictInt] = Field(default=None, ge=1, le=32)
     copy_file_fsync_enabled: Optional[StrictBool] = Field(default=None)
+    copy_hashing_separate_thread_enabled: Optional[StrictBool] = Field(default=None)
     usb_discovery_interval: Optional[StrictInt] = Field(default=None, ge=0)
     job_detail_files_page_size: Optional[StrictInt] = Field(default=None, ge=20, le=100)
 
@@ -76,6 +77,7 @@ class ConfigurationUpdateRequest(StrictIntMixin, BaseModel):
     copy_progress_flush_bytes: Optional[StrictInt] = Field(default=None, ge=1_048_576, le=1_073_741_824)
     copy_default_thread_count: Optional[StrictInt] = Field(default=None, ge=1, le=32)
     copy_file_fsync_enabled: Optional[StrictBool] = Field(default=None)
+    copy_hashing_separate_thread_enabled: Optional[StrictBool] = Field(default=None)
     usb_discovery_interval: Optional[StrictInt] = Field(default=None, ge=0)
     job_detail_files_page_size: Optional[StrictInt] = Field(default=None, ge=20, le=100)
     callback_allow_private_ips: Optional[StrictBool] = Field(default=None)

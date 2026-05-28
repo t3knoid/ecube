@@ -41,6 +41,10 @@ class TestConfigurationSchemaValidation:
         req = ConfigurationUpdateRequest(copy_file_fsync_enabled=True)
         assert req.copy_file_fsync_enabled is True
 
+    def test_update_accepts_copy_hashing_separate_thread_enabled(self):
+        req = ConfigurationUpdateRequest(copy_hashing_separate_thread_enabled=True)
+        assert req.copy_hashing_separate_thread_enabled is True
+
     def test_update_accepts_usb_discovery_interval(self):
         req = ConfigurationUpdateRequest(usb_discovery_interval=0)
         assert req.usb_discovery_interval == 0
@@ -189,6 +193,7 @@ class TestConfigurationEndpoints:
         "copy_progress_flush_bytes",
         "copy_default_thread_count",
         "copy_file_fsync_enabled",
+        "copy_hashing_separate_thread_enabled",
         "usb_discovery_interval",
         "job_detail_files_page_size",
     }
@@ -354,6 +359,7 @@ class TestConfigurationEndpoints:
             "copy_progress_flush_bytes": settings.copy_progress_flush_bytes,
             "copy_default_thread_count": settings.copy_default_thread_count,
             "copy_file_fsync_enabled": settings.copy_file_fsync_enabled,
+            "copy_hashing_separate_thread_enabled": settings.copy_hashing_separate_thread_enabled,
         }
         next_thread_count = 16 if original_values["copy_default_thread_count"] != 16 else 12
         payload = {
@@ -361,6 +367,7 @@ class TestConfigurationEndpoints:
             "copy_progress_flush_bytes": 134_217_728,
             "copy_default_thread_count": next_thread_count,
             "copy_file_fsync_enabled": True,
+            "copy_hashing_separate_thread_enabled": True,
         }
         try:
             resp = manager_client.put("/configuration", json=payload)
@@ -375,6 +382,7 @@ class TestConfigurationEndpoints:
             assert written.get("COPY_PROGRESS_FLUSH_BYTES") == "134217728"
             assert written.get("COPY_DEFAULT_THREAD_COUNT") == str(next_thread_count)
             assert written.get("COPY_FILE_FSYNC_ENABLED") == "True"
+            assert written.get("COPY_HASHING_SEPARATE_THREAD_ENABLED") == "True"
         finally:
             for key, value in original_values.items():
                 setattr(settings, key, value)

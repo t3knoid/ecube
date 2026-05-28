@@ -303,6 +303,11 @@ class Settings(BaseSettings):
     #: last committed ``DONE`` file after crashes or restarts.
     copy_file_fsync_enabled: bool = False
 
+    #: Feature flag reserved for staged copy-engine work. When true, the runtime
+    #: may execute hashing outside the file-copy worker path. Current behavior is
+    #: unchanged; hashing remains in the copy worker.
+    copy_hashing_separate_thread_enabled: bool = False
+
     #: Minimum buffered byte count before the copy engine flushes
     #: ``copied_bytes`` progress to the database.
     copy_progress_flush_bytes: int = Field(default=67_108_864, ge=1_048_576, le=1_073_741_824)

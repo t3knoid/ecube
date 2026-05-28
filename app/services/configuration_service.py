@@ -88,6 +88,7 @@ _EDITABLE_FIELDS: Dict[str, _FieldSpec] = {
     "copy_progress_flush_bytes": _FieldSpec("COPY_PROGRESS_FLUSH_BYTES", False, _serialize_plain),
     "copy_default_thread_count": _FieldSpec("COPY_DEFAULT_THREAD_COUNT", False, _serialize_plain),
     "copy_file_fsync_enabled": _FieldSpec("COPY_FILE_FSYNC_ENABLED", False, _serialize_plain),
+    "copy_hashing_separate_thread_enabled": _FieldSpec("COPY_HASHING_SEPARATE_THREAD_ENABLED", False, _serialize_plain),
     "usb_discovery_interval": _FieldSpec("USB_DISCOVERY_INTERVAL", False, _serialize_plain),
     "job_detail_files_page_size": _FieldSpec("JOB_DETAIL_FILES_PAGE_SIZE", False, _serialize_plain),
     "callback_allow_private_ips": _FieldSpec("CALLBACK_ALLOW_PRIVATE_IPS", False, _serialize_plain),
@@ -116,6 +117,7 @@ _MANAGER_CONFIGURATION_READ_FIELDS = (
     "copy_progress_flush_bytes",
     "copy_default_thread_count",
     "copy_file_fsync_enabled",
+    "copy_hashing_separate_thread_enabled",
     "usb_discovery_interval",
     "job_detail_files_page_size",
 )
@@ -132,6 +134,7 @@ _MANAGER_CONFIGURATION_UPDATE_FIELDS = (
     "copy_progress_flush_bytes",
     "copy_default_thread_count",
     "copy_file_fsync_enabled",
+    "copy_hashing_separate_thread_enabled",
     "usb_discovery_interval",
     "job_detail_files_page_size",
 )

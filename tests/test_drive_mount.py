@@ -140,12 +140,13 @@ def test_mount_drive_uses_plain_sudo_mount_command():
         mock_settings.procfs_mounts_path = "/proc/shares"
         with patch("os.path.realpath", side_effect=lambda p: p):
             with patch("app.infrastructure.drive_mount.validate_device_path", return_value=True):
-                with patch("app.infrastructure.drive_mount.LinuxFilesystemDetector.detect", return_value="ext4"):
-                    with patch("os.makedirs"):
-                        with patch("os.geteuid", return_value=1000):
-                            with patch("os.access", return_value=True):
-                                with patch("subprocess.run") as mock_run:
-                                    ok, err = dm.mount_drive(_VALID_DEVICE, f"{_BASE}/7")
+                with patch("app.infrastructure.drive_mount._find_mountable_device", return_value=_VALID_DEVICE):
+                    with patch("app.infrastructure.drive_mount.LinuxFilesystemDetector.detect", return_value="ext4"):
+                        with patch("os.makedirs"):
+                            with patch("os.geteuid", return_value=1000):
+                                with patch("os.access", return_value=True):
+                                    with patch("subprocess.run") as mock_run:
+                                        ok, err = dm.mount_drive(_VALID_DEVICE, f"{_BASE}/7")
 
     assert ok is True
     assert err is None

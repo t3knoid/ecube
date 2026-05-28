@@ -2,6 +2,8 @@ import hashlib
 import logging
 import math
 import os
+import queue
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
@@ -187,8 +189,20 @@ def copy_file(
     """
     try:
         dst.parent.mkdir(parents=True, exist_ok=True)
-        h = hashlib.new(checksum_algorithm)
         chunk_size = int(chunk_size or settings.copy_chunk_size_bytes)
+        if bool(settings.copy_hashing_separate_thread_enabled):
+            checksum = _copy_file_with_separate_hashing(
+                src,
+                dst,
+                checksum_algorithm=checksum_algorithm,
+                progress_callback=progress_callback,
+                timeout_seconds=timeout_seconds,
+                chunk_size=chunk_size,
+                fsync_enabled=fsync_enabled,
+            )
+            return True, checksum, None
+
+        h = hashlib.new(checksum_algorithm)
         start_time = time.monotonic()
         with open(src, "rb") as fsrc, open(dst, "wb") as fdst:
             while True:
@@ -217,6 +231,71 @@ def copy_file(
         except OSError:
             logger.debug("Could not remove partial file %s", dst)
         return False, None, str(exc)
+
+
+def _copy_file_with_separate_hashing(
+    src: Path,
+    dst: Path,
+    *,
+    checksum_algorithm: str,
+    progress_callback: Optional[Callable[[int], None]],
+    timeout_seconds: int,
+    chunk_size: int,
+    fsync_enabled: Optional[bool],
+) -> str:
+    hash_queue: "queue.Queue[bytes | None]" = queue.Queue()
+    hash_errors: list[BaseException] = []
+    checksum_hex: list[str] = []
+
+    def _hash_worker() -> None:
+        try:
+            h = hashlib.new(checksum_algorithm)
+            while True:
+                chunk = hash_queue.get()
+                if chunk is None:
+                    checksum_hex.append(h.hexdigest())
+                    return
+                h.update(chunk)
+        except BaseException as exc:
+            hash_errors.append(exc)
+
+    hash_thread = threading.Thread(
+        target=_hash_worker,
+        name=f"copy-hash-{threading.get_ident()}",
+        daemon=True,
+    )
+    hash_thread.start()
+    start_time = time.monotonic()
+
+    try:
+        with open(src, "rb") as fsrc, open(dst, "wb") as fdst:
+            while True:
+                if timeout_seconds > 0 and (time.monotonic() - start_time) > timeout_seconds:
+                    raise TimeoutError(f"File copy timed out after {timeout_seconds}s")
+                chunk = fsrc.read(chunk_size)
+                if not chunk:
+                    break
+                if timeout_seconds > 0 and (time.monotonic() - start_time) > timeout_seconds:
+                    raise TimeoutError(f"File copy timed out after {timeout_seconds}s")
+                fdst.write(chunk)
+                hash_queue.put(chunk)
+                if hash_errors:
+                    raise RuntimeError("Checksum worker failed") from hash_errors[0]
+                if progress_callback is not None:
+                    progress_callback(len(chunk))
+
+            if bool(settings.copy_file_fsync_enabled if fsync_enabled is None else fsync_enabled):
+                fdst.flush()
+                os.fsync(fdst.fileno())
+    finally:
+        hash_queue.put(None)
+        hash_thread.join()
+
+    if hash_errors:
+        raise RuntimeError("Checksum worker failed") from hash_errors[0]
+    if not checksum_hex:
+        raise RuntimeError("Checksum worker did not produce a digest")
+    return checksum_hex[0]
 
 
 def _checksum_only(
@@ -375,6 +454,7 @@ def _log_copy_job_runtime_parameters(
             "copy_progress_flush_source": copy_progress_flush_source or tuning.copy_progress_flush_source,
             "copy_file_fsync_enabled": copy_file_fsync_enabled,
             "copy_file_fsync_source": copy_file_fsync_source or tuning.copy_file_fsync_source,
+            "copy_hashing_separate_thread_enabled": bool(settings.copy_hashing_separate_thread_enabled),
             "pending_batch_limit": batch_limit,
             "pending_batch_multiplier": COPY_PENDING_BATCH_MULTIPLIER,
         },
@@ -2331,6 +2411,7 @@ def run_copy_job(job_id: int) -> None:
                             "job_id": job_id,
                             "project_id": job.project_id,
                             "preparing_duration_seconds": round(_calculate_phase_elapsed_seconds(run_started_at, copy_started_at), 2),
+                            "copy_hashing_separate_thread_enabled": bool(settings.copy_hashing_separate_thread_enabled),
                         },
                     )
 
