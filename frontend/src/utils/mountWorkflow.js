@@ -32,7 +32,7 @@ export function classifyMountWorkflowBucket(mount) {
     return MOUNT_WORKFLOW_BUCKETS.BLOCKED
   }
 
-  if (['COMPLETED', 'ARCHIVED'].includes(status)) {
+  if (status === 'COMPLETED') {
     if (custodyStatus === 'HANDOFF_RECORDED') {
       return MOUNT_WORKFLOW_BUCKETS.COMPLETED
     }

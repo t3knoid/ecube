@@ -223,7 +223,7 @@ describe('SharesView removal flow', () => {
     routeState.query = { workflow: 'CUSTODY_PENDING' }
     mocks.getShares.mockResolvedValueOnce([
       buildMount({ id: 11, related_job: { job_id: 31, status: 'COMPLETED', custody_status: 'PENDING_HANDOFF' } }),
-      buildMount({ id: 12, related_job: { job_id: 32, status: 'ARCHIVED', custody_status: 'PENDING_HANDOFF' } }),
+      buildMount({ id: 12, related_job: { job_id: 32, status: 'COMPLETED', custody_status: 'PENDING_HANDOFF' } }),
       buildMount({ id: 13, related_job: { job_id: 33, status: 'COMPLETED', custody_status: 'HANDOFF_RECORDED' } }),
     ])
 

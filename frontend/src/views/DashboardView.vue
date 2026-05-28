@@ -68,7 +68,7 @@ const mountsByJobId = computed(() => {
 })
 
 const activeJobs = computed(() =>
-  jobs.value.filter((job) => ['PENDING', 'PREPARING', 'RUNNING', 'VERIFYING'].includes(String(job.status || '').toUpperCase())),
+  jobs.value.filter((job) => ['PENDING', 'PREPARING', 'RUNNING', 'PAUSING', 'VERIFYING'].includes(String(job.status || '').toUpperCase())),
 )
 
 const needsAttentionColumns = computed(() => [

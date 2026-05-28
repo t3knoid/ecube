@@ -10,14 +10,14 @@ describe('mount workflow helpers', () => {
     expect(classifyMountWorkflowBucket({ related_job: { status: 'RUNNING', custody_status: 'PENDING_HANDOFF' } })).toBe(MOUNT_WORKFLOW_BUCKETS.ACTIVE)
     expect(classifyMountWorkflowBucket({ related_job: { status: 'FAILED', custody_status: 'PENDING_HANDOFF' } })).toBe(MOUNT_WORKFLOW_BUCKETS.BLOCKED)
     expect(classifyMountWorkflowBucket({ related_job: { status: 'COMPLETED', custody_status: 'PENDING_HANDOFF' } })).toBe(MOUNT_WORKFLOW_BUCKETS.CUSTODY_PENDING)
-    expect(classifyMountWorkflowBucket({ related_job: { status: 'ARCHIVED', custody_status: 'HANDOFF_RECORDED' } })).toBe(MOUNT_WORKFLOW_BUCKETS.COMPLETED)
+    expect(classifyMountWorkflowBucket({ related_job: { status: 'COMPLETED', custody_status: 'HANDOFF_RECORDED' } })).toBe(MOUNT_WORKFLOW_BUCKETS.COMPLETED)
     expect(classifyMountWorkflowBucket({ related_job: { status: 'STATUS_UNAVAILABLE', custody_status: 'STATUS_UNAVAILABLE' } })).toBe(MOUNT_WORKFLOW_BUCKETS.UNAVAILABLE)
   })
 
-  it('counts completed and archived pending-handoff mounts in the custody-pending bucket', () => {
+  it('counts completed pending-handoff mounts in the custody-pending bucket', () => {
     expect(buildMountWorkflowCounts([
       { related_job: { status: 'COMPLETED', custody_status: 'PENDING_HANDOFF' } },
-      { related_job: { status: 'ARCHIVED', custody_status: 'PENDING_HANDOFF' } },
+      { related_job: { status: 'COMPLETED', custody_status: 'PENDING_HANDOFF' } },
       { related_job: { status: 'COMPLETED', custody_status: 'HANDOFF_RECORDED' } },
     ])).toEqual({
       [MOUNT_WORKFLOW_BUCKETS.UNASSIGNED]: 0,

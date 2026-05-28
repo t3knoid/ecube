@@ -37,7 +37,7 @@ export function listJobs(params = {}, { timeout } = {}) {
   return toData(apiClient.get(`${API_BASE}/jobs`, config))
 }
 
-const DASHBOARD_ACTIVE_JOB_STATUSES = ['PENDING', 'PREPARING', 'RUNNING', 'VERIFYING']
+const DASHBOARD_ACTIVE_JOB_STATUSES = ['PENDING', 'PREPARING', 'RUNNING', 'PAUSING', 'VERIFYING']
 const DASHBOARD_JOB_LIMIT = 200
 
 function mergeUniqueJobs(jobLists) {

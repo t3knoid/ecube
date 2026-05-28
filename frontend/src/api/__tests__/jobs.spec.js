@@ -111,7 +111,7 @@ describe('jobs api helpers', () => {
       params: expect.any(URLSearchParams),
     }))
     expect(get.mock.calls[0][1].params.toString()).toBe(
-      'limit=200&statuses=PENDING&statuses=PREPARING&statuses=RUNNING&statuses=VERIFYING',
+      'limit=200&statuses=PENDING&statuses=PREPARING&statuses=RUNNING&statuses=PAUSING&statuses=VERIFYING',
     )
     expect(get.mock.calls[1][1].params.toString()).toBe(
       'limit=200&requires_attention=true',
@@ -133,5 +133,21 @@ describe('jobs api helpers', () => {
     const jobs = await listDashboardJobs()
 
     expect(jobs).toEqual([{ id: 4, status: 'RUNNING' }])
+  })
+
+  it('includes pause-drain jobs in the bounded dashboard active snapshot', async () => {
+    toData.mockImplementation(async (value) => (await value).data)
+    get
+      .mockResolvedValueOnce({ data: [{ id: 5, status: 'PAUSING' }] })
+      .mockResolvedValueOnce({ data: [] })
+
+    const { listDashboardJobs } = await import('@/api/jobs.js')
+
+    const jobs = await listDashboardJobs()
+
+    expect(get.mock.calls[0][1].params.toString()).toBe(
+      'limit=200&statuses=PENDING&statuses=PREPARING&statuses=RUNNING&statuses=PAUSING&statuses=VERIFYING',
+    )
+    expect(jobs).toEqual([{ id: 5, status: 'PAUSING' }])
   })
 })
