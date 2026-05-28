@@ -125,12 +125,16 @@ export function getDashboardNextStepKey({
     return retryableFiles ? 'dashboard.nextStepReviewFailedFiles' : 'dashboard.nextStepReviewAndResume'
   }
 
-  if (['COMPLETED', 'ARCHIVED'].includes(status)) {
+  if (status === 'ARCHIVED') {
+    return 'dashboard.nextStepOpenDetail'
+  }
+
+  if (status === 'COMPLETED') {
     if (normalizedCustodyStatus === 'HANDOFF_RECORDED' && isDriveAwaitingEject({ driveState, driveIsMounted })) {
       return 'dashboard.nextStepPrepareEject'
     }
 
-    if (status === 'ARCHIVED' || !knownFileOutcomeState) {
+    if (!knownFileOutcomeState) {
       return 'dashboard.nextStepOpenDetail'
     }
 
@@ -157,6 +161,10 @@ export function getDashboardFollowUpKey({ jobStatus, startupAnalysisStatus, cust
   const normalizedStartupAnalysisStatus = normalizeStartupAnalysisStatus(startupAnalysisStatus)
   const normalizedCustodyStatus = String(custodyStatus || '').toUpperCase()
 
+  if (status === 'ARCHIVED') {
+    return ''
+  }
+
   if (status === 'FAILED' || status === 'PAUSED') {
     return 'dashboard.attentionBlocked'
   }
@@ -165,11 +173,11 @@ export function getDashboardFollowUpKey({ jobStatus, startupAnalysisStatus, cust
     return 'dashboard.attentionWaitingToStart'
   }
 
-  if (['COMPLETED', 'ARCHIVED'].includes(status) && normalizedCustodyStatus === 'PENDING_HANDOFF') {
+  if (status === 'COMPLETED' && normalizedCustodyStatus === 'PENDING_HANDOFF') {
     return 'dashboard.attentionWaitingForCustody'
   }
 
-  if (['COMPLETED', 'ARCHIVED'].includes(status) && normalizedCustodyStatus === 'HANDOFF_RECORDED' && isDriveAwaitingEject({ driveState, driveIsMounted })) {
+  if (status === 'COMPLETED' && normalizedCustodyStatus === 'HANDOFF_RECORDED' && isDriveAwaitingEject({ driveState, driveIsMounted })) {
     return 'dashboard.attentionReadyForEject'
   }
 

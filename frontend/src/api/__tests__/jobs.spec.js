@@ -101,7 +101,7 @@ describe('jobs api helpers', () => {
     toData.mockImplementation(async (value) => (await value).data)
     get
       .mockResolvedValueOnce({ data: [{ id: 1, status: 'PENDING' }] })
-      .mockResolvedValueOnce({ data: [{ id: 2, status: 'ARCHIVED', custody_status: 'PENDING_HANDOFF' }] })
+      .mockResolvedValueOnce({ data: [{ id: 2, status: 'COMPLETED', custody_status: 'PENDING_HANDOFF' }] })
 
     const { listDashboardJobs } = await import('@/api/jobs.js')
 
@@ -114,11 +114,11 @@ describe('jobs api helpers', () => {
       'limit=200&statuses=PENDING&statuses=PREPARING&statuses=RUNNING&statuses=VERIFYING',
     )
     expect(get.mock.calls[1][1].params.toString()).toBe(
-      'limit=200&include_archived=true&requires_attention=true',
+      'limit=200&requires_attention=true',
     )
     expect(jobs).toEqual([
       { id: 1, status: 'PENDING' },
-      { id: 2, status: 'ARCHIVED', custody_status: 'PENDING_HANDOFF' },
+      { id: 2, status: 'COMPLETED', custody_status: 'PENDING_HANDOFF' },
     ])
   })
 

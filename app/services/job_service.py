@@ -89,7 +89,6 @@ _DASHBOARD_ATTENTION_CANDIDATE_STATUSES = (
     JobStatus.FAILED,
     JobStatus.PAUSED,
     JobStatus.COMPLETED,
-    JobStatus.ARCHIVED,
 )
 
 
@@ -575,7 +574,7 @@ def _job_requires_attention(
     if job.status in (JobStatus.PENDING, JobStatus.FAILED, JobStatus.PAUSED):
         return True
 
-    if job.status not in (JobStatus.COMPLETED, JobStatus.ARCHIVED):
+    if job.status != JobStatus.COMPLETED:
         return False
 
     if custody_complete is False:

@@ -190,7 +190,7 @@ Compatibility note: To support project-to-source-path policy, use project source
 
 **Archived Job Visibility:** `GET /jobs` excludes `ARCHIVED` jobs by default. Pass `include_archived=true` when operator or QA workflows need to review archived jobs alongside active and terminal jobs.
 
-**Dashboard Attention Filter:** `GET /jobs?requires_attention=true` returns only jobs that still need operator follow-up. The filtered set includes pending, paused, and failed jobs plus completed or archived jobs that are still waiting on custody handoff or still need `Prepare Eject` after custody is recorded. Combine it with `include_archived=true` when callers need archived custody-closeout work without walking the full archived history.
+**Dashboard Attention Filter:** `GET /jobs?requires_attention=true` returns only jobs that still need operator follow-up. The filtered set includes pending, paused, and failed jobs plus completed jobs that are still waiting on custody handoff or still need `Prepare Eject` after custody is recorded.
 
 **Archive Semantics:** `POST /jobs/{job_id}/archive` is limited to `admin` and `manager`, requires `{ "confirm": true }`, and returns **409 Conflict** unless the current job is `COMPLETED` or `FAILED` and any related drive has already been through `Prepare Eject` so it is no longer mounted. Archived jobs remain available through `GET /jobs/{job_id}` but are removed from the default list flow.
 

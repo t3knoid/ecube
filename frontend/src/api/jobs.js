@@ -70,7 +70,6 @@ export async function listDashboardJobs({ timeout, limit = DASHBOARD_JOB_LIMIT }
     }, { timeout }),
     listJobs({
       limit: effectiveLimit,
-      include_archived: true,
       requires_attention: true,
     }, { timeout }),
   ])

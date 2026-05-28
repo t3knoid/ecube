@@ -5693,7 +5693,7 @@ def test_list_jobs_include_archived_returns_custody_status_for_archived_jobs(cli
     assert match["custody_status"] == "PENDING_HANDOFF"
 
 
-def test_list_jobs_requires_attention_filters_to_follow_up_work(client, db):
+def test_list_jobs_requires_attention_filters_to_non_archived_follow_up_work(client, db):
     pending_job = ExportJob(
         project_id="PROJ-DASH-ATTN",
         evidence_number="EV-DASH-PENDING-001",
@@ -5807,7 +5807,7 @@ def test_list_jobs_requires_attention_filters_to_follow_up_work(client, db):
     assert "EV-DASH-PAUSED-001" in evidence_numbers
     assert "EV-DASH-FAILED-001" in evidence_numbers
     assert "EV-DASH-COMPLETE-READY-001" in evidence_numbers
-    assert "EV-DASH-ARCHIVED-WAITING-001" in evidence_numbers
+    assert "EV-DASH-ARCHIVED-WAITING-001" not in evidence_numbers
     assert "EV-DASH-ARCHIVED-DONE-001" not in evidence_numbers
 
 

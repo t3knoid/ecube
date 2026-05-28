@@ -242,7 +242,7 @@ describe('DashboardView active jobs', () => {
     expect(needsAttentionRows[0].find('.dashboard-source-context').text()).toContain(i18n.global.t('jobs.sourcePath'))
   })
 
-  it('uses job custody status for archived custody-closeout guidance even when shares have no related job', async () => {
+  it('ignores archived jobs in needs attention even when archived custody data is present', async () => {
     mocks.listDashboardJobs.mockResolvedValue([
       {
         id: 70,
@@ -260,9 +260,9 @@ describe('DashboardView active jobs', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.text()).toContain(i18n.global.t('dashboard.attentionWaitingForCustody'))
-    expect(wrapper.text()).toContain(i18n.global.t('dashboard.nextStepOpenDetail'))
-    expect(wrapper.text()).not.toContain(i18n.global.t('dashboard.nextStepReviewVerificationAndHandoff'))
+    expect(wrapper.text()).toContain(i18n.global.t('dashboard.noNeedsAttention'))
+    expect(wrapper.text()).not.toContain(i18n.global.t('dashboard.attentionWaitingForCustody'))
+    expect(wrapper.text()).not.toContain('70')
   })
 
   it('does not classify pending jobs that are still analyzing as waiting to start', async () => {
