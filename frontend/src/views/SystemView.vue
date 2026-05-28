@@ -362,8 +362,12 @@ const ecubeThreadCountDisplay = computed(() => {
 })
 
 const activeCopyThreadCountDisplay = computed(() => {
+  const threads = ecubeProcess.value?.active_copy_threads
+  if (Array.isArray(threads)) {
+    return threads.length
+  }
   const count = ecubeProcess.value?.active_copy_thread_count
-  return count != null ? count : ecubeProcess.value?.active_copy_threads?.length || 0
+  return count != null ? count : 0
 })
 
 function parsePositiveInteger(value) {
@@ -499,8 +503,8 @@ const threadTimelineJobs = computed(() => {
         registry.set(jobId, {
           jobId,
           projectId: null,
-          configuredThreadCount: null,
-          lanes: new Set(),
+          latestConfiguredThreadCount: null,
+          latestLaneLabels: new Set(),
         })
       }
 
@@ -510,21 +514,18 @@ const threadTimelineJobs = computed(() => {
       }
 
       const configuredThreadCount = parsePositiveInteger(job.configuredThreadCount)
-      if (configuredThreadCount != null) {
-        record.configuredThreadCount = Math.max(record.configuredThreadCount || 0, configuredThreadCount)
-      }
-
-      for (const label of Object.keys(job.lanes || {})) {
-        record.lanes.add(label)
+      if (snapshot === snapshots[snapshots.length - 1]) {
+        record.latestConfiguredThreadCount = configuredThreadCount
+        record.latestLaneLabels = new Set(Object.keys(job.lanes || {}))
       }
     }
   }
 
   for (const [jobId, record] of registry.entries()) {
-    const configuredThreadCount = parsePositiveInteger(record.configuredThreadCount)
+    const configuredThreadCount = parsePositiveInteger(record.latestConfiguredThreadCount)
     if (configuredThreadCount == null) continue
     for (let index = 0; index < configuredThreadCount; index += 1) {
-      record.lanes.add(buildFallbackWorkerLabel(jobId, index))
+      record.latestLaneLabels.add(buildFallbackWorkerLabel(jobId, index))
     }
   }
 
@@ -532,7 +533,7 @@ const threadTimelineJobs = computed(() => {
   return Array.from(registry.values())
     .sort((a, b) => a.jobId - b.jobId)
     .map((job) => {
-      const lanes = Array.from(job.lanes)
+      const lanes = Array.from(job.latestLaneLabels)
         .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }))
         .map((workerLabel) => {
           const segments = snapshots.map((snapshot) => {

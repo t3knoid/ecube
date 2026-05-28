@@ -268,6 +268,56 @@ describe('SystemView USB topology tab', () => {
     expect(wrapper.text()).toContain('copy-job-42_1')
   })
 
+  it('shrinks thread timeline lanes after configured thread count decreases', async () => {
+    vi.useFakeTimers()
+    try {
+      const buildThreads = (count) =>
+        Array.from({ length: count }, (_unused, index) => ({
+          job_id: 42,
+          project_id: 'proj-42',
+          job_status: 'RUNNING',
+          configured_thread_count: count,
+          worker_label: `copy-job-42_${index}`,
+          elapsed_seconds: 5.5,
+          cpu_time_seconds: 1.0,
+        }))
+
+      mocks.getSystemHealth
+        .mockResolvedValueOnce({
+          status: 'ok',
+          database: 'connected',
+          active_jobs: 1,
+          ecube_process: {
+            active_copy_thread_count: 14,
+            active_copy_threads: buildThreads(14),
+          },
+        })
+        .mockResolvedValueOnce({
+          status: 'ok',
+          database: 'connected',
+          active_jobs: 1,
+          ecube_process: {
+            active_copy_thread_count: 12,
+            active_copy_threads: buildThreads(12),
+          },
+        })
+
+      const wrapper = mountView()
+      await flushPromises()
+      expect(wrapper.findAll('.thread-timeline-lane-row')).toHaveLength(14)
+      expect(wrapper.findAll('.health-thread-table tbody tr')).toHaveLength(14)
+
+      await vi.advanceTimersByTimeAsync(2100)
+      await flushPromises()
+
+      expect(wrapper.findAll('.thread-timeline-lane-row')).toHaveLength(12)
+      expect(wrapper.findAll('.health-thread-table tbody tr')).toHaveLength(12)
+      wrapper.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('shows waiting timeline segments when thread status is preparing', async () => {
     mocks.getSystemHealth.mockResolvedValue({
       status: 'ok',
