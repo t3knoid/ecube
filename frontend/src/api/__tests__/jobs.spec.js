@@ -76,6 +76,17 @@ describe('jobs api helpers', () => {
     expect(get).toHaveBeenCalledWith('/api/jobs', expect.objectContaining({ timeout: 5000 }))
   })
 
+  it('forwards job file listing filters to the backend', async () => {
+    const { getJobFiles } = await import('@/api/jobs.js')
+
+    await getJobFiles(77, { page: 2, status: 'ERROR' })
+
+    expect(get).toHaveBeenCalledWith('/api/jobs/77/files', {
+      params: { page: 2, status: 'ERROR' },
+    })
+    expect(toData).toHaveBeenCalled()
+  })
+
   it('paginates through all job pages when callers need more than 1000 rows', async () => {
     toData.mockImplementation(async (value) => (await value).data)
     get

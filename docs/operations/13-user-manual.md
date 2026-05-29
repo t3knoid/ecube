@@ -822,6 +822,8 @@ When ECUBE can safely correlate a failed copy to the selected source or destinat
 
 The Files panel is collapsed by default on Job Detail. Use `Show files` to expand it and `Hide files` to collapse it again without losing the current page.
 
+When the panel is open, the `File status` filter narrows the list to rows with one file state such as `Done`, `Error`, or `Timed out`. Changing that filter reloads the list from the first page for the selected status, and `All statuses` returns to the complete file list.
+
 When expanded, the file table usually shows:
 
 - File ID

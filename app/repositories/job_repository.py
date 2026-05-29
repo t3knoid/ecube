@@ -223,6 +223,7 @@ class FileRepository:
         self,
         job_id: int,
         *,
+        status: FileStatus | None = None,
         limit: int | None = None,
         offset: int = 0,
     ) -> List[ExportFile]:
@@ -233,6 +234,8 @@ class FileRepository:
             .filter(ExportFile.job_id == job_id)
             .order_by(ExportFile.id)
         )
+        if status is not None:
+            query = query.filter(ExportFile.status == status)
         if offset:
             query = query.offset(offset)
         if limit is not None:
@@ -278,13 +281,12 @@ class FileRepository:
             query = query.limit(limit)
         return query.all()
 
-    def count_by_job(self, job_id: int) -> int:
+    def count_by_job(self, job_id: int, *, status: FileStatus | None = None) -> int:
         """Return the total number of files belonging to *job_id*."""
-        return (
-            self.db.query(func.count())
-            .filter(ExportFile.job_id == job_id)
-            .scalar()
-        )
+        query = self.db.query(func.count()).filter(ExportFile.job_id == job_id)
+        if status is not None:
+            query = query.filter(ExportFile.status == status)
+        return query.scalar()
 
     def list_done_by_job(self, job_id: int) -> List[ExportFile]:
         """Return completed files belonging to *job_id*."""

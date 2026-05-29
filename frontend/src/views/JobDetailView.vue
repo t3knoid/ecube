@@ -36,9 +36,10 @@ const jobId = computed(() => {
 })
 
 const DEFAULT_JOB_FILES_PAGE_SIZE = 40
+const FILE_STATUS_FILTERS = ['PENDING', 'COPYING', 'DONE', 'ERROR', 'RETRYING', 'TIMEOUT']
 
 const job = ref(null)
-const debug = ref({ files: [], total_files: 0, returned_files: 0, page: 1, page_size: DEFAULT_JOB_FILES_PAGE_SIZE })
+const debug = ref({ files: [], total_files: 0, returned_files: 0, page: 1, page_size: DEFAULT_JOB_FILES_PAGE_SIZE, status: '' })
 const loading = ref(false)
 const filesLoading = ref(false)
 let latestDebugRequestId = 0
@@ -435,6 +436,14 @@ const fileListNotice = computed(() => {
 const selectedCompareFile = computed(() => (
   (debug.value.files || []).find((file) => Number(file.id) === Number(compareFileId.value)) || null
 ))
+
+const fileStatusFilterOptions = computed(() => ([
+  { value: '', label: t('jobs.allFileStatuses') },
+  ...FILE_STATUS_FILTERS.map((status) => ({
+    value: status,
+    label: t(`jobs.fileStatuses.${status}`),
+  })),
+]))
 
 const selectedHashFile = computed(() => {
   const currentPageFile = (debug.value.files || []).find((file) => Number(file.id) === Number(selectedFileId.value))
@@ -1755,6 +1764,7 @@ async function loadDebug(force = false) {
   try {
     const response = await getJobFiles(jobId.value, {
       page: Number(debug.value.page || 1),
+      status: debug.value.status || undefined,
     })
     if (requestId !== latestDebugRequestId) return
 
@@ -1774,11 +1784,12 @@ async function loadDebug(force = false) {
       returned_files: Number(response?.returned_files || 0),
       page,
       page_size: pageSize,
+      status: debug.value.status || '',
     }
   } catch {
     if (requestId !== latestDebugRequestId) return
     if (force) {
-      debug.value = { files: [], total_files: 0, returned_files: 0, page: 1, page_size: DEFAULT_JOB_FILES_PAGE_SIZE }
+      debug.value = { files: [], total_files: 0, returned_files: 0, page: 1, page_size: DEFAULT_JOB_FILES_PAGE_SIZE, status: debug.value.status || '' }
     }
   } finally {
     if (requestId === latestDebugRequestId) {
@@ -1812,7 +1823,7 @@ async function refreshAll() {
   if (!jobId.value) {
     error.value = t('common.errors.invalidRequest')
     job.value = null
-    debug.value = { files: [], total_files: 0, returned_files: 0, page: 1, page_size: DEFAULT_JOB_FILES_PAGE_SIZE }
+    debug.value = { files: [], total_files: 0, returned_files: 0, page: 1, page_size: DEFAULT_JOB_FILES_PAGE_SIZE, status: '' }
     return
   }
 
@@ -1830,6 +1841,15 @@ async function refreshAll() {
 
 watch(() => debug.value.page, (nextPage, previousPage) => {
   if (nextPage === previousPage) return
+  void loadDebug(true)
+})
+
+watch(() => debug.value.status, (nextStatus, previousStatus) => {
+  if (nextStatus === previousStatus) return
+  if (Number(debug.value.page || 1) !== 1) {
+    debug.value = { ...debug.value, page: 1 }
+    return
+  }
   void loadDebug(true)
 })
 
@@ -2395,15 +2415,29 @@ onUnmounted(() => {
     <article class="panel files-panel">
       <div class="files-panel-header">
         <h2>{{ t('jobs.files') }}</h2>
-        <button
-          type="button"
-          class="btn files-panel-toggle"
-          :aria-expanded="filesPanelExpanded"
-          aria-controls="job-files-panel"
-          @click="filesPanelExpanded = !filesPanelExpanded"
-        >
-          {{ filesPanelExpanded ? t('jobs.hideFiles') : t('jobs.showFiles') }}
-        </button>
+        <div class="files-panel-controls">
+          <label v-if="filesPanelExpanded" class="files-panel-filter">
+            <span>{{ t('jobs.fileStatusFilter') }}</span>
+            <select v-model="debug.status" class="files-panel-filter-select">
+              <option
+                v-for="option in fileStatusFilterOptions"
+                :key="option.value || 'all'"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </option>
+            </select>
+          </label>
+          <button
+            type="button"
+            class="btn files-panel-toggle"
+            :aria-expanded="filesPanelExpanded"
+            aria-controls="job-files-panel"
+            @click="filesPanelExpanded = !filesPanelExpanded"
+          >
+            {{ filesPanelExpanded ? t('jobs.hideFiles') : t('jobs.showFiles') }}
+          </button>
+        </div>
       </div>
       <div v-if="filesPanelExpanded" id="job-files-panel" class="files-panel-body">
         <p v-if="filesLoading" class="muted">{{ t('common.labels.loading') }}</p>
@@ -3164,6 +3198,29 @@ select {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-sm);
+}
+
+.files-panel-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.files-panel-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--color-text-muted);
+}
+
+.files-panel-filter-select {
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-input);
+  color: var(--color-text-primary);
+  border-radius: var(--border-radius);
+  padding: var(--space-2xs) var(--space-xs);
 }
 
 .files-panel-body {

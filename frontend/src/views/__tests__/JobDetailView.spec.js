@@ -1776,6 +1776,55 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).toContain('USB-002 (Drive #2)')
   })
 
+  it('filters file rows by status and resets paging to the first page', async () => {
+    mocks.getJobFiles.mockImplementation((_jobId, params = {}) => {
+      if (params.status === 'ERROR') {
+        return Promise.resolve({
+          files: [{ id: 21, relative_path: 'errors/doc-021.txt', status: 'ERROR', error_message: 'disk full' }],
+          total_files: 1,
+          returned_files: 1,
+          page: 1,
+          page_size: 40,
+        })
+      }
+      if (params.page === 4) {
+        return Promise.resolve({
+          files: [{ id: 150, relative_path: 'done/doc-150.txt', status: 'DONE', checksum: 'def' }],
+          total_files: 150,
+          returned_files: 30,
+          page: 4,
+          page_size: 40,
+        })
+      }
+      return Promise.resolve({
+        files: [{ id: 9, relative_path: 'done/doc-009.txt', status: 'DONE', checksum: 'abc' }],
+        total_files: 150,
+        returned_files: 40,
+        page: 1,
+        page_size: 40,
+      })
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.find('.files-panel-toggle').trigger('click')
+    await flushPromises()
+
+    await wrapper.findAll('.page-number-btn').find((node) => node.text() === '4').trigger('click')
+    await flushPromises()
+
+    expect(mocks.getJobFiles.mock.calls).toContainEqual([6, { page: 4 }])
+
+    const filter = wrapper.find('.files-panel-filter-select')
+    expect(filter.exists()).toBe(true)
+    await filter.setValue('ERROR')
+    await flushPromises()
+
+    expect(mocks.getJobFiles.mock.calls).toContainEqual([6, { page: 1, status: 'ERROR' }])
+    expect(wrapper.text()).toContain('errors/doc-021.txt')
+  })
+
   it('opens the overflow dialog and submits the selected overflow drive', async () => {
     const wrapper = mountView()
     await flushPromises()

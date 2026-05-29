@@ -2335,6 +2335,46 @@ def test_get_job_files_supports_page_navigation(client, db):
     assert [row["relative_path"] for row in data["files"]] == ["doc/21.txt"]
 
 
+def test_get_job_files_filters_by_status(client, db):
+    job = ExportJob(
+        project_id="PROJ-FILES-FILTER-001",
+        evidence_number="EV-FILES-FILTER-001",
+        source_path="/data/files-filter",
+        status=JobStatus.RUNNING,
+    )
+    db.add(job)
+    db.flush()
+    db.add_all([
+        ExportFile(job_id=job.id, relative_path="doc/done.txt", status=FileStatus.DONE, checksum="sha256:done"),
+        ExportFile(job_id=job.id, relative_path="doc/error.txt", status=FileStatus.ERROR, error_message="disk full"),
+        ExportFile(job_id=job.id, relative_path="doc/timeout.txt", status=FileStatus.TIMEOUT, error_message="timed out"),
+    ])
+    db.commit()
+
+    response = client.get(f"/jobs/{job.id}/files?status=ERROR")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_files"] == 1
+    assert data["returned_files"] == 1
+    assert [row["relative_path"] for row in data["files"]] == ["doc/error.txt"]
+
+
+def test_get_job_files_rejects_invalid_status_filter(client, db):
+    job = ExportJob(
+        project_id="PROJ-FILES-FILTER-002",
+        evidence_number="EV-FILES-FILTER-002",
+        source_path="/data/files-filter-2",
+        status=JobStatus.RUNNING,
+    )
+    db.add(job)
+    db.commit()
+
+    response = client.get(f"/jobs/{job.id}/files?status=NOT_A_REAL_STATUS")
+
+    assert response.status_code == 422
+
+
 def test_get_job_files_uses_configured_default_page_size(client, db, monkeypatch):
     monkeypatch.setattr(jobs_router.settings, "job_detail_files_page_size", 20)
 

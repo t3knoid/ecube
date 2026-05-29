@@ -12,7 +12,7 @@ from app.auth import CurrentUser, require_roles
 from app.config import settings
 from app.database import get_db
 from app.models.audit import AuditLog
-from app.models.jobs import JobStatus
+from app.models.jobs import FileStatus, JobStatus
 from app.repositories.job_repository import DriveAssignmentRepository, FileRepository, JobRepository
 from app.schemas.audit import ChainOfCustodyHandoffRequest, ChainOfCustodyHandoffResponse, ChainOfCustodyReportSchema
 from app.schemas.jobs import (
@@ -585,6 +585,7 @@ def get_job_files(
     job_id: int,
     page: int = Query(default=1, ge=1, description="1-based page number of file rows to return"),
     limit: int | None = Query(default=None, ge=20, le=100, description="Maximum number of file rows to return"),
+    status: FileStatus | None = Query(default=None, description="Optional file status filter for the returned file rows"),
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(_ALL_ROLES),
 ):
@@ -599,7 +600,7 @@ def get_job_files(
     file_repo = FileRepository(db)
     effective_limit = int(limit or settings.job_detail_files_page_size)
     offset = (page - 1) * effective_limit
-    files = file_repo.list_by_job(job.id, limit=effective_limit, offset=offset)
+    files = file_repo.list_by_job(job.id, status=status, limit=effective_limit, offset=offset)
     serialized_files = [
         JobFileRowSchema(
             id=file_row.id,
@@ -622,7 +623,7 @@ def get_job_files(
         job_id=job.id,
         page=page,
         page_size=effective_limit,
-        total_files=file_repo.count_by_job(job.id),
+        total_files=file_repo.count_by_job(job.id, status=status),
         returned_files=len(serialized_files),
         files=serialized_files,
     )

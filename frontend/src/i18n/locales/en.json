@@ -301,6 +301,8 @@
     "relatedLogEntryMissing": "No matching line was found in the main application log for this failure. Older failures may not have a directly correlated log line yet.",
     "showingFiles": "Showing {start}–{end} of {total} file rows.",
     "files": "Files",
+    "fileStatusFilter": "File status",
+    "allFileStatuses": "All statuses",
     "destinationDrive": "Destination Drive",
     "showFiles": "Show files",
     "hideFiles": "Hide files",
@@ -326,6 +328,14 @@
     "pathMatch": "Path Match",
     "path": "Path",
     "checksum": "Checksum",
+    "fileStatuses": {
+      "PENDING": "Pending",
+      "COPYING": "Copying",
+      "DONE": "Done",
+      "ERROR": "Error",
+      "RETRYING": "Retrying",
+      "TIMEOUT": "Timed out"
+    },
     "statuses": {
       "pending": "Pending",
       "preparing": "Preparing",
