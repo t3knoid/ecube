@@ -319,8 +319,8 @@ Password reset behavior:
 
 | Method | Endpoint | Role | Description |
 | ------ | -------- | ---- | ----------- |
-| GET | `/configuration` | admin/manager | Return the manager-accessible runtime configuration fields exposed by the Configuration API. |
-| PUT | `/configuration` | admin/manager | Update only the manager-accessible runtime configuration fields exposed by the Configuration API. |
+| GET | `/configuration` | admin/manager | Return the manager-accessible persisted configuration fields exposed by the Configuration API. |
+| PUT | `/configuration` | admin/manager | Update only the manager-accessible persisted configuration fields exposed by the Configuration API. |
 
 Manager-accessible fields are limited to:
 
@@ -344,7 +344,7 @@ Notes:
 
 - `processor` and `auditor` receive `403 Forbidden`.
 - Requests that try to send admin-only configuration fields through `/configuration` are rejected with `403 Forbidden`.
-- Managers can see the current effective `log_file` name on `GET /configuration`. The response returns a basename only, not a host path, and changing it remains admin-only through `/admin/configuration`.
+- Managers can see the current persisted `log_file` name on `GET /configuration`. The response returns a basename only, not a host path, and changing it remains admin-only through `/admin/configuration`.
 - `usb_discovery_interval` selects runtime USB discovery mode without a service restart. Setting it to `0` turns off timed polling and turns on event-driven udev monitoring mode. Setting it to a positive value turns off udev runtime monitoring and enables timed polling at the configured interval.
 - This surface intentionally does not expose password policy, webhook secret, database runtime, logging infrastructure, or restart controls.
 
@@ -354,8 +354,8 @@ Notes:
 
 | Method | Endpoint | Role | Description |
 | ------ | -------- | ---- | ----------- |
-| GET | `/admin/configuration` | admin | Return the admin-only runtime configuration fields shown on the `Admin` page. |
-| PUT | `/admin/configuration` | admin | Update admin-only runtime configuration fields. |
+| GET | `/admin/configuration` | admin | Return the admin-only persisted configuration fields shown on the `Admin` page. |
+| PUT | `/admin/configuration` | admin | Update admin-only persisted configuration fields. |
 | POST | `/admin/configuration/restart` | admin | Request an ECUBE service restart after explicit confirmation. |
 
 Admin-only fields exposed through this surface include:

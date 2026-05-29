@@ -124,7 +124,7 @@ def _log_configuration_event(
 def get_configuration(
     _: CurrentUser = Depends(_CONFIGURATION_ACCESS),
 ) -> ConfigurationGetResponse:
-    """Return the current manager-accessible runtime configuration values."""
+    """Return the current manager-accessible persisted configuration values."""
     return ConfigurationGetResponse(
         settings=[
             ConfigurationField(**field)
@@ -267,7 +267,7 @@ async def update_configuration(
 def get_admin_configuration(
     _: CurrentUser = Depends(_ADMIN_ONLY),
 ) -> ConfigurationGetResponse:
-    """Return the current admin-only runtime configuration values."""
+    """Return the current admin-only persisted configuration values."""
     return ConfigurationGetResponse(
         settings=[
             ConfigurationField(**field)

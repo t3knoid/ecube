@@ -243,7 +243,7 @@ class TestConfigurationEndpoints:
         env_file.write_text("COPY_HASHING_SEPARATE_THREAD_ENABLED=true\n", encoding="utf-8")
 
         original_value = settings.copy_hashing_separate_thread_enabled
-        monkeypatch.setattr("app.services.configuration_service._ENV_FILE", str(env_file))
+        monkeypatch.setenv("ECUBE_ENV_FILE", str(env_file))
         settings.copy_hashing_separate_thread_enabled = False
         try:
             resp = manager_client.get("/configuration")
@@ -264,7 +264,7 @@ class TestConfigurationEndpoints:
         env_file.write_text("COPY_HASHING_SEPARATE_THREAD_ENABLED=true\n", encoding="utf-8")
 
         original_value = settings.copy_hashing_separate_thread_enabled
-        monkeypatch.setattr("app.services.configuration_service._ENV_FILE", str(env_file))
+        monkeypatch.setenv("ECUBE_ENV_FILE", str(env_file))
         monkeypatch.setenv("COPY_HASHING_SEPARATE_THREAD_ENABLED", "false")
         settings.copy_hashing_separate_thread_enabled = False
         try:

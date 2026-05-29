@@ -52,7 +52,7 @@ Primary workflows covered in this guide:
 - Managing mount definitions
 - Viewing and exporting audit logs
 - Accessing user and system pages when your role permits it
-- Managing operational runtime configuration settings when your role permits it
+- Managing operational configuration settings when your role permits it
 
 ## Scope
 
