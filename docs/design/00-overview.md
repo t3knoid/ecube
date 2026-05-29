@@ -50,6 +50,11 @@ The design documents are grouped by role so readers can move from high-level int
 
 18. `18-metrics-and-observability-design.md` — Prometheus metrics contract (`GET /metrics`), metric catalog, label/cardinality rules, histogram buckets, and periodic copy-throughput sampling behavior.
 
+### Copy Engine Design
+
+19. `19-copy-engine-redesign.md` — proposal space for future staged, small-file-optimized, or strategy-based copy-engine designs.
+20. `20-copy-engine-implementation.md` — current production copy-engine algorithm, scheduler loop, per-file worker lifecycle, progress batching, deferred retry behavior, and control-state polling semantics.
+
 ## Recommended Reading Order
 
 For most readers, the most efficient path is:
@@ -61,6 +66,8 @@ For most readers, the most efficient path is:
 5. `14` through `16` for frontend and UX design.
 6. `17` for turnkey appliance tiering and production-hardware profile design.
 7. `18` for operational observability contract and metrics implementation details.
+8. `20` for the current production copy-engine implementation.
+9. `19` for future redesign options and trade-off analysis.
 
 ## Design Principles
 
