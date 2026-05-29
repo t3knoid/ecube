@@ -689,7 +689,7 @@ Typical functions include:
 - Retry only the failed or timed-out files from a partial-success completed job
 - Manually complete a safe non-active job when required by the workflow
 - Use `Chain of Custody` as the standard sunset path when custody is being transferred
-- Use `Archive` only as an exceptional administrative or non-handoff closure path after `Prepare Eject` when the related drive is still attached
+- Use `Archive` only as an exceptional administrative closure path after `Prepare Eject`; when custody is still pending it remains a non-handoff path, and when handoff is already recorded it can be used to sunset the job record afterward
 - Clear a persisted startup-analysis snapshot before the next restart when the cached scan should be discarded
 - Generate a manifest, review the reported location, and download the generated file
 - Review copied files
@@ -792,7 +792,7 @@ Important operator notes:
 
 For evidence-bearing work, treat `Chain of Custody` as the standard sunset path. Use it to review the stored report and, when needed, launch the separate `Custody Handoff` dialog to record custody transfer in ECUBE even when external paper paperwork is also being used.
 
-`Archive` opens its own confirmation dialog and is available only for `COMPLETED` or `FAILED` jobs after the related drive has been through `Prepare Eject`. This is an exception-only path for administrative or non-handoff closure. The confirmation explicitly warns that the job cannot be restored from the UI and that archive does not itself record custody handoff. After confirmation, the job transitions to `ARCHIVED`, remains viewable in Job Detail for audit and review purposes, drops out of the default Jobs list, and no longer blocks recreation of the same exact project/source/destination work definition.
+`Archive` opens its own confirmation dialog and is available only for `COMPLETED` or `FAILED` jobs after the related drive has been through `Prepare Eject`. This is an exception-only administrative closure path. The confirmation always warns that the job cannot be restored from the UI. When custody handoff is still pending, the same dialog also warns that archive does not itself record custody handoff. When handoff is already recorded, the dialog confirms that the custody handoff is already stored for the job. After confirmation, the job transitions to `ARCHIVED`, remains viewable in Job Detail for audit and review purposes, drops out of the default Jobs list, and no longer blocks recreation of the same exact project/source/destination work definition.
 
 `Delete` remains limited to eligible pending jobs that have not yet become part of the operational record. It is not a substitute for closing out historical work.
 

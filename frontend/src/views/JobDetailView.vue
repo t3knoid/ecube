@@ -140,6 +140,14 @@ const canReadCoc = computed(() => canReadJobCoc({
   jobStatus: currentStatus.value,
 }))
 const hasPendingCocHandoff = computed(() => (cocReport.value?.reports || []).some((report) => !report?.custody_complete))
+const hasRecordedCocHandoff = computed(() => {
+  const custodyStatus = String(job.value?.custody_status || '').toUpperCase()
+  if (custodyStatus === 'HANDOFF_RECORDED') {
+    return true
+  }
+  const reports = cocReport.value?.reports || []
+  return reports.length > 0 && !hasPendingCocHandoff.value
+})
 const canRefreshCoc = computed(() => authStore.hasAnyRole(['admin', 'manager'])
   && currentStatus.value !== 'ARCHIVED'
   && (!cocReport.value || hasPendingCocHandoff.value))
@@ -2806,7 +2814,7 @@ onUnmounted(() => {
 
     <ConfirmDialog
       v-model="showArchiveDialog"
-      :title="t('jobs.archiveConfirmTitle')"
+      :title="hasRecordedCocHandoff ? t('jobs.archiveConfirmTitleRecordedHandoff') : t('jobs.archiveConfirmTitle')"
       :message="t('jobs.archiveConfirmBody')"
       :confirm-label="t('jobs.archiveWithoutHandoff')"
       :cancel-label="t('common.actions.cancel')"
@@ -2817,8 +2825,11 @@ onUnmounted(() => {
       <div class="archive-confirm-copy">
         <p>{{ t('jobs.archiveConfirmBodyLead') }}</p>
         <p>{{ t('jobs.archiveConfirmBodyRestore') }}</p>
-        <p>{{ t('jobs.archiveConfirmBodyNoHandoff') }}</p>
-        <p>{{ t('jobs.archiveConfirmBodyUseHandoff') }}</p>
+        <p v-if="hasRecordedCocHandoff">{{ t('jobs.archiveConfirmBodyRecordedHandoff') }}</p>
+        <template v-else>
+          <p>{{ t('jobs.archiveConfirmBodyNoHandoff') }}</p>
+          <p>{{ t('jobs.archiveConfirmBodyUseHandoff') }}</p>
+        </template>
       </div>
     </ConfirmDialog>
 

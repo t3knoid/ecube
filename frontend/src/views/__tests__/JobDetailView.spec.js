@@ -894,6 +894,60 @@ describe('JobDetailView start action', () => {
     expect(mocks.archiveJob).toHaveBeenCalledWith(6, { confirm: true })
   })
 
+  it('uses recorded-handoff archive copy when custody handoff is already complete', async () => {
+    mocks.getJob.mockResolvedValue({
+      id: 6,
+      status: 'COMPLETED',
+      project_id: 'PROJ-001',
+      evidence_number: 'EV-006',
+      source_path: '/nfs/project-001/evidence',
+      target_mount_path: '/mnt/ecube/1',
+      thread_count: 4,
+      copied_bytes: 10,
+      total_bytes: 10,
+      file_count: 1,
+      files_succeeded: 1,
+      files_failed: 0,
+      files_timed_out: 0,
+      startup_analysis_status: 'READY',
+      custody_status: 'HANDOFF_RECORDED',
+      drive: { id: 5, current_state: 'AVAILABLE', is_mounted: false },
+    })
+    mocks.getJobChainOfCustody.mockResolvedValue({
+      selector_mode: 'JOB',
+      project_id: 'PROJ-001',
+      snapshot_updated_at: '2026-04-28T19:30:00Z',
+      reports: [{
+        drive_id: 5,
+        drive_sn: 'SN-005',
+        drive_manufacturer: 'SanDisk',
+        drive_model: 'Cruzer Switch',
+        project_id: 'PROJ-001',
+        evidence_number: 'EV-006',
+        custody_complete: true,
+        delivery_time: '2026-04-28T18:00:00Z',
+        chain_of_custody_events: [],
+        manifest_summary: [],
+      }],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const archiveButton = wrapper.findAll('button').find((node) => node.text() === i18n.global.t('jobs.archiveWithoutHandoff'))
+    expect(archiveButton).toBeTruthy()
+
+    await archiveButton.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.archiveConfirmTitleRecordedHandoff'))
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.archiveConfirmBodyLead'))
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.archiveConfirmBodyRestore'))
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.archiveConfirmBodyRecordedHandoff'))
+    expect(wrapper.text()).not.toContain(i18n.global.t('jobs.archiveConfirmBodyNoHandoff'))
+    expect(wrapper.text()).not.toContain(i18n.global.t('jobs.archiveConfirmBodyUseHandoff'))
+  })
+
   it('requires the related drive to be ejected before archive is available', async () => {
     mocks.getJob.mockResolvedValue({
       id: 6,
