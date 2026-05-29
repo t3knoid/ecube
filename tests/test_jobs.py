@@ -6312,6 +6312,13 @@ def test_get_job_details_include_notes_and_overflow_assignments(client, db):
             },
         )
     )
+
+    # Simulate later port churn so the job-detail payload must keep using the
+    # stable drive identifier rather than whichever device is currently on the port.
+    reserved_port.vendor_id = "ffff"
+    reserved_port.product_id = "eeee"
+    active_port.vendor_id = "1111"
+    active_port.product_id = "2222"
     db.commit()
 
     response = client.get(f"/jobs/{job.id}")
@@ -6333,6 +6340,12 @@ def test_get_job_details_include_notes_and_overflow_assignments(client, db):
     assert data["drive"]["serial_number"] == "SER-ACTIVE-001"
     assert data["drive"]["vendor_id"] == "beef"
     assert data["drive"]["product_id"] == "9001"
+    assert data["overflow_assignments"][0]["drive"]["serial_number"] == "SER-RESERVED-001"
+    assert data["overflow_assignments"][0]["drive"]["vendor_id"] == "abcd"
+    assert data["overflow_assignments"][0]["drive"]["product_id"] == "1234"
+    assert data["overflow_assignments"][1]["drive"]["serial_number"] == "SER-ACTIVE-001"
+    assert data["overflow_assignments"][1]["drive"]["vendor_id"] == "beef"
+    assert data["overflow_assignments"][1]["drive"]["product_id"] == "9001"
     assert data["overflow_assignments"][0]["drive"]["serial_number"] == "SER-RESERVED-001"
     assert data["overflow_assignments"][0]["drive"]["vendor_id"] == "abcd"
     assert data["overflow_assignments"][0]["drive"]["product_id"] == "1234"

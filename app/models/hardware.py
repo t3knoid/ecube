@@ -2,7 +2,7 @@ from sqlalchemy import Boolean, Column, Integer, String, BigInteger, Enum, Forei
 from sqlalchemy.orm import relationship, validates
 from sqlalchemy.sql import func
 from app.database import Base
-from app.utils.drive_identity import build_readable_device_label, extract_usb_serial_number
+from app.utils.drive_identity import build_readable_device_label, extract_usb_serial_number, parse_persistent_device_identifier
 from app.utils.sanitize import normalize_project_id
 import enum
 
@@ -97,10 +97,16 @@ class UsbDrive(Base):
 
     @property
     def vendor_id(self):
+        parsed = parse_persistent_device_identifier(self.device_identifier)
+        if parsed.get("vid"):
+            return parsed["vid"]
         return self.port.vendor_id if self.port else None
 
     @property
     def product_id(self):
+        parsed = parse_persistent_device_identifier(self.device_identifier)
+        if parsed.get("pid"):
+            return parsed["pid"]
         return self.port.product_id if self.port else None
 
     @property
