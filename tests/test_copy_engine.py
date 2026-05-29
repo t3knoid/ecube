@@ -3110,10 +3110,10 @@ def test_prepare_job_startup_analysis_auto_applies_recommended_profile_when_defa
     target_dir.mkdir()
 
     job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
-    job.thread_count = settings.copy_default_thread_count
-    job.copy_chunk_size_bytes = settings.copy_chunk_size_bytes
-    job.copy_progress_flush_bytes = settings.copy_progress_flush_bytes
-    job.copy_file_fsync_enabled = settings.copy_file_fsync_enabled
+    job.thread_count = None
+    job.copy_chunk_size_bytes = None
+    job.copy_progress_flush_bytes = None
+    job.copy_file_fsync_enabled = None
     job.startup_analysis_auto_apply_recommended_profile = True
     db.commit()
 
@@ -3128,6 +3128,50 @@ def test_prepare_job_startup_analysis_auto_applies_recommended_profile_when_defa
     assert job.thread_count == 6
     assert job.copy_chunk_size_bytes == 8_388_608
     assert job.copy_progress_flush_bytes == 134_217_728
+    assert job.copy_file_fsync_enabled is False
+
+
+def test_prepare_job_startup_analysis_auto_applies_profile_using_persisted_thresholds(db, tmp_path, monkeypatch):
+    env_file = tmp_path / "configuration.env"
+    env_file.write_text(
+        "STARTUP_ANALYSIS_SMALL_FILE_MAX_BYTES=131072\n"
+        "STARTUP_ANALYSIS_LARGE_FILE_MIN_BYTES=1048576\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("ECUBE_ENV_FILE", str(env_file))
+    monkeypatch.setenv("STARTUP_ANALYSIS_SMALL_FILE_MAX_BYTES", "262144")
+    monkeypatch.setenv("STARTUP_ANALYSIS_LARGE_FILE_MIN_BYTES", "2097152")
+    monkeypatch.setattr(settings, "startup_analysis_small_file_max_bytes", 65_536)
+    monkeypatch.setattr(settings, "startup_analysis_large_file_min_bytes", 8_388_608)
+
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "small-a.bin").write_bytes(b"x" * 131_072)
+    (source_dir / "small-b.bin").write_bytes(b"x" * (96 * 1024))
+    (source_dir / "large-c.bin").write_bytes(b"x" * 1_048_576)
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), target_mount_path=str(target_dir))
+    job.thread_count = None
+    job.copy_chunk_size_bytes = None
+    job.copy_progress_flush_bytes = None
+    job.copy_file_fsync_enabled = None
+    job.startup_analysis_auto_apply_recommended_profile = True
+    db.commit()
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        result = copy_engine.prepare_job_startup_analysis(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+
+    assert result["recommended_profile"] == "small_files"
+    assert result["auto_profile_applied"] is True
+    assert job.thread_count == 12
+    assert job.copy_chunk_size_bytes == 1_048_576
+    assert job.copy_progress_flush_bytes == 33_554_432
     assert job.copy_file_fsync_enabled is False
 
 
