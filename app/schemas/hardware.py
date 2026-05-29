@@ -76,6 +76,14 @@ class UsbDriveSchema(BaseModel):
             "distinct from the /dev block node reported in filesystem_path"
         ),
     )
+    vendor_id: Optional[str] = Field(
+        default=None,
+        description="USB vendor ID when available; derived from the stable identifier when present",
+    )
+    product_id: Optional[str] = Field(
+        default=None,
+        description="USB product ID when available; derived from the stable identifier when present",
+    )
     serial_number: Optional[str] = Field(
         default=None,
         description="USB serial number when available; derived from the stable identifier for composite-key rows",

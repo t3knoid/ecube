@@ -127,6 +127,8 @@ def test_list_drives_exposes_safe_usb_metadata_and_readable_label(client, db):
     assert match["port_number"] == 7
     assert match["speed"] == "5000"
     assert match["display_device_label"] == "Kingston DataTraveler - Port 7 (30GB)"
+    assert match["vendor_id"] == "0951"
+    assert match["product_id"] == "1666"
     assert match["serial_number"] == "SER-7777"
 
 
