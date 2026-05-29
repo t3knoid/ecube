@@ -1023,6 +1023,21 @@ def reconcile_jobs(db: Session) -> Dict[str, int]:
 
     for job in jobs:
         old_status = job.status
+        (
+            db.query(ExportFile)
+            .filter(
+                ExportFile.job_id == job.id,
+                ExportFile.status.in_((FileStatus.COPYING, FileStatus.RETRYING)),
+            )
+            .update(
+                {
+                    ExportFile.status: FileStatus.PENDING,
+                    ExportFile.retry_attempts: 0,
+                    ExportFile.error_message: None,
+                },
+                synchronize_session=False,
+            )
+        )
         job.status = JobStatus.FAILED
         job.completed_at = datetime.now(timezone.utc)
         job.failure_reason = "Job interrupted by service restart before completion"

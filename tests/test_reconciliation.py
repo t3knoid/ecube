@@ -784,6 +784,37 @@ class TestReconcileJobs:
         assert job.status == JobStatus.FAILED
         assert result["jobs_corrected"] == 1
 
+    def test_running_job_resets_in_flight_files_without_erasing_terminal_outcomes(self, db: Session):
+        job = _make_job(db, JobStatus.RUNNING)
+        db.add_all(
+            [
+                ExportFile(job_id=job.id, relative_path="done.bin", status=FileStatus.DONE),
+                ExportFile(job_id=job.id, relative_path="error.bin", status=FileStatus.ERROR),
+                ExportFile(job_id=job.id, relative_path="retry.bin", status=FileStatus.RETRYING, retry_attempts=2),
+                ExportFile(job_id=job.id, relative_path="copying.bin", status=FileStatus.COPYING),
+            ]
+        )
+        db.commit()
+
+        result = reconcile_jobs(db)
+
+        db.expire_all()
+        refreshed_job = db.get(ExportJob, job.id)
+        files = {
+            export_file.relative_path: export_file
+            for export_file in db.query(ExportFile).filter(ExportFile.job_id == job.id).all()
+        }
+
+        assert refreshed_job is not None
+        assert refreshed_job.status == JobStatus.FAILED
+        assert result["jobs_corrected"] == 1
+        assert files["done.bin"].status == FileStatus.DONE
+        assert files["error.bin"].status == FileStatus.ERROR
+        assert files["retry.bin"].status == FileStatus.PENDING
+        assert files["retry.bin"].retry_attempts == 0
+        assert files["retry.bin"].error_message is None
+        assert files["copying.bin"].status == FileStatus.PENDING
+
     def test_pending_job_not_touched(self, db: Session):
         job = _make_job(db, JobStatus.PENDING)
 
