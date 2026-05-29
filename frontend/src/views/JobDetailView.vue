@@ -2308,6 +2308,15 @@ onUnmounted(() => {
                 <span>{{ t('jobs.destinationDrive') }}</span><strong class="mono wrap-anywhere">{{ resolveJobDestinationLabel(job) }}</strong>
               </div>
               <div class="detail-grid-item">
+                <span>{{ t('drives.serialNumber') }}</span><strong class="mono wrap-anywhere">{{ job.drive?.serial_number || t('common.labels.notAvailable') }}</strong>
+              </div>
+              <div class="detail-grid-item">
+                <span>{{ t('system.vendorId') }}</span><strong class="mono wrap-anywhere">{{ job.drive?.vendor_id || t('common.labels.notAvailable') }}</strong>
+              </div>
+              <div class="detail-grid-item">
+                <span>{{ t('system.productId') }}</span><strong class="mono wrap-anywhere">{{ job.drive?.product_id || t('common.labels.notAvailable') }}</strong>
+              </div>
+              <div class="detail-grid-item">
                 <span>{{ t('drives.availableSpace') }}</span><strong>{{ formatBytes(job.drive?.available_bytes) }}</strong>
               </div>
               <div class="detail-grid-item">
@@ -2326,6 +2335,15 @@ onUnmounted(() => {
                 <div class="detail-grid">
                   <div class="detail-grid-item">
                     <span>{{ t('jobs.destinationDrive') }}</span><strong class="mono wrap-anywhere">{{ overflowAssignmentDriveLabel(assignment) }}</strong>
+                  </div>
+                  <div class="detail-grid-item">
+                    <span>{{ t('drives.serialNumber') }}</span><strong class="mono wrap-anywhere">{{ assignment.drive?.serial_number || t('common.labels.notAvailable') }}</strong>
+                  </div>
+                  <div class="detail-grid-item">
+                    <span>{{ t('system.vendorId') }}</span><strong class="mono wrap-anywhere">{{ assignment.drive?.vendor_id || t('common.labels.notAvailable') }}</strong>
+                  </div>
+                  <div class="detail-grid-item">
+                    <span>{{ t('system.productId') }}</span><strong class="mono wrap-anywhere">{{ assignment.drive?.product_id || t('common.labels.notAvailable') }}</strong>
                   </div>
                   <div class="detail-grid-item">
                     <span>{{ t('common.labels.status') }}</span><strong>{{ overflowAssignmentStateLabel(assignment.state) }}</strong>

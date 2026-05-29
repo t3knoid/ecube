@@ -96,6 +96,14 @@ class UsbDrive(Base):
         return self.port.speed if self.port else None
 
     @property
+    def vendor_id(self):
+        return self.port.vendor_id if self.port else None
+
+    @property
+    def product_id(self):
+        return self.port.product_id if self.port else None
+
+    @property
     def serial_number(self):
         return extract_usb_serial_number(
             self.device_identifier,

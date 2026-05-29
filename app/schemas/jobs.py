@@ -248,11 +248,14 @@ class DriveInfoSchema(BaseModel):
     port_system_path: Optional[str] = Field(default=None, description="Port-based USB identifier (for example '2-1')")
     manufacturer: Optional[str] = Field(default=None, description="USB manufacturer string when available")
     product_name: Optional[str] = Field(default=None, description="USB product string when available")
+    vendor_id: Optional[str] = Field(default=None, description="USB vendor ID when available")
+    product_id: Optional[str] = Field(default=None, description="USB product ID when available")
     display_device_label: str = Field(..., description="Operator-friendly drive label built from safe USB metadata")
     device_identifier: str = Field(
         ...,
         description="Stable hardware identifier for the drive built from available USB metadata",
     )
+    serial_number: Optional[str] = Field(default=None, description="USB serial number when available")
     filesystem_path: Optional[str] = Field(default=None, description="Current OS block device node (e.g. /dev/sdb)")
     capacity_bytes: Optional[int] = Field(default=None, description="Total storage capacity in bytes")
     available_bytes: Optional[int] = Field(default=None, description="Last known available space in bytes for the mounted drive")
@@ -270,7 +273,10 @@ class JobOverflowDriveSchema(BaseModel):
     id: int = Field(..., description="Unique identifier for the drive")
     manufacturer: Optional[str] = Field(default=None, description="USB manufacturer string when available")
     product_name: Optional[str] = Field(default=None, description="USB product string when available")
+    vendor_id: Optional[str] = Field(default=None, description="USB vendor ID when available")
+    product_id: Optional[str] = Field(default=None, description="USB product ID when available")
     display_device_label: str = Field(..., description="Operator-friendly drive label built from safe USB metadata")
+    serial_number: Optional[str] = Field(default=None, description="USB serial number when available")
     available_bytes: Optional[int] = Field(default=None, description="Last known available space in bytes for the mounted drive")
     filesystem_type: Optional[str] = Field(default=None, description="Detected filesystem label (e.g. ext4, exfat)")
     current_state: DriveState = Field(..., description="Current drive state (DISCONNECTED, DISABLED, AVAILABLE, IN_USE)")

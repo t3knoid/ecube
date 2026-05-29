@@ -2034,11 +2034,24 @@ describe('JobDetailView start action', () => {
       startup_analysis_last_analyzed_at: '2026-04-24T15:00:00Z',
       startup_analysis_file_count: 4,
       startup_analysis_total_bytes: 120,
-      drive: { id: 1, available_bytes: 2048, display_device_label: 'Destination One' },
+      drive: {
+        id: 1,
+        available_bytes: 2048,
+        display_device_label: 'Destination One',
+        serial_number: 'SER-DEST-001',
+        vendor_id: '0781',
+        product_id: '5583',
+      },
       overflow_assignments: [{
         id: 22,
         state: 'RESERVED',
-        drive: { id: 2, display_device_label: 'Reserved Overflow Device' },
+        drive: {
+          id: 2,
+          display_device_label: 'Reserved Overflow Device',
+          serial_number: 'SER-OVERFLOW-002',
+          vendor_id: 'abcd',
+          product_id: '1234',
+        },
       }],
     })
 
@@ -2058,6 +2071,15 @@ describe('JobDetailView start action', () => {
     expect(wrapper.text()).toContain('Available Space')
     expect(wrapper.text()).toContain('Files copied')
     expect(wrapper.text()).toContain('Reserved Overflow Device')
+    expect(wrapper.text()).toContain('Serial Number')
+    expect(wrapper.text()).toContain('Vendor ID')
+    expect(wrapper.text()).toContain('Product ID')
+    expect(wrapper.text()).toContain('SER-DEST-001')
+    expect(wrapper.text()).toContain('0781')
+    expect(wrapper.text()).toContain('5583')
+    expect(wrapper.text()).toContain('SER-OVERFLOW-002')
+    expect(wrapper.text()).toContain('abcd')
+    expect(wrapper.text()).toContain('1234')
   })
 
   it('shows N/A for source file count and size before source totals are known', async () => {

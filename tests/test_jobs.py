@@ -6191,8 +6191,37 @@ def test_get_job_details_includes_timed_out_count(client, db):
 
 
 def test_get_job_details_include_notes_and_overflow_assignments(client, db):
+    hub = UsbHub(
+        name="Detail Hub",
+        system_identifier="usb-detail-hub-001",
+    )
+    primary_port = UsbPort(
+        hub=hub,
+        port_number=1,
+        system_path="9-1",
+        enabled=True,
+        vendor_id="0781",
+        product_id="5583",
+    )
+    reserved_port = UsbPort(
+        hub=hub,
+        port_number=2,
+        system_path="9-2",
+        enabled=True,
+        vendor_id="abcd",
+        product_id="1234",
+    )
+    active_port = UsbPort(
+        hub=hub,
+        port_number=3,
+        system_path="9-3",
+        enabled=True,
+        vendor_id="beef",
+        product_id="9001",
+    )
     primary_drive = UsbDrive(
-        device_identifier="USB-DETAIL-PRIMARY-001",
+        port=primary_port,
+        device_identifier=build_persistent_device_identifier("0781", "5583", "SER-PRIMARY-001", "9-1"),
         manufacturer="Primary",
         product_name="Device",
         current_state=DriveState.IN_USE,
@@ -6200,7 +6229,8 @@ def test_get_job_details_include_notes_and_overflow_assignments(client, db):
         mount_path="/mnt/ecube/detail-primary-001",
     )
     reserved_drive = UsbDrive(
-        device_identifier="USB-DETAIL-RESERVED-001",
+        port=reserved_port,
+        device_identifier=build_persistent_device_identifier("abcd", "1234", "SER-RESERVED-001", "9-2"),
         manufacturer="Reserved Overflow",
         product_name="Device",
         current_state=DriveState.IN_USE,
@@ -6208,14 +6238,15 @@ def test_get_job_details_include_notes_and_overflow_assignments(client, db):
         mount_path="/mnt/ecube/detail-reserved-001",
     )
     active_overflow_drive = UsbDrive(
-        device_identifier="USB-DETAIL-ACTIVE-001",
+        port=active_port,
+        device_identifier=build_persistent_device_identifier("beef", "9001", "SER-ACTIVE-001", "9-3"),
         manufacturer="Active Overflow",
         product_name="Device",
         current_state=DriveState.IN_USE,
         current_project_id="PROJ-DETAIL-OVERFLOW-001",
         mount_path="/mnt/ecube/detail-active-001",
     )
-    db.add_all([primary_drive, reserved_drive, active_overflow_drive])
+    db.add_all([hub, primary_drive, reserved_drive, active_overflow_drive])
     db.flush()
 
     job = ExportJob(
@@ -6291,14 +6322,23 @@ def test_get_job_details_include_notes_and_overflow_assignments(client, db):
     assert data["started_at"] == "2026-05-04T12:00:00"
     assert data["notes"] == "Operator handoff note"
     assert [item["drive"]["display_device_label"] for item in data["overflow_assignments"]] == [
-        "Reserved Overflow Device",
-        "Active Overflow Device",
+        "Reserved Overflow Device - Port 2",
+        "Active Overflow Device - Port 3",
     ]
     assert [item["state"] for item in data["overflow_assignments"]] == ["RESERVED", "ACTIVE"]
     assert "filesystem_path" not in data["overflow_assignments"][0]["drive"]
     assert "device_identifier" not in data["overflow_assignments"][0]["drive"]
     assert "port_system_path" not in data["overflow_assignments"][0]["drive"]
-    assert data["drive"]["display_device_label"] == "Active Overflow Device"
+    assert data["drive"]["display_device_label"] == "Active Overflow Device - Port 3"
+    assert data["drive"]["serial_number"] == "SER-ACTIVE-001"
+    assert data["drive"]["vendor_id"] == "beef"
+    assert data["drive"]["product_id"] == "9001"
+    assert data["overflow_assignments"][0]["drive"]["serial_number"] == "SER-RESERVED-001"
+    assert data["overflow_assignments"][0]["drive"]["vendor_id"] == "abcd"
+    assert data["overflow_assignments"][0]["drive"]["product_id"] == "1234"
+    assert data["overflow_assignments"][1]["drive"]["serial_number"] == "SER-ACTIVE-001"
+    assert data["overflow_assignments"][1]["drive"]["vendor_id"] == "beef"
+    assert data["overflow_assignments"][1]["drive"]["product_id"] == "9001"
 
 
 def test_list_jobs_includes_error_summary_for_failed_jobs(client, db):
