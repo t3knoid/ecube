@@ -238,6 +238,44 @@ class TestConfigurationEndpoints:
         settings_map = {item["key"]: item["value"] for item in resp.json()["settings"]}
         assert settings_map["log_file"] == "app.log"
 
+    def test_get_configuration_prefers_persisted_copy_hashing_value(self, manager_client, monkeypatch, tmp_path):
+        env_file = tmp_path / "configuration.env"
+        env_file.write_text("COPY_HASHING_SEPARATE_THREAD_ENABLED=true\n", encoding="utf-8")
+
+        original_value = settings.copy_hashing_separate_thread_enabled
+        monkeypatch.setattr("app.services.configuration_service._ENV_FILE", str(env_file))
+        settings.copy_hashing_separate_thread_enabled = False
+        try:
+            resp = manager_client.get("/configuration")
+            assert resp.status_code == 200
+
+            settings_map = {item["key"]: item["value"] for item in resp.json()["settings"]}
+            assert settings_map["copy_hashing_separate_thread_enabled"] is True
+        finally:
+            settings.copy_hashing_separate_thread_enabled = original_value
+
+    def test_get_configuration_ignores_process_env_override_for_persisted_copy_hashing_value(
+        self,
+        manager_client,
+        monkeypatch,
+        tmp_path,
+    ):
+        env_file = tmp_path / "configuration.env"
+        env_file.write_text("COPY_HASHING_SEPARATE_THREAD_ENABLED=true\n", encoding="utf-8")
+
+        original_value = settings.copy_hashing_separate_thread_enabled
+        monkeypatch.setattr("app.services.configuration_service._ENV_FILE", str(env_file))
+        monkeypatch.setenv("COPY_HASHING_SEPARATE_THREAD_ENABLED", "false")
+        settings.copy_hashing_separate_thread_enabled = False
+        try:
+            resp = manager_client.get("/configuration")
+            assert resp.status_code == 200
+
+            settings_map = {item["key"]: item["value"] for item in resp.json()["settings"]}
+            assert settings_map["copy_hashing_separate_thread_enabled"] is True
+        finally:
+            settings.copy_hashing_separate_thread_enabled = original_value
+
     def test_get_configuration_processor_forbidden(self, client):
         resp = client.get("/configuration")
         assert resp.status_code == 403
@@ -278,23 +316,24 @@ class TestConfigurationEndpoints:
         assert settings_map["callback_default_url"] is None
 
     def test_get_configuration_returns_callback_allow_private_ips_value(self, admin_client):
-        original_value = settings.callback_allow_private_ips
-        settings.callback_allow_private_ips = True
-        try:
+        with patch("app.services.configuration_service._load_configuration_snapshot") as mock_snapshot:
+            mock_snapshot.return_value = settings.model_copy(update={"callback_allow_private_ips": True})
+
             resp = admin_client.get("/admin/configuration")
             assert resp.status_code == 200
 
             settings_map = {item["key"]: item["value"] for item in resp.json()["settings"]}
             assert settings_map["callback_allow_private_ips"] is True
-        finally:
-            settings.callback_allow_private_ips = original_value
 
     def test_get_configuration_returns_callback_payload_contract(self, admin_client):
-        original_fields = settings.callback_payload_fields
-        original_map = settings.callback_payload_field_map
-        settings.callback_payload_fields = ["event", "project_id"]
-        settings.callback_payload_field_map = {"type": "event", "project": "project_id"}
-        try:
+        with patch("app.services.configuration_service._load_configuration_snapshot") as mock_snapshot:
+            mock_snapshot.return_value = settings.model_copy(
+                update={
+                    "callback_payload_fields": ["event", "project_id"],
+                    "callback_payload_field_map": {"type": "event", "project": "project_id"},
+                }
+            )
+
             resp = admin_client.get("/admin/configuration")
             assert resp.status_code == 200
 
@@ -304,22 +343,17 @@ class TestConfigurationEndpoints:
                 "type": "event",
                 "project": "project_id",
             }
-        finally:
-            settings.callback_payload_fields = original_fields
-            settings.callback_payload_field_map = original_map
 
     def test_get_configuration_returns_callback_hmac_secret_status_only(self, admin_client):
-        original_secret = settings.callback_hmac_secret
-        settings.callback_hmac_secret = "stored-secret"
-        try:
+        with patch("app.services.configuration_service._load_configuration_snapshot") as mock_snapshot:
+            mock_snapshot.return_value = settings.model_copy(update={"callback_hmac_secret": "stored-secret"})
+
             resp = admin_client.get("/admin/configuration")
             assert resp.status_code == 200
 
             settings_map = {item["key"]: item["value"] for item in resp.json()["settings"]}
             assert settings_map["callback_hmac_secret_configured"] is True
             assert "callback_hmac_secret" not in settings_map
-        finally:
-            settings.callback_hmac_secret = original_secret
 
     def test_get_configuration_non_admin_forbidden(self, client):
         resp = client.get("/admin/configuration")
@@ -425,6 +459,7 @@ class TestConfigurationEndpoints:
         properties = request_schema["properties"]
 
         assert "log_level" in properties
+        assert "copy_hashing_separate_thread_enabled" in properties
         assert "callback_allow_private_ips" not in properties
         assert "callback_default_url" not in properties
         assert "db_pool_size" not in properties

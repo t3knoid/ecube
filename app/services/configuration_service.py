@@ -6,15 +6,15 @@ Configuration and Admin pages and a helper to request service restarts.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shutil
 import subprocess
-import json
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List
 
-from app.config import settings
+from app.config import _ENV_FILE, settings
 from app.exceptions import AuthorizationError
 from app.infrastructure.subprocess_runner import resolve_binary, run_subprocess
 from app.logging_config import configure_logging
@@ -233,14 +233,76 @@ def _manager_display_value(field_name: str, value: Any) -> Any:
     return normalized
 
 
+def _parse_persisted_configuration_value(field_name: str, raw_value: str, current_value: Any) -> Any:
+    if field_name in {"log_file", "callback_default_url", "callback_proxy_url", "callback_hmac_secret"}:
+        stripped = raw_value.strip()
+        return stripped or None
+    if field_name == "callback_payload_fields":
+        stripped = raw_value.strip()
+        return None if not stripped else list(json.loads(stripped))
+    if field_name == "callback_payload_field_map":
+        stripped = raw_value.strip()
+        return None if not stripped else dict(json.loads(stripped))
+    if isinstance(current_value, bool):
+        return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+    if isinstance(current_value, int):
+        return int(raw_value.strip())
+    if isinstance(current_value, float):
+        return float(raw_value.strip())
+    return raw_value.strip()
+
+
+def _load_persisted_configuration_overrides() -> dict[str, Any]:
+    env_key_to_field = {
+        spec.env_key: field_name
+        for field_name, spec in _EDITABLE_FIELDS.items()
+    }
+    persisted_values = database_service._read_env_settings(list(env_key_to_field))
+    overrides: dict[str, Any] = {}
+
+    for env_key, raw_value in persisted_values.items():
+        field_name = env_key_to_field.get(env_key)
+        if not field_name:
+            continue
+
+        current_value = getattr(settings, field_name)
+        overrides[field_name] = _parse_persisted_configuration_value(
+            field_name,
+            raw_value,
+            current_value,
+        )
+
+    return overrides
+
+
+def _load_configuration_snapshot() -> Any:
+    try:
+        return settings.model_copy(update=_load_persisted_configuration_overrides())
+    except Exception:
+        logger.info(
+            "Configuration snapshot fallback to runtime settings",
+            extra={
+                "operation_surface": "configuration.read",
+                "failure_category": "env_snapshot_unavailable",
+            },
+        )
+        logger.debug(
+            "Configuration snapshot load failed",
+            extra={"env_file": _ENV_FILE},
+            exc_info=True,
+        )
+        return settings
+
+
 def get_configuration_fields(*, scope: str) -> List[Dict[str, Any]]:
     """Return editable configuration fields and their current values."""
+    snapshot = _load_configuration_snapshot()
     fields: List[Dict[str, Any]] = []
     for key in _get_scope_read_field_names(scope):
         spec = _EDITABLE_FIELDS[key]
         if not spec.readable:
             continue
-        value = getattr(settings, key)
+        value = getattr(snapshot, key)
         display_value = _manager_display_value(key, value) if scope == "manager" else _display_value(key, value)
         fields.append(
             {
@@ -253,7 +315,7 @@ def get_configuration_fields(*, scope: str) -> List[Dict[str, Any]]:
         fields.append(
             {
                 "key": "callback_hmac_secret_configured",
-                "value": _display_value("callback_hmac_secret", settings.callback_hmac_secret),
+                "value": _display_value("callback_hmac_secret", snapshot.callback_hmac_secret),
                 "requires_restart": False,
             }
         )

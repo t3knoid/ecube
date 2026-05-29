@@ -306,7 +306,7 @@ class Settings(BaseSettings):
     #: Feature flag for the copy engine's separate hashing mode. When true,
     #: copy work writes the file while a dedicated hashing thread computes the
     #: checksum in parallel.
-    copy_hashing_separate_thread_enabled: bool = False
+    copy_hashing_separate_thread_enabled: bool = True
 
     #: Minimum buffered byte count before the copy engine flushes
     #: ``copied_bytes`` progress to the database.

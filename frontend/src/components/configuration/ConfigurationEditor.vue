@@ -61,6 +61,7 @@ const managerFieldOrder = [
   'copy_progress_flush_bytes',
   'copy_default_thread_count',
   'copy_file_fsync_enabled',
+  'copy_hashing_separate_thread_enabled',
   'usb_discovery_interval',
   'job_detail_files_page_size',
 ]
@@ -115,6 +116,7 @@ const form = ref({
   copy_progress_flush_bytes: 67_108_864,
   copy_default_thread_count: 12,
   copy_file_fsync_enabled: false,
+  copy_hashing_separate_thread_enabled: true,
   usb_discovery_interval: 30,
   job_detail_files_page_size: 40,
   callback_allow_private_ips: false,
@@ -292,6 +294,14 @@ function normalizeForm(data) {
     }
     if (typeof form.value[key] === 'number' && value != null) {
       value = Number(value)
+    }
+    if (typeof form.value[key] === 'boolean' && value != null) {
+      if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase()
+        value = ['1', 'true', 'yes', 'on'].includes(normalized)
+      } else {
+        value = Boolean(value)
+      }
     }
     next[key] = value
   }
@@ -685,6 +695,16 @@ onMounted(loadConfiguration)
             <span>{{ t('configuration.fields.copy_file_fsync_enabled.label') }}</span>
           </label>
           <p class="field-help">{{ t('configuration.fields.copy_file_fsync_enabled.help') }}</p>
+
+          <label class="checkbox-row" for="cfg-copy-hashing-separate-thread-enabled">
+            <input
+              id="cfg-copy-hashing-separate-thread-enabled"
+              v-model="form.copy_hashing_separate_thread_enabled"
+              type="checkbox"
+            />
+            <span>{{ t('configuration.fields.copy_hashing_separate_thread_enabled.label') }}</span>
+          </label>
+          <p class="field-help">{{ t('configuration.fields.copy_hashing_separate_thread_enabled.help') }}</p>
 
           <label for="cfg-job-detail-files-page-size">{{ t('configuration.fields.job_detail_files_page_size.label') }}</label>
           <input

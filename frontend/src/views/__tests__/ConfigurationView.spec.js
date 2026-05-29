@@ -48,6 +48,7 @@ function buildManagerResponse(overrides = {}) {
     copy_progress_flush_bytes: 67_108_864,
     copy_default_thread_count: 12,
     copy_file_fsync_enabled: false,
+    copy_hashing_separate_thread_enabled: true,
     usb_discovery_interval: 30,
     job_detail_files_page_size: 40,
     ...overrides,
@@ -105,9 +106,47 @@ describe('ConfigurationView', () => {
     expect(logFileInput.element.value).toBe('app.log')
     expect(logFileInput.attributes('readonly')).toBeDefined()
     expect(wrapper.find('#cfg-log-file-enabled').exists()).toBe(false)
+    expect(wrapper.find('#cfg-copy-hashing-separate-thread-enabled').exists()).toBe(true)
     expect(wrapper.find('#cfg-callback-allow-private-ips').exists()).toBe(false)
     expect(wrapper.find('#cfg-policy-minlen').exists()).toBe(false)
     expect(mocks.getPasswordPolicy).not.toHaveBeenCalled()
+  })
+
+  it('loads and saves the separate hashing toggle from the configuration copy workflow panel', async () => {
+    mocks.getConfiguration.mockResolvedValue(buildManagerResponse({ copy_hashing_separate_thread_enabled: true }))
+    mocks.updateConfiguration.mockResolvedValue({
+      restart_required: false,
+      restart_required_settings: [],
+      applied_immediately: ['copy_hashing_separate_thread_enabled'],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const checkbox = wrapper.find('#cfg-copy-hashing-separate-thread-enabled')
+    expect(checkbox.exists()).toBe(true)
+    expect(checkbox.element.checked).toBe(true)
+
+    await checkbox.setValue(false)
+    await wrapper.find('.action-row .btn.btn-primary').trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateConfiguration).toHaveBeenCalledWith({
+      copy_hashing_separate_thread_enabled: false,
+    })
+  })
+
+  it('coerces boolean-like hashing values from the API before binding the checkbox', async () => {
+    mocks.getConfiguration.mockResolvedValue(
+      buildManagerResponse({ copy_hashing_separate_thread_enabled: 'true' }),
+    )
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const checkbox = wrapper.find('#cfg-copy-hashing-separate-thread-enabled')
+    expect(checkbox.exists()).toBe(true)
+    expect(checkbox.element.checked).toBe(true)
   })
 
   it('loads and saves the configured Job Detail files page size', async () => {

@@ -796,6 +796,10 @@
         "label": "Force per-file disk sync",
         "help": "When enabled, ECUBE calls fsync() after every copied file. Leave disabled for maximum throughput and rely on restart recovery to resume from the last committed DONE file."
       },
+      "copy_hashing_separate_thread_enabled": {
+        "label": "Enable separate hashing thread",
+        "help": "When enabled, the copy worker writes file data while a dedicated hashing thread computes the checksum in parallel for the same file attempt."
+      },
       "usb_discovery_interval": {
         "label": "Auto USB Discovery Interval (seconds)",
         "help": "How often ECUBE polls for USB drive changes in the background. Set to 0 to disable polling and enable udev hotplug discovery."

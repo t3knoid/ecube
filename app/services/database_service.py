@@ -598,6 +598,35 @@ def _write_env_setting(key: str, value: str) -> None:
     _write_env_settings({key: value})
 
 
+def _read_env_settings(keys: list[str] | None = None) -> Dict[str, str]:
+    """Read persisted settings from the runtime .env file.
+
+    Returns the last persisted value for each matching key and ignores blank
+    lines or comments. When *keys* is provided, only those env keys are
+    returned.
+    """
+    env_path = _get_env_file_path()
+    if not os.path.exists(env_path):
+        return {}
+
+    wanted_keys = None if keys is None else set(keys)
+    values: Dict[str, str] = {}
+
+    with open(env_path, "r", encoding="utf-8") as env_file:
+        for raw_line in env_file:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+
+            key, raw_value = line.split("=", 1)
+            normalized_key = key.strip()
+            if wanted_keys is not None and normalized_key not in wanted_keys:
+                continue
+            values[normalized_key] = raw_value
+
+    return values
+
+
 def _write_env_settings(updates: Dict[str, str]) -> None:
     """Atomically write or update one or more settings in the .env file.
 

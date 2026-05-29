@@ -273,7 +273,7 @@ Operational notes:
 | `COPY_PROGRESS_FLUSH_BYTES`        | `67108864` | Copied-byte threshold ECUBE buffers before committing progress updates to the database. Minimum `1048576`, maximum `1073741824`. Larger values reduce transaction overhead and increase buffered progress between commits. |
 | `COPY_DEFAULT_THREAD_COUNT`        | `12`      | Default worker thread pool size when not set on a job. Minimum `1`, maximum `32`. Higher values can improve overlap on many small files when the source and destination can sustain it. |
 | `COPY_FILE_FSYNC_ENABLED`          | `false`   | When `true`, ECUBE calls `fsync()` after every copied file. Leave disabled for maximum throughput when restart recovery from the last committed `DONE` file is sufficient. |
-| `COPY_HASHING_SEPARATE_THREAD_ENABLED` | `false` | When `true`, the copy engine writes file data on the copy worker and computes the checksum on a dedicated hashing thread. Leave disabled unless you are tuning for the separate hashing path. |
+| `COPY_HASHING_SEPARATE_THREAD_ENABLED` | `true` | When `true`, the copy engine writes file data on the copy worker and computes the checksum on a dedicated hashing thread. This toggle is exposed on the Configuration page under `Copy and Job Workflow`. |
 | `COPY_DEFAULT_MAX_RETRIES`         | `3`       | Default maximum per-file retries when not set on a job.            |
 | `COPY_DEFAULT_RETRY_DELAY_SECONDS` | `1.0`     | Default delay before a failed file becomes eligible for another attempt when not set on a job. The scheduler requeues the file and keeps worker capacity available for healthy pending files during the delay window. |
 
