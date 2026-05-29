@@ -53,6 +53,14 @@ class TestConfigurationSchemaValidation:
         req = ConfigurationUpdateRequest(startup_analysis_batch_size=250)
         assert req.startup_analysis_batch_size == 250
 
+    def test_update_accepts_startup_analysis_small_file_max_bytes(self):
+        req = ConfigurationUpdateRequest(startup_analysis_small_file_max_bytes=65_536)
+        assert req.startup_analysis_small_file_max_bytes == 65_536
+
+    def test_update_accepts_startup_analysis_large_file_min_bytes(self):
+        req = ConfigurationUpdateRequest(startup_analysis_large_file_min_bytes=8_388_608)
+        assert req.startup_analysis_large_file_min_bytes == 8_388_608
+
     def test_update_accepts_mkfs_exfat_cluster_size(self):
         req = ConfigurationUpdateRequest(mkfs_exfat_cluster_size="64K")
         assert req.mkfs_exfat_cluster_size == "64K"
@@ -162,6 +170,10 @@ class TestConfigurationSchemaValidation:
         with pytest.raises(ValidationError):
             ConfigurationUpdateRequest(startup_analysis_batch_size=5001)
 
+    def test_update_rejects_startup_analysis_small_file_max_bytes_below_minimum(self):
+        with pytest.raises(ValidationError):
+            ConfigurationUpdateRequest(startup_analysis_small_file_max_bytes=512)
+
     def test_update_rejects_copy_chunk_size_bytes_below_minimum(self):
         with pytest.raises(ValidationError):
             ConfigurationUpdateRequest(copy_chunk_size_bytes=131_072)
@@ -196,6 +208,8 @@ class TestConfigurationEndpoints:
         "copy_hashing_separate_thread_enabled",
         "usb_discovery_interval",
         "job_detail_files_page_size",
+        "startup_analysis_small_file_max_bytes",
+        "startup_analysis_large_file_min_bytes",
     }
 
     _ADMIN_CONFIGURATION_KEYS = {
@@ -237,6 +251,33 @@ class TestConfigurationEndpoints:
 
         settings_map = {item["key"]: item["value"] for item in resp.json()["settings"]}
         assert settings_map["log_file"] == "app.log"
+
+    def test_update_configuration_allows_startup_analysis_bucket_thresholds(self, manager_client):
+        response = manager_client.put(
+            "/configuration",
+            json={
+                "startup_analysis_small_file_max_bytes": 131_072,
+                "startup_analysis_large_file_min_bytes": 16_777_216,
+            },
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert set(payload["changed_settings"]) == {
+            "startup_analysis_small_file_max_bytes",
+            "startup_analysis_large_file_min_bytes",
+        }
+
+    def test_update_configuration_rejects_inverted_startup_analysis_bucket_thresholds(self, manager_client):
+        response = manager_client.put(
+            "/configuration",
+            json={
+                "startup_analysis_small_file_max_bytes": 16_777_216,
+                "startup_analysis_large_file_min_bytes": 131_072,
+            },
+        )
+
+        assert response.status_code == 422
 
     def test_get_configuration_prefers_persisted_copy_hashing_value(self, manager_client, monkeypatch, tmp_path):
         env_file = tmp_path / "configuration.env"

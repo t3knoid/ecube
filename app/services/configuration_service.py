@@ -78,6 +78,8 @@ _EDITABLE_FIELDS: Dict[str, _FieldSpec] = {
     "db_pool_max_overflow": _FieldSpec("DB_POOL_MAX_OVERFLOW", False, _serialize_plain),
     "db_pool_recycle_seconds": _FieldSpec("DB_POOL_RECYCLE_SECONDS", True, _serialize_plain),
     "startup_analysis_batch_size": _FieldSpec("STARTUP_ANALYSIS_BATCH_SIZE", False, _serialize_plain),
+    "startup_analysis_small_file_max_bytes": _FieldSpec("STARTUP_ANALYSIS_SMALL_FILE_MAX_BYTES", False, _serialize_plain),
+    "startup_analysis_large_file_min_bytes": _FieldSpec("STARTUP_ANALYSIS_LARGE_FILE_MIN_BYTES", False, _serialize_plain),
     "mkfs_exfat_cluster_size": _FieldSpec("MKFS_EXFAT_CLUSTER_SIZE", False, _serialize_plain),
     "drive_format_timeout_seconds": _FieldSpec("DRIVE_FORMAT_TIMEOUT_SECONDS", False, _serialize_plain),
     "drive_mount_timeout_seconds": _FieldSpec("DRIVE_MOUNT_TIMEOUT_SECONDS", False, _serialize_plain),
@@ -120,6 +122,8 @@ _MANAGER_CONFIGURATION_READ_FIELDS = (
     "copy_hashing_separate_thread_enabled",
     "usb_discovery_interval",
     "job_detail_files_page_size",
+    "startup_analysis_small_file_max_bytes",
+    "startup_analysis_large_file_min_bytes",
 )
 
 _MANAGER_CONFIGURATION_UPDATE_FIELDS = (
@@ -137,6 +141,8 @@ _MANAGER_CONFIGURATION_UPDATE_FIELDS = (
     "copy_hashing_separate_thread_enabled",
     "usb_discovery_interval",
     "job_detail_files_page_size",
+    "startup_analysis_small_file_max_bytes",
+    "startup_analysis_large_file_min_bytes",
 )
 
 _ADMIN_CONFIGURATION_FIELDS = (
@@ -224,6 +230,22 @@ def _display_value(field_name: str, value: Any) -> Any:
     if field_name == "callback_hmac_secret":
         return bool(normalized)
     return normalized
+
+
+def _validate_startup_analysis_bucket_thresholds(values: Dict[str, Any]) -> None:
+    small_value = values.get(
+        "startup_analysis_small_file_max_bytes",
+        getattr(settings, "startup_analysis_small_file_max_bytes"),
+    )
+    large_value = values.get(
+        "startup_analysis_large_file_min_bytes",
+        getattr(settings, "startup_analysis_large_file_min_bytes"),
+    )
+
+    if int(small_value) >= int(large_value):
+        raise ValueError(
+            "startup_analysis_small_file_max_bytes must be less than startup_analysis_large_file_min_bytes"
+        )
 
 
 def _manager_display_value(field_name: str, value: Any) -> Any:
@@ -340,6 +362,7 @@ def update_configuration(values: Dict[str, Any], *, scope: str) -> Dict[str, Any
 
     values = dict(values)
     _ensure_scope_allows_requested_keys(values, scope)
+    _validate_startup_analysis_bucket_thresholds(values)
     clear_callback_hmac_secret = bool(values.pop("clear_callback_hmac_secret", False))
     if clear_callback_hmac_secret:
         values["callback_hmac_secret"] = None

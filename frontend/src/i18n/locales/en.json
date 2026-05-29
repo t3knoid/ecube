@@ -764,6 +764,14 @@
         "label": "Startup Analysis Batch Size",
         "help": "Maximum number of startup-analysis rows processed per batch while scanning, persisting, and validating source trees. Allowed range: 1 to 5000. Lower values reduce peak memory usage but increase database round trips."
       },
+      "startup_analysis_small_file_max_bytes": {
+        "label": "Startup Analysis Small-File Max Bytes",
+        "help": "Files at or below the current value are counted in the small-file bucket for workload-profile recommendations. Fresh installs default to 65536 bytes (64 KiB), but this field shows the current saved setting."
+      },
+      "startup_analysis_large_file_min_bytes": {
+        "label": "Startup Analysis Large-File Min Bytes",
+        "help": "Files at or above the current value are counted in the large-file bucket for workload-profile recommendations. Files between the small and large thresholds count as medium. Fresh installs default to 8388608 bytes (8 MiB), but this field shows the current saved setting."
+      },
       "mkfs_exfat_cluster_size": {
         "label": "exFAT Cluster Size",
         "help": "Allocation unit used when ECUBE formats a drive as exFAT. 4KB is recommended for most situations. Use larger clusters only for drives that will store very large files only and no small files."

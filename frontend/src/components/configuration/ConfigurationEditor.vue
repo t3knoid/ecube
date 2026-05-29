@@ -57,6 +57,8 @@ const managerFieldOrder = [
   'network_mount_timeout_seconds',
   'mount_share_discovery_timeout_seconds',
   'copy_job_timeout',
+  'startup_analysis_small_file_max_bytes',
+  'startup_analysis_large_file_min_bytes',
   'copy_chunk_size_bytes',
   'copy_progress_flush_bytes',
   'copy_default_thread_count',
@@ -112,6 +114,8 @@ const form = ref({
   network_mount_timeout_seconds: 120,
   mount_share_discovery_timeout_seconds: 60,
   copy_job_timeout: 3600,
+  startup_analysis_small_file_max_bytes: 65_536,
+  startup_analysis_large_file_min_bytes: 8_388_608,
   copy_chunk_size_bytes: 4_194_304,
   copy_progress_flush_bytes: 67_108_864,
   copy_default_thread_count: 12,
@@ -673,6 +677,26 @@ onMounted(loadConfiguration)
           <label for="cfg-copy-job-timeout">{{ t('configuration.fields.copy_job_timeout.label') }}</label>
           <input id="cfg-copy-job-timeout" v-model.number="form.copy_job_timeout" type="number" min="0" />
           <p class="field-help">{{ t('configuration.fields.copy_job_timeout.help') }}</p>
+
+          <label for="cfg-startup-analysis-small-file-max-bytes">{{ t('configuration.fields.startup_analysis_small_file_max_bytes.label') }}</label>
+          <input
+            id="cfg-startup-analysis-small-file-max-bytes"
+            v-model.number="form.startup_analysis_small_file_max_bytes"
+            type="number"
+            min="1024"
+            max="67108864"
+          />
+          <p class="field-help">{{ t('configuration.fields.startup_analysis_small_file_max_bytes.help') }}</p>
+
+          <label for="cfg-startup-analysis-large-file-min-bytes">{{ t('configuration.fields.startup_analysis_large_file_min_bytes.label') }}</label>
+          <input
+            id="cfg-startup-analysis-large-file-min-bytes"
+            v-model.number="form.startup_analysis_large_file_min_bytes"
+            type="number"
+            min="1024"
+            max="1073741824"
+          />
+          <p class="field-help">{{ t('configuration.fields.startup_analysis_large_file_min_bytes.help') }}</p>
 
           <label for="cfg-copy-chunk-size-bytes">{{ t('configuration.fields.copy_chunk_size_bytes.label') }}</label>
           <select id="cfg-copy-chunk-size-bytes" v-model.number="form.copy_chunk_size_bytes">

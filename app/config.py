@@ -295,6 +295,14 @@ class Settings(BaseSettings):
     #: startup-analysis memory growth on large source trees.
     startup_analysis_batch_size: int = Field(default=500, ge=1, le=5000)
 
+    #: Maximum file size in bytes that startup analysis classifies as a
+    #: small file when building workload-profile recommendations.
+    startup_analysis_small_file_max_bytes: int = Field(default=64 * 1024, ge=1024, le=67_108_864)
+
+    #: Minimum file size in bytes that startup analysis classifies as a
+    #: large file when building workload-profile recommendations.
+    startup_analysis_large_file_min_bytes: int = Field(default=8 * 1024 * 1024, ge=1024, le=1_073_741_824)
+
     #: Chunk size in bytes for file copy and checksum computation.
     copy_chunk_size_bytes: int = Field(default=4_194_304, ge=262_144, le=67_108_864)
 

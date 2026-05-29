@@ -30,10 +30,10 @@ from app.services import metrics_service
 from app.services.callback_service import deliver_callback
 from app.services.copy_tuning import resolve_job_copy_tuning
 from app.services.workload_profiles import (
-    LARGE_FILE_MIN_BYTES,
-    SMALL_FILE_MAX_BYTES,
     apply_workload_profile,
     build_size_distribution_summary,
+    get_large_file_min_bytes,
+    get_small_file_max_bytes,
     job_has_explicit_copy_tuning_overrides,
     recommend_workload_profile,
 )
@@ -103,8 +103,8 @@ def get_startup_analysis_workload_profile_summary(
 ) -> tuple[Optional[dict[str, int | float]], Optional[str]]:
     summary_counts = StartupAnalysisEntryRepository(db).summarize_file_size_distribution(
         job_id,
-        small_file_max_bytes=SMALL_FILE_MAX_BYTES,
-        large_file_min_bytes=LARGE_FILE_MIN_BYTES,
+        small_file_max_bytes=get_small_file_max_bytes(),
+        large_file_min_bytes=get_large_file_min_bytes(),
     )
     summary = build_size_distribution_summary(**summary_counts)
     recommendation = recommend_workload_profile(summary)

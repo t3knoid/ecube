@@ -40,10 +40,12 @@ Startup-analysis recommendation begins by assigning each analyzed file to one of
 | Medium | file size `> 64 KiB` and `< 8 MiB` |
 | Large | file size `>= 8 MiB` |
 
-These thresholds are defined in [app/services/workload_profiles.py](../../app/services/workload_profiles.py) as:
+These thresholds default to values defined in [app/services/workload_profiles.py](../../app/services/workload_profiles.py) and are operator-configurable from the Configuration page:
 
-- `SMALL_FILE_MAX_BYTES = 64 * 1024`
-- `LARGE_FILE_MIN_BYTES = 8 * 1024 * 1024`
+- `startup_analysis_small_file_max_bytes = 64 * 1024`
+- `startup_analysis_large_file_min_bytes = 8 * 1024 * 1024`
+
+When operators change the Configuration-page threshold values, these bucket boundaries move with those persisted settings. The table above describes the default out-of-the-box classification.
 
 ## 21.5 Derived Summary Values
 

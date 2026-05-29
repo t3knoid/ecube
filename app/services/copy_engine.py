@@ -37,10 +37,10 @@ from app.services.copy_worker_runtime import (
     unregister_active_copy_worker,
 )
 from app.services.workload_profiles import (
-    LARGE_FILE_MIN_BYTES,
-    SMALL_FILE_MAX_BYTES,
     apply_workload_profile,
     build_size_distribution_summary,
+    get_large_file_min_bytes,
+    get_small_file_max_bytes,
     job_has_explicit_copy_tuning_overrides,
     recommend_workload_profile,
 )
@@ -2151,8 +2151,8 @@ def prepare_job_startup_analysis(
 
         distribution_counts = startup_entry_repo.summarize_file_size_distribution(
             job_id,
-            small_file_max_bytes=SMALL_FILE_MAX_BYTES,
-            large_file_min_bytes=LARGE_FILE_MIN_BYTES,
+            small_file_max_bytes=get_small_file_max_bytes(),
+            large_file_min_bytes=get_large_file_min_bytes(),
         )
         size_distribution = build_size_distribution_summary(**distribution_counts)
         recommended_profile = recommend_workload_profile(size_distribution)

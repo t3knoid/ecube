@@ -44,6 +44,8 @@ function buildManagerResponse(overrides = {}) {
     network_mount_timeout_seconds: 120,
     mount_share_discovery_timeout_seconds: 60,
     copy_job_timeout: 3600,
+    startup_analysis_small_file_max_bytes: 65_536,
+    startup_analysis_large_file_min_bytes: 8_388_608,
     copy_chunk_size_bytes: 4_194_304,
     copy_progress_flush_bytes: 67_108_864,
     copy_default_thread_count: 12,
@@ -107,6 +109,8 @@ describe('ConfigurationView', () => {
     expect(logFileInput.attributes('readonly')).toBeDefined()
     expect(wrapper.find('#cfg-log-file-enabled').exists()).toBe(false)
     expect(wrapper.find('#cfg-copy-hashing-separate-thread-enabled').exists()).toBe(true)
+    expect(wrapper.find('#cfg-startup-analysis-small-file-max-bytes').exists()).toBe(true)
+    expect(wrapper.find('#cfg-startup-analysis-large-file-min-bytes').exists()).toBe(true)
     expect(wrapper.find('#cfg-callback-allow-private-ips').exists()).toBe(false)
     expect(wrapper.find('#cfg-policy-minlen').exists()).toBe(false)
     expect(mocks.getPasswordPolicy).not.toHaveBeenCalled()
@@ -169,6 +173,39 @@ describe('ConfigurationView', () => {
 
     expect(mocks.updateConfiguration).toHaveBeenCalledWith({ job_detail_files_page_size: 80 })
     expect(mocks.updateAdminConfiguration).not.toHaveBeenCalled()
+  })
+
+  it('loads and saves startup-analysis bucket thresholds', async () => {
+    mocks.getConfiguration.mockResolvedValue(buildManagerResponse({
+      startup_analysis_small_file_max_bytes: 131_072,
+      startup_analysis_large_file_min_bytes: 16_777_216,
+    }))
+    mocks.updateConfiguration.mockResolvedValue({
+      restart_required: false,
+      restart_required_settings: [],
+      applied_immediately: [
+        'startup_analysis_small_file_max_bytes',
+        'startup_analysis_large_file_min_bytes',
+      ],
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    const smallInput = wrapper.find('#cfg-startup-analysis-small-file-max-bytes')
+    const largeInput = wrapper.find('#cfg-startup-analysis-large-file-min-bytes')
+    expect(smallInput.element.value).toBe('131072')
+    expect(largeInput.element.value).toBe('16777216')
+
+    await smallInput.setValue('262144')
+    await largeInput.setValue('33554432')
+    await wrapper.find('.action-row .btn.btn-primary').trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateConfiguration).toHaveBeenCalledWith({
+      startup_analysis_small_file_max_bytes: 262144,
+      startup_analysis_large_file_min_bytes: 33554432,
+    })
   })
 
   it('loads and saves the drive mount timeout', async () => {

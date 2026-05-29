@@ -1346,6 +1346,8 @@ Managers cannot view or trigger password policy, webhook secret, logging infrast
 </li><li>
 <code>Mount Share Discovery Timeout (seconds)</code> controls how long ECUBE allows SMB share browsing and NFS export discovery to run before treating them as failed. Increase it when the Add Share <code>Browse</code> dialog times out against slow servers or high-latency networks.
 </li><li>
+<code>Startup Analysis Small-File Max Bytes</code> and <code>Startup Analysis Large-File Min Bytes</code> define the file-size bucket boundaries that startup analysis uses when it recommends a workload profile. The values shown on the Configuration page are the current saved thresholds, not always the fresh-install defaults. Files between those two thresholds count as medium.
+</li><li>
 <code>Copy Chunk Size</code>, <code>Progress Flush Threshold</code>, and <code>Default Copy Worker Count</code> let managers tune copy throughput for different workloads. Larger values reduce loop or transaction overhead but use more memory per active worker. <code>Default Copy Worker Count</code> is the fallback ECUBE uses when a job request omits its per-job <code>Thread count</code> value.
 </li><li>
 <code>Force per-file disk sync</code> controls whether ECUBE calls <code>fsync()</code> after every copied file. Leave it disabled for maximum throughput when restart recovery from the last committed <code>DONE</code> file is acceptable.

@@ -5,8 +5,8 @@ from typing import Optional
 
 from app.config import settings
 
-SMALL_FILE_MAX_BYTES = 64 * 1024
-LARGE_FILE_MIN_BYTES = 8 * 1024 * 1024
+DEFAULT_SMALL_FILE_MAX_BYTES = 64 * 1024
+DEFAULT_LARGE_FILE_MIN_BYTES = 8 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -48,6 +48,14 @@ WORKLOAD_PROFILES: dict[str, WorkloadProfile] = {
         copy_file_fsync_enabled=False,
     ),
 }
+
+
+def get_small_file_max_bytes() -> int:
+    return int(getattr(settings, "startup_analysis_small_file_max_bytes", DEFAULT_SMALL_FILE_MAX_BYTES))
+
+
+def get_large_file_min_bytes() -> int:
+    return int(getattr(settings, "startup_analysis_large_file_min_bytes", DEFAULT_LARGE_FILE_MIN_BYTES))
 
 
 def build_size_distribution_summary(*, total_files: int, total_bytes: int, small_files: int, medium_files: int, large_files: int) -> dict[str, int | float]:
