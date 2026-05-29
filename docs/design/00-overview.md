@@ -54,6 +54,7 @@ The design documents are grouped by role so readers can move from high-level int
 
 19. `19-copy-engine-redesign.md` — proposal space for future staged, small-file-optimized, or strategy-based copy-engine designs.
 20. `20-copy-engine-implementation.md` — current production copy-engine algorithm, scheduler loop, per-file worker lifecycle, progress batching, deferred retry behavior, and control-state polling semantics.
+21. `21-copy-workload-profile-decision-logic.md` — current production workload-profile classification thresholds, recommendation order, profile tuning bundles, and startup-analysis auto-apply guardrails.
 
 ## Recommended Reading Order
 
@@ -67,7 +68,8 @@ For most readers, the most efficient path is:
 6. `17` for turnkey appliance tiering and production-hardware profile design.
 7. `18` for operational observability contract and metrics implementation details.
 8. `20` for the current production copy-engine implementation.
-9. `19` for future redesign options and trade-off analysis.
+9. `21` for the current workload-profile recommendation logic and tuning bundles.
+10. `19` for future redesign options and trade-off analysis.
 
 ## Design Principles
 

@@ -11,6 +11,8 @@
 
 This document describes the current implementation in [app/services/copy_engine.py](../../app/services/copy_engine.py). It explains the active control flow, runtime tuning pickup, retry scheduling, progress batching, and recovery semantics used by the production copy path.
 
+For the startup-analysis workload-profile recommendation thresholds and the tuning bundles behind `Small-file heavy`, `Mixed workload`, `Large-file heavy`, and `Greedy throughput`, see [21-copy-workload-profile-decision-logic.md](21-copy-workload-profile-decision-logic.md).
+
 This document is intentionally different from [19-copy-engine-redesign.md](19-copy-engine-redesign.md). The redesign document captures a proposal space for future staged or strategy-based engines. This document captures the current behavior that the code executes today.
 
 ## 20.2 Implementation Summary
