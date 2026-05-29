@@ -770,7 +770,8 @@
       },
       "startup_analysis_large_file_min_bytes": {
         "label": "Startup Analysis Large-File Min Bytes",
-        "help": "Files at or above the current value are counted in the large-file bucket for workload-profile recommendations. Files between the small and large thresholds count as medium. Fresh installs default to 8388608 bytes (8 MiB), but this field shows the current saved setting."
+        "help": "Files at or above the current value are counted in the large-file bucket for workload-profile recommendations. Files between the small and large thresholds count as medium. Fresh installs default to 8388608 bytes (8 MiB), but this field shows the current saved setting.",
+        "invalidRange": "Startup Analysis Small-File Max Bytes must stay below Startup Analysis Large-File Min Bytes."
       },
       "mkfs_exfat_cluster_size": {
         "label": "exFAT Cluster Size",

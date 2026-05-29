@@ -279,6 +279,56 @@ class TestConfigurationEndpoints:
 
         assert response.status_code == 422
 
+    def test_update_configuration_rejects_single_threshold_change_against_persisted_peer(
+        self,
+        manager_client,
+        monkeypatch,
+        tmp_path,
+    ):
+        env_file = tmp_path / "configuration.env"
+        env_file.write_text(
+            "STARTUP_ANALYSIS_SMALL_FILE_MAX_BYTES=131072\n"
+            "STARTUP_ANALYSIS_LARGE_FILE_MIN_BYTES=1048576\n",
+            encoding="utf-8",
+        )
+
+        monkeypatch.setenv("ECUBE_ENV_FILE", str(env_file))
+        monkeypatch.setattr(settings, "startup_analysis_small_file_max_bytes", 65_536)
+        monkeypatch.setattr(settings, "startup_analysis_large_file_min_bytes", 8_388_608)
+
+        response = manager_client.put(
+            "/configuration",
+            json={"startup_analysis_small_file_max_bytes": 2_097_152},
+        )
+
+        assert response.status_code == 422
+
+    def test_update_configuration_allows_single_threshold_change_against_persisted_peer(
+        self,
+        manager_client,
+        monkeypatch,
+        tmp_path,
+    ):
+        env_file = tmp_path / "configuration.env"
+        env_file.write_text(
+            "STARTUP_ANALYSIS_SMALL_FILE_MAX_BYTES=131072\n"
+            "STARTUP_ANALYSIS_LARGE_FILE_MIN_BYTES=1048576\n",
+            encoding="utf-8",
+        )
+
+        monkeypatch.setenv("ECUBE_ENV_FILE", str(env_file))
+        monkeypatch.setattr(settings, "startup_analysis_small_file_max_bytes", 65_536)
+        monkeypatch.setattr(settings, "startup_analysis_large_file_min_bytes", 131_072)
+
+        response = manager_client.put(
+            "/configuration",
+            json={"startup_analysis_small_file_max_bytes": 262_144},
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["changed_settings"] == ["startup_analysis_small_file_max_bytes"]
+
     def test_get_configuration_prefers_persisted_copy_hashing_value(self, manager_client, monkeypatch, tmp_path):
         env_file = tmp_path / "configuration.env"
         env_file.write_text("COPY_HASHING_SEPARATE_THREAD_ENABLED=true\n", encoding="utf-8")

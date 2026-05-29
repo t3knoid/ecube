@@ -407,6 +407,8 @@ function buildPatchPayload() {
     payload.allow_insecure_callback_default_url = true
   }
 
+  validateStartupAnalysisThresholds(payload)
+
   if (!isAdminMode.value) {
     return payload
   }
@@ -419,6 +421,19 @@ function buildPatchPayload() {
   }
 
   return payload
+}
+
+function validateStartupAnalysisThresholds(payload) {
+  const smallValue = Number(
+    payload.startup_analysis_small_file_max_bytes ?? originalForm.value.startup_analysis_small_file_max_bytes,
+  )
+  const largeValue = Number(
+    payload.startup_analysis_large_file_min_bytes ?? originalForm.value.startup_analysis_large_file_min_bytes,
+  )
+
+  if (smallValue >= largeValue) {
+    throw new Error(t('configuration.fields.startup_analysis_large_file_min_bytes.invalidRange'))
+  }
 }
 
 function parseJsonConfigurationField(value, key, kind) {

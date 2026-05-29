@@ -233,13 +233,14 @@ def _display_value(field_name: str, value: Any) -> Any:
 
 
 def _validate_startup_analysis_bucket_thresholds(values: Dict[str, Any]) -> None:
+    snapshot = _load_configuration_snapshot()
     small_value = values.get(
         "startup_analysis_small_file_max_bytes",
-        getattr(settings, "startup_analysis_small_file_max_bytes"),
+        getattr(snapshot, "startup_analysis_small_file_max_bytes"),
     )
     large_value = values.get(
         "startup_analysis_large_file_min_bytes",
-        getattr(settings, "startup_analysis_large_file_min_bytes"),
+        getattr(snapshot, "startup_analysis_large_file_min_bytes"),
     )
 
     if int(small_value) >= int(large_value):

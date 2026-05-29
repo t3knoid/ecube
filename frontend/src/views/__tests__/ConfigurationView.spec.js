@@ -208,6 +208,26 @@ describe('ConfigurationView', () => {
     })
   })
 
+  it('rejects inverted startup-analysis thresholds before save', async () => {
+    mocks.getConfiguration.mockResolvedValue(buildManagerResponse({
+      startup_analysis_small_file_max_bytes: 131_072,
+      startup_analysis_large_file_min_bytes: 16_777_216,
+    }))
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.find('#cfg-startup-analysis-small-file-max-bytes').setValue('16777216')
+    await wrapper.find('#cfg-startup-analysis-large-file-min-bytes').setValue('131072')
+    await wrapper.find('.action-row .btn.btn-primary').trigger('click')
+    await flushPromises()
+
+    expect(mocks.updateConfiguration).not.toHaveBeenCalled()
+    expect(wrapper.find('.error-banner').text()).toBe(
+      'Startup Analysis Small-File Max Bytes must stay below Startup Analysis Large-File Min Bytes.',
+    )
+  })
+
   it('loads and saves the drive mount timeout', async () => {
     mocks.getConfiguration.mockResolvedValue(buildManagerResponse({ drive_mount_timeout_seconds: 300 }))
     mocks.updateConfiguration.mockResolvedValue({
