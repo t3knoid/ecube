@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from app.config import settings
+from app.services import database_service
 
 DEFAULT_SMALL_FILE_MAX_BYTES = 64 * 1024
 DEFAULT_LARGE_FILE_MIN_BYTES = 8 * 1024 * 1024
@@ -51,11 +52,31 @@ WORKLOAD_PROFILES: dict[str, WorkloadProfile] = {
 
 
 def get_small_file_max_bytes() -> int:
-    return int(getattr(settings, "startup_analysis_small_file_max_bytes", DEFAULT_SMALL_FILE_MAX_BYTES))
+    return _get_persisted_bucket_threshold(
+        env_key="STARTUP_ANALYSIS_SMALL_FILE_MAX_BYTES",
+        field_name="startup_analysis_small_file_max_bytes",
+        default=DEFAULT_SMALL_FILE_MAX_BYTES,
+    )
 
 
 def get_large_file_min_bytes() -> int:
-    return int(getattr(settings, "startup_analysis_large_file_min_bytes", DEFAULT_LARGE_FILE_MIN_BYTES))
+    return _get_persisted_bucket_threshold(
+        env_key="STARTUP_ANALYSIS_LARGE_FILE_MIN_BYTES",
+        field_name="startup_analysis_large_file_min_bytes",
+        default=DEFAULT_LARGE_FILE_MIN_BYTES,
+    )
+
+
+def _get_persisted_bucket_threshold(*, env_key: str, field_name: str, default: int) -> int:
+    persisted_values = database_service._read_env_settings([env_key])
+    raw_value = persisted_values.get(env_key)
+    if raw_value is not None:
+        try:
+            return int(raw_value.strip())
+        except (TypeError, ValueError):
+            pass
+
+    return int(getattr(settings, field_name, default))
 
 
 def build_size_distribution_summary(*, total_files: int, total_bytes: int, small_files: int, medium_files: int, large_files: int) -> dict[str, int | float]:

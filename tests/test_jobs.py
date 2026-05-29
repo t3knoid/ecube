@@ -2650,13 +2650,62 @@ def test_apply_recommended_startup_analysis_profile_updates_job_tuning(client, d
     assert job.copy_file_fsync_enabled is False
 
 
-def test_get_job_uses_configured_startup_analysis_bucket_thresholds(client, db, monkeypatch):
-    monkeypatch.setattr(settings, "startup_analysis_small_file_max_bytes", 131_072)
-    monkeypatch.setattr(settings, "startup_analysis_large_file_min_bytes", 1_048_576)
+def test_get_job_uses_configured_startup_analysis_bucket_thresholds(client, db, monkeypatch, tmp_path):
+    env_file = tmp_path / "configuration.env"
+    env_file.write_text(
+        "STARTUP_ANALYSIS_SMALL_FILE_MAX_BYTES=131072\n"
+        "STARTUP_ANALYSIS_LARGE_FILE_MIN_BYTES=1048576\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("ECUBE_ENV_FILE", str(env_file))
 
     job = ExportJob(
         project_id="PROJ-ANALYZE-THRESHOLDS-001",
         evidence_number="EV-ANALYZE-THRESHOLDS-001",
+        source_path="/data/evidence",
+        status=JobStatus.PENDING,
+        startup_analysis_status=StartupAnalysisStatus.READY,
+        startup_analysis_cache_present=True,
+    )
+    db.add(job)
+    db.flush()
+    db.add_all(
+        [
+            StartupAnalysisEntry(job_id=job.id, entry_type="file", relative_path="small/a.bin", size_bytes=131_072),
+            StartupAnalysisEntry(job_id=job.id, entry_type="file", relative_path="small/b.bin", size_bytes=96 * 1024),
+            StartupAnalysisEntry(job_id=job.id, entry_type="file", relative_path="large/c.bin", size_bytes=1_048_576),
+        ]
+    )
+    db.commit()
+
+    response = client.get(f"/jobs/{job.id}")
+    assert response.status_code == 200
+    payload = response.json()
+    distribution = payload["startup_analysis_size_distribution"]
+
+    assert distribution["small_files"] == 2
+    assert distribution["large_files"] == 1
+    assert payload["startup_analysis_recommended_workload_profile"] == "small_files"
+
+
+def test_get_job_prefers_persisted_startup_analysis_thresholds_over_process_env_override(client, db, monkeypatch, tmp_path):
+    env_file = tmp_path / "configuration.env"
+    env_file.write_text(
+        "STARTUP_ANALYSIS_SMALL_FILE_MAX_BYTES=131072\n"
+        "STARTUP_ANALYSIS_LARGE_FILE_MIN_BYTES=1048576\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("ECUBE_ENV_FILE", str(env_file))
+    monkeypatch.setenv("STARTUP_ANALYSIS_SMALL_FILE_MAX_BYTES", "262144")
+    monkeypatch.setenv("STARTUP_ANALYSIS_LARGE_FILE_MIN_BYTES", "2097152")
+    monkeypatch.setattr(settings, "startup_analysis_small_file_max_bytes", 65_536)
+    monkeypatch.setattr(settings, "startup_analysis_large_file_min_bytes", 8_388_608)
+
+    job = ExportJob(
+        project_id="PROJ-ANALYZE-PERSISTED-001",
+        evidence_number="EV-ANALYZE-PERSISTED-001",
         source_path="/data/evidence",
         status=JobStatus.PENDING,
         startup_analysis_status=StartupAnalysisStatus.READY,
