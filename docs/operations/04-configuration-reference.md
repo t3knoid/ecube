@@ -275,7 +275,7 @@ Operational notes:
 | `COPY_FILE_FSYNC_ENABLED`          | `false`   | When `true`, ECUBE calls `fsync()` after every copied file. Leave disabled for maximum throughput when restart recovery from the last committed `DONE` file is sufficient. |
 | `COPY_HASHING_SEPARATE_THREAD_ENABLED` | `false` | When `true`, the copy engine writes file data on the copy worker and computes the checksum on a dedicated hashing thread. Leave disabled unless you are tuning for the separate hashing path. |
 | `COPY_DEFAULT_MAX_RETRIES`         | `3`       | Default maximum per-file retries when not set on a job.            |
-| `COPY_DEFAULT_RETRY_DELAY_SECONDS` | `1.0`     | Default retry delay in seconds when not set on a job.              |
+| `COPY_DEFAULT_RETRY_DELAY_SECONDS` | `1.0`     | Default delay before a failed file becomes eligible for another attempt when not set on a job. The scheduler requeues the file and keeps worker capacity available for healthy pending files during the delay window. |
 
 `admin` and `manager` users can adjust copy-engine settings from the `Configuration` API surface. The `Configuration` page exposes direct controls for chunk size, progress flush threshold, default worker count, and per-file disk sync together with workload profile shortcuts for `Small-file heavy`, `Mixed workload`, `Large-file heavy`, and `Greedy throughput`.
 

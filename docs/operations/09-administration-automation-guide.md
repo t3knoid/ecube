@@ -1028,7 +1028,7 @@ Key behaviors:
 - **Start** launches the background copy process (`PENDING → PREPARING → RUNNING`). Progress is tracked via `copied_bytes` and per-file status. Immediately after start, ECUBE can legitimately return `PREPARING` with `total_bytes=0`, `copied_bytes=0`, and `file_count=0` while startup analysis is still scanning the source and calculating totals.
 - **Verify** (optional) compares checksums of copied files against source (`RUNNING/completed → VERIFYING → COMPLETED` or `FAILED`).
 - **Manifest** generates a JSON document on the USB drive listing all copied files with their checksums, sizes, and metadata.
-- Failed files are automatically retried up to `max_file_retries` times with a configurable delay.
+- Failed files are automatically retried up to `max_file_retries` times. During the configured retry delay, ECUBE requeues the failed file and leaves worker capacity available for healthy pending files.
 
 ### Create Export Job
 
@@ -1056,7 +1056,7 @@ Optional parameters:
 | `drive_id` | `null` | Pre-assign a specific USB drive (omit for auto-assignment) |
 | `thread_count` | `4` | Parallel copy threads (1–8) |
 | `max_file_retries` | `3` | Maximum retry attempts per failed file |
-| `retry_delay_seconds` | `1` | Delay between retries in seconds |
+| `retry_delay_seconds` | `1` | Delay before a failed file becomes eligible for another retry attempt |
 | `target_mount_path` | `null` | Alternative target mount path instead of the assigned drive mount path |
 | `callback_url` | `null` | HTTPS URL that receives a job-status callback when the job reaches `COMPLETED` or `FAILED` |
 | `created_by` | `null` | Optional username attribution override for audit/job metadata |

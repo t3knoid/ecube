@@ -83,6 +83,33 @@ def _session_factory(db):
     return lambda: _NonClosing()
 
 
+def _drain_process_file_attempts(
+    export_file_id: int,
+    src_file: Path,
+    target: Path | None,
+    *,
+    max_retries: int,
+    retry_delay: float,
+    progress_writer=None,
+):
+    outcomes = []
+    attempt = 0
+    while True:
+        outcome = copy_engine._process_file(
+            export_file_id,
+            src_file,
+            target,
+            max_retries=max_retries,
+            retry_delay=retry_delay,
+            progress_writer=progress_writer,
+            attempt=attempt,
+        )
+        outcomes.append(outcome)
+        if outcome.deferred_retry is None:
+            return outcomes
+        attempt = outcome.deferred_retry.attempt
+
+
 # ---------------------------------------------------------------------------
 # copy_file / retry unit tests
 # ---------------------------------------------------------------------------
@@ -281,7 +308,7 @@ def test_process_file_succeeds_after_transient_failure(db, tmp_path):
 
     with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
         with patch("app.services.copy_engine.copy_file", side_effect=_flaky_copy):
-            copy_engine._process_file(ef.id, test_file, target_dir, max_retries=2, retry_delay=0)
+            _drain_process_file_attempts(ef.id, test_file, target_dir, max_retries=2, retry_delay=0)
 
     db.expire_all()
     db.refresh(ef)
@@ -317,7 +344,7 @@ def test_process_file_exhausts_retries_marks_error(db, tmp_path):
             "app.services.copy_engine.copy_file",
             return_value=(False, None, "persistent I/O error"),
         ):
-            copy_engine._process_file(ef.id, test_file, tmp_path / "target", max_retries=2, retry_delay=0)
+            _drain_process_file_attempts(ef.id, test_file, tmp_path / "target", max_retries=2, retry_delay=0)
 
     db.expire_all()
     db.refresh(ef)
@@ -803,7 +830,7 @@ def test_process_file_retry_audit_entries_created(db, tmp_path):
 
     with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
         with patch("app.services.copy_engine.copy_file", side_effect=_fail_twice):
-            copy_engine._process_file(ef.id, test_file, target_dir, max_retries=2, retry_delay=0)
+            _drain_process_file_attempts(ef.id, test_file, target_dir, max_retries=2, retry_delay=0)
 
     retry_entries = (
         db.query(AuditLog).filter(AuditLog.action == "FILE_COPY_RETRY").all()
@@ -816,6 +843,107 @@ def test_process_file_retry_audit_entries_created(db, tmp_path):
 # ---------------------------------------------------------------------------
 # run_copy_job integration tests
 # ---------------------------------------------------------------------------
+
+
+def test_run_copy_job_defers_retry_backoff_so_healthy_files_refill_capacity(db, tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    flaky_file = source_dir / "a-flaky.txt"
+    healthy_file = source_dir / "b-healthy.txt"
+    flaky_file.write_bytes(b"flaky")
+    healthy_file.write_bytes(b"healthy")
+
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    job = _make_job(db, str(source_dir), max_file_retries=1, retry_delay_seconds=5, target_mount_path=str(target_dir))
+    job.thread_count = 1
+    job.startup_analysis_total_bytes = len(b"flaky") + len(b"healthy")
+    job.startup_analysis_file_count = 2
+    job.startup_analysis_status = StartupAnalysisStatus.READY
+    job.startup_analysis_cache_present = True
+    db.commit()
+    db.refresh(job)
+
+    db.add_all(
+        [
+            ExportFile(job_id=job.id, relative_path="a-flaky.txt", status=FileStatus.PENDING, size_bytes=len(b"flaky")),
+            ExportFile(job_id=job.id, relative_path="b-healthy.txt", status=FileStatus.PENDING, size_bytes=len(b"healthy")),
+        ]
+    )
+    db.commit()
+    _assign_drive(db, job)
+
+    original_copy_file = copy_engine.copy_file
+    copy_order: list[str] = []
+    attempt_counts: dict[str, int] = {}
+
+    class _QueuedFuture:
+        def __init__(self, fn, *args):
+            self._fn = fn
+            self._args = args
+            self._ran = False
+            self._cancelled = False
+
+        def result(self):
+            if not self._cancelled and not self._ran:
+                self._ran = True
+                return self._fn(*self._args)
+            return False
+
+        def done(self):
+            return self._ran or self._cancelled
+
+        def cancel(self):
+            self._cancelled = True
+            return True
+
+    class _Executor:
+        def __init__(self, *args, **kwargs):
+            self.futures = []
+
+        def submit(self, fn, *args, **kwargs):
+            future = _QueuedFuture(fn, *args)
+            self.futures.append(future)
+            return future
+
+        def shutdown(self, wait=True, cancel_futures=True):
+            return None
+
+    def _first_unfinished_future(futures):
+        for future in list(futures):
+            if not future.done():
+                yield future
+                return
+
+    def _copy_with_single_transient_retry(src, dst, *args, **kwargs):
+        file_name = Path(src).name
+        copy_order.append(file_name)
+        attempt_counts[file_name] = attempt_counts.get(file_name, 0) + 1
+        if file_name == "a-flaky.txt" and attempt_counts[file_name] == 1:
+            return False, None, "transient I/O error"
+        return original_copy_file(src, dst, *args, **kwargs)
+
+    with patch("app.services.copy_engine.SessionLocal", _session_factory(db)):
+        with patch("app.services.copy_engine.ThreadPoolExecutor", _Executor):
+            with patch("app.services.copy_engine.as_completed", side_effect=_first_unfinished_future):
+                with patch("app.services.copy_engine.copy_file", side_effect=_copy_with_single_transient_retry):
+                    with patch("app.services.copy_engine.time.sleep", return_value=None):
+                        with patch(
+                            "app.services.copy_engine.prepare_job_startup_analysis",
+                            return_value={
+                                "file_count": 2,
+                                "total_bytes": len(b"flaky") + len(b"healthy"),
+                                "reused_cached_analysis": True,
+                            },
+                        ):
+                            copy_engine.run_copy_job(job.id)
+
+    db.expire_all()
+    db.refresh(job)
+
+    assert job.status == JobStatus.COMPLETED
+    assert copy_order[:3] == ["a-flaky.txt", "b-healthy.txt", "a-flaky.txt"]
 
 
 def test_run_copy_job_fresh_run(db, tmp_path):
@@ -4068,29 +4196,6 @@ def test_run_copy_job_reads_persisted_runtime_tuning_updates_between_batches(db,
     db.refresh(job)
 
     batch_index = 0
-
-    def _as_completed_with_persisted_update(futures):
-        nonlocal batch_index
-        batch_index += 1
-        if batch_index == 1:
-            update_db = Session(bind=db.get_bind())
-            try:
-                update_db.execute(
-                    sql_update(ExportJob)
-                    .where(ExportJob.id == job.id)
-                    .values(
-                        thread_count=2,
-                        copy_chunk_size_bytes=2048,
-                        copy_progress_flush_bytes=4096,
-                        copy_file_fsync_enabled=True,
-                    )
-                )
-                update_db.commit()
-            finally:
-                update_db.close()
-        for future in list(futures):
-            yield future
-
     observed_copy_settings: list[tuple[int, bool]] = []
     original_copy_file = copy_engine.copy_file
     original_list_pending = copy_engine.FileRepository.list_pending_by_job_after_id
@@ -4119,10 +4224,68 @@ def test_run_copy_job_reads_persisted_runtime_tuning_updates_between_batches(db,
             fsync_enabled=fsync_enabled,
         )
 
-    with patch("app.services.copy_engine.as_completed", side_effect=_as_completed_with_persisted_update):
-        with patch("app.services.copy_engine.copy_file", side_effect=_recording_copy_file):
-            with patch.object(copy_engine.FileRepository, "list_pending_by_job_after_id", _one_file_batch):
-                copy_engine.run_copy_job(job.id)
+    class _QueuedFuture:
+        def __init__(self, fn, *args):
+            self._fn = fn
+            self._args = args
+            self._ran = False
+            self._cancelled = False
+
+        def result(self):
+            nonlocal batch_index
+            if not self._cancelled and not self._ran:
+                self._ran = True
+                result = self._fn(*self._args)
+                batch_index += 1
+                if batch_index == 1:
+                    update_db = Session(bind=db.get_bind())
+                    try:
+                        update_db.execute(
+                            sql_update(ExportJob)
+                            .where(ExportJob.id == job.id)
+                            .values(
+                                thread_count=2,
+                                copy_chunk_size_bytes=2048,
+                                copy_progress_flush_bytes=4096,
+                                copy_file_fsync_enabled=True,
+                            )
+                        )
+                        update_db.commit()
+                    finally:
+                        update_db.close()
+                return result
+            return None
+
+        def done(self):
+            return self._ran or self._cancelled
+
+        def cancel(self):
+            self._cancelled = True
+            return True
+
+    class _Executor:
+        def __init__(self, *args, **kwargs):
+            self.futures = []
+
+        def submit(self, fn, *args, **kwargs):
+            future = _QueuedFuture(fn, *args)
+            self.futures.append(future)
+            return future
+
+        def shutdown(self, wait=True, cancel_futures=True):
+            return None
+
+    def _first_unfinished_future(futures):
+        for future in list(futures):
+            if not future.done():
+                yield future
+                return
+
+    with patch("app.services.copy_engine.ThreadPoolExecutor", _Executor):
+        with patch("app.services.copy_engine.as_completed", side_effect=_first_unfinished_future):
+            with patch("app.services.copy_engine.copy_file", side_effect=_recording_copy_file):
+                with patch.object(copy_engine.FileRepository, "list_pending_by_job_after_id", _one_file_batch):
+                    copy_engine.run_copy_job(job.id)
 
     db.expire_all()
     db.refresh(job)

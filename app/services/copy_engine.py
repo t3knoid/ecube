@@ -1,4 +1,5 @@
 import hashlib
+import heapq
 import logging
 import math
 import os
@@ -7,6 +8,7 @@ import threading
 import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterator, List, Optional, Protocol, Tuple, cast
@@ -62,6 +64,20 @@ THROUGHPUT_BENCHMARK_SAMPLE_BUCKETS: tuple[tuple[int, Optional[int]], ...] = (
     (1024 * 1024, 10 * 1024 * 1024),
     (10 * 1024 * 1024, None),
 )
+
+
+@dataclass(frozen=True)
+class _DeferredRetry:
+    file_id: int
+    relative_path: str
+    attempt: int
+    eligible_at_monotonic: float
+
+
+@dataclass(frozen=True)
+class _CopyAttemptOutcome:
+    target_full_failure: bool = False
+    deferred_retry: Optional[_DeferredRetry] = None
 
 
 # ---------------------------------------------------------------------------
@@ -2315,12 +2331,14 @@ def _process_file(
     copy_progress_flush_threshold_bytes: Optional[int] = None,
     copy_file_fsync_enabled: Optional[bool] = None,
     progress_writer: Optional[_CopyProgressWriter] = None,
-) -> bool:
+    attempt: int = 0,
+) -> _CopyAttemptOutcome:
     """Worker executed inside the thread pool.
 
     Each worker opens its own DB session to avoid cross-thread SQLAlchemy issues.
-    Retries the copy up to *max_retries* additional times on failure, using
-    exponential backoff seeded by *retry_delay* seconds.
+    A single invocation performs at most one copy attempt. Retry delays are
+    scheduled by the rolling refill loop so worker capacity stays available for
+    healthy files while a failed file waits for its next eligible attempt.
     
     Files that timeout are marked TIMEOUT (not ERROR) and are skipped; the job
     continues copying remaining files. Timeout events are audited with elapsed time
@@ -2359,13 +2377,13 @@ def _process_file(
 
         ef = file_repo.get(export_file_id)
         if ef is None:
-            return False
+            return _CopyAttemptOutcome()
         file_job_id = int(ef.job_id)
 
         job_repo = JobRepository(db)
         job = job_repo.get(file_job_id)
         if job is None:
-            return False
+            return _CopyAttemptOutcome()
         assignment_repo = DriveAssignmentRepository(db)
         active_assignment = assignment_repo.get_active_for_job(file_job_id)
         active_assignment_id = int(active_assignment.id) if active_assignment is not None else None
@@ -2375,7 +2393,7 @@ def _process_file(
                 file_repo.save(ef)
             except Exception:
                 logger.exception("DB commit failed restoring PENDING status for file %s", export_file_id)
-            return False
+            return _CopyAttemptOutcome()
 
         # Do not hold the worker's initial read transaction open across the
         # potentially long-running copy/checksum operation. Reopen a fresh
@@ -2389,7 +2407,7 @@ def _process_file(
         audit_repo = AuditRepository(db)
         ef = file_repo.get(export_file_id)
         if ef is None:
-            return False
+            return _CopyAttemptOutcome()
         file_job_id = int(ef.job_id)
         file_id = int(ef.id)
         relative_path = str(ef.relative_path)
@@ -2398,12 +2416,19 @@ def _process_file(
 
         ef.status = FileStatus.COPYING
         ef.drive_assignment_id = active_assignment_id
-        if not _commit_with_staged_audit(
-            commit_error_message="DB commit failed setting file %s to COPYING",
-            action="FILE_COPY_START",
-            details={"file_id": file_id, "relative_path": relative_path},
-        ):
-            return False
+        if attempt == 0:
+            if not _commit_with_staged_audit(
+                commit_error_message="DB commit failed setting file %s to COPYING",
+                action="FILE_COPY_START",
+                details={"file_id": file_id, "relative_path": relative_path},
+            ):
+                return _CopyAttemptOutcome()
+        else:
+            try:
+                file_repo.save(ef)
+            except Exception:
+                logger.exception("DB commit failed setting file %s to COPYING on retry", export_file_id)
+                return _CopyAttemptOutcome()
 
         last_err: Optional[str] = None
         success = False
@@ -2419,153 +2444,123 @@ def _process_file(
         )
         timed_out = False
         timeout_elapsed_seconds = 0.0
+        attempt_bytes_reported = 0
+        pending_progress_bytes = 0
 
-        for attempt in range(max_retries + 1):
-            attempt_bytes_reported = 0
+        def _flush_progress(*, force: bool = False) -> None:
+            nonlocal attempt_bytes_reported, bytes_reported, pending_progress_bytes
+            if pending_progress_bytes <= 0:
+                return
+            if not force and pending_progress_bytes < progress_flush_threshold:
+                return
+            flushed_bytes = pending_progress_bytes
+            try:
+                if progress_writer is not None:
+                    progress_writer.record_delta(active_assignment_id, flushed_bytes)
+                else:
+                    file_repo.increment_copy_progress(file_job_id, active_assignment_id, flushed_bytes)
+                attempt_bytes_reported += flushed_bytes
+                bytes_reported += flushed_bytes
+                pending_progress_bytes = 0
+            except Exception:
+                logger.exception("DB commit failed incrementing copied_bytes for file %s", export_file_id)
+
+        def _report_progress(delta: int) -> None:
+            nonlocal pending_progress_bytes
+            if delta <= 0:
+                return
+            pending_progress_bytes += delta
+            _flush_progress()
+
+        def _stage_remaining_progress() -> None:
+            nonlocal pending_progress_bytes
+            if pending_progress_bytes <= 0:
+                return
+            if progress_writer is not None:
+                progress_writer.record_delta(active_assignment_id, pending_progress_bytes)
+            else:
+                self_execute = db.execute
+                self_execute(
+                    update(ExportJob)
+                    .where(ExportJob.id == file_job_id)
+                    .values(copied_bytes=ExportJob.copied_bytes + pending_progress_bytes)
+                )
+                if active_assignment_id is not None:
+                    self_execute(
+                        update(DriveAssignment)
+                        .where(DriveAssignment.id == active_assignment_id)
+                        .values(copied_bytes=DriveAssignment.copied_bytes + pending_progress_bytes)
+                    )
             pending_progress_bytes = 0
 
-            def _flush_progress(*, force: bool = False) -> None:
-                nonlocal attempt_bytes_reported, bytes_reported, pending_progress_bytes
-                if pending_progress_bytes <= 0:
-                    return
-                if not force and pending_progress_bytes < progress_flush_threshold:
-                    return
-                flushed_bytes = pending_progress_bytes
-                try:
-                    if progress_writer is not None:
-                        progress_writer.record_delta(active_assignment_id, flushed_bytes)
-                    else:
-                        file_repo.increment_copy_progress(file_job_id, active_assignment_id, flushed_bytes)
-                    attempt_bytes_reported += flushed_bytes
-                    bytes_reported += flushed_bytes
-                    pending_progress_bytes = 0
-                except Exception:
-                    logger.exception("DB commit failed incrementing copied_bytes for file %s", export_file_id)
+        if target is not None:
+            dst = target / relative_path
+            file_timeout_seconds = int(getattr(settings, "copy_job_timeout", 0) or 0)
+            timeout_start = time.monotonic()
+            try:
+                success, checksum, err = copy_file(
+                    src_file,
+                    dst,
+                    progress_callback=_report_progress,
+                    timeout_seconds=file_timeout_seconds,
+                    chunk_size=copy_chunk_size_bytes,
+                    fsync_enabled=copy_file_fsync_enabled,
+                )
+            except TimeoutError as timeout_exc:
+                timeout_elapsed_seconds = time.monotonic() - timeout_start
+                timed_out = True
+                success = False
+                err = str(timeout_exc)
+        else:
+            file_timeout_seconds = int(getattr(settings, "copy_job_timeout", 0) or 0)
+            timeout_start = time.monotonic()
+            try:
+                success, checksum, err = _checksum_only(
+                    src_file,
+                    progress_callback=_report_progress,
+                    timeout_seconds=file_timeout_seconds,
+                    chunk_size=copy_chunk_size_bytes,
+                )
+            except TimeoutError as timeout_exc:
+                timeout_elapsed_seconds = time.monotonic() - timeout_start
+                timed_out = True
+                success = False
+                err = str(timeout_exc)
 
-            def _report_progress(delta: int) -> None:
-                nonlocal pending_progress_bytes
-                if delta <= 0:
-                    return
-                pending_progress_bytes += delta
-                _flush_progress()
+        if not success:
+            _flush_progress(force=True)
 
-            def _stage_remaining_progress() -> None:
-                nonlocal pending_progress_bytes
-                if pending_progress_bytes <= 0:
-                    return
-                if progress_writer is not None:
-                    progress_writer.record_delta(active_assignment_id, pending_progress_bytes)
-                else:
-                    self_execute = db.execute
-                    self_execute(
-                        update(ExportJob)
-                        .where(ExportJob.id == file_job_id)
-                        .values(copied_bytes=ExportJob.copied_bytes + pending_progress_bytes)
-                    )
-                    if active_assignment_id is not None:
-                        self_execute(
-                            update(DriveAssignment)
-                            .where(DriveAssignment.id == active_assignment_id)
-                            .values(copied_bytes=DriveAssignment.copied_bytes + pending_progress_bytes)
-                        )
-                pending_progress_bytes = 0
-
-            if attempt > 0:
-                # Exponential backoff: retry_delay * 2^(attempt-1)
-                delay = retry_delay * (2 ** (attempt - 1))
-                ef.status = FileStatus.RETRYING
-                ef.retry_attempts = attempt
-                if not _commit_with_staged_audit(
-                    commit_error_message="DB commit failed setting file %s to RETRYING",
-                    action="FILE_COPY_RETRY",
+        if not success and timed_out:
+            # Timeout: skip this file, do not retry, let job continue with other files.
+            # Audit the timeout with elapsed time and file path.
+            last_err = err
+            try:
+                AuditRepository(db).add(
+                    action="FILE_COPY_TIMEOUT",
+                    job_id=file_job_id,
                     details={
-                        "file_id": ef.id,
+                        "file_id": file_id,
                         "relative_path": relative_path,
-                        "attempt": attempt,
-                        "delay_seconds": delay,
+                        "timeout_seconds": file_timeout_seconds,
+                        "elapsed_seconds": round(timeout_elapsed_seconds, 2),
+                        "error_code": "copy_timeout",
+                        "error_detail": f"timed_out_after_{file_timeout_seconds}s",
                     },
-                ):
-                    return False
-                metrics_service.record_job_copy_error("retry")
-                time.sleep(delay)
-                ef.status = FileStatus.COPYING
-                ef.drive_assignment_id = active_assignment_id
-                try:
-                    file_repo.save(ef)
-                except Exception:
-                    logger.exception("DB commit failed setting file %s to COPYING on retry", export_file_id)
+                )
+            except Exception:
+                logger.exception("Failed to write audit log for FILE_COPY_TIMEOUT")
 
-            if target is not None:
-                dst = target / relative_path
-                file_timeout_seconds = int(getattr(settings, "copy_job_timeout", 0) or 0)
-                timeout_start = time.monotonic()
-                try:
-                    success, checksum, err = copy_file(
-                        src_file,
-                        dst,
-                        progress_callback=_report_progress,
-                        timeout_seconds=file_timeout_seconds,
-                        chunk_size=copy_chunk_size_bytes,
-                        fsync_enabled=copy_file_fsync_enabled,
-                    )
-                except TimeoutError as timeout_exc:
-                    timeout_elapsed_seconds = time.monotonic() - timeout_start
-                    timed_out = True
-                    success = False
-                    err = str(timeout_exc)
-            else:
-                file_timeout_seconds = int(getattr(settings, "copy_job_timeout", 0) or 0)
-                timeout_start = time.monotonic()
-                try:
-                    success, checksum, err = _checksum_only(
-                        src_file,
-                        progress_callback=_report_progress,
-                        timeout_seconds=file_timeout_seconds,
-                        chunk_size=copy_chunk_size_bytes,
-                    )
-                except TimeoutError as timeout_exc:
-                    timeout_elapsed_seconds = time.monotonic() - timeout_start
-                    timed_out = True
-                    success = False
-                    err = str(timeout_exc)
+        if not success and attempt_bytes_reported:
+            try:
+                if progress_writer is not None:
+                    progress_writer.record_delta(active_assignment_id, -attempt_bytes_reported)
+                else:
+                    file_repo.decrement_copy_progress(file_job_id, active_assignment_id, attempt_bytes_reported)
+                bytes_reported = max(0, bytes_reported - attempt_bytes_reported)
+            except Exception:
+                logger.exception("DB commit failed rolling back copied_bytes for file %s", export_file_id)
 
-            if not success:
-                _flush_progress(force=True)
-
-            if success:
-                break
-
-            if timed_out:
-                # Timeout: skip this file, do not retry, let job continue with other files.
-                # Audit the timeout with elapsed time and file path.
-                last_err = err
-                try:
-                    AuditRepository(db).add(
-                        action="FILE_COPY_TIMEOUT",
-                        job_id=file_job_id,
-                        details={
-                            "file_id": file_id,
-                            "relative_path": relative_path,
-                            "timeout_seconds": file_timeout_seconds,
-                            "elapsed_seconds": round(timeout_elapsed_seconds, 2),
-                            "error_code": "copy_timeout",
-                            "error_detail": f"timed_out_after_{file_timeout_seconds}s",
-                        },
-                    )
-                except Exception:
-                    logger.exception("Failed to write audit log for FILE_COPY_TIMEOUT")
-                break  # Exit retry loop; file will be marked TIMEOUT below
-
-            if attempt_bytes_reported:
-                try:
-                    if progress_writer is not None:
-                        progress_writer.record_delta(active_assignment_id, -attempt_bytes_reported)
-                    else:
-                        file_repo.decrement_copy_progress(file_job_id, active_assignment_id, attempt_bytes_reported)
-                    bytes_reported = max(0, bytes_reported - attempt_bytes_reported)
-                except Exception:
-                    logger.exception("DB commit failed rolling back copied_bytes for file %s", export_file_id)
-
+        if not success and not timed_out:
             last_err = err
             error_code, safe_error_message = _classify_file_failure(last_err)
             logger.info(
@@ -2605,6 +2600,31 @@ def _process_file(
             except Exception:
                 db.rollback()
                 logger.exception("Failed to write audit log for FILE_COPY_FAILURE")
+
+            if attempt < max_retries:
+                delay = retry_delay * (2 ** attempt)
+                ef.status = FileStatus.RETRYING
+                ef.retry_attempts = attempt + 1
+                if not _commit_with_staged_audit(
+                    commit_error_message="DB commit failed setting file %s to RETRYING",
+                    action="FILE_COPY_RETRY",
+                    details={
+                        "file_id": ef.id,
+                        "relative_path": relative_path,
+                        "attempt": attempt + 1,
+                        "delay_seconds": delay,
+                    },
+                ):
+                    return _CopyAttemptOutcome()
+                metrics_service.record_job_copy_error("retry")
+                return _CopyAttemptOutcome(
+                    deferred_retry=_DeferredRetry(
+                        file_id=file_id,
+                        relative_path=relative_path,
+                        attempt=attempt + 1,
+                        eligible_at_monotonic=time.monotonic() + delay,
+                    )
+                )
 
         ef.checksum = checksum
         target_full_failure = False
@@ -2667,7 +2687,7 @@ def _process_file(
                 metrics_service.record_job_copy_error("failed")
             except Exception:
                 logger.exception("DB commit failed saving ERROR status for file %s", export_file_id)
-        return target_full_failure
+        return _CopyAttemptOutcome(target_full_failure=target_full_failure)
     finally:
         unregister_active_copy_worker(worker_snapshot)
         db.close()
@@ -2928,6 +2948,7 @@ def run_copy_job(job_id: int) -> None:
                         pending_cursor: int | None = None
                         pending_buffer: list[ExportFile] = []
                         pending_exhausted = False
+                        deferred_retries: list[tuple[float, int, str, int]] = []
                         futures: dict[Any, int] = {}
 
                         def _load_pending_buffer(limit: int) -> None:
@@ -2947,6 +2968,9 @@ def run_copy_job(job_id: int) -> None:
                             pending_buffer.extend(pending_files)
 
                         def _submit_pending_file(ef: ExportFile) -> None:
+                            _submit_file_attempt(ef.id, str(ef.relative_path), attempt=0)
+
+                        def _submit_file_attempt(file_id: int, relative_path: str, *, attempt: int) -> None:
                             nonlocal refill_pending_since, max_refill_latency_seconds
                             if refill_pending_since is not None:
                                 refill_latency_seconds = max(0.0, time.monotonic() - refill_pending_since)
@@ -2955,8 +2979,8 @@ def run_copy_job(job_id: int) -> None:
                                 refill_pending_since = None
                             futures[executor.submit(
                                 _process_file,
-                                ef.id,
-                                _source_path_for_relative_path(source, ef.relative_path),
+                                file_id,
+                                _source_path_for_relative_path(source, relative_path),
                                 target,
                                 max_retries,
                                 retry_delay,
@@ -2964,7 +2988,16 @@ def run_copy_job(job_id: int) -> None:
                                 copy_progress_flush_threshold_bytes,
                                 copy_file_fsync_enabled,
                                 progress_writer,
-                            )] = ef.id
+                                attempt,
+                            )] = file_id
+
+                        def _submit_ready_deferred_retries() -> None:
+                            while deferred_retries and len(futures) < max_workers:
+                                eligible_at_monotonic, file_id, relative_path, attempt = deferred_retries[0]
+                                if eligible_at_monotonic > time.monotonic():
+                                    break
+                                heapq.heappop(deferred_retries)
+                                _submit_file_attempt(file_id, relative_path, attempt=attempt)
 
                         if _poll_runtime_control_state("startup"):
                             if stale_run_detected:
@@ -3000,6 +3033,8 @@ def run_copy_job(job_id: int) -> None:
                             batch_limit = max(1, max_workers * COPY_PENDING_BATCH_MULTIPLIER)
 
                             if len(futures) < max_workers:
+                                _submit_ready_deferred_retries()
+
                                 while not pending_buffer and not pending_exhausted:
                                     _load_pending_buffer(batch_limit)
                                     if pending_buffer or pending_exhausted:
@@ -3009,6 +3044,12 @@ def run_copy_job(job_id: int) -> None:
                                     _submit_pending_file(pending_buffer.pop(0))
 
                             if not futures:
+                                if deferred_retries:
+                                    next_eligible_at = deferred_retries[0][0]
+                                    delay_seconds = max(0.0, min(COPY_CONTROL_POLL_MAX_INTERVAL_SECONDS, next_eligible_at - time.monotonic()))
+                                    if delay_seconds > 0:
+                                        time.sleep(delay_seconds)
+                                    continue
                                 if pending_exhausted:
                                     break
                                 continue
@@ -3023,7 +3064,19 @@ def run_copy_job(job_id: int) -> None:
                                 done_future = done_futures.pop(0)
                                 completions_since_control_poll += 1
                                 try:
-                                    target_full_detected = bool(done_future.result()) or target_full_detected
+                                    attempt_outcome = done_future.result()
+                                    target_full_detected = bool(attempt_outcome.target_full_failure) or target_full_detected
+                                    if attempt_outcome.deferred_retry is not None:
+                                        deferred_retry = attempt_outcome.deferred_retry
+                                        heapq.heappush(
+                                            deferred_retries,
+                                            (
+                                                deferred_retry.eligible_at_monotonic,
+                                                deferred_retry.file_id,
+                                                deferred_retry.relative_path,
+                                                deferred_retry.attempt,
+                                            ),
+                                        )
                                 except Exception:
                                     future_failed = True
                                 futures.pop(done_future, None)
