@@ -1085,9 +1085,8 @@ Use this action when mounted-share state appears stale or inconsistent and you n
 #### Run Reconciliation from the System Page
 
 1. Open the `System` page.
-2. In the tab bar, locate `Reconcile managed mounts` next to `Mounts`:
-   - `admin`: between `Mounts` and `Logs`
-   - `manager`: between `Mounts` and `Logs`
+2. Open the `Mounts` tab.
+3. Locate `Reconcile managed mounts` above the mounts table.
 3. Click `Reconcile managed mounts`.
 4. While the request is running, the button label changes to `Loading`.
 5. On success, ECUBE navigates to the `Reconciliation Results` page.
