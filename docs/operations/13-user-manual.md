@@ -619,14 +619,9 @@ The `Job ID` value on the Jobs page acts as the direct navigation entry point in
 
 ### 9.2 Creating a Job
 
-Job creation uses a grouped dialog. The same grouped dialog shell is also reused when you edit an eligible job from Job Detail, so the overall section layout and required-field treatment stay consistent.
+Job creation uses a tabbed dialog. The same dialog shell is also reused when you edit an eligible job from Job Detail, so the required-field treatment and grouped section layout stay consistent.
 
-The dialog is organized into four sections:
-
-1. `Job details` — project, evidence number, optional notes, webhook callback URL, and thread count
-2. `Source` — the mounted project share, a trusted source path field, and a folder browser for the selected mount
-3. `Destination` — the eligible mounted USB device for the selected project
-4. `Execution` — the optional `Run job immediately` checkbox
+The `Details` tab starts with the project-selection guidance, then shows the project, evidence number, optional notes, and webhook callback URL fields before the grouped `Source` and `Destination` sections. The `Workflow` tab contains `Thread count`, `Copy Chunk Size`, `Progress Flush Threshold`, `Force per-file disk sync`, overflow-drive reservation, the create-only `Auto-apply startup analysis profile` checkbox, and the optional `Run job immediately` control.
 
 Only the `Project` field is active when the dialog opens. After you select a project, ECUBE unlocks the remaining fields and filters the available shares and destination drives to project-matching, currently eligible resources. Required fields use the shared required-marker icon in their labels, and the footer repeats that marker with a `Required field` legend.
 
@@ -1514,11 +1509,11 @@ Notes:
 1. Confirm the correct drive is present and in the expected state.
 2. Confirm the source mount is available.
 3. Open `Jobs`.
-4. Click `Create Job` to open the grouped dialog.
-5. Select the project first.
+4. Click `Create Job` to open the tabbed dialog.
+5. Stay on `Details`, select the project first, and complete the project, source, and destination fields there.
 6. Choose the filtered source mount. Enter the source path manually, or click `Browse folders`, navigate inside the mounted share while the `Source path` field updates live, and use `..` when you need to move to the parent folder.
-7. Choose the primary destination drive, then use the `Overflow drives` panel to reserve any additional mounted destination drives in the order ECUBE should use them if the job overflows.
-8. Create the job, or enable `Run job immediately` if you want it to start as soon as creation succeeds.
+7. Choose the primary destination drive, then switch to `Workflow` to set `Thread count`, reserve any overflow drives, review `Auto-apply startup analysis profile`, and enable `Run job immediately` if needed.
+8. Create the job when the dialog reflects the workflow you want.
 9. Open the job detail page.
 10. Monitor progress until completion.
 11. Run verification and generate a manifest if required by your workflow.

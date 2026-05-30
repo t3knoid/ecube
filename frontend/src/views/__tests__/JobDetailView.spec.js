@@ -3090,6 +3090,19 @@ describe('JobDetailView start action', () => {
     expect(wrapper.find('#job-evidence').element.value).toBe('EV-006')
     expect(wrapper.find('#job-notes').exists()).toBe(false)
     expect(wrapper.find('#job-callback-url').element.value).toBe('https://example.com/current-webhook')
+
+    await workflowTab.trigger('click')
+    await flushPromises()
+
+    expect(detailsTab.attributes('aria-selected')).toBe('false')
+    expect(workflowTab.attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('#job-thread-count').isVisible()).toBe(true)
+    expect(wrapper.text().split(i18n.global.t('jobs.workflowTabEditHelp')).length - 1).toBe(1)
+    expect(wrapper.text()).not.toContain(i18n.global.t('jobs.workflowTabLockedHelp'))
+
+    await detailsTab.trigger('click')
+    await flushPromises()
+
     const driveOptions = wrapper.find('#job-drive').findAll('option').map((node) => node.text())
     expect(wrapper.text()).toContain(i18n.global.t('jobs.selectDrive'))
     expect(driveOptions.join(' ')).toContain('2-1')

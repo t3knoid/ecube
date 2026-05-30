@@ -676,17 +676,8 @@ Progress label or percentage
 </li></ul>
 <p>The <code>Job ID</code> value on the Jobs page acts as the direct navigation entry point into Job Detail. On desktop, authorized rows show one stateful lifecycle action. That action shows <code>Start</code> when the job can begin or resume, shows <code>Pause</code> when the job has entered active work, stays visible as a disabled <code>Pause</code> while the job is still entering copy work during <code>PREPARING</code>, and also stays disabled while the job is draining in-flight work during <code>PAUSING</code>. Other ineligible states keep that action hidden or disabled.</p>
 <h2 id="6-2-creating-a-job">6.2 Creating a Job</h2>
-<p>Job creation uses a grouped dialog. The same grouped dialog shell is also reused when you edit an eligible job from Job Detail, so the overall section layout and required-field treatment stay consistent.</p>
-<p>The dialog is organized into four sections:</p>
-<ol><li>
-<code>Job details</code> — project, evidence number, optional notes, webhook callback URL, and thread count
-</li><li>
-<code>Source</code> — the mounted project share, a trusted source path field, and a folder browser for the selected mount
-</li><li>
-<code>Destination</code> — the eligible mounted USB device for the selected project
-</li><li>
-<code>Execution</code> — the optional <code>Run job immediately</code> checkbox
-</li></ol>
+<p>Job creation uses a tabbed dialog. The same dialog shell is also reused when you edit an eligible job from Job Detail, so the required-field treatment and grouped section layout stay consistent.</p>
+<p>The <code>Details</code> tab starts with the project-selection guidance, then shows the project, evidence number, optional notes, and webhook callback URL fields before the grouped <code>Source</code> and <code>Destination</code> sections. The <code>Workflow</code> tab contains <code>Thread count</code>, <code>Copy Chunk Size</code>, <code>Progress Flush Threshold</code>, <code>Force per-file disk sync</code>, overflow-drive reservation, the create-only <code>Auto-apply startup analysis profile</code> checkbox, and the optional <code>Run job immediately</code> control.</p>
 <p>Only the <code>Project</code> field is active when the dialog opens. After you select a project, ECUBE unlocks the remaining fields and filters the available shares and destination drives to project-matching, currently eligible resources. Required fields use the shared required-marker icon in their labels, and the footer repeats that marker with a <code>Required field</code> legend.</p>
 <p>The destination selector is labeled <code>Select device</code> and shows the same port-based <code>Device</code> value used elsewhere in the UI, rather than a serial number or <code>#id</code> prefix.</p>
 <p>ECUBE does not copy from an arbitrary share to an arbitrary USB drive. The source side and destination side must both be compatible with the same project:</p>
@@ -1824,15 +1815,15 @@ Confirm the source mount is available.
 </li><li>
 Open <code>Jobs</code>.
 </li><li>
-Click <code>Create Job</code> to open the grouped dialog.
+Click <code>Create Job</code> to open the tabbed dialog.
 </li><li>
-Select the project first.
+Stay on <code>Details</code>, select the project first, and complete the project, source, and destination fields there.
 </li><li>
 Choose the filtered source mount. Enter the source path manually, or click <code>Browse folders</code>, navigate inside the mounted share while the <code>Source path</code> field updates live, and use <code>..</code> when you need to move to the parent folder.
 </li><li>
-Choose the primary destination drive, then use the <code>Overflow drives</code> panel to reserve any additional mounted destination drives in the order ECUBE should use them if the job overflows.
+Choose the primary destination drive, then switch to <code>Workflow</code> to set <code>Thread count</code>, reserve any overflow drives, review <code>Auto-apply startup analysis profile</code>, and enable <code>Run job immediately</code> if needed.
 </li><li>
-Create the job, or enable <code>Run job immediately</code> if you want it to start as soon as creation succeeds.
+Create the job when the dialog reflects the workflow you want.
 </li><li>
 Open the job detail page.
 </li><li>
