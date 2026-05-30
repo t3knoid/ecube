@@ -151,7 +151,7 @@ function installMatchMediaMock() {
   })
 }
 
-describe('JobsView grouped create dialog', () => {
+describe('JobsView tabbed create dialog', () => {
   beforeEach(() => {
     vi.useRealTimers()
     viewportState.mobile = false
@@ -414,7 +414,7 @@ describe('JobsView grouped create dialog', () => {
     expect(wrapper.find('#jobs-show-archived').exists()).toBe(true)
   })
 
-  it('opens a grouped dialog with only the project field active initially', async () => {
+  it('opens a tabbed dialog with only the project field active initially', async () => {
     const wrapper = mountView()
     await flushPromises()
 
@@ -515,7 +515,7 @@ describe('JobsView grouped create dialog', () => {
     expect(driveOptionValues).toContain('1')
   })
 
-  it('creates and optionally starts the job from the grouped dialog', async () => {
+  it('creates and optionally starts the job from the tabbed dialog', async () => {
     const wrapper = mountView()
     await flushPromises()
 
