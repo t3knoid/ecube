@@ -121,58 +121,79 @@ function panelId(key) {
 <style scoped>
 .tabbed-dialog {
   display: grid;
-  gap: var(--space-md);
+  gap: 0;
   min-height: 0;
 }
 
 .tabbed-dialog__tabs {
+  background: color-mix(in srgb, var(--color-primary, #5aa9e6) 12%, var(--color-bg-primary) 88%);
+  border: 1px solid var(--color-border);
+  border-bottom: 0;
+  border-radius: var(--border-radius-lg, calc(var(--border-radius) * 1.5)) var(--border-radius-lg, calc(var(--border-radius) * 1.5)) 0 0;
   display: flex;
-  gap: var(--space-xs);
   align-items: flex-end;
-  border-bottom: 1px solid var(--color-border);
   overflow-x: auto;
   overflow-y: hidden;
+  padding: var(--space-xs) var(--space-xs) 0;
   scrollbar-width: thin;
 }
 
 .tabbed-dialog__tab {
   appearance: none;
-  border: 0;
+  border: 1px solid var(--color-border);
+  border-bottom: 0;
   border-radius: var(--border-radius) var(--border-radius) 0 0;
-  border-bottom: 2px solid transparent;
-  background: transparent;
+  background: color-mix(in srgb, var(--color-bg-primary) 96%, white 4%);
   color: var(--color-text-secondary);
   cursor: pointer;
   font: inherit;
   font-weight: var(--font-weight-semibold);
+  line-height: 1.2;
   margin-bottom: -1px;
-  padding: var(--space-sm) var(--space-md);
+  padding: var(--space-sm) var(--space-lg, var(--space-md));
+  position: relative;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease;
   white-space: nowrap;
 }
 
-.tabbed-dialog__tab:hover,
-.tabbed-dialog__tab:focus-visible {
+.tabbed-dialog__tab:hover {
+  background: color-mix(in srgb, var(--color-primary, #5aa9e6) 6%, var(--color-bg-primary) 94%);
   color: var(--color-text-primary);
-  outline: none;
 }
 
 .tabbed-dialog__tab:focus-visible {
+  outline: none;
   box-shadow: inset 0 0 0 1px var(--color-border-strong, var(--color-border));
 }
 
 .tabbed-dialog__tab--active {
+  background: color-mix(in srgb, var(--color-primary, #5aa9e6) 5%, var(--color-bg-primary) 95%);
+  border-color: var(--color-border);
   color: var(--color-text-primary);
-  border-bottom-color: var(--color-primary, var(--color-text-primary));
+  box-shadow: 0 -1px 0 color-mix(in srgb, var(--color-primary, var(--color-text-primary)) 28%, transparent);
+  padding-bottom: calc(var(--space-sm) + 2px);
 }
 
-.tabbed-dialog__content,
+.tabbed-dialog__content {
+  background: color-mix(in srgb, var(--color-primary, #5aa9e6) 5%, var(--color-bg-primary) 95%);
+  border: 1px solid var(--color-border);
+  border-radius: 0 0 var(--border-radius-lg, calc(var(--border-radius) * 1.5)) var(--border-radius-lg, calc(var(--border-radius) * 1.5));
+  min-height: 0;
+}
+
 .tabbed-dialog__panel {
   min-height: 0;
+  padding: var(--space-md);
 }
 
 @media (max-width: 768px) {
   .tabbed-dialog__tabs {
     gap: 0;
+    padding-inline: var(--space-2xs, var(--space-xs));
   }
 
   .tabbed-dialog__tab {

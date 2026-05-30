@@ -409,7 +409,6 @@ watch(
 <template>
   <div class="dialog-header job-create-summary">
     <h2 id="job-editor-title">{{ title }}</h2>
-    <p v-if="description" class="muted">{{ description }}</p>
     <p v-if="errorMessage" class="error-banner dialog-error-banner" role="alert" aria-live="assertive">{{ errorMessage }}</p>
     <p v-if="noProjectsMessage" class="muted">{{ noProjectsMessage }}</p>
     <p v-else-if="projectSelected && noEligibleMountsMessage" class="muted">{{ noEligibleMountsMessage }}</p>
@@ -425,9 +424,8 @@ watch(
     >
       <template #panel-details>
       <div class="dialog-groups dialog-groups--details">
-      <fieldset class="dialog-group dialog-group--details">
-        <legend>{{ jobDetailsGroupLabel }}</legend>
-
+      <div class="dialog-group dialog-group--details dialog-group--flat">
+        <p v-if="description" class="muted dialog-tab-copy">{{ description }}</p>
         <div class="details-primary-row">
           <div class="details-primary-field details-primary-field--project">
             <label for="job-project">
@@ -489,7 +487,7 @@ watch(
             </p>
           </div>
         </div>
-      </fieldset>
+      </div>
 
       <fieldset v-if="showSourceGroup" class="dialog-group dialog-group--source">
         <legend>{{ sourceGroupLabel }}</legend>
@@ -570,9 +568,7 @@ watch(
 
       <template #panel-workflow>
       <div class="dialog-groups dialog-groups--workflow">
-        <fieldset class="dialog-group dialog-group--workflow">
-          <legend>{{ workflowGroupLabel || copyAndJobWorkflowTabLabel }}</legend>
-
+        <div class="dialog-group dialog-group--workflow dialog-group--flat">
           <p v-if="workflowTabDescription" class="muted dialog-tab-copy">{{ workflowTabDescription }}</p>
           <p v-if="workflowTabMessage" class="muted dialog-tab-copy">{{ workflowTabMessage }}</p>
 
@@ -658,7 +654,7 @@ watch(
             </label>
             <p class="muted field-hint">{{ autoApplyRecommendedProfileHint }}</p>
           </div>
-        </fieldset>
+        </div>
       </div>
       </template>
     </TabbedDialog>
@@ -834,7 +830,6 @@ textarea {
   z-index: 1;
   background: var(--color-bg-secondary);
   padding-bottom: var(--space-xs);
-  border-bottom: 1px solid var(--color-border);
 }
 
 .dialog-error-banner {
@@ -864,6 +859,12 @@ textarea {
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius);
   padding: var(--space-md);
+}
+
+.dialog-group--flat {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
 }
 
 .dialog-group legend {

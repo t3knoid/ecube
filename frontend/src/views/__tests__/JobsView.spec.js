@@ -423,7 +423,7 @@ describe('JobsView grouped create dialog', () => {
     await flushPromises()
 
     expect(wrapper.find('#job-project').exists()).toBe(true)
-    expect(wrapper.text()).toContain('Job details')
+    expect(wrapper.text()).toContain(i18n.global.t('jobs.jobDetailsTab'))
     expect(wrapper.text()).toContain('Source')
     expect(wrapper.text()).toContain('Destination')
     expect(wrapper.text()).toContain('Execution')
