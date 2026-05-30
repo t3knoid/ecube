@@ -121,6 +121,18 @@ function mountView(options = {}) {
   })
 }
 
+function findTab(wrapper, label) {
+  return wrapper.findAll('[role="tab"]').find((node) => node.text() === label)
+}
+
+async function activateTab(wrapper, label) {
+  const tab = findTab(wrapper, label)
+  expect(tab).toBeTruthy()
+  await tab.trigger('click')
+  await flushPromises()
+  return tab
+}
+
 describe('SystemView USB topology tab', () => {
   beforeEach(() => {
     mocks.hasRole.mockReset()
@@ -169,12 +181,35 @@ describe('SystemView USB topology tab', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    const labels = wrapper.findAll('button').map((button) => button.text())
-    expect(labels).toContain(i18n.global.t('system.tabs.health'))
-    expect(labels).not.toContain(i18n.global.t('system.tabs.usb'))
-    expect(labels).not.toContain(i18n.global.t('system.tabs.block'))
-    expect(labels).not.toContain(i18n.global.t('system.tabs.mounts'))
-    expect(labels).not.toContain(i18n.global.t('system.tabs.logs'))
+    const labels = wrapper.findAll('[role="tab"]').map((tab) => tab.text())
+    expect(labels).toEqual([i18n.global.t('system.tabs.health')])
+  })
+
+  it('renders the shared tab strip and supports keyboard navigation', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const labels = wrapper.findAll('[role="tab"]').map((tab) => tab.text())
+    expect(labels).toEqual([
+      i18n.global.t('system.tabs.health'),
+      i18n.global.t('system.tabs.usb'),
+      i18n.global.t('system.tabs.block'),
+      i18n.global.t('system.tabs.mounts'),
+      i18n.global.t('system.tabs.logs'),
+    ])
+
+    const healthTab = findTab(wrapper, i18n.global.t('system.tabs.health'))
+    const usbTab = findTab(wrapper, i18n.global.t('system.tabs.usb'))
+    expect(healthTab.attributes('aria-selected')).toBe('true')
+    expect(usbTab.attributes('aria-selected')).toBe('false')
+
+    await healthTab.trigger('keydown', { key: 'ArrowRight' })
+    await flushPromises()
+
+    expect(usbTab.attributes('aria-selected')).toBe('true')
+
+    await activateTab(wrapper, i18n.global.t('system.tabs.mounts'))
+    expect(wrapper.find('.system-panel-toolbar .btn').exists()).toBe(true)
   })
 
   it('renders host metrics and ECUBE process diagnostics separately', async () => {

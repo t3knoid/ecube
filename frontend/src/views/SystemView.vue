@@ -15,6 +15,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import DataTable from '@/components/common/DataTable.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import StatusBadge from '@/components/common/StatusBadge.vue'
+import TabbedDialog from '@/components/common/TabbedDialog.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { usePolling } from '@/composables/usePolling.js'
 import { normalizeProjectId } from '@/utils/projectId.js'
@@ -41,7 +42,12 @@ const tabs = computed(() => {
   }
   return items
 })
+const systemTabs = computed(() => tabs.value.map((key) => ({
+  key,
+  label: t(`system.tabs.${key}`),
+})))
 const activeTab = ref('health')
+const systemTabListAriaLabel = computed(() => t('system.title'))
 const loading = ref(false)
 const error = ref('')
 const infoMessage = ref('')
@@ -954,41 +960,19 @@ onBeforeUnmount(() => {
       </button>
     </header>
 
-    <div class="tabs">
-      <template v-for="tab in tabs" :key="tab">
-        <button
-          v-if="tab !== 'logs'"
-          class="btn"
-          :class="{ active: activeTab === tab }"
-          @click="activeTab = tab"
-        >
-          {{ t(`system.tabs.${tab}`) }}
-        </button>
-        <button
-          v-if="tab === 'mounts' && canRunManagedMountReconciliation"
-          class="btn"
-          :disabled="loading || reconcilingManagedMounts"
-          @click="runManagedMountReconciliation"
-        >
-          {{ reconcilingManagedMounts ? t('common.labels.loading') : t('system.reconcileManagedMounts') }}
-        </button>
-        <button
-          v-if="tab === 'logs'"
-          class="btn"
-          :class="{ active: activeTab === tab }"
-          @click="activeTab = tab"
-        >
-          {{ t(`system.tabs.${tab}`) }}
-        </button>
-      </template>
-    </div>
-
     <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
     <p v-if="error" class="error-banner">{{ error }}</p>
     <p v-if="infoMessage" class="info-banner" role="status" aria-live="polite">{{ infoMessage }}</p>
     <p v-if="successMessage" class="success-banner" role="status" aria-live="polite">{{ successMessage }}</p>
 
-    <article v-if="activeTab === 'health'" class="panel">
+    <TabbedDialog
+      v-model:active-tab="activeTab"
+      :tabs="systemTabs"
+      id-prefix="system-view"
+      :aria-label="systemTabListAriaLabel"
+    >
+      <template #panel-health>
+    <article class="panel system-panel">
       <section class="health-section">
         <h2 class="health-section-title">{{ t('system.hostMetrics') }}</h2>
         <div class="health-grid">
@@ -1141,8 +1125,10 @@ onBeforeUnmount(() => {
         </details>
       </section>
     </article>
+      </template>
 
-    <article v-else-if="activeTab === 'logs'" class="panel">
+      <template #panel-logs>
+    <article class="panel system-panel">
       <div class="log-controls">
         <label for="log-source">{{ t('system.logSource') }}</label>
         <select id="log-source" v-model="logViewer.source" class="job-picker" @change="refreshLogViewer">
@@ -1181,8 +1167,10 @@ onBeforeUnmount(() => {
         <pre class="log-viewer-content">{{ logViewerText || (hasAvailableLogFiles ? t('system.logViewerEmpty') : t('system.logsEmpty')) }}</pre>
       </div>
     </article>
+      </template>
 
-    <article v-else class="panel">
+      <template #panel-usb>
+    <article class="panel system-panel">
       <DataTable :class="{ 'usb-topology-table': activeTab === 'usb' && isMobileViewport, 'system-mounts-table': activeTab === 'mounts' && isMobileViewport }" :columns="tabColumns" :rows="pagedRows" :empty-text="t('system.empty')">
         <template #cell-product="{ row }">
           <span
@@ -1240,6 +1228,139 @@ onBeforeUnmount(() => {
       </DataTable>
       <Pagination v-model:page="page" :page-size="pageSize" :total="tabRows.length" />
     </article>
+      </template>
+
+      <template #panel-block>
+    <article class="panel system-panel">
+      <DataTable :class="{ 'usb-topology-table': activeTab === 'usb' && isMobileViewport, 'system-mounts-table': activeTab === 'mounts' && isMobileViewport }" :columns="tabColumns" :rows="pagedRows" :empty-text="t('system.empty')">
+        <template #cell-product="{ row }">
+          <span
+            v-if="activeTab === 'usb' && isMobileViewport"
+            class="usb-product-cell"
+            :title="row.product || '-'"
+          >
+            {{ row.product || '-' }}
+          </span>
+          <span v-else>{{ row.product || '-' }}</span>
+        </template>
+        <template #cell-speed="{ row }">{{ formatUsbSpeed(row.speed) }}</template>
+        <template #cell-mount_point="{ row }">
+          <span
+            v-if="activeTab === 'mounts' && isMobileViewport"
+            class="mount-point-cell"
+            :title="row.mount_point || '-'"
+          >
+            {{ row.mount_point || '-' }}
+          </span>
+          <span v-else>{{ row.mount_point || '-' }}</span>
+        </template>
+        <template #cell-details="{ row }">
+          <details v-if="(activeTab === 'usb' || activeTab === 'mounts') && isMobileViewport" class="usb-topology-menu">
+            <summary class="usb-topology-menu-toggle" :aria-label="`${row.device || t('system.device')} ${t('drives.details')}`">
+              <span class="usb-topology-menu-toggle-dots" aria-hidden="true">
+                <span class="usb-topology-menu-toggle-dot" />
+                <span class="usb-topology-menu-toggle-dot" />
+                <span class="usb-topology-menu-toggle-dot" />
+              </span>
+            </summary>
+            <div class="usb-topology-menu-popover">
+              <div v-if="activeTab === 'usb'" class="usb-topology-menu-grid">
+                <span>{{ t('system.manufacturer') }}</span><strong>{{ row.manufacturer || '-' }}</strong>
+                <span>{{ t('system.serialNumber') }}</span><strong>{{ row.serial || '-' }}</strong>
+                <span>{{ t('system.speed') }}</span><strong>{{ formatUsbSpeed(row.speed) }}</strong>
+                <span>{{ t('system.vendorId') }}</span><strong>{{ row.idVendor || '-' }}</strong>
+                <span>{{ t('system.productId') }}</span><strong>{{ row.idProduct || '-' }}</strong>
+              </div>
+              <div v-else class="usb-topology-menu-grid">
+                <span>{{ t('system.fsType') }}</span><strong>{{ row.fs_type || '-' }}</strong>
+                <span>{{ t('system.options') }}</span><strong>{{ row.options || '-' }}</strong>
+              </div>
+              <button class="btn usb-topology-menu-close" @click="closeUsbDetailsMenu($event)">{{ t('common.actions.close') }}</button>
+            </div>
+          </details>
+        </template>
+        <template #cell-size="{ row }">{{ formatBytes(row.size) }}</template>
+        <template #cell-modified="{ row }">{{ asLocalDate(row.modified) }}</template>
+        <template #cell-download="{ row }">
+          <button class="btn" :disabled="downloadingLogName === row.name" @click="downloadLog(row)">
+            {{ t('system.download') }}
+          </button>
+        </template>
+      </DataTable>
+      <Pagination v-model:page="page" :page-size="pageSize" :total="tabRows.length" />
+    </article>
+      </template>
+
+      <template #panel-mounts>
+    <article class="panel system-panel">
+      <div v-if="canRunManagedMountReconciliation" class="system-panel-toolbar">
+        <button
+          class="btn"
+          :disabled="loading || reconcilingManagedMounts"
+          @click="runManagedMountReconciliation"
+        >
+          {{ reconcilingManagedMounts ? t('common.labels.loading') : t('system.reconcileManagedMounts') }}
+        </button>
+      </div>
+      <DataTable :class="{ 'usb-topology-table': activeTab === 'usb' && isMobileViewport, 'system-mounts-table': activeTab === 'mounts' && isMobileViewport }" :columns="tabColumns" :rows="pagedRows" :empty-text="t('system.empty')">
+        <template #cell-product="{ row }">
+          <span
+            v-if="activeTab === 'usb' && isMobileViewport"
+            class="usb-product-cell"
+            :title="row.product || '-'"
+          >
+            {{ row.product || '-' }}
+          </span>
+          <span v-else>{{ row.product || '-' }}</span>
+        </template>
+        <template #cell-speed="{ row }">{{ formatUsbSpeed(row.speed) }}</template>
+        <template #cell-mount_point="{ row }">
+          <span
+            v-if="activeTab === 'mounts' && isMobileViewport"
+            class="mount-point-cell"
+            :title="row.mount_point || '-'"
+          >
+            {{ row.mount_point || '-' }}
+          </span>
+          <span v-else>{{ row.mount_point || '-' }}</span>
+        </template>
+        <template #cell-details="{ row }">
+          <details v-if="(activeTab === 'usb' || activeTab === 'mounts') && isMobileViewport" class="usb-topology-menu">
+            <summary class="usb-topology-menu-toggle" :aria-label="`${row.device || t('system.device')} ${t('drives.details')}`">
+              <span class="usb-topology-menu-toggle-dots" aria-hidden="true">
+                <span class="usb-topology-menu-toggle-dot" />
+                <span class="usb-topology-menu-toggle-dot" />
+                <span class="usb-topology-menu-toggle-dot" />
+              </span>
+            </summary>
+            <div class="usb-topology-menu-popover">
+              <div v-if="activeTab === 'usb'" class="usb-topology-menu-grid">
+                <span>{{ t('system.manufacturer') }}</span><strong>{{ row.manufacturer || '-' }}</strong>
+                <span>{{ t('system.serialNumber') }}</span><strong>{{ row.serial || '-' }}</strong>
+                <span>{{ t('system.speed') }}</span><strong>{{ formatUsbSpeed(row.speed) }}</strong>
+                <span>{{ t('system.vendorId') }}</span><strong>{{ row.idVendor || '-' }}</strong>
+                <span>{{ t('system.productId') }}</span><strong>{{ row.idProduct || '-' }}</strong>
+              </div>
+              <div v-else class="usb-topology-menu-grid">
+                <span>{{ t('system.fsType') }}</span><strong>{{ row.fs_type || '-' }}</strong>
+                <span>{{ t('system.options') }}</span><strong>{{ row.options || '-' }}</strong>
+              </div>
+              <button class="btn usb-topology-menu-close" @click="closeUsbDetailsMenu($event)">{{ t('common.actions.close') }}</button>
+            </div>
+          </details>
+        </template>
+        <template #cell-size="{ row }">{{ formatBytes(row.size) }}</template>
+        <template #cell-modified="{ row }">{{ asLocalDate(row.modified) }}</template>
+        <template #cell-download="{ row }">
+          <button class="btn" :disabled="downloadingLogName === row.name" @click="downloadLog(row)">
+            {{ t('system.download') }}
+          </button>
+        </template>
+      </DataTable>
+      <Pagination v-model:page="page" :page-size="pageSize" :total="tabRows.length" />
+    </article>
+      </template>
+    </TabbedDialog>
 
     <ConfirmDialog
       v-model="showSystemHealthActionDialog"
@@ -1261,7 +1382,6 @@ onBeforeUnmount(() => {
 }
 
 .header-row,
-.tabs,
 .header-actions {
   display: flex;
   gap: var(--space-sm);
@@ -1272,8 +1392,17 @@ onBeforeUnmount(() => {
   align-items: center;
 }
 
-.tabs {
-  flex-wrap: wrap;
+.system-panel {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.system-panel-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--space-sm);
 }
 
 .log-controls {

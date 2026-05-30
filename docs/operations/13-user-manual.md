@@ -963,6 +963,8 @@ This page is useful when:
 
 End users who only perform export jobs may rarely need this page. Administrators and support personnel are more likely to use it during troubleshooting.
 
+The `System` page uses the same shared tab strip pattern as other multi-section ECUBE screens. Use the `Health`, `USB Topology`, `Block Devices`, `Mounts`, and `Logs` tabs that your role is allowed to see to move between sections without leaving the page.
+
 In the `System Health` tab, ECUBE separates host metrics from ECUBE-owned process diagnostics. When the backend reports degraded but non-fatal runtime conditions, the same tab shows a `Runtime Warnings` panel with the sanitized warning summary, remediation guidance, stable warning code, and any explicit operator repair actions that are safe to expose for that warning. `GET /introspection/system-health` includes repair-action metadata only for `admin` callers; `manager`, `processor`, and `auditor` users still see the warning details, but they do not receive warning-action metadata from the API and therefore do not see repair-action buttons. For example, when exFAT formatting tools are present but the running kernel has not loaded exFAT runtime support, `admin` users can trigger the explicit repair action from the warning itself instead of relying on `Refresh` to mutate host state. The ECUBE process section shows ECUBE CPU and memory usage, the total ECUBE thread count, the number of active copy workers, and a table that correlates each active copy thread to its parent job and project, including status, configured threads, elapsed time, and CPU time. The same section includes a job-grouped copy-thread timeline with one lane per configured or active worker and a rolling time scale that highlights active copy samples, waiting/preparing samples, and inactive periods over the recent polling window.
 
 #### Host Metrics Fields
@@ -1008,7 +1010,7 @@ For `admin`, `manager`, and `processor` users, the `USB Topology` tab shows a so
 
 For `admin`, `manager`, and `processor` users, the `Mounts` tab continues to show device, mount point, filesystem type, and mount options on wider screens. On smaller screens, it keeps `Device` and `Mount Point` visible and moves the remaining fields into a per-row overflow menu.
 
-For users with `admin` or `manager` roles, the System tab bar includes a `Reconcile managed mounts` action button positioned between `Mounts` and `Logs`. This action triggers a manual managed-mount reconciliation pass and opens a dedicated results page.
+For users with `admin` or `manager` roles, the `Mounts` tab includes a `Reconcile managed mounts` action button above the table. This action triggers a manual managed-mount reconciliation pass and opens a dedicated results page.
 
 ![System page (E2E snapshot, default theme, Chromium/Linux)](../../frontend/e2e/theme.spec.js-snapshots/system-default-chromium-linux.png)
 
