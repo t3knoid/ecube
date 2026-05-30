@@ -95,6 +95,18 @@ function mountView() {
   })
 }
 
+function findTab(wrapper, label) {
+  return wrapper.findAll('[role="tab"]').find((node) => node.text() === label)
+}
+
+async function activateTab(wrapper, label) {
+  const tab = findTab(wrapper, label)
+  expect(tab).toBeTruthy()
+  await tab.trigger('click')
+  await flushPromises()
+  return tab
+}
+
 describe('AdminView', () => {
   beforeEach(() => {
     mocks.getConfiguration.mockReset()
@@ -109,14 +121,14 @@ describe('AdminView', () => {
     mocks.getPasswordPolicy.mockResolvedValue(buildPasswordPolicyResponse())
   })
 
-  it('renders only admin sections', async () => {
+  it('renders admin settings in tabs', async () => {
     mocks.getAdminConfiguration.mockResolvedValue(buildAdminResponse())
 
     const wrapper = mountView()
     await flushPromises()
 
-    const panelTitles = wrapper.findAll('.panel > h2').map((node) => node.text())
-    expect(panelTitles).toEqual([
+    const tabs = wrapper.findAll('[role="tab"]').map((node) => node.text())
+    expect(tabs).toEqual([
       i18n.global.t('adminPage.sections.loggingInfrastructure'),
       i18n.global.t('adminPage.sections.databaseRuntime'),
       i18n.global.t('configuration.sections.passwordPolicy'),
@@ -124,6 +136,21 @@ describe('AdminView', () => {
       i18n.global.t('adminPage.sections.platformIntegration'),
       i18n.global.t('adminPage.sections.serviceControl'),
     ])
+
+    const loggingTab = findTab(wrapper, i18n.global.t('adminPage.sections.loggingInfrastructure'))
+    const databaseTab = findTab(wrapper, i18n.global.t('adminPage.sections.databaseRuntime'))
+    expect(loggingTab.attributes('aria-selected')).toBe('true')
+    expect(databaseTab.attributes('aria-selected')).toBe('false')
+
+    await loggingTab.trigger('keydown', { key: 'ArrowRight' })
+    await flushPromises()
+
+    expect(databaseTab.attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('#cfg-db-pool-size').isVisible()).toBe(true)
+    expect(wrapper.find('#cfg-log-format').isVisible()).toBe(false)
+
+    await activateTab(wrapper, i18n.global.t('adminPage.sections.loggingInfrastructure'))
+
     expect(wrapper.find('#cfg-drive-mount-timeout-seconds').exists()).toBe(false)
     expect(wrapper.find('#cfg-policy-minlen').exists()).toBe(true)
     expect(wrapper.find('#cfg-log-file').element.value).toBe('app.log')
@@ -139,6 +166,8 @@ describe('AdminView', () => {
 
     const wrapper = mountView()
     await flushPromises()
+
+    await activateTab(wrapper, i18n.global.t('adminPage.sections.loggingInfrastructure'))
 
     const logFileInput = wrapper.find('#cfg-log-file')
     expect(logFileInput.element.value).toBe('app.log.2')
@@ -157,6 +186,8 @@ describe('AdminView', () => {
 
     const wrapper = mountView()
     await flushPromises()
+
+    await activateTab(wrapper, i18n.global.t('configuration.sections.passwordPolicy'))
 
     const minlenInput = wrapper.find('#cfg-policy-minlen')
     expect(minlenInput.element.value).toBe('16')
@@ -181,6 +212,8 @@ describe('AdminView', () => {
     const wrapper = mountView()
     await flushPromises()
 
+    await activateTab(wrapper, i18n.global.t('configuration.sections.webhooks'))
+
     const secretInput = wrapper.find('#cfg-callback-hmac-secret')
     expect(secretInput.element.value).toBe('')
 
@@ -202,6 +235,8 @@ describe('AdminView', () => {
 
     const wrapper = mountView()
     await flushPromises()
+
+    await activateTab(wrapper, i18n.global.t('configuration.sections.webhooks'))
 
     await wrapper.find('#cfg-callback-default-url').setValue('http://example.com/default-webhook')
     expect(wrapper.find('#cfg-allow-insecure-callback-default-url').exists()).toBe(true)
@@ -233,6 +268,8 @@ describe('AdminView', () => {
     const wrapper = mountView()
     await flushPromises()
 
+    await activateTab(wrapper, i18n.global.t('configuration.sections.webhooks'))
+
     const checkbox = wrapper.find('#cfg-callback-allow-private-ips')
     expect(checkbox.exists()).toBe(true)
     expect(checkbox.element.checked).toBe(false)
@@ -261,6 +298,8 @@ describe('AdminView', () => {
     await wrapper.find('#cfg-db-pool-recycle').setValue('120')
     await wrapper.find('.action-row .btn.btn-primary').trigger('click')
     await flushPromises()
+
+    await activateTab(wrapper, i18n.global.t('adminPage.sections.serviceControl'))
 
     const restartButton = wrapper.find('.panel.warning-panel .btn.btn-primary')
     expect(restartButton.exists()).toBe(true)

@@ -76,6 +76,18 @@ function mountView() {
   })
 }
 
+function findTab(wrapper, label) {
+  return wrapper.findAll('[role="tab"]').find((node) => node.text() === label)
+}
+
+async function activateTab(wrapper, label) {
+  const tab = findTab(wrapper, label)
+  expect(tab).toBeTruthy()
+  await tab.trigger('click')
+  await flushPromises()
+  return tab
+}
+
 describe('ConfigurationView', () => {
   beforeEach(() => {
     mocks.getConfiguration.mockReset()
@@ -89,20 +101,35 @@ describe('ConfigurationView', () => {
     mocks.toast.warning.mockReset()
   })
 
-  it('renders only manager sections and does not load admin-only data', async () => {
+  it('renders manager settings in tabs and does not load admin-only data', async () => {
     mocks.getConfiguration.mockResolvedValue(buildManagerResponse())
 
     const wrapper = mountView()
     await flushPromises()
 
-    const panelTitles = wrapper.findAll('.panel > h2').map((node) => node.text())
-    expect(panelTitles).toEqual([
+    const tabs = wrapper.findAll('[role="tab"]').map((node) => node.text())
+    expect(tabs).toEqual([
       i18n.global.t('configuration.sections.troubleshooting'),
       i18n.global.t('configuration.sections.driveOperations'),
       i18n.global.t('configuration.sections.backgroundOperations'),
       i18n.global.t('configuration.sections.networkMountOperations'),
       i18n.global.t('configuration.sections.copyAndJobWorkflow'),
     ])
+
+    const troubleshootingTab = findTab(wrapper, i18n.global.t('configuration.sections.troubleshooting'))
+    const driveOperationsTab = findTab(wrapper, i18n.global.t('configuration.sections.driveOperations'))
+    expect(troubleshootingTab.attributes('aria-selected')).toBe('true')
+    expect(driveOperationsTab.attributes('aria-selected')).toBe('false')
+
+    await troubleshootingTab.trigger('keydown', { key: 'ArrowRight' })
+    await flushPromises()
+
+    expect(driveOperationsTab.attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('#cfg-drive-mount-timeout-seconds').isVisible()).toBe(true)
+    expect(wrapper.find('#cfg-log-level').isVisible()).toBe(false)
+
+    await activateTab(wrapper, i18n.global.t('configuration.sections.troubleshooting'))
+
     const logFileInput = wrapper.find('#cfg-log-file')
     expect(logFileInput.exists()).toBe(true)
     expect(logFileInput.element.value).toBe('app.log')
@@ -127,6 +154,8 @@ describe('ConfigurationView', () => {
     const wrapper = mountView()
     await flushPromises()
 
+    await activateTab(wrapper, i18n.global.t('configuration.sections.copyAndJobWorkflow'))
+
     const checkbox = wrapper.find('#cfg-copy-hashing-separate-thread-enabled')
     expect(checkbox.exists()).toBe(true)
     expect(checkbox.element.checked).toBe(true)
@@ -148,6 +177,8 @@ describe('ConfigurationView', () => {
     const wrapper = mountView()
     await flushPromises()
 
+    await activateTab(wrapper, i18n.global.t('configuration.sections.copyAndJobWorkflow'))
+
     const checkbox = wrapper.find('#cfg-copy-hashing-separate-thread-enabled')
     expect(checkbox.exists()).toBe(true)
     expect(checkbox.element.checked).toBe(true)
@@ -163,6 +194,8 @@ describe('ConfigurationView', () => {
 
     const wrapper = mountView()
     await flushPromises()
+
+    await activateTab(wrapper, i18n.global.t('configuration.sections.copyAndJobWorkflow'))
 
     const pageSizeInput = wrapper.find('#cfg-job-detail-files-page-size')
     expect(pageSizeInput.element.value).toBe('60')
@@ -192,6 +225,8 @@ describe('ConfigurationView', () => {
     const wrapper = mountView()
     await flushPromises()
 
+    await activateTab(wrapper, i18n.global.t('configuration.sections.copyAndJobWorkflow'))
+
     const smallInput = wrapper.find('#cfg-startup-analysis-small-file-max-bytes')
     const largeInput = wrapper.find('#cfg-startup-analysis-large-file-min-bytes')
     expect(smallInput.element.value).toBe('131072')
@@ -217,6 +252,8 @@ describe('ConfigurationView', () => {
     const wrapper = mountView()
     await flushPromises()
 
+    await activateTab(wrapper, i18n.global.t('configuration.sections.copyAndJobWorkflow'))
+
     await wrapper.find('#cfg-startup-analysis-small-file-max-bytes').setValue('16777216')
     await wrapper.find('#cfg-startup-analysis-large-file-min-bytes').setValue('131072')
     await wrapper.find('.action-row .btn.btn-primary').trigger('click')
@@ -239,6 +276,8 @@ describe('ConfigurationView', () => {
     const wrapper = mountView()
     await flushPromises()
 
+    await activateTab(wrapper, i18n.global.t('configuration.sections.driveOperations'))
+
     const timeoutInput = wrapper.find('#cfg-drive-mount-timeout-seconds')
     expect(timeoutInput.element.value).toBe('300')
 
@@ -259,6 +298,8 @@ describe('ConfigurationView', () => {
 
     const wrapper = mountView()
     await flushPromises()
+
+    await activateTab(wrapper, i18n.global.t('configuration.sections.backgroundOperations'))
 
     const intervalInput = wrapper.find('#cfg-usb-discovery-interval')
     expect(intervalInput.element.value).toBe('0')
@@ -284,6 +325,8 @@ describe('ConfigurationView', () => {
 
     const wrapper = mountView()
     await flushPromises()
+
+    await activateTab(wrapper, i18n.global.t('configuration.sections.copyAndJobWorkflow'))
 
     await wrapper.findAll('.chip-button')[3].trigger('click')
     await wrapper.find('.action-row .btn.btn-primary').trigger('click')

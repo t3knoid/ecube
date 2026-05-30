@@ -1312,7 +1312,7 @@ Adjusting copy timeout and Job Detail file-page defaults used by operators
 <ol><li>
 Open <code>Configuration</code> from the navigation area.
 </li><li>
-Review the current values in <code>Troubleshooting</code>, <code>Drive Operations</code>, <code>Background Operations</code>, <code>Network Mount Operations</code>, and <code>Copy and Job Workflow</code>.
+Use the <code>Troubleshooting</code>, <code>Drive Operations</code>, <code>Background Operations</code>, <code>Network Mount Operations</code>, and <code>Copy and Job Workflow</code> tabs to review the current values for each settings group.
 </li><li>
 Edit one or more fields.
 </li><li>
@@ -1321,6 +1321,8 @@ Click <code>Save</code>.
 <p>Important operational notes:</p>
 <ul><li>
 The <code>Configuration</code> page contains only operational settings: <code>log_level</code>, <code>mkfs_exfat_cluster_size</code>, <code>drive_format_timeout_seconds</code>, <code>drive_mount_timeout_seconds</code>, <code>usb_discovery_interval</code>, <code>network_mount_timeout_seconds</code>, <code>mount_share_discovery_timeout_seconds</code>, <code>copy_job_timeout</code>, <code>copy_chunk_size_bytes</code>, <code>copy_progress_flush_bytes</code>, <code>copy_default_thread_count</code>, <code>copy_file_fsync_enabled</code>, and <code>job_detail_files_page_size</code>.
+</li><li>
+The manager-facing <code>Configuration</code> page uses one tab per settings group so operators can move directly between <code>Troubleshooting</code>, <code>Drive Operations</code>, <code>Background Operations</code>, <code>Network Mount Operations</code>, and <code>Copy and Job Workflow</code> without leaving the form.
 </li><li>
 The <code>Configuration</code> page also shows the current effective log file name as a read-only value so managers can verify the target log file without exposing host path details.
 </li><li>
@@ -1378,7 +1380,7 @@ Applying safe admin-only configuration changes through role-restricted workflows
 <ol><li>
 Open <code>Admin</code> from the admin navigation area.
 </li><li>
-Review current values in each section.
+Use the <code>Logging Infrastructure</code>, <code>Database Runtime</code>, <code>Password Policy</code>, <code>Webhooks</code>, <code>Platform Integration</code>, and <code>Service Control</code> tabs to review the current values for each admin settings group.
 </li><li>
 Edit one or more fields.
 </li><li>
@@ -1400,6 +1402,8 @@ If you select cancel, no restart is triggered and the service keeps running.
 </li></ol>
 <p>Important operational notes:</p>
 <ul><li>
+The <code>Admin</code> page uses one tab per settings group so administrators can move directly between logging, database, password-policy, webhook, platform-integration, and service-control settings without leaving the form.
+</li><li>
 Restart actions are never automatic from this page and always require explicit confirmation.
 </li><li>
 Restarting the application service can interrupt active operations. Prefer using a maintenance window or an idle period.

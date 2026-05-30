@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import TabbedDialog from '@/components/common/TabbedDialog.vue'
 import {
   getAdminConfiguration,
   getConfiguration,
@@ -96,6 +97,57 @@ const description = computed(() => (isAdminMode.value ? t('adminPage.description
 const serviceControlBody = computed(() => (
   restartPending.value ? t('configuration.pendingRestartBody') : t('adminPage.serviceControl.idle')
 ))
+const managerTabs = computed(() => ([
+  {
+    key: 'troubleshooting',
+    label: t('configuration.sections.troubleshooting'),
+  },
+  {
+    key: 'driveOperations',
+    label: t('configuration.sections.driveOperations'),
+  },
+  {
+    key: 'backgroundOperations',
+    label: t('configuration.sections.backgroundOperations'),
+  },
+  {
+    key: 'networkMountOperations',
+    label: t('configuration.sections.networkMountOperations'),
+  },
+  {
+    key: 'copyAndJobWorkflow',
+    label: t('configuration.sections.copyAndJobWorkflow'),
+  },
+]))
+const adminTabs = computed(() => ([
+  {
+    key: 'loggingInfrastructure',
+    label: t('adminPage.sections.loggingInfrastructure'),
+  },
+  {
+    key: 'databaseRuntime',
+    label: t('adminPage.sections.databaseRuntime'),
+  },
+  {
+    key: 'passwordPolicy',
+    label: t('configuration.sections.passwordPolicy'),
+  },
+  {
+    key: 'webhooks',
+    label: t('configuration.sections.webhooks'),
+  },
+  {
+    key: 'platformIntegration',
+    label: t('adminPage.sections.platformIntegration'),
+  },
+  {
+    key: 'serviceControl',
+    label: t('adminPage.sections.serviceControl'),
+  },
+]))
+const activeManagerTab = ref('troubleshooting')
+const activeAdminTab = ref('loggingInfrastructure')
+const configurationTabListAriaLabel = computed(() => title.value)
 
 const form = ref({
   log_level: 'INFO',
@@ -599,167 +651,184 @@ onMounted(loadConfiguration)
     <p v-if="loading" class="muted">{{ t('common.labels.loading') }}</p>
     <p v-if="error" class="error-banner">{{ error }}</p>
 
-    <div class="settings-grid">
-      <template v-if="!isAdminMode">
-        <article class="panel">
-          <h2>{{ t('configuration.sections.troubleshooting') }}</h2>
+    <div v-if="!isAdminMode" class="settings-tabbed-layout">
+      <TabbedDialog
+        v-model:active-tab="activeManagerTab"
+        :tabs="managerTabs"
+        id-prefix="configuration-editor"
+        :aria-label="configurationTabListAriaLabel"
+      >
+        <template #panel-troubleshooting>
+          <article class="panel settings-panel">
 
-          <label for="cfg-log-level">{{ t('configuration.fields.log_level.label') }}</label>
-          <select id="cfg-log-level" v-model="form.log_level">
-            <option v-for="option in levelOptions" :key="option" :value="option">{{ option }}</option>
-          </select>
-          <p class="field-help">{{ t('configuration.fields.log_level.help') }}</p>
+            <label for="cfg-log-level">{{ t('configuration.fields.log_level.label') }}</label>
+            <select id="cfg-log-level" v-model="form.log_level">
+              <option v-for="option in levelOptions" :key="option" :value="option">{{ option }}</option>
+            </select>
+            <p class="field-help">{{ t('configuration.fields.log_level.help') }}</p>
 
-          <label for="cfg-log-file">{{ t('configuration.fields.log_file.label') }}</label>
-          <input id="cfg-log-file" :value="displayedLogFile" type="text" readonly />
-          <p class="field-help">{{ t('configuration.fields.log_file.readOnlyHelp') }}</p>
-        </article>
+            <label for="cfg-log-file">{{ t('configuration.fields.log_file.label') }}</label>
+            <input id="cfg-log-file" :value="displayedLogFile" type="text" readonly />
+            <p class="field-help">{{ t('configuration.fields.log_file.readOnlyHelp') }}</p>
+          </article>
+        </template>
 
-        <article class="panel">
-          <h2>{{ t('configuration.sections.driveOperations') }}</h2>
+        <template #panel-driveOperations>
+          <article class="panel settings-panel">
 
-          <label for="cfg-mkfs-exfat-cluster-size">{{ t('configuration.fields.mkfs_exfat_cluster_size.label') }}</label>
-          <select id="cfg-mkfs-exfat-cluster-size" v-model="form.mkfs_exfat_cluster_size">
-            <option v-for="option in exfatClusterSizeOptions" :key="option" :value="option">{{ option }}</option>
-          </select>
-          <p class="field-help">{{ t('configuration.fields.mkfs_exfat_cluster_size.help') }}</p>
+            <label for="cfg-mkfs-exfat-cluster-size">{{ t('configuration.fields.mkfs_exfat_cluster_size.label') }}</label>
+            <select id="cfg-mkfs-exfat-cluster-size" v-model="form.mkfs_exfat_cluster_size">
+              <option v-for="option in exfatClusterSizeOptions" :key="option" :value="option">{{ option }}</option>
+            </select>
+            <p class="field-help">{{ t('configuration.fields.mkfs_exfat_cluster_size.help') }}</p>
 
-          <label for="cfg-drive-format-timeout-seconds">{{ t('configuration.fields.drive_format_timeout_seconds.label') }}</label>
-          <input
-            id="cfg-drive-format-timeout-seconds"
-            v-model.number="form.drive_format_timeout_seconds"
-            type="number"
-            min="1"
-          />
-          <p class="field-help">{{ t('configuration.fields.drive_format_timeout_seconds.help') }}</p>
-
-          <label for="cfg-drive-mount-timeout-seconds">{{ t('configuration.fields.drive_mount_timeout_seconds.label') }}</label>
-          <input
-            id="cfg-drive-mount-timeout-seconds"
-            v-model.number="form.drive_mount_timeout_seconds"
-            type="number"
-            min="1"
-          />
-          <p class="field-help">{{ t('configuration.fields.drive_mount_timeout_seconds.help') }}</p>
-        </article>
-
-        <article class="panel">
-          <h2>{{ t('configuration.sections.backgroundOperations') }}</h2>
-
-          <label for="cfg-usb-discovery-interval">{{ t('configuration.fields.usb_discovery_interval.label') }}</label>
-          <input
-            id="cfg-usb-discovery-interval"
-            v-model.number="form.usb_discovery_interval"
-            type="number"
-            min="0"
-          />
-          <p class="field-help">{{ t('configuration.fields.usb_discovery_interval.help') }}</p>
-        </article>
-
-        <article class="panel">
-          <h2>{{ t('configuration.sections.networkMountOperations') }}</h2>
-
-          <label for="cfg-network-mount-timeout-seconds">{{ t('configuration.fields.network_mount_timeout_seconds.label') }}</label>
-          <input
-            id="cfg-network-mount-timeout-seconds"
-            v-model.number="form.network_mount_timeout_seconds"
-            type="number"
-            min="1"
-          />
-          <p class="field-help">{{ t('configuration.fields.network_mount_timeout_seconds.help') }}</p>
-
-          <label for="cfg-mount-share-discovery-timeout-seconds">{{ t('configuration.fields.mount_share_discovery_timeout_seconds.label') }}</label>
-          <input
-            id="cfg-mount-share-discovery-timeout-seconds"
-            v-model.number="form.mount_share_discovery_timeout_seconds"
-            type="number"
-            min="1"
-          />
-          <p class="field-help">{{ t('configuration.fields.mount_share_discovery_timeout_seconds.help') }}</p>
-        </article>
-
-        <article class="panel">
-          <h2>{{ t('configuration.sections.copyAndJobWorkflow') }}</h2>
-
-          <p class="field-help">{{ t('configuration.copyProfiles.help') }}</p>
-          <div class="profile-chip-row">
-            <button type="button" class="chip-button" @click="applyCopyWorkloadProfile('smallFiles')">{{ t('configuration.copyProfiles.smallFiles') }}</button>
-            <button type="button" class="chip-button" @click="applyCopyWorkloadProfile('mixed')">{{ t('configuration.copyProfiles.mixed') }}</button>
-            <button type="button" class="chip-button" @click="applyCopyWorkloadProfile('largeFiles')">{{ t('configuration.copyProfiles.largeFiles') }}</button>
-            <button type="button" class="chip-button" @click="applyCopyWorkloadProfile('greedy')">{{ t('configuration.copyProfiles.greedy') }}</button>
-          </div>
-
-          <label for="cfg-copy-job-timeout">{{ t('configuration.fields.copy_job_timeout.label') }}</label>
-          <input id="cfg-copy-job-timeout" v-model.number="form.copy_job_timeout" type="number" min="0" />
-          <p class="field-help">{{ t('configuration.fields.copy_job_timeout.help') }}</p>
-
-          <label for="cfg-startup-analysis-small-file-max-bytes">{{ t('configuration.fields.startup_analysis_small_file_max_bytes.label') }}</label>
-          <input
-            id="cfg-startup-analysis-small-file-max-bytes"
-            v-model.number="form.startup_analysis_small_file_max_bytes"
-            type="number"
-            min="1024"
-            max="67108864"
-          />
-          <p class="field-help">{{ t('configuration.fields.startup_analysis_small_file_max_bytes.help') }}</p>
-
-          <label for="cfg-startup-analysis-large-file-min-bytes">{{ t('configuration.fields.startup_analysis_large_file_min_bytes.label') }}</label>
-          <input
-            id="cfg-startup-analysis-large-file-min-bytes"
-            v-model.number="form.startup_analysis_large_file_min_bytes"
-            type="number"
-            min="1024"
-            max="1073741824"
-          />
-          <p class="field-help">{{ t('configuration.fields.startup_analysis_large_file_min_bytes.help') }}</p>
-
-          <label for="cfg-copy-chunk-size-bytes">{{ t('configuration.fields.copy_chunk_size_bytes.label') }}</label>
-          <select id="cfg-copy-chunk-size-bytes" v-model.number="form.copy_chunk_size_bytes">
-            <option v-for="option in copyChunkSizeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-          </select>
-          <p class="field-help">{{ t('configuration.fields.copy_chunk_size_bytes.help') }}</p>
-
-          <label for="cfg-copy-progress-flush-bytes">{{ t('configuration.fields.copy_progress_flush_bytes.label') }}</label>
-          <select id="cfg-copy-progress-flush-bytes" v-model.number="form.copy_progress_flush_bytes">
-            <option v-for="option in copyProgressFlushOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-          </select>
-          <p class="field-help">{{ t('configuration.fields.copy_progress_flush_bytes.help') }}</p>
-
-          <label for="cfg-copy-default-thread-count">{{ t('configuration.fields.copy_default_thread_count.label') }}</label>
-          <input id="cfg-copy-default-thread-count" v-model.number="form.copy_default_thread_count" type="number" min="1" max="32" />
-          <p class="field-help">{{ t('configuration.fields.copy_default_thread_count.help') }}</p>
-
-          <label class="checkbox-row" for="cfg-copy-file-fsync-enabled">
-            <input id="cfg-copy-file-fsync-enabled" v-model="form.copy_file_fsync_enabled" type="checkbox" />
-            <span>{{ t('configuration.fields.copy_file_fsync_enabled.label') }}</span>
-          </label>
-          <p class="field-help">{{ t('configuration.fields.copy_file_fsync_enabled.help') }}</p>
-
-          <label class="checkbox-row" for="cfg-copy-hashing-separate-thread-enabled">
+            <label for="cfg-drive-format-timeout-seconds">{{ t('configuration.fields.drive_format_timeout_seconds.label') }}</label>
             <input
-              id="cfg-copy-hashing-separate-thread-enabled"
-              v-model="form.copy_hashing_separate_thread_enabled"
-              type="checkbox"
+              id="cfg-drive-format-timeout-seconds"
+              v-model.number="form.drive_format_timeout_seconds"
+              type="number"
+              min="1"
             />
-            <span>{{ t('configuration.fields.copy_hashing_separate_thread_enabled.label') }}</span>
-          </label>
-          <p class="field-help">{{ t('configuration.fields.copy_hashing_separate_thread_enabled.help') }}</p>
+            <p class="field-help">{{ t('configuration.fields.drive_format_timeout_seconds.help') }}</p>
 
-          <label for="cfg-job-detail-files-page-size">{{ t('configuration.fields.job_detail_files_page_size.label') }}</label>
-          <input
-            id="cfg-job-detail-files-page-size"
-            v-model.number="form.job_detail_files_page_size"
-            type="number"
-            min="20"
-            max="100"
-          />
-          <p class="field-help">{{ t('configuration.fields.job_detail_files_page_size.help') }}</p>
-        </article>
-      </template>
+            <label for="cfg-drive-mount-timeout-seconds">{{ t('configuration.fields.drive_mount_timeout_seconds.label') }}</label>
+            <input
+              id="cfg-drive-mount-timeout-seconds"
+              v-model.number="form.drive_mount_timeout_seconds"
+              type="number"
+              min="1"
+            />
+            <p class="field-help">{{ t('configuration.fields.drive_mount_timeout_seconds.help') }}</p>
+          </article>
+        </template>
 
-      <template v-else>
-        <article class="panel">
-          <h2>{{ t('adminPage.sections.loggingInfrastructure') }}</h2>
+        <template #panel-backgroundOperations>
+          <article class="panel settings-panel">
+
+            <label for="cfg-usb-discovery-interval">{{ t('configuration.fields.usb_discovery_interval.label') }}</label>
+            <input
+              id="cfg-usb-discovery-interval"
+              v-model.number="form.usb_discovery_interval"
+              type="number"
+              min="0"
+            />
+            <p class="field-help">{{ t('configuration.fields.usb_discovery_interval.help') }}</p>
+          </article>
+        </template>
+
+        <template #panel-networkMountOperations>
+          <article class="panel settings-panel">
+
+            <label for="cfg-network-mount-timeout-seconds">{{ t('configuration.fields.network_mount_timeout_seconds.label') }}</label>
+            <input
+              id="cfg-network-mount-timeout-seconds"
+              v-model.number="form.network_mount_timeout_seconds"
+              type="number"
+              min="1"
+            />
+            <p class="field-help">{{ t('configuration.fields.network_mount_timeout_seconds.help') }}</p>
+
+            <label for="cfg-mount-share-discovery-timeout-seconds">{{ t('configuration.fields.mount_share_discovery_timeout_seconds.label') }}</label>
+            <input
+              id="cfg-mount-share-discovery-timeout-seconds"
+              v-model.number="form.mount_share_discovery_timeout_seconds"
+              type="number"
+              min="1"
+            />
+            <p class="field-help">{{ t('configuration.fields.mount_share_discovery_timeout_seconds.help') }}</p>
+          </article>
+        </template>
+
+        <template #panel-copyAndJobWorkflow>
+          <article class="panel settings-panel">
+
+            <p class="field-help">{{ t('configuration.copyProfiles.help') }}</p>
+            <div class="profile-chip-row">
+              <button type="button" class="chip-button" @click="applyCopyWorkloadProfile('smallFiles')">{{ t('configuration.copyProfiles.smallFiles') }}</button>
+              <button type="button" class="chip-button" @click="applyCopyWorkloadProfile('mixed')">{{ t('configuration.copyProfiles.mixed') }}</button>
+              <button type="button" class="chip-button" @click="applyCopyWorkloadProfile('largeFiles')">{{ t('configuration.copyProfiles.largeFiles') }}</button>
+              <button type="button" class="chip-button" @click="applyCopyWorkloadProfile('greedy')">{{ t('configuration.copyProfiles.greedy') }}</button>
+            </div>
+
+            <label for="cfg-copy-job-timeout">{{ t('configuration.fields.copy_job_timeout.label') }}</label>
+            <input id="cfg-copy-job-timeout" v-model.number="form.copy_job_timeout" type="number" min="0" />
+            <p class="field-help">{{ t('configuration.fields.copy_job_timeout.help') }}</p>
+
+            <label for="cfg-startup-analysis-small-file-max-bytes">{{ t('configuration.fields.startup_analysis_small_file_max_bytes.label') }}</label>
+            <input
+              id="cfg-startup-analysis-small-file-max-bytes"
+              v-model.number="form.startup_analysis_small_file_max_bytes"
+              type="number"
+              min="1024"
+              max="67108864"
+            />
+            <p class="field-help">{{ t('configuration.fields.startup_analysis_small_file_max_bytes.help') }}</p>
+
+            <label for="cfg-startup-analysis-large-file-min-bytes">{{ t('configuration.fields.startup_analysis_large_file_min_bytes.label') }}</label>
+            <input
+              id="cfg-startup-analysis-large-file-min-bytes"
+              v-model.number="form.startup_analysis_large_file_min_bytes"
+              type="number"
+              min="1024"
+              max="1073741824"
+            />
+            <p class="field-help">{{ t('configuration.fields.startup_analysis_large_file_min_bytes.help') }}</p>
+
+            <label for="cfg-copy-chunk-size-bytes">{{ t('configuration.fields.copy_chunk_size_bytes.label') }}</label>
+            <select id="cfg-copy-chunk-size-bytes" v-model.number="form.copy_chunk_size_bytes">
+              <option v-for="option in copyChunkSizeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+            </select>
+            <p class="field-help">{{ t('configuration.fields.copy_chunk_size_bytes.help') }}</p>
+
+            <label for="cfg-copy-progress-flush-bytes">{{ t('configuration.fields.copy_progress_flush_bytes.label') }}</label>
+            <select id="cfg-copy-progress-flush-bytes" v-model.number="form.copy_progress_flush_bytes">
+              <option v-for="option in copyProgressFlushOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+            </select>
+            <p class="field-help">{{ t('configuration.fields.copy_progress_flush_bytes.help') }}</p>
+
+            <label for="cfg-copy-default-thread-count">{{ t('configuration.fields.copy_default_thread_count.label') }}</label>
+            <input id="cfg-copy-default-thread-count" v-model.number="form.copy_default_thread_count" type="number" min="1" max="32" />
+            <p class="field-help">{{ t('configuration.fields.copy_default_thread_count.help') }}</p>
+
+            <label class="checkbox-row" for="cfg-copy-file-fsync-enabled">
+              <input id="cfg-copy-file-fsync-enabled" v-model="form.copy_file_fsync_enabled" type="checkbox" />
+              <span>{{ t('configuration.fields.copy_file_fsync_enabled.label') }}</span>
+            </label>
+            <p class="field-help">{{ t('configuration.fields.copy_file_fsync_enabled.help') }}</p>
+
+            <label class="checkbox-row" for="cfg-copy-hashing-separate-thread-enabled">
+              <input
+                id="cfg-copy-hashing-separate-thread-enabled"
+                v-model="form.copy_hashing_separate_thread_enabled"
+                type="checkbox"
+              />
+              <span>{{ t('configuration.fields.copy_hashing_separate_thread_enabled.label') }}</span>
+            </label>
+            <p class="field-help">{{ t('configuration.fields.copy_hashing_separate_thread_enabled.help') }}</p>
+
+            <label for="cfg-job-detail-files-page-size">{{ t('configuration.fields.job_detail_files_page_size.label') }}</label>
+            <input
+              id="cfg-job-detail-files-page-size"
+              v-model.number="form.job_detail_files_page_size"
+              type="number"
+              min="20"
+              max="100"
+            />
+            <p class="field-help">{{ t('configuration.fields.job_detail_files_page_size.help') }}</p>
+          </article>
+        </template>
+      </TabbedDialog>
+    </div>
+
+    <div v-else class="settings-tabbed-layout">
+      <TabbedDialog
+        v-model:active-tab="activeAdminTab"
+        :tabs="adminTabs"
+        id-prefix="admin-editor"
+        :aria-label="configurationTabListAriaLabel"
+      >
+        <template #panel-loggingInfrastructure>
+          <article class="panel settings-panel">
 
           <label for="cfg-log-format">{{ t('configuration.fields.log_format.label') }}</label>
           <select id="cfg-log-format" v-model="form.log_format">
@@ -780,10 +849,11 @@ onMounted(loadConfiguration)
 
           <label for="cfg-log-backup-count">{{ t('configuration.fields.log_file_backup_count.label') }}</label>
           <input id="cfg-log-backup-count" v-model.number="form.log_file_backup_count" type="number" min="0" />
-        </article>
+          </article>
+        </template>
 
-        <article class="panel">
-          <h2>{{ t('adminPage.sections.databaseRuntime') }}</h2>
+        <template #panel-databaseRuntime>
+          <article class="panel settings-panel">
 
           <label for="cfg-db-pool-size">{{ t('configuration.fields.db_pool_size.label') }}</label>
           <input id="cfg-db-pool-size" v-model.number="form.db_pool_size" type="number" min="1" max="100" />
@@ -795,10 +865,11 @@ onMounted(loadConfiguration)
           <input id="cfg-db-pool-recycle" v-model.number="form.db_pool_recycle_seconds" type="number" min="-1" />
           <p class="field-help">{{ t('configuration.fields.db_pool_recycle_seconds.help') }}</p>
           <p class="restart-chip">{{ t('configuration.restartRequiredField') }}</p>
-        </article>
+          </article>
+        </template>
 
-        <article class="panel">
-          <h2>{{ t('configuration.sections.passwordPolicy') }}</h2>
+        <template #panel-passwordPolicy>
+          <article class="panel settings-panel">
 
           <p v-if="passwordPolicyError" class="error-banner">{{ passwordPolicyError }}</p>
 
@@ -836,10 +907,11 @@ onMounted(loadConfiguration)
           <input id="cfg-policy-retry" v-model.number="passwordPolicyForm.retry" type="number" min="1" max="10" :disabled="!passwordPolicyAvailable || saving" />
 
           <p class="field-help">{{ t('configuration.passwordPolicy.enforceForRoot') }}</p>
-        </article>
+          </article>
+        </template>
 
-        <article class="panel">
-          <h2>{{ t('configuration.sections.webhooks') }}</h2>
+        <template #panel-webhooks>
+          <article class="panel settings-panel">
 
           <label for="cfg-callback-default-url">{{ t('configuration.fields.callback_default_url.label') }}</label>
           <input
@@ -921,10 +993,11 @@ onMounted(loadConfiguration)
             :placeholder="CALLBACK_PAYLOAD_FIELD_MAP_PLACEHOLDER"
           />
           <p class="field-help">{{ t('configuration.fields.callback_payload_field_map.help') }}</p>
-        </article>
+          </article>
+        </template>
 
-        <article class="panel">
-          <h2>{{ t('adminPage.sections.platformIntegration') }}</h2>
+        <template #panel-platformIntegration>
+          <article class="panel settings-panel">
 
           <label for="cfg-nfs-client-version">{{ t('configuration.fields.nfs_client_version.label') }}</label>
           <select id="cfg-nfs-client-version" v-model="form.nfs_client_version">
@@ -941,10 +1014,11 @@ onMounted(loadConfiguration)
             max="5000"
           />
           <p class="field-help">{{ t('configuration.fields.startup_analysis_batch_size.help') }}</p>
-        </article>
+          </article>
+        </template>
 
-        <article class="panel" :class="{ 'warning-panel': restartPending }">
-          <h2>{{ t('adminPage.sections.serviceControl') }}</h2>
+        <template #panel-serviceControl>
+          <article class="panel settings-panel" :class="{ 'warning-panel': restartPending }">
           <p>{{ serviceControlBody }}</p>
           <ul v-if="restartPending">
             <li v-for="label in changedFieldLabels" :key="label">{{ label }}</li>
@@ -952,8 +1026,9 @@ onMounted(loadConfiguration)
           <button class="btn btn-primary" :disabled="!restartPending || restarting" @click="showRestartConfirm = true">
             {{ t('configuration.actions.restartService') }}
           </button>
-        </article>
-      </template>
+          </article>
+        </template>
+      </TabbedDialog>
     </div>
 
     <footer class="action-row">
@@ -982,6 +1057,17 @@ onMounted(loadConfiguration)
 .view-root {
   display: grid;
   gap: var(--space-md);
+}
+
+.settings-tabbed-layout {
+  min-height: 0;
+}
+
+.settings-panel {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
 }
 
 .settings-grid {

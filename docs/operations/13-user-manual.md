@@ -1195,13 +1195,14 @@ What this page is for:
 Basic workflow:
 
 1. Open `Configuration` from the navigation area.
-2. Review the current values in `Troubleshooting`, `Drive Operations`, `Background Operations`, `Network Mount Operations`, and `Copy and Job Workflow`.
+2. Use the `Troubleshooting`, `Drive Operations`, `Background Operations`, `Network Mount Operations`, and `Copy and Job Workflow` tabs to review the current values for each settings group.
 3. Edit one or more fields.
 4. Click `Save`.
 
 Important operational notes:
 
 - The `Configuration` page contains only operational settings: `log_level`, `mkfs_exfat_cluster_size`, `drive_format_timeout_seconds`, `drive_mount_timeout_seconds`, `usb_discovery_interval`, `network_mount_timeout_seconds`, `mount_share_discovery_timeout_seconds`, `copy_job_timeout`, `copy_chunk_size_bytes`, `copy_progress_flush_bytes`, `copy_default_thread_count`, `copy_file_fsync_enabled`, and `job_detail_files_page_size`.
+- The manager-facing `Configuration` page uses one tab per settings group so operators can move directly between `Troubleshooting`, `Drive Operations`, `Background Operations`, `Network Mount Operations`, and `Copy and Job Workflow` without leaving the form.
 - The `Configuration` page also shows the current effective log file name as a read-only value so managers can verify the target log file without exposing host path details.
 - Managers cannot view or trigger password policy, webhook secret, logging infrastructure, database runtime, or service restart controls from this page.
 - `exFAT Cluster Size` controls the allocation unit ECUBE uses when formatting drives as exFAT. `4K` is recommended for most situations. Use larger values only for drives that will store very large files only and no small files.
@@ -1240,7 +1241,7 @@ What this page is for:
 Basic workflow:
 
 1. Open `Admin` from the admin navigation area.
-2. Review current values in each section.
+2. Use the `Logging Infrastructure`, `Database Runtime`, `Password Policy`, `Webhooks`, `Platform Integration`, and `Service Control` tabs to review the current values for each admin settings group.
 3. Edit one or more fields.
 4. Click `Save`.
 5. Review post-save status: some changes apply immediately, and some changes are marked as pending restart.
@@ -1255,6 +1256,7 @@ Restart-required workflow:
 
 Important operational notes:
 
+- The `Admin` page uses one tab per settings group so administrators can move directly between logging, database, password-policy, webhook, platform-integration, and service-control settings without leaving the form.
 - Restart actions are never automatic from this page and always require explicit confirmation.
 - Restarting the application service can interrupt active operations. Prefer using a maintenance window or an idle period.
 - The `Password Policy` panel applies to locally managed OS accounts authenticated through PAM. New passwords, password resets, and expired-password recovery all use the active policy immediately.
