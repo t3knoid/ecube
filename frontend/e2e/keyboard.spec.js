@@ -212,7 +212,10 @@ test('keyboard navigation: system log paging controls are focusable and activata
   })
 
   await page.goto('/system')
-  await page.getByRole('button', { name: 'Logs' }).click()
+  const logsTab = page.locator('#system-view-tab-logs')
+  await expect(logsTab).toBeVisible()
+  await logsTab.click()
+  await expect(page.locator('#system-view-panel-logs')).toBeVisible()
 
   const olderButton = page.getByRole('button', { name: 'Load older lines' })
   await expect(olderButton).toBeVisible()

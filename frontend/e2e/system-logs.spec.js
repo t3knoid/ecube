@@ -1,6 +1,13 @@
 import { test, expect } from '@playwright/test'
 import { setupAuthenticatedPage, routeJson } from './helpers/app.js'
 
+async function openSystemLogsTab(page) {
+  const logsTab = page.locator('#system-view-tab-logs')
+  await expect(logsTab).toBeVisible()
+  await logsTab.click()
+  await expect(page.locator('#system-view-panel-logs')).toBeVisible()
+}
+
 async function stubSystemLogApis(page) {
   await routeJson(page, '**/api/admin/logs', {
     log_files: [
@@ -58,7 +65,7 @@ test('admin can select and download a rollover log source from the System page',
   })
 
   await page.goto('/system')
-  await page.getByRole('button', { name: 'Logs' }).click()
+  await openSystemLogsTab(page)
 
   const sourceSelect = page.locator('#log-source')
   await expect(sourceSelect).toBeVisible()
@@ -113,7 +120,7 @@ test('admin can page older and newer log lines by scrolling the log viewer', asy
   })
 
   await page.goto('/system')
-  await page.getByRole('button', { name: 'Logs' }).click()
+  await openSystemLogsTab(page)
 
   const viewer = page.locator('.log-viewer')
   await expect(viewer).toContainText('line 200')
@@ -189,7 +196,7 @@ test('admin can page newer from a partial older page without skipping lines', as
   })
 
   await page.goto('/system')
-  await page.getByRole('button', { name: 'Logs' }).click()
+  await openSystemLogsTab(page)
 
   await page.getByRole('button', { name: 'Load older lines' }).click()
   await expect(page.locator('.log-viewer')).toContainText('line 150')
